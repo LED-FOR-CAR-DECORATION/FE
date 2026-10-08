@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Map as MapLibreMap, Marker, setWorkerUrl } from 'maplibre-gl';
+import { Map as MapLibreMap, MapMouseEvent, Marker, setWorkerUrl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 setWorkerUrl(new URL('maplibre-gl/dist/maplibre-gl-worker.mjs', import.meta.url).toString());
@@ -21,6 +21,7 @@ export const GoongMapAddress: React.FC<GoongMapAddressProps> = ({ onLocationSele
 
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [isResolvingAddress, setIsResolvingAddress] = useState(false);
   const [center] = useState<[number, number]>([105.85242472181584, 21.029579719995272]); // Default center
   const [zoom] = useState(14);
   const [radiusInMeters] = useState(500);
@@ -61,8 +62,39 @@ export const GoongMapAddress: React.FC<GoongMapAddressProps> = ({ onLocationSele
     map.current.on('load', () => {
       addMarkerAndCircleAround(center);
     });
+
+    map.current.on('click', handleMapClick);
+
+    return () => {
+      map.current?.remove();
+      map.current = null;
+      marker.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
+
+  const handleMapClick = async (event: MapMouseEvent) => {
+    const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
+    addMarkerAndCircleAround(lngLat);
+    setIsResolvingAddress(true);
+
+    try {
+      const apiLink = `https://rsapi.goong.io/Geocode?api_key=${GOONG_API_KEY}&latlng=${lngLat[1]},${lngLat[0]}`;
+      const response = await fetch(apiLink);
+      const data = await response.json();
+      const address = data.results?.[0]?.formatted_address || `${lngLat[1].toFixed(6)}, ${lngLat[0].toFixed(6)}`;
+
+      setQuery(address);
+      onLocationSelect?.(lngLat[0], lngLat[1], address);
+    } catch (error) {
+      console.error('Error reverse geocoding map location:', error);
+      const coordinates = `${lngLat[1].toFixed(6)}, ${lngLat[0].toFixed(6)}`;
+      setQuery(coordinates);
+      onLocationSelect?.(lngLat[0], lngLat[1], coordinates);
+    } finally {
+      setIsResolvingAddress(false);
+    }
+  };
 
   const addMarkerAndCircleAround = (lngLat: [number, number]) => {
     if (!map.current) return;
@@ -164,7 +196,8 @@ export const GoongMapAddress: React.FC<GoongMapAddressProps> = ({ onLocationSele
           type="text" 
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
-          placeholder="Tìm kiếm địa chỉ..."
+          placeholder={isResolvingAddress ? "Đang lấy địa chỉ..." : "Tìm kiếm địa chỉ hoặc bấm trên bản đồ..."}
+          disabled={isResolvingAddress}
           className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
         />
         {suggestions.length > 0 && (

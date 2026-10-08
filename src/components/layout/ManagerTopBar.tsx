@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Globe, ChevronDown, Search } from "lucide-react";
+import { Bell, ChevronDown, Search } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function ManagerTopBar() {
@@ -13,7 +13,7 @@ export default function ManagerTopBar() {
         <Search size={15} className="text-text-muted flex-shrink-0" />
         <input
           type="text"
-          placeholder="Search orders, LED panels, characters..."
+          placeholder="Tìm đơn hàng, bảng LED, nhân vật..."
           className="bg-transparent outline-none text-sm w-full"
         />
       </div>
@@ -27,13 +27,6 @@ export default function ManagerTopBar() {
           </span>
         </button>
 
-        {/* Language */}
-        <button className="flex items-center gap-1.5 border-2 border-black px-2.5 py-1 text-sm font-semibold hover:bg-gray-50 transition-colors">
-          <Globe size={15} />
-          ENG
-          <ChevronDown size={13} />
-        </button>
-
         {/* User */}
         <div className="flex items-center gap-2 border-2 border-black px-3 py-1.5 cursor-pointer hover:bg-gray-50 transition-colors">
           {/* Avatar placeholder */}
@@ -42,7 +35,7 @@ export default function ManagerTopBar() {
           </div>
           <div className="leading-tight">
             <p className="text-sm font-black">{user?.name ?? "Manager"}</p>
-            <p className="text-[10px] text-text-muted font-semibold">Store Manager</p>
+            <p className="text-[10px] text-text-muted font-semibold">Quản lý cửa hàng</p>
           </div>
           <ChevronDown size={13} className="ml-1" />
         </div>

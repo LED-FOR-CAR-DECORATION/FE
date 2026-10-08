@@ -40,7 +40,7 @@ export default function ProductDetailPage() {
                 <h1 className="text-4xl font-black uppercase tracking-tight mb-4">32 x 32 Matrix Panels</h1>
                 <div className="flex items-center gap-4 mb-4">
                   <span className="text-4xl font-black tracking-tighter text-primary-dark">$20.00</span>
-                  <span className="bg-primary px-2 py-1 text-xs font-bold border-2 border-black">IN STOCK</span>
+                  <span className="bg-primary px-2 py-1 text-xs font-bold border-2 border-black">CÒN HÀNG</span>
                 </div>
                 <p className="font-medium text-text-muted leading-relaxed">
                   These 32x32 LEDs matrix panels can help you display crisp pixel art sprite of your choosing.

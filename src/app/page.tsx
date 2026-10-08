@@ -14,7 +14,7 @@ export default function Home() {
               {/* IMAGE PLACEHOLDER */}
               <div className="absolute inset-0 bg-gradient-to-r from-black/80 to-black/30 z-10" />
               <div className="absolute inset-0 flex items-center justify-center text-gray-500 font-bold tracking-widest uppercase">
-                [Banner Image Placeholder]
+                [Ảnh banner]
               </div>
               
               <div className="relative z-20 flex flex-col justify-center px-8 md:px-16 text-white w-full h-full text-left">
@@ -25,7 +25,7 @@ export default function Home() {
                   Decorate your car with colorful character sprites. Express yourself in style with our flexible matrix LEDs panels that can be easily installed and removed.
                 </p>
                 <Link href="/products" className="btn-primary w-fit text-black inline-block bg-primary hover:bg-primary-light">
-                  Shop Now
+                  Mua ngay
                 </Link>
               </div>
             </div>
@@ -35,7 +35,7 @@ export default function Home() {
         {/* CATEGORIES / FLASH SALE LIKE SHOPEE */}
         <section className="container mx-auto px-4 mt-12 mb-12">
           <div className="flex items-center justify-between border-b-2 border-black pb-2 mb-6">
-            <h3 className="text-2xl font-black uppercase tracking-tight">Categories</h3>
+            <h3 className="text-2xl font-black uppercase tracking-tight">Danh mục</h3>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {['32x32 Panels', '64x64 Panels', 'Flexible LEDs', 'Accessories', 'Custom Frames', 'Cables'].map((cat, i) => (
@@ -52,8 +52,8 @@ export default function Home() {
         {/* FEATURED PRODUCTS (THE LIST) */}
         <section className="container mx-auto px-4">
           <div className="flex items-center justify-between border-b-2 border-black pb-2 mb-6">
-            <h3 className="text-2xl font-black uppercase tracking-tight">Featured Products</h3>
-            <Link href="/products" className="text-sm font-bold hover:underline uppercase tracking-wider">View All</Link>
+            <h3 className="text-2xl font-black uppercase tracking-tight">Sản phẩm nổi bật</h3>
+            <Link href="/products" className="text-sm font-bold hover:underline uppercase tracking-wider">Xem tất cả</Link>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -69,12 +69,12 @@ export default function Home() {
                 <div>
                   <h4 className="font-bold text-lg leading-tight mb-2 uppercase line-clamp-2">32x32 Matrix Panel Flexible</h4>
                   <p className="text-xs font-medium text-text-muted mb-4 line-clamp-3">
-                    These 32x32 LEDs matrix panels can help you display crisp pixel art sprite of your choosing. They are flexible and easily attachable.
+                    Bảng LED ma trận 32x32 giúp hiển thị hình ảnh pixel sắc nét. Sản phẩm dẻo và dễ dàng lắp đặt.
                   </p>
                 </div>
                 <div className="flex items-end justify-between mt-4">
                   <span className="text-2xl font-black tracking-tighter">$20.00</span>
-                  <Link href="/products/1" className="btn-primary text-xs py-1.5 px-3 bg-primary">View Details</Link>
+                  <Link href="/products/1" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
                 </div>
               </div>
             </div>
@@ -88,12 +88,12 @@ export default function Home() {
                 <div>
                   <h4 className="font-bold text-lg leading-tight mb-2 uppercase line-clamp-2">Small Rectangular Scrolling LED</h4>
                   <p className="text-xs font-medium text-text-muted mb-4 line-clamp-3">
-                    Sleek rectangular LED panel perfect for scrolling text, small badges, or dashboard notifications.
+                    Bảng LED hình chữ nhật gọn gàng, phù hợp để chạy chữ, hiển thị biểu tượng nhỏ hoặc thông báo.
                   </p>
                 </div>
                 <div className="flex items-end justify-between mt-4">
                   <span className="text-2xl font-black tracking-tighter">$15.00</span>
-                  <Link href="/products/2" className="btn-primary text-xs py-1.5 px-3 bg-primary">View Details</Link>
+                  <Link href="/products/2" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
                 </div>
               </div>
             </div>
@@ -107,12 +107,12 @@ export default function Home() {
                 <div>
                   <h4 className="font-bold text-lg leading-tight mb-2 uppercase line-clamp-2">64x64 Matrix Panel</h4>
                   <p className="text-xs font-medium text-text-muted mb-4 line-clamp-3">
-                    High resolution 64x64 LEDs matrix panel for detailed graphics and complex animations.
+                    Bảng LED ma trận 64x64 độ phân giải cao cho đồ họa chi tiết và hoạt ảnh phức tạp.
                   </p>
                 </div>
                 <div className="flex items-end justify-between mt-4">
                   <span className="text-2xl font-black tracking-tighter">$45.00</span>
-                  <button className="btn-secondary text-xs py-1.5 px-3 opacity-50 cursor-not-allowed">Out of Stock</button>
+                  <button className="btn-secondary text-xs py-1.5 px-3 opacity-50 cursor-not-allowed">Hết hàng</button>
                 </div>
               </div>
             </div>
@@ -126,12 +126,12 @@ export default function Home() {
                 <div>
                   <h4 className="font-bold text-lg leading-tight mb-2 uppercase line-clamp-2">LED Controller Box</h4>
                   <p className="text-xs font-medium text-text-muted mb-4 line-clamp-3">
-                    Smart controller box for managing multiple LED panels simultaneously via mobile app.
+                    Hộp điều khiển thông minh giúp quản lý nhiều bảng LED cùng lúc qua ứng dụng di động.
                   </p>
                 </div>
                 <div className="flex items-end justify-between mt-4">
                   <span className="text-2xl font-black tracking-tighter">$12.50</span>
-                  <Link href="/products/4" className="btn-primary text-xs py-1.5 px-3 bg-primary">View Details</Link>
+                  <Link href="/products/4" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
                 </div>
               </div>
             </div>

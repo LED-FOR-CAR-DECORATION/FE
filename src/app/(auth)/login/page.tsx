@@ -74,14 +74,14 @@ export default function LoginPage() {
 
         {/* Right form panel */}
         <div className="flex-1 flex flex-col">
-          <AuthWindow title="Login">
+          <AuthWindow title="Đăng nhập">
             {/* Form */}
             <div className="px-8 py-6">
               <form className="flex flex-col gap-4">
                 {/* Email / Phone */}
                 <div>
                   <label htmlFor="login-email" className="block text-sm font-bold mb-1">
-                    Email/Phone
+                    Email/Số điện thoại
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary">
@@ -99,7 +99,7 @@ export default function LoginPage() {
                 {/* Password */}
                 <div>
                   <label htmlFor="login-password" className="block text-sm font-bold mb-1">
-                    Password
+                    Mật khẩu
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary">
@@ -123,10 +123,10 @@ export default function LoginPage() {
                       onChange={(e) => setRemember(e.target.checked)}
                       className="w-4 h-4 border-2 border-black accent-primary"
                     />
-                    Remember me
+                    Ghi nhớ đăng nhập
                   </label>
                   <Link href="#" className="text-xs font-bold hover:underline text-text-muted">
-                    Forgot Password?
+                    Quên mật khẩu?
                   </Link>
                 </div>
 
@@ -135,21 +135,21 @@ export default function LoginPage() {
                   type="button"
                   className="w-full py-2.5 bg-primary border-2 border-black font-black uppercase tracking-widest text-sm text-black transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none mt-1"
                 >
-                  Login
+                  Đăng nhập
                 </button>
 
                 {/* Sign up link */}
                 <p className="text-center text-xs font-medium text-text-muted">
-                  No account?{" "}
+                  Chưa có tài khoản?{" "}
                   <Link href="/register" className="font-bold text-black hover:underline">
-                    Sign up now!
+                    Đăng ký ngay!
                   </Link>
                 </p>
               </form>
             </div>
 
             {/* Social strip */}
-            <SocialStrip label="Login with" />
+            <SocialStrip label="Đăng nhập bằng" />
           </AuthWindow>
         </div>
       </div>

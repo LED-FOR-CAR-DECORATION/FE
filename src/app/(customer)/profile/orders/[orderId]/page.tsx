@@ -28,6 +28,8 @@ const STATUS_CFG: Record<string, string> = {
   Cancelled: "bg-red-100   text-red-700   border-red-400",
 };
 
+const STATUS_LABEL: Record<string, string> = { Pending: "Chờ xử lý", Confirmed: "Đã xác nhận", Shipping: "Đang giao", Delivered: "Đã giao", Cancelled: "Đã hủy" };
+
 import { use } from "react";
 
 export default function CustomerOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
@@ -40,8 +42,8 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
         <Header />
         <main className="flex-1 flex items-center justify-center py-24">
           <div className="text-center">
-            <p className="text-2xl font-black mb-4">Order not found</p>
-            <Link href="/profile" className="btn-primary text-sm px-6 py-2.5">← Back to Profile</Link>
+            <p className="text-2xl font-black mb-4">Không tìm thấy đơn hàng</p>
+            <Link href="/profile" className="btn-primary text-sm px-6 py-2.5">← Về hồ sơ</Link>
           </div>
         </main>
         <Footer />
@@ -64,7 +66,7 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
               <ArrowLeft size={15} /> Profile
             </Link>
             <span className="text-text-muted">/</span>
-            <span className="text-sm font-bold text-text-muted">Order History</span>
+              <span className="text-sm font-bold text-text-muted">Lịch sử đơn hàng</span>
             <span className="text-text-muted">/</span>
             <span className="text-sm font-black">#{order.id}</span>
           </div>
@@ -72,13 +74,13 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
           {/* Title + status */}
           <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
             <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight">Order #{order.id}</h1>
+              <h1 className="text-2xl font-black uppercase tracking-tight">Đơn hàng #{order.id}</h1>
               <p className="text-sm text-text-muted mt-1 flex items-center gap-1.5">
-                <Clock size={13} /> Placed on {order.date}
+                <Clock size={13} /> Đặt ngày {order.date}
               </p>
             </div>
             <span className={`border px-3 py-1.5 text-sm font-black rounded-sm ${STATUS_CFG[order.status]}`}>
-              {order.status}
+              {STATUS_LABEL[order.status] ?? order.status}
             </span>
           </div>
 
@@ -92,7 +94,7 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2">
                     <Truck size={17} />
-                    <h2 className="font-black text-base uppercase">Shipping Status</h2>
+                    <h2 className="font-black text-base uppercase">Trạng thái giao hàng</h2>
                   </div>
                   {"tracking" in order && order.tracking && (
                     <div className="flex items-center gap-1.5 text-xs font-bold text-text-muted">
@@ -116,7 +118,7 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
                         </div>
                         <p className={`text-sm font-bold ${!step.done && !isActive ? "text-gray-400" : ""}`}>{step.label}</p>
                         {step.time && <p className="text-xs text-text-muted mt-0.5">{step.time}</p>}
-                        {isActive && !step.time && <p className="text-xs text-amber-600 font-semibold mt-0.5">In progress…</p>}
+                        {isActive && !step.time && <p className="text-xs text-amber-600 font-semibold mt-0.5">Đang xử lý…</p>}
                       </div>
                     );
                   })}
@@ -127,7 +129,7 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
               <div className="neo-box-no-hover bg-white p-6">
                 <div className="flex items-center gap-2 mb-4 border-b-2 border-black pb-3">
                   <Package size={17} />
-                  <h2 className="font-black text-base uppercase">Items Ordered</h2>
+                  <h2 className="font-black text-base uppercase">Sản phẩm đã đặt</h2>
                 </div>
                 <div className="flex flex-col gap-3">
                   {order.items.map((item, i) => (
@@ -135,7 +137,7 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
                       <div className="w-14 h-14 bg-gray-200 border-2 border-black flex items-center justify-center text-[10px] font-bold text-gray-500 flex-shrink-0">[IMG]</div>
                       <div className="flex-1">
                         <p className="font-bold text-sm">{item.name}</p>
-                        <p className="text-xs text-text-muted">Qty: {item.qty}</p>
+                        <p className="text-xs text-text-muted">Số lượng: {item.qty}</p>
                       </div>
                       <p className="font-black">${item.price}</p>
                     </div>
@@ -147,22 +149,22 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
             {/* Right: summary + address + support */}
             <div className="lg:col-span-2 flex flex-col gap-5">
               <div className="neo-box-no-hover bg-white p-5">
-                <h2 className="font-black text-base uppercase mb-4 border-b-2 border-black pb-2">Order Summary</h2>
+                <h2 className="font-black text-base uppercase mb-4 border-b-2 border-black pb-2">Tóm tắt đơn hàng</h2>
                 <div className="flex flex-col gap-2 text-sm font-bold">
-                  <div className="flex justify-between"><span className="text-text-muted">Subtotal</span><span>${order.subtotal}</span></div>
-                  <div className="flex justify-between"><span className="text-text-muted">Shipping</span><span>${order.shipping}</span></div>
+                  <div className="flex justify-between"><span className="text-text-muted">Tạm tính</span><span>${order.subtotal}</span></div>
+                  <div className="flex justify-between"><span className="text-text-muted">Vận chuyển</span><span>${order.shipping}</span></div>
                   <div className="flex justify-between text-lg font-black border-t-2 border-dashed border-black pt-2 mt-1">
-                    <span>Total</span><span className="text-primary-dark">${order.total}</span>
+                    <span>Tổng cộng</span><span className="text-primary-dark">${order.total}</span>
                   </div>
                 </div>
                 <div className="mt-3 bg-gray-50 border-2 border-black px-3 py-2 text-xs font-semibold text-text-muted">
-                  Service: {order.service}
+                  Dịch vụ: {order.service}
                 </div>
               </div>
 
               <div className="neo-box-no-hover bg-white p-5">
                 <div className="flex items-center gap-2 mb-3 border-b-2 border-black pb-2">
-                  <MapPin size={15} /><h2 className="font-black text-sm uppercase">Shipping Address</h2>
+                  <MapPin size={15} /><h2 className="font-black text-sm uppercase">Địa chỉ giao hàng</h2>
                 </div>
                 <p className="font-bold text-sm">John Doe</p>
                 <p className="text-xs text-text-muted">(+84) 123 456 789</p>
@@ -170,13 +172,13 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
               </div>
 
               <div className="neo-box-no-hover bg-white p-5">
-                <h2 className="font-black text-sm uppercase mb-3 border-b-2 border-black pb-2">Need Help?</h2>
+                <h2 className="font-black text-sm uppercase mb-3 border-b-2 border-black pb-2">Cần hỗ trợ?</h2>
                 <div className="flex flex-col gap-2">
                   <button className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5 w-full">
-                    <MessageCircle size={13} /> Contact Support
+                    <MessageCircle size={13} /> Liên hệ hỗ trợ
                   </button>
                   <button className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5 w-full">
-                    <Phone size={13} /> Call Hotline
+                    <Phone size={13} /> Gọi tổng đài
                   </button>
                 </div>
               </div>

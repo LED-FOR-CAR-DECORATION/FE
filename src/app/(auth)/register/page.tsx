@@ -53,13 +53,13 @@ function SignUpForm({ onNext }: { onNext: () => void }) {
   const [agreed, setAgreed] = useState(false);
 
   return (
-    <AuthWindow title="Sign up for an account">
+    <AuthWindow title="Đăng ký tài khoản">
       <div className="px-8 py-6">
         <form className="flex flex-col gap-4">
           {/* Email / Phone */}
           <div>
             <label htmlFor="reg-email" className="block text-sm font-bold mb-1">
-              Email/Phone
+              Email/Số điện thoại
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary">
@@ -77,7 +77,7 @@ function SignUpForm({ onNext }: { onNext: () => void }) {
           {/* Password */}
           <div>
             <label htmlFor="reg-password" className="block text-sm font-bold mb-1">
-              Password
+              Mật khẩu
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary">
@@ -95,7 +95,7 @@ function SignUpForm({ onNext }: { onNext: () => void }) {
           {/* Confirm Password */}
           <div>
             <label htmlFor="reg-confirm" className="block text-sm font-bold mb-1">
-              Confirm password
+              Xác nhận mật khẩu
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary">
@@ -119,7 +119,7 @@ function SignUpForm({ onNext }: { onNext: () => void }) {
                 onChange={(e) => setRemember(e.target.checked)}
                 className="w-4 h-4 border-2 border-black accent-primary"
               />
-              Remember me
+              Ghi nhớ đăng nhập
             </label>
             <label className="flex items-center gap-2 cursor-pointer text-xs font-medium select-none">
               <input
@@ -128,9 +128,9 @@ function SignUpForm({ onNext }: { onNext: () => void }) {
                 onChange={(e) => setAgreed(e.target.checked)}
                 className="w-4 h-4 border-2 border-black accent-primary"
               />
-              I have read and accept{" "}
+              Tôi đã đọc và đồng ý với{" "}
               <Link href="#" className="font-bold hover:underline text-black">
-                Term of Service
+                Điều khoản dịch vụ
               </Link>
             </label>
           </div>
@@ -141,12 +141,12 @@ function SignUpForm({ onNext }: { onNext: () => void }) {
             onClick={onNext}
             className="self-end px-8 py-2.5 bg-primary border-2 border-black font-black uppercase tracking-widest text-sm text-black transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none"
           >
-            Sign-up
+            Đăng ký
           </button>
         </form>
       </div>
 
-      <SocialStrip label="Sign up with" />
+      <SocialStrip label="Đăng ký bằng" />
     </AuthWindow>
   );
 }
@@ -154,13 +154,13 @@ function SignUpForm({ onNext }: { onNext: () => void }) {
 /* ── Step 2: Auth code verification ── */
 function AuthCodeForm({ onBack }: { onBack: () => void }) {
   return (
-    <AuthWindow title="Authentication">
+    <AuthWindow title="Xác thực tài khoản">
       <div className="px-8 py-6">
         <form className="flex flex-col gap-4">
           {/* Authcode */}
           <div>
             <label htmlFor="reg-authcode" className="block text-sm font-bold mb-1">
-              Authcode
+              Mã xác thực
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary">
@@ -169,7 +169,7 @@ function AuthCodeForm({ onBack }: { onBack: () => void }) {
               <input
                 id="reg-authcode"
                 type="text"
-                placeholder="Enter the code sent to your email"
+                placeholder="Nhập mã được gửi đến email của bạn"
                 className="w-full bg-gray-100 border-2 border-black py-2 pl-9 pr-3 outline-none focus:bg-white transition-colors text-sm font-medium"
               />
             </div>
@@ -182,13 +182,13 @@ function AuthCodeForm({ onBack }: { onBack: () => void }) {
               className="flex items-center gap-1.5 text-xs font-bold text-text-muted hover:text-black transition-colors"
             >
               <RefreshCw size={13} />
-              Resend code
+              Gửi lại mã
             </button>
             <button
               type="button"
               className="px-8 py-2.5 bg-primary border-2 border-black font-black uppercase tracking-widest text-sm text-black transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none"
             >
-              Sign up
+              Đăng ký
             </button>
           </div>
 
@@ -197,12 +197,12 @@ function AuthCodeForm({ onBack }: { onBack: () => void }) {
             onClick={onBack}
             className="text-xs font-bold text-text-muted hover:underline self-start"
           >
-            ← Back
+            ← Quay lại
           </button>
         </form>
       </div>
 
-      <SocialStrip label="Sign up with" />
+      <SocialStrip label="Đăng ký bằng" />
     </AuthWindow>
   );
 }

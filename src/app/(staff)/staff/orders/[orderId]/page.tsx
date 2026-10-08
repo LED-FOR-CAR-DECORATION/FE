@@ -37,6 +37,14 @@ const STATUS_CFG: Record<string, string> = {
   Cancelled: "bg-red-100   text-red-700   border-red-400",
 };
 
+const STATUS_LABEL: Record<OrderStatus, string> = {
+  Pending: "Chờ xử lý",
+  Confirmed: "Đã xác nhận",
+  Shipping: "Đang giao",
+  Delivered: "Đã giao",
+  Cancelled: "Đã hủy",
+};
+
 /* ── Create Shipping Order Modal (ViettelPost-style) ── */
 function CreateShippingModal({ order, onClose, onSubmit }: {
   order: typeof MOCK_ORDERS[0];
@@ -274,7 +282,7 @@ export default function StaffOrderDetailPage({ params }: { params: Promise<{ ord
     return (
       <div className="p-8 text-center">
         <p className="text-xl font-black mb-4">Order not found</p>
-        <Link href="/staff/orders" className="btn-primary text-sm px-6 py-2.5">← Back to Orders</Link>
+        <Link href="/staff/orders" className="btn-primary text-sm px-6 py-2.5">← Về danh sách đơn</Link>
       </div>
     );
   }
@@ -302,11 +310,11 @@ export default function StaffOrderDetailPage({ params }: { params: Promise<{ ord
         {/* Back + title */}
         <div className="flex items-center gap-3 flex-wrap">
           <Link href="/staff/orders" className="flex items-center gap-1.5 btn-secondary text-xs py-1.5 px-3">
-            <ArrowLeft size={14} /> All Orders
+            <ArrowLeft size={14} /> Tất cả đơn hàng
           </Link>
-          <h1 className="text-xl font-black uppercase">Order #{order.id}</h1>
+          <h1 className="text-xl font-black uppercase">Đơn hàng #{order.id}</h1>
           <span className={`border px-2.5 py-1 text-xs font-black rounded-sm ${STATUS_CFG[order.status]}`}>
-            {order.status}
+            {STATUS_LABEL[order.status as OrderStatus]}
           </span>
         </div>
 
@@ -317,7 +325,7 @@ export default function StaffOrderDetailPage({ params }: { params: Promise<{ ord
               onClick={handleConfirm}
               className="btn-primary flex items-center gap-1.5 text-sm"
             >
-              <CheckCircle size={15} /> Confirm Order
+              <CheckCircle size={15} /> Xác nhận đơn hàng
             </button>
           )}
           {(order.status === "Confirmed" || order.status === "Pending") && !shippingCreated && (
@@ -327,17 +335,21 @@ export default function StaffOrderDetailPage({ params }: { params: Promise<{ ord
               disabled={order.status === "Pending"}
               style={{ opacity: order.status === "Pending" ? 0.5 : 1, cursor: order.status === "Pending" ? "not-allowed" : "pointer" }}
             >
-              <Truck size={15} /> Create Shipping Order
+              <Truck size={15} /> Tạo đơn vận chuyển
             </button>
           )}
           {shippingCreated && (
-            <div className="flex items-center gap-2 text-sm font-bold text-primary-dark bg-primary/10 border-2 border-primary px-3 py-2">
-              <CheckCircle size={15} /> Shipping order created — tracking: VTPOST-{order.id}
+            <div className="flex items-center gap-3 text-sm font-bold text-primary-dark bg-primary/10 border-2 border-primary px-3 py-2">
+                <CheckCircle size={15} />
+              <span>Đã tạo đơn vận chuyển — mã: VTPOST-{order.id}</span>
+              <Link href="/staff/deliveries" className="ml-auto underline hover:text-black whitespace-nowrap">
+                Theo dõi giao hàng
+              </Link>
             </div>
           )}
           {order.status === "Pending" && (
             <p className="text-xs text-text-muted flex items-center gap-1 ml-2">
-              <AlertTriangle size={12} /> Confirm the order first before creating a shipping order.
+              <AlertTriangle size={12} /> Hãy xác nhận đơn hàng trước khi tạo đơn vận chuyển.
             </p>
           )}
         </div>
@@ -351,7 +363,7 @@ export default function StaffOrderDetailPage({ params }: { params: Promise<{ ord
             <div className="neo-box-no-hover bg-white p-6">
               <div className="flex items-center gap-2 mb-5">
                 <Clock size={17} />
-                <h2 className="font-black text-base uppercase">Order Progress</h2>
+                <h2 className="font-black text-base uppercase">Tiến trình đơn hàng</h2>
               </div>
               <div className="relative pl-7">
                 <div className="absolute left-3 top-2 bottom-2 w-0.5 bg-gray-200" />

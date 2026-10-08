@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import AddAddressModal from "@/components/ui/AddAddressModal";
+import type { AddressFormData } from "@/components/ui/AddAddressModal";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,17 +14,27 @@ import {
 
 /* ── Order Confirmation Modal ── */
 interface ConfirmModalProps {
+  address: AddressFormData;
   onClose: () => void;
   onConfirm: () => void;
 }
-function OrderConfirmModal({ onClose, onConfirm }: ConfirmModalProps) {
+function OrderConfirmModal({ address, onClose, onConfirm }: ConfirmModalProps) {
+  const formattedAddress = address.fullAddress || [
+    address.streetNumber && address.streetName
+      ? `${address.streetNumber} ${address.streetName}`
+      : address.streetNumber || address.streetName,
+    address.ward,
+    address.district,
+    address.province,
+  ].filter(Boolean).join(", ");
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] animate-slide-up">
         {/* Title bar */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-primary border-b-2 border-black">
           <div className="flex items-center gap-2 font-black text-sm uppercase">
-            <CheckCircle size={15} /> Confirm Order
+            <CheckCircle size={15} /> Xác nhận đơn hàng
           </div>
           <button onClick={onClose} className="w-6 h-6 border-2 border-black bg-white flex items-center justify-center hover:bg-red-100">
             <X size={12} />
@@ -31,8 +42,8 @@ function OrderConfirmModal({ onClose, onConfirm }: ConfirmModalProps) {
         </div>
 
         <div className="p-6">
-          <p className="font-bold text-lg mb-1">Review your order</p>
-          <p className="text-sm text-text-muted mb-5">Please confirm the details below before placing your order.</p>
+          <p className="font-bold text-lg mb-1">Kiểm tra đơn hàng</p>
+          <p className="text-sm text-text-muted mb-5">Vui lòng kiểm tra thông tin trước khi đặt hàng.</p>
 
           {/* Items summary */}
           <div className="border-2 border-black mb-4">
@@ -47,7 +58,7 @@ function OrderConfirmModal({ onClose, onConfirm }: ConfirmModalProps) {
                   </div>
                   <div>
                     <p className="text-sm font-bold">{item.name}</p>
-                    <p className="text-xs text-text-muted">Qty: {item.qty}</p>
+                    <p className="text-xs text-text-muted">Số lượng: {item.qty}</p>
                   </div>
                 </div>
                 <span className="font-black">{item.price}</span>
@@ -57,29 +68,29 @@ function OrderConfirmModal({ onClose, onConfirm }: ConfirmModalProps) {
 
           {/* Address + Shipping */}
           <div className="bg-gray-50 border-2 border-black p-3 mb-4 text-sm">
-            <p className="font-bold flex items-center gap-1.5 mb-1"><MapPin size={13} /> Ship to</p>
-            <p className="text-text-muted">John Doe · (+84) 123 456 789</p>
-            <p className="text-text-muted">Number 8, Sesame Street, NYC, USA</p>
+            <p className="font-bold flex items-center gap-1.5 mb-1"><MapPin size={13} /> Giao đến</p>
+            <p className="text-text-muted">{address.fullName} · {address.phoneNumber}</p>
+            <p className="text-text-muted">{formattedAddress}</p>
           </div>
 
           {/* Totals */}
           <div className="flex flex-col gap-1.5 text-sm font-bold border-t-2 border-black pt-3 mb-5">
-            <div className="flex justify-between"><span className="text-text-muted">Subtotal:</span><span>$45.00</span></div>
-            <div className="flex justify-between"><span className="text-text-muted">Shipping (ViettelPost):</span><span>$5.00</span></div>
+            <div className="flex justify-between"><span className="text-text-muted">Tạm tính:</span><span>$45.00</span></div>
+            <div className="flex justify-between"><span className="text-text-muted">Phí vận chuyển (ViettelPost):</span><span>$5.00</span></div>
             <div className="flex justify-between text-lg font-black border-t-2 border-dashed border-black pt-2 mt-1">
-              <span>Total:</span><span className="text-primary-dark">$50.00</span>
+              <span>Tổng cộng:</span><span className="text-primary-dark">$50.00</span>
             </div>
           </div>
 
           <div className="flex gap-3">
             <button onClick={onClose} className="btn-secondary flex-1 py-2.5 text-sm">
-              Go back
+              Quay lại
             </button>
             <button
               onClick={onConfirm}
               className="btn-primary flex-1 py-2.5 text-sm flex items-center justify-center gap-2"
             >
-              Place Order <ArrowRight size={15} />
+              Đặt hàng <ArrowRight size={15} />
             </button>
           </div>
         </div>
@@ -103,22 +114,22 @@ function OrderSuccessModal({ orderId, onClose }: { orderId: string; onClose: () 
         <div className="w-16 h-16 bg-primary border-2 border-black flex items-center justify-center mx-auto mb-4">
           <CheckCircle size={32} />
         </div>
-        <h2 className="text-2xl font-black mb-1">Order Placed!</h2>
-        <p className="text-text-muted text-sm mb-2">Your order has been received.</p>
+        <h2 className="text-2xl font-black mb-1">Đặt hàng thành công!</h2>
+        <p className="text-text-muted text-sm mb-2">Đơn hàng của bạn đã được tiếp nhận.</p>
         <p className="font-black text-primary-dark text-lg mb-6">#{orderId}</p>
         <div className="flex items-center justify-center gap-2 text-xs text-text-muted mb-6 bg-gray-50 border-2 border-black p-3">
           <Clock size={14} />
-          <span>We'll notify you when the store confirms your order.</span>
+          <span>Chúng tôi sẽ thông báo khi cửa hàng xác nhận đơn.</span>
         </div>
         <div className="flex flex-col gap-2">
           <Link
             href={`/profile/orders/${orderId}`}
             className="btn-primary w-full py-2.5 text-sm flex items-center justify-center gap-2"
           >
-            Track Order <ArrowRight size={14} />
+            Theo dõi đơn hàng <ArrowRight size={14} />
           </Link>
           <button onClick={onClose} className="btn-secondary w-full py-2.5 text-sm">
-            Continue Shopping
+            Tiếp tục mua sắm
           </button>
         </div>
       </div>
@@ -130,6 +141,16 @@ function OrderSuccessModal({ orderId, onClose }: { orderId: string; onClose: () 
 export default function CheckoutPage() {
   const router = useRouter();
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [shippingAddress, setShippingAddress] = useState<AddressFormData>({
+    fullName: "John Doe",
+    phoneNumber: "(+84) 123 456 789",
+    streetNumber: "Number 8",
+    streetName: "Sesame street",
+    ward: "",
+    district: "Manhattan",
+    province: "NYC, United States",
+    fullAddress: "Number 8, Sesame street, Manhattan, NYC, United States.",
+  });
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const ORDER_ID = "ORD-1049";
@@ -142,8 +163,21 @@ export default function CheckoutPage() {
   return (
     <>
       <Header />
-      <AddAddressModal isOpen={isAddressModalOpen} onClose={() => setIsAddressModalOpen(false)} />
-      {showConfirm && <OrderConfirmModal onClose={() => setShowConfirm(false)} onConfirm={handlePlaceOrder} />}
+      <AddAddressModal
+        isOpen={isAddressModalOpen}
+        onClose={() => setIsAddressModalOpen(false)}
+        onSave={(address) => {
+          setShippingAddress(address);
+          setIsAddressModalOpen(false);
+        }}
+      />
+      {showConfirm && (
+        <OrderConfirmModal
+          address={shippingAddress}
+          onClose={() => setShowConfirm(false)}
+          onConfirm={handlePlaceOrder}
+        />
+      )}
       {showSuccess && <OrderSuccessModal orderId={ORDER_ID} onClose={() => router.push("/")} />}
 
       <main className="flex-1 bg-background py-10">
@@ -152,7 +186,7 @@ export default function CheckoutPage() {
             <div className="p-2 bg-white border-2 border-black rounded-md">
               <ShoppingBag size={28} />
             </div>
-            <h1 className="text-3xl font-black uppercase tracking-tight">Check out.</h1>
+            <h1 className="text-3xl font-black uppercase tracking-tight">Thanh toán</h1>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -163,19 +197,19 @@ export default function CheckoutPage() {
               <div className="neo-box bg-white p-6">
                 <div className="flex items-center gap-2 mb-4 border-b-2 border-black pb-2">
                   <MapPin size={20} />
-                  <h2 className="text-xl font-black uppercase tracking-wide">Ship To</h2>
+                  <h2 className="text-xl font-black uppercase tracking-wide">Địa chỉ giao hàng</h2>
                 </div>
                 <div className="bg-gray-50 border-2 border-black p-4 mb-4 relative">
-                  <div className="font-bold uppercase text-lg mb-1">John Doe</div>
-                  <div className="text-sm font-medium text-text-muted mb-1">(+84) 123 456 789</div>
-                  <div className="text-sm font-medium">Number 8, Sesame street, Manhattan, NYC, United States.</div>
-                  <button className="absolute top-4 right-4 text-xs font-bold uppercase underline hover:text-primary-dark">Change</button>
+                  <div className="font-bold uppercase text-lg mb-1">{shippingAddress.fullName}</div>
+                  <div className="text-sm font-medium text-text-muted mb-1">{shippingAddress.phoneNumber}</div>
+                  <div className="text-sm font-medium">{shippingAddress.fullAddress || [shippingAddress.streetNumber, shippingAddress.streetName, shippingAddress.ward, shippingAddress.district, shippingAddress.province].filter(Boolean).join(", ")}</div>
+                  <button className="absolute top-4 right-4 text-xs font-bold uppercase underline hover:text-primary-dark">Đổi địa chỉ</button>
                 </div>
                 <button
                   onClick={() => setIsAddressModalOpen(true)}
                   className="btn-secondary w-full text-sm py-2 flex items-center justify-center gap-2"
                 >
-                  <span className="text-lg leading-none">+</span> Add new address
+                  <span className="text-lg leading-none">+</span> Thêm địa chỉ mới
                 </button>
               </div>
 
@@ -183,7 +217,7 @@ export default function CheckoutPage() {
               <div className="neo-box bg-white p-6">
                 <div className="flex items-center gap-2 mb-4 border-b-2 border-black pb-2">
                   <Truck size={20} />
-                  <h2 className="text-xl font-black uppercase tracking-wide">Shipping Method</h2>
+                  <h2 className="text-xl font-black uppercase tracking-wide">Phương thức vận chuyển</h2>
                 </div>
                 <div className="relative border-2 border-black">
                   <select className="w-full p-4 bg-gray-50 appearance-none outline-none font-bold cursor-pointer hover:bg-white transition-colors">
@@ -198,7 +232,7 @@ export default function CheckoutPage() {
               <div className="neo-box bg-white p-6">
                 <div className="flex items-center gap-2 mb-4 border-b-2 border-black pb-2">
                   <CreditCard size={20} />
-                  <h2 className="text-xl font-black uppercase tracking-wide">Payment Method</h2>
+                  <h2 className="text-xl font-black uppercase tracking-wide">Phương thức thanh toán</h2>
                 </div>
                 <div className="relative border-2 border-black mb-4">
                   <select className="w-full p-4 bg-gray-50 appearance-none outline-none font-bold cursor-pointer hover:bg-white transition-colors">
@@ -208,7 +242,7 @@ export default function CheckoutPage() {
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none font-bold">▼</div>
                 </div>
                 <button className="btn-secondary w-full text-sm py-2 flex items-center justify-center gap-2">
-                  <span className="text-lg leading-none">+</span> Add new payment method
+                  <span className="text-lg leading-none">+</span> Thêm phương thức thanh toán
                 </button>
               </div>
 
@@ -218,10 +252,10 @@ export default function CheckoutPage() {
                   onClick={() => setShowConfirm(true)}
                   className="btn-primary w-full py-4 text-xl tracking-widest uppercase mb-4 bg-primary hover:bg-primary-dark"
                 >
-                  Place Order
+                  Đặt hàng
                 </button>
                 <p className="text-xs text-text-muted font-bold flex items-center justify-center gap-1 cursor-pointer hover:underline">
-                  ⓘ Our refund policy
+                  ⓘ Chính sách hoàn tiền
                 </p>
               </div>
             </div>

@@ -16,19 +16,19 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { label: "Dashboard",      href: "/staff",             icon: LayoutDashboard },
-  { label: "Orders",         href: "/staff/orders",      icon: ShoppingCart },
-  { label: "LED Inventory",  href: "/staff/inventory",   icon: Layers },
-  { label: "Store Pricing",  href: "/staff/pricing",     icon: Tag },
-  { label: "Commission",     href: "/staff/commission",  icon: Percent },
-  { label: "Deliveries",     href: "/staff/deliveries",  icon: Truck },
-  { label: "Warranty",       href: "/staff/warranty",    icon: Shield },
-  { label: "Device Returns", href: "/staff/returns",     icon: RotateCcw },
+  { label: "Tổng quan",          href: "/staff",             icon: LayoutDashboard },
+  { label: "Đơn hàng",           href: "/staff/orders",      icon: ShoppingCart },
+  { label: "Kho LED",             href: "/staff/inventory",   icon: Layers },
+  { label: "Giá cửa hàng",       href: "/staff/pricing",     icon: Tag },
+  { label: "Hoa hồng",            href: "/staff/commission",  icon: Percent },
+  { label: "Đơn giao hàng",       href: "/staff/deliveries",  icon: Truck },
+  { label: "Bảo hành",            href: "/staff/warranty",    icon: Shield },
+  { label: "Đổi trả thiết bị",    href: "/staff/returns",     icon: RotateCcw },
 ];
 
 const accountItems = [
-  { label: "Profile",  href: "/manager/profile",  icon: User },
-  { label: "Settings", href: "/manager/settings", icon: Settings },
+  { label: "Hồ sơ",    href: "/manager/profile",  icon: User },
+  { label: "Cài đặt",  href: "/manager/settings", icon: Settings },
 ];
 
 export default function ManagerSidebar() {
@@ -44,7 +44,7 @@ export default function ManagerSidebar() {
         </div>
         <span className="font-black text-base tracking-tight">PIXEL HUB</span>
         <span className="ml-auto bg-primary border-2 border-black text-[10px] font-black px-1.5 py-0.5 uppercase">
-          Manager
+          Quản lý
         </span>
       </div>
 
@@ -71,7 +71,7 @@ export default function ManagerSidebar() {
 
       {/* Account section */}
       <div className="border-t-2 border-black px-2 py-3">
-        <p className="text-[10px] font-black uppercase tracking-widest text-text-muted px-3 mb-1">Account</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-text-muted px-3 mb-1">Tài khoản</p>
         {accountItems.map(({ label, href, icon: Icon }) => {
           const active = pathname === href;
           return (

@@ -14,7 +14,7 @@ export default function CartPage() {
             <div className="p-2 bg-white border-2 border-black rounded-md">
               <ShoppingBag size={28} />
             </div>
-            <h1 className="text-3xl font-black uppercase tracking-tight">Your Cart.</h1>
+            <h1 className="text-3xl font-black uppercase tracking-tight">Giỏ hàng</h1>
           </div>
 
           {/* Cart Items Box */}
@@ -24,10 +24,10 @@ export default function CartPage() {
               <div className="col-span-1 flex items-center justify-center">
                 <input type="checkbox" className="w-5 h-5 border-2 border-black rounded-none appearance-none checked:bg-primary checked:after:content-['✓'] flex items-center justify-center text-black font-bold" />
               </div>
-              <div className="col-span-5">Product</div>
-              <div className="col-span-2 text-center">Unit Price</div>
-              <div className="col-span-2 text-center">Quantity</div>
-              <div className="col-span-2 text-right">Total Price</div>
+              <div className="col-span-5">Sản phẩm</div>
+              <div className="col-span-2 text-center">Đơn giá</div>
+              <div className="col-span-2 text-center">Số lượng</div>
+              <div className="col-span-2 text-right">Thành tiền</div>
             </div>
 
             {/* Item 1 */}
@@ -41,15 +41,15 @@ export default function CartPage() {
                 </div>
                 <div className="flex flex-col justify-center">
                   <h4 className="font-bold text-base leading-tight uppercase line-clamp-2">32x32 Matrix Panel</h4>
-                  <p className="text-sm font-medium text-text-muted mt-1">Variation: Default</p>
+                  <p className="text-sm font-medium text-text-muted mt-1">Phân loại: Mặc định</p>
                 </div>
               </div>
               <div className="col-span-4 md:col-span-2 text-left md:text-center font-bold">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Unit Price</span>
+                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Đơn giá</span>
                 $20.00
               </div>
               <div className="col-span-4 md:col-span-2 flex justify-center">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Qty</span>
+                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Số lượng</span>
                 <div className="flex border-2 border-black w-24 h-8 bg-white">
                   <button className="flex-1 hover:bg-gray-100 font-bold border-r-2 border-black">-</button>
                   <div className="flex-1 flex items-center justify-center font-bold text-sm">2</div>
@@ -73,15 +73,15 @@ export default function CartPage() {
                 </div>
                 <div className="flex flex-col justify-center">
                   <h4 className="font-bold text-base leading-tight uppercase line-clamp-2">Character Sprite Pack A</h4>
-                  <p className="text-sm font-medium text-text-muted mt-1">Digital Download</p>
+                  <p className="text-sm font-medium text-text-muted mt-1">Tải xuống kỹ thuật số</p>
                 </div>
               </div>
               <div className="col-span-4 md:col-span-2 text-left md:text-center font-bold">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Unit Price</span>
+                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Đơn giá</span>
                 $5.00
               </div>
               <div className="col-span-4 md:col-span-2 flex justify-center">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Qty</span>
+                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Số lượng</span>
                 <div className="flex border-2 border-black w-24 h-8 bg-white">
                   <button className="flex-1 hover:bg-gray-100 font-bold border-r-2 border-black">-</button>
                   <div className="flex-1 flex items-center justify-center font-bold text-sm">1</div>
@@ -89,7 +89,7 @@ export default function CartPage() {
                 </div>
               </div>
               <div className="col-span-4 md:col-span-2 text-right font-black text-primary-dark">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Total</span>
+                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Thành tiền</span>
                 $5.00
               </div>
             </div>
@@ -100,21 +100,21 @@ export default function CartPage() {
             <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-start">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" className="w-5 h-5 border-2 border-black rounded-none appearance-none checked:bg-white checked:after:content-['✓'] flex items-center justify-center text-black font-bold" />
-                <span className="font-bold uppercase text-sm">Select All (2)</span>
+                <span className="font-bold uppercase text-sm">Chọn tất cả (2)</span>
               </label>
               
               <button className="flex items-center gap-1 text-sm font-bold uppercase hover:underline">
-                <Trash2 size={16} /> Delete
+                <Trash2 size={16} /> Xóa
               </button>
             </div>
 
             <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
               <div className="flex items-center gap-2">
-                <span className="font-bold uppercase text-sm">Total Cost:</span>
+                <span className="font-bold uppercase text-sm">Tổng tiền:</span>
                 <span className="text-3xl font-black text-white drop-shadow-md">$45.00</span>
               </div>
               <Link href="/checkout" className="btn-secondary py-3 px-8 text-lg bg-white">
-                Check out
+                Thanh toán
               </Link>
             </div>
           </div>

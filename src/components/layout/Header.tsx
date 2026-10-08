@@ -25,7 +25,7 @@ function UserDropdown() {
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 p-2 border-2 border-transparent hover:border-black rounded-md transition-colors font-semibold text-sm"
-        aria-label="User menu"
+        aria-label="Trình đơn người dùng"
       >
         <User size={22} />
         <span className="hidden md:inline max-w-[100px] truncate">{user?.name}</span>
@@ -39,13 +39,13 @@ function UserDropdown() {
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 border-b-2 border-black"
           >
-            <User size={15} /> My Profile
+            <User size={15} /> Hồ sơ của tôi
           </Link>
           <button
             onClick={() => { logout(); setOpen(false); }}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-red-50 text-red-600"
           >
-            <LogOut size={15} /> Log out
+            <LogOut size={15} /> Đăng xuất
           </button>
         </div>
       )}
@@ -61,13 +61,13 @@ function GuestButtons() {
         href="/login"
         className="btn-secondary text-sm px-4 py-1.5 font-bold"
       >
-        Login
+        Đăng nhập
       </Link>
       <Link
         href="/register"
         className="btn-primary text-sm px-4 py-1.5 font-bold"
       >
-        Sign up
+        Đăng ký
       </Link>
     </div>
   );
@@ -92,9 +92,9 @@ export default function Header() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 font-semibold">
-            <Link href="/"        className="hover:underline underline-offset-4">SHOP</Link>
-            <Link href="/about"   className="hover:underline underline-offset-4">ABOUT</Link>
-            <Link href="/products" className="hover:underline underline-offset-4">PRODUCTS</Link>
+            <Link href="/"        className="hover:underline underline-offset-4">CỬA HÀNG</Link>
+            <Link href="/about"   className="hover:underline underline-offset-4">GIỚI THIỆU</Link>
+            <Link href="/products" className="hover:underline underline-offset-4">SẢN PHẨM</Link>
           </nav>
         </div>
 
@@ -104,7 +104,7 @@ export default function Header() {
           <div className="hidden md:flex items-center bg-white border-2 border-black px-3 py-1">
             <input
               type="text"
-              placeholder="Search products..."
+              placeholder="Tìm sản phẩm..."
               className="outline-none bg-transparent w-48 text-sm"
             />
             <Search size={18} />
@@ -117,7 +117,7 @@ export default function Header() {
               <Link
                 href="/cart"
                 className="p-2 border-2 border-transparent hover:border-black rounded-md transition-colors relative"
-                aria-label="Cart"
+                aria-label="Giỏ hàng"
               >
                 <ShoppingBag size={24} />
                 <span className="absolute top-0 right-0 bg-white text-black text-xs font-bold border-2 border-black rounded-full h-5 w-5 flex items-center justify-center translate-x-1 -translate-y-1">
@@ -144,13 +144,13 @@ export default function Header() {
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="md:hidden bg-white border-t-2 border-black px-4 py-4 flex flex-col gap-4 font-semibold">
-          <Link href="/"         onClick={() => setMobileOpen(false)}>SHOP</Link>
-          <Link href="/about"    onClick={() => setMobileOpen(false)}>ABOUT</Link>
-          <Link href="/products" onClick={() => setMobileOpen(false)}>PRODUCTS</Link>
+          <Link href="/"         onClick={() => setMobileOpen(false)}>CỬA HÀNG</Link>
+          <Link href="/about"    onClick={() => setMobileOpen(false)}>GIỚI THIỆU</Link>
+          <Link href="/products" onClick={() => setMobileOpen(false)}>SẢN PHẨM</Link>
           {!isAuthenticated && (
             <div className="flex gap-2 pt-2 border-t-2 border-black">
-              <Link href="/login"    onClick={() => setMobileOpen(false)} className="btn-secondary flex-1 text-center text-sm py-1.5">Login</Link>
-              <Link href="/register" onClick={() => setMobileOpen(false)} className="btn-primary  flex-1 text-center text-sm py-1.5">Sign up</Link>
+              <Link href="/login"    onClick={() => setMobileOpen(false)} className="btn-secondary flex-1 text-center text-sm py-1.5">Đăng nhập</Link>
+              <Link href="/register" onClick={() => setMobileOpen(false)} className="btn-primary  flex-1 text-center text-sm py-1.5">Đăng ký</Link>
             </div>
           )}
         </div>
@@ -159,12 +159,12 @@ export default function Header() {
       {/* Marquee banner */}
       <div className="w-full bg-white border-t-2 border-black h-8 flex items-center overflow-hidden">
         <div className="flex gap-8 whitespace-nowrap animate-pulse text-xs font-bold text-primary-dark tracking-widest uppercase">
-          <span>NEW DESIGNS AVAILABLE</span>
-          <span>FLASH SALE: 20% OFF 32x32 PANELS</span>
-          <span>FREE SHIPPING ON ORDERS OVER $50</span>
-          <span>NEW DESIGNS AVAILABLE</span>
-          <span>FLASH SALE: 20% OFF 32x32 PANELS</span>
-          <span>FREE SHIPPING ON ORDERS OVER $50</span>
+          <span>CÓ THIẾT KẾ MỚI</span>
+          <span>GIẢM 20% BẢNG LED 32x32</span>
+          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN $50</span>
+          <span>CÓ THIẾT KẾ MỚI</span>
+          <span>GIẢM 20% BẢNG LED 32x32</span>
+          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN $50</span>
         </div>
       </div>
     </header>

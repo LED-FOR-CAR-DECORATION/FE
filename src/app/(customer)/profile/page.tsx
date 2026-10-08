@@ -56,11 +56,13 @@ const STATUS_CFG: Record<string, { badge: string; icon: React.ReactNode }> = {
   Cancelled: { badge: "bg-red-100   text-red-700   border-red-400",    icon: <X size={12} /> },
 };
 
+const STATUS_LABEL: Record<string, string> = { Pending: "Chờ xử lý", Confirmed: "Đã xác nhận", Shipping: "Đang giao", Delivered: "Đã giao", Cancelled: "Đã hủy" };
+
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.Pending;
   return (
     <span className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[11px] font-bold rounded-sm ${cfg.badge}`}>
-      {cfg.icon} {status}
+      {cfg.icon} {STATUS_LABEL[status] ?? status}
     </span>
   );
 }
@@ -79,23 +81,23 @@ function AccountInfoTab() {
         <div className="flex items-center justify-between mb-5 border-b-2 border-black pb-3">
           <div className="flex items-center gap-2">
             <User size={18} />
-            <h3 className="font-black text-lg uppercase tracking-wide">Personal Information</h3>
+            <h3 className="font-black text-lg uppercase tracking-wide">Thông tin cá nhân</h3>
           </div>
           <button
             onClick={() => setEditMode(v => !v)}
             className="flex items-center gap-1.5 btn-secondary text-xs py-1.5 px-3"
           >
-            <Edit2 size={13} /> {editMode ? "Cancel" : "Edit"}
+            <Edit2 size={13} /> {editMode ? "Hủy" : "Chỉnh sửa"}
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
-            { label: "First Name", id: "fn", value: "John",               icon: <User size={14} /> },
-            { label: "Last Name",  id: "ln", value: "Doe",                icon: <User size={14} /> },
-            { label: "Email",      id: "em", value: "john@example.com",   icon: <Mail size={14} /> },
-            { label: "Phone",      id: "ph", value: "(+84) 123 456 789",  icon: <Phone size={14} /> },
-            { label: "Date of Birth", id: "dob", value: "Jan 1, 1995",   icon: <Calendar size={14} /> },
+            { label: "Tên", id: "fn", value: "John", icon: <User size={14} /> },
+            { label: "Họ", id: "ln", value: "Doe", icon: <User size={14} /> },
+            { label: "Email", id: "em", value: "john@example.com", icon: <Mail size={14} /> },
+            { label: "Điện thoại", id: "ph", value: "(+84) 123 456 789", icon: <Phone size={14} /> },
+            { label: "Ngày sinh", id: "dob", value: "01/01/1995", icon: <Calendar size={14} /> },
           ].map(({ label, id, value, icon }) => (
             <div key={id}>
               <label htmlFor={id} className="flex items-center gap-1.5 text-xs font-bold uppercase mb-1 text-text-muted">
@@ -112,7 +114,7 @@ function AccountInfoTab() {
           ))}
           <div>
             <label className="flex items-center gap-1.5 text-xs font-bold uppercase mb-1 text-text-muted">
-              <Edit2 size={14} /> Password
+              <Edit2 size={14} /> Mật khẩu
             </label>
             <input type="password" defaultValue="••••••••" disabled={!editMode} className={inputCls} />
           </div>
@@ -120,8 +122,8 @@ function AccountInfoTab() {
 
         {editMode && (
           <div className="flex gap-2 mt-5">
-            <button onClick={() => setEditMode(false)} className="btn-secondary text-sm py-2 px-5">Cancel</button>
-            <button onClick={() => setEditMode(false)} className="btn-primary text-sm py-2 px-5">Save Changes</button>
+            <button onClick={() => setEditMode(false)} className="btn-secondary text-sm py-2 px-5">Hủy</button>
+            <button onClick={() => setEditMode(false)} className="btn-primary text-sm py-2 px-5">Lưu thay đổi</button>
           </div>
         )}
       </div>
@@ -131,10 +133,10 @@ function AccountInfoTab() {
         <div className="flex items-center justify-between mb-5 border-b-2 border-black pb-3">
           <div className="flex items-center gap-2">
             <MapPin size={18} />
-            <h3 className="font-black text-lg uppercase tracking-wide">Shipping Addresses</h3>
+            <h3 className="font-black text-lg uppercase tracking-wide">Địa chỉ giao hàng</h3>
           </div>
           <button onClick={() => setIsAddressModalOpen(true)} className="flex items-center gap-1.5 btn-primary text-xs py-1.5 px-3">
-            <Plus size={13} /> Add Address
+            <Plus size={13} /> Thêm địa chỉ
           </button>
         </div>
 
@@ -145,17 +147,17 @@ function AccountInfoTab() {
           ].map((addr, i) => (
             <div key={i} className={`border-2 ${addr.default ? "border-primary shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]" : "border-black"} p-4 relative`}>
               {addr.default && (
-                <span className="absolute top-2 right-2 bg-primary border border-black text-[10px] font-black px-2 py-0.5 uppercase">Default</span>
+                <span className="absolute top-2 right-2 bg-primary border border-black text-[10px] font-black px-2 py-0.5 uppercase">Mặc định</span>
               )}
               <p className="font-black">{addr.name}</p>
               <p className="text-sm text-text-muted">{addr.phone}</p>
               <p className="text-sm mt-1">{addr.address}</p>
               <div className="flex items-center gap-3 mt-3">
-                <button className="text-xs font-bold text-primary-dark hover:underline flex items-center gap-1"><Edit2 size={11} /> Edit</button>
+                <button className="text-xs font-bold text-primary-dark hover:underline flex items-center gap-1"><Edit2 size={11} /> Sửa</button>
                 {!addr.default && (
                   <>
-                    <button className="text-xs font-bold text-text-muted hover:underline flex items-center gap-1"><Trash2 size={11} /> Delete</button>
-                    <button className="text-xs font-bold hover:underline">Set as default</button>
+                    <button className="text-xs font-bold text-text-muted hover:underline flex items-center gap-1"><Trash2 size={11} /> Xóa</button>
+                    <button className="text-xs font-bold hover:underline">Đặt làm mặc định</button>
                   </>
                 )}
               </div>
@@ -173,7 +175,7 @@ function OrderHistoryTab() {
     <div className="neo-box-no-hover bg-white">
       <div className="flex items-center gap-2 p-5 border-b-2 border-black">
         <Package size={18} />
-        <h3 className="font-black text-lg uppercase tracking-wide">Order History</h3>
+        <h3 className="font-black text-lg uppercase tracking-wide">Lịch sử đơn hàng</h3>
       </div>
 
       <div className="divide-y-2 divide-black">
@@ -198,12 +200,12 @@ function OrderHistoryTab() {
             </div>
 
             <div className="flex items-center justify-between">
-              <p className="text-sm font-black">Total: <span className="text-primary-dark">${order.total}</span></p>
+              <p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">${order.total}</span></p>
               <Link
                 href={`/profile/orders/${order.id}`}
                 className="flex items-center gap-1.5 text-xs font-bold border-2 border-black px-3 py-1.5 hover:bg-primary/20 transition-colors"
               >
-                <Eye size={13} /> View Details
+                <Eye size={13} /> Xem chi tiết
               </Link>
             </div>
           </div>
@@ -243,7 +245,7 @@ export default function ProfilePage() {
                 className={`px-6 py-3 text-sm font-black uppercase tracking-wide border-r-2 border-black transition-colors
                   ${tab === t ? "bg-primary" : "bg-white hover:bg-gray-50"}`}
               >
-                {t === "account" ? "Account Info" : "Order History"}
+                {t === "account" ? "Thông tin tài khoản" : "Lịch sử đơn hàng"}
               </button>
             ))}
           </div>

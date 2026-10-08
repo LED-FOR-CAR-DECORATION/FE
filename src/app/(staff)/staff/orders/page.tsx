@@ -38,11 +38,11 @@ const MOCK_ORDERS: Order[] = [
 
 /* ══════════════ STATUS CONFIG ══════════════ */
 const STATUS_CONFIG: Record<OrderStatus, { label: string; badge: string; icon: React.ReactNode }> = {
-  Pending:   { label: "Pending",   badge: "bg-amber-100  text-amber-700  border-amber-400",  icon: <Circle size={12}      className="text-amber-500" /> },
-  Confirmed: { label: "Confirmed", badge: "bg-blue-100   text-blue-700   border-blue-400",   icon: <CheckCircle size={12} className="text-blue-500"  /> },
-  Shipping:  { label: "Shipping",  badge: "bg-green-100  text-green-700  border-green-400",  icon: <Truck size={12}       className="text-green-500" /> },
-  Delivered: { label: "Delivered", badge: "bg-gray-100   text-gray-600   border-gray-400",   icon: <CheckCircle size={12} className="text-gray-500"  /> },
-  Cancelled: { label: "Cancelled", badge: "bg-red-100    text-red-700    border-red-400",    icon: <X size={12}           className="text-red-500"   /> },
+  Pending:   { label: "Chờ xử lý",     badge: "bg-amber-100  text-amber-700  border-amber-400",  icon: <Circle size={12}      className="text-amber-500" /> },
+  Confirmed: { label: "Đã xác nhận",   badge: "bg-blue-100   text-blue-700   border-blue-400",   icon: <CheckCircle size={12} className="text-blue-500"  /> },
+  Shipping:  { label: "Đang giao",    badge: "bg-green-100  text-green-700  border-green-400",  icon: <Truck size={12}       className="text-green-500" /> },
+  Delivered: { label: "Đã giao",      badge: "bg-gray-100   text-gray-600   border-gray-400",   icon: <CheckCircle size={12} className="text-gray-500"  /> },
+  Cancelled: { label: "Đã hủy",       badge: "bg-red-100    text-red-700    border-red-400",    icon: <X size={12}           className="text-red-500"   /> },
 };
 
 function StatusBadge({ status }: { status: OrderStatus }) {
@@ -424,8 +424,8 @@ export default function OrdersPage() {
         {/* Page header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-black uppercase tracking-tight">Order Management</h1>
-            <p className="text-sm text-text-muted font-medium">Manage and track all customer orders.</p>
+            <h1 className="text-2xl font-black uppercase tracking-tight">Quản lý đơn hàng</h1>
+            <p className="text-sm text-text-muted font-medium">Quản lý và theo dõi tất cả đơn hàng của khách.</p>
           </div>
           <button
             onClick={() => setShowCreate(true)}
@@ -446,7 +446,7 @@ export default function OrdersPage() {
                 onClick={() => setActiveTab(s)}
                 className={`neo-box-no-hover p-3 text-left transition-shadow hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${active ? "bg-primary shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]" : "bg-white"}`}
               >
-                <p className="text-xs font-bold uppercase text-text-muted">{s}</p>
+                <p className="text-xs font-bold uppercase text-text-muted">{s === "All" ? "Tất cả" : STATUS_CONFIG[s].label}</p>
                 <p className="text-2xl font-black">{count}</p>
               </button>
             );
@@ -459,7 +459,7 @@ export default function OrdersPage() {
             <Search size={15} className="text-text-muted flex-shrink-0" />
             <input
               type="text"
-              placeholder="Tìm theo mã đơn, tên khách, SĐT..."
+              placeholder="Tìm theo mã đơn, tên khách, số điện thoại..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="bg-transparent outline-none text-sm w-full"
@@ -495,7 +495,7 @@ export default function OrdersPage() {
               className={`px-4 py-2.5 text-sm font-bold whitespace-nowrap border-r-2 border-black transition-colors
                 ${activeTab === s ? "bg-primary" : "bg-white hover:bg-gray-50"}`}
             >
-              {s}
+              {s === "All" ? "Tất cả" : STATUS_CONFIG[s].label}
               <span className="ml-1.5 text-[10px] bg-black text-white px-1.5 py-0.5 font-black">
                 {s === "All" ? MOCK_ORDERS.length : MOCK_ORDERS.filter(o => o.status === s).length}
               </span>

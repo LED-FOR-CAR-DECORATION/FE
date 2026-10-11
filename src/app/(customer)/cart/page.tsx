@@ -1,124 +1,52 @@
+"use client";
+
 import Link from "next/link";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { ShoppingBag, Trash2 } from "lucide-react";
+import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { useCart } from "@/features/cart/context/CartContext";
 
 export default function CartPage() {
+  const { items, isLoading, updateQuantity, removeItem, clearItems, subtotal } = useCart();
+  const shipping = items.some((item) => item.productType === "LED_MODEL") && subtotal > 0 ? 5 : 0;
+
+  if (isLoading) return <><Header /><main className="flex-1 grid place-items-center p-20">Đang tải giỏ hàng...</main><Footer /></>;
+
   return (
     <>
       <Header />
       <main className="flex-1 bg-background py-10">
-        <div className="container mx-auto px-4 max-w-4xl flex flex-col min-h-[60vh]">
-          
-          <div className="flex items-center gap-3 mb-8">
-            <div className="p-2 bg-white border-2 border-black rounded-md">
-              <ShoppingBag size={28} />
+        <div className="container mx-auto min-h-[60vh] max-w-5xl px-4">
+          <div className="mb-8 flex items-center gap-3"><ShoppingBag size={28} /><h1 className="text-3xl font-black uppercase">Giỏ hàng</h1></div>
+          {items.length === 0 ? (
+            <div className="neo-box-no-hover bg-white p-14 text-center">
+              <ShoppingBag className="mx-auto mb-4 text-primary-dark" size={42} />
+              <h2 className="mb-2 text-xl font-black">Giỏ hàng đang trống</h2>
+              <Link href="/" className="btn-primary inline-block mt-4">Tiếp tục mua sắm</Link>
             </div>
-            <h1 className="text-3xl font-black uppercase tracking-tight">Giỏ hàng</h1>
-          </div>
-
-          {/* Cart Items Box */}
-          <div className="neo-box-no-hover bg-white flex flex-col mb-8 overflow-hidden">
-            {/* Header row */}
-            <div className="hidden md:grid grid-cols-12 gap-4 p-4 border-b-2 border-black font-bold uppercase text-sm bg-gray-50">
-              <div className="col-span-1 flex items-center justify-center">
-                <input type="checkbox" className="w-5 h-5 border-2 border-black rounded-none appearance-none checked:bg-primary checked:after:content-['✓'] flex items-center justify-center text-black font-bold" />
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="neo-box-no-hover bg-white lg:col-span-2">
+                {items.map((item) => (
+                  <div key={item.id} className="flex flex-wrap items-center gap-4 border-b-2 border-gray-100 p-4 last:border-0">
+                    <div className="grid h-20 w-20 place-items-center border-2 border-black bg-gray-100 text-xs font-bold">[IMG]</div>
+                    <div className="min-w-40 flex-1"><h2 className="font-black">{item.name}</h2><p className="text-sm text-text-muted">${item.price.toFixed(2)} / sản phẩm</p></div>
+                    <div className="flex h-9 border-2 border-black"><button onClick={() => updateQuantity(item.id, item.quantity - 1)} disabled={item.quantity <= 1} className="w-9 border-r-2 border-black disabled:opacity-40"><Minus size={14} className="mx-auto" /></button><span className="grid w-10 place-items-center font-bold">{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-9 border-l-2 border-black"><Plus size={14} className="mx-auto" /></button></div>
+                    <strong className="w-20 text-right text-primary-dark">${(item.price * item.quantity).toFixed(2)}</strong>
+                    <button onClick={() => removeItem(item.id)} className="p-2 text-red-600" aria-label={`Xóa ${item.name}`}><Trash2 size={17} /></button>
+                  </div>
+                ))}
+                <button onClick={() => clearItems()} className="m-4 flex items-center gap-2 text-sm font-bold text-red-600 hover:underline"><Trash2 size={15} /> Xóa toàn bộ</button>
               </div>
-              <div className="col-span-5">Sản phẩm</div>
-              <div className="col-span-2 text-center">Đơn giá</div>
-              <div className="col-span-2 text-center">Số lượng</div>
-              <div className="col-span-2 text-right">Thành tiền</div>
-            </div>
-
-            {/* Item 1 */}
-            <div className="grid grid-cols-12 gap-4 p-4 border-b-2 border-black items-center group">
-              <div className="col-span-12 md:col-span-1 flex items-center justify-start md:justify-center mb-4 md:mb-0">
-                <input type="checkbox" className="w-5 h-5 border-2 border-black rounded-none appearance-none checked:bg-primary checked:after:content-['✓'] flex items-center justify-center text-black font-bold" />
-              </div>
-              <div className="col-span-12 md:col-span-5 flex gap-4">
-                <div className="w-24 h-24 bg-gray-200 border-2 border-black flex-shrink-0 flex items-center justify-center text-xs font-bold text-gray-500 uppercase">
-                  [Img]
-                </div>
-                <div className="flex flex-col justify-center">
-                  <h4 className="font-bold text-base leading-tight uppercase line-clamp-2">32x32 Matrix Panel</h4>
-                  <p className="text-sm font-medium text-text-muted mt-1">Phân loại: Mặc định</p>
-                </div>
-              </div>
-              <div className="col-span-4 md:col-span-2 text-left md:text-center font-bold">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Đơn giá</span>
-                $20.00
-              </div>
-              <div className="col-span-4 md:col-span-2 flex justify-center">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Số lượng</span>
-                <div className="flex border-2 border-black w-24 h-8 bg-white">
-                  <button className="flex-1 hover:bg-gray-100 font-bold border-r-2 border-black">-</button>
-                  <div className="flex-1 flex items-center justify-center font-bold text-sm">2</div>
-                  <button className="flex-1 hover:bg-gray-100 font-bold border-l-2 border-black">+</button>
-                </div>
-              </div>
-              <div className="col-span-4 md:col-span-2 text-right font-black text-primary-dark">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Total</span>
-                $40.00
+              <div className="neo-box-no-hover h-fit bg-primary p-5">
+                <h2 className="mb-4 border-b-2 border-black pb-3 text-lg font-black uppercase">Tóm tắt</h2>
+                <div className="flex justify-between text-sm font-bold"><span>Tạm tính</span><span>${subtotal.toFixed(2)}</span></div>
+                <div className="mt-2 flex justify-between text-sm font-bold"><span>Vận chuyển</span><span>${shipping.toFixed(2)}</span></div>
+                <div className="mt-4 flex justify-between border-t-2 border-black pt-3 text-xl font-black"><span>Tổng</span><span>${(subtotal + shipping).toFixed(2)}</span></div>
+                <Link href="/checkout" className="btn-secondary mt-5 block w-full text-center">Tiến hành thanh toán</Link>
               </div>
             </div>
-
-            {/* Item 2 */}
-            <div className="grid grid-cols-12 gap-4 p-4 items-center group">
-              <div className="col-span-12 md:col-span-1 flex items-center justify-start md:justify-center mb-4 md:mb-0">
-                <input type="checkbox" className="w-5 h-5 border-2 border-black rounded-none appearance-none checked:bg-primary checked:after:content-['✓'] flex items-center justify-center text-black font-bold" />
-              </div>
-              <div className="col-span-12 md:col-span-5 flex gap-4">
-                <div className="w-24 h-24 bg-gray-200 border-2 border-black flex-shrink-0 flex items-center justify-center text-xs font-bold text-gray-500 uppercase">
-                  [Img]
-                </div>
-                <div className="flex flex-col justify-center">
-                  <h4 className="font-bold text-base leading-tight uppercase line-clamp-2">Character Sprite Pack A</h4>
-                  <p className="text-sm font-medium text-text-muted mt-1">Tải xuống kỹ thuật số</p>
-                </div>
-              </div>
-              <div className="col-span-4 md:col-span-2 text-left md:text-center font-bold">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Đơn giá</span>
-                $5.00
-              </div>
-              <div className="col-span-4 md:col-span-2 flex justify-center">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Số lượng</span>
-                <div className="flex border-2 border-black w-24 h-8 bg-white">
-                  <button className="flex-1 hover:bg-gray-100 font-bold border-r-2 border-black">-</button>
-                  <div className="flex-1 flex items-center justify-center font-bold text-sm">1</div>
-                  <button className="flex-1 hover:bg-gray-100 font-bold border-l-2 border-black">+</button>
-                </div>
-              </div>
-              <div className="col-span-4 md:col-span-2 text-right font-black text-primary-dark">
-                <span className="md:hidden text-xs text-gray-500 uppercase block mb-1">Thành tiền</span>
-                $5.00
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Bar */}
-          <div className="mt-auto neo-box-no-hover bg-primary p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-start">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-5 h-5 border-2 border-black rounded-none appearance-none checked:bg-white checked:after:content-['✓'] flex items-center justify-center text-black font-bold" />
-                <span className="font-bold uppercase text-sm">Chọn tất cả (2)</span>
-              </label>
-              
-              <button className="flex items-center gap-1 text-sm font-bold uppercase hover:underline">
-                <Trash2 size={16} /> Xóa
-              </button>
-            </div>
-
-            <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
-              <div className="flex items-center gap-2">
-                <span className="font-bold uppercase text-sm">Tổng tiền:</span>
-                <span className="text-3xl font-black text-white drop-shadow-md">$45.00</span>
-              </div>
-              <Link href="/checkout" className="btn-secondary py-3 px-8 text-lg bg-white">
-                Thanh toán
-              </Link>
-            </div>
-          </div>
-
+          )}
         </div>
       </main>
       <Footer />

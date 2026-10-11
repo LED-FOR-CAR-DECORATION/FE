@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useCart } from "@/features/cart/context/CartContext";
 
 /* ── User dropdown (shown when logged in) ── */
 function UserDropdown() {
@@ -28,7 +29,7 @@ function UserDropdown() {
         aria-label="Trình đơn người dùng"
       >
         <User size={22} />
-        <span className="hidden md:inline max-w-[100px] truncate">{user?.name}</span>
+        <span className="hidden md:inline max-w-[100px] truncate">{user?.fullName}</span>
         <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
@@ -41,8 +42,22 @@ function UserDropdown() {
           >
             <User size={15} /> Hồ sơ của tôi
           </Link>
+          <Link
+            href="/profile/orders"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 border-b-2 border-black"
+          >
+            <ShoppingBag size={15} /> Lịch sử đơn hàng
+          </Link>
+          <Link
+            href="/profile/gallery"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-gray-50"
+          >
+            <ShoppingBag size={15} /> Gallery Character
+          </Link>
           <button
-            onClick={() => { logout(); setOpen(false); }}
+            onClick={async () => { await logout(); setOpen(false); window.location.assign("/"); }}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-red-50 text-red-600"
           >
             <LogOut size={15} /> Đăng xuất
@@ -75,7 +90,8 @@ function GuestButtons() {
 
 /* ── Header ── */
 export default function Header() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  const { itemCount } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -94,7 +110,6 @@ export default function Header() {
           <nav className="hidden md:flex items-center gap-6 font-semibold">
             <Link href="/"        className="hover:underline underline-offset-4">CỬA HÀNG</Link>
             <Link href="/about"   className="hover:underline underline-offset-4">GIỚI THIỆU</Link>
-            <Link href="/products" className="hover:underline underline-offset-4">SẢN PHẨM</Link>
           </nav>
         </div>
 
@@ -111,7 +126,9 @@ export default function Header() {
           </div>
 
           {/* Auth-aware zone */}
-          {isAuthenticated ? (
+          {isLoading ? (
+            <div className="h-9 w-24 animate-pulse bg-white/60 border-2 border-black" aria-label="Đang tải phiên đăng nhập" />
+          ) : isAuthenticated ? (
             <>
               {/* Cart (only for logged-in users) */}
               <Link
@@ -121,7 +138,7 @@ export default function Header() {
               >
                 <ShoppingBag size={24} />
                 <span className="absolute top-0 right-0 bg-white text-black text-xs font-bold border-2 border-black rounded-full h-5 w-5 flex items-center justify-center translate-x-1 -translate-y-1">
-                  2
+                  {itemCount}
                 </span>
               </Link>
               <UserDropdown />
@@ -146,8 +163,7 @@ export default function Header() {
         <div className="md:hidden bg-white border-t-2 border-black px-4 py-4 flex flex-col gap-4 font-semibold">
           <Link href="/"         onClick={() => setMobileOpen(false)}>CỬA HÀNG</Link>
           <Link href="/about"    onClick={() => setMobileOpen(false)}>GIỚI THIỆU</Link>
-          <Link href="/products" onClick={() => setMobileOpen(false)}>SẢN PHẨM</Link>
-          {!isAuthenticated && (
+          {!isLoading && !isAuthenticated && (
             <div className="flex gap-2 pt-2 border-t-2 border-black">
               <Link href="/login"    onClick={() => setMobileOpen(false)} className="btn-secondary flex-1 text-center text-sm py-1.5">Đăng nhập</Link>
               <Link href="/register" onClick={() => setMobileOpen(false)} className="btn-primary  flex-1 text-center text-sm py-1.5">Đăng ký</Link>

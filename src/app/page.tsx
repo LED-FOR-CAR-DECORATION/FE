@@ -74,7 +74,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-end justify-between mt-4">
                   <span className="text-2xl font-black tracking-tighter">$20.00</span>
-                  <Link href="/products/1" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
+                  <Link href="/products/matrix-32" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
                 </div>
               </div>
             </div>
@@ -93,7 +93,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-end justify-between mt-4">
                   <span className="text-2xl font-black tracking-tighter">$15.00</span>
-                  <Link href="/products/2" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
+                  <Link href="/products/matrix-16" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
                 </div>
               </div>
             </div>
@@ -112,7 +112,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-end justify-between mt-4">
                   <span className="text-2xl font-black tracking-tighter">$45.00</span>
-                  <button className="btn-secondary text-xs py-1.5 px-3 opacity-50 cursor-not-allowed">Hết hàng</button>
+                  <Link href="/products/matrix-64" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
                 </div>
               </div>
             </div>
@@ -131,7 +131,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-end justify-between mt-4">
                   <span className="text-2xl font-black tracking-tighter">$12.50</span>
-                  <Link href="/products/4" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
+                  <Link href="/products/controller-box" className="btn-primary text-xs py-1.5 px-3 bg-primary">Xem chi tiết</Link>
                 </div>
               </div>
             </div>

@@ -4,49 +4,18 @@ import React, { useState } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import AddAddressModal from "@/components/ui/AddAddressModal";
+import { useAddresses } from "@/features/address/context/AddressContext";
 import Link from "next/link";
 import {
   User, MapPin, Package, ChevronRight, Edit2, Plus,
   Trash2, Phone, Mail, Calendar, CheckCircle, Truck,
   Circle, Clock, X, ArrowRight, Eye
 } from "lucide-react";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useOrders } from "@/features/order/context/OrderContext";
 
 /* ── Shared order data (mock) ── */
-export const MOCK_ORDERS = [
-  {
-    id: "ORD-1049", date: "Oct 8, 2024", status: "Pending",
-    items: [{ name: "32×32 Matrix Panel", qty: 2, price: 40 }, { name: "Character Sprite Pack A", qty: 1, price: 5 }],
-    subtotal: 45, shipping: 5, total: 50,
-    address: "Number 8, Sesame Street, NYC, USA",
-    service: "ViettelPost Fast",
-  },
-  {
-    id: "ORD-1044", date: "Oct 6, 2024", status: "Shipping",
-    items: [{ name: "64×64 Matrix Panel", qty: 1, price: 120 }],
-    subtotal: 120, shipping: 5, total: 125,
-    address: "654 Vo Van Tan, Q3, TP.HCM",
-    service: "ViettelPost Fast",
-    tracking: "VTPOST-9284710",
-    shippingSteps: [
-      { label: "Order placed",    time: "Oct 6, 09:00", done: true },
-      { label: "Confirmed",       time: "Oct 6, 11:30", done: true },
-      { label: "Picked up",       time: "Oct 7, 08:10", done: true },
-      { label: "In transit",      time: "Oct 7, 14:00", done: true },
-      { label: "Out for delivery",time: "Oct 8, 08:30", done: false },
-      { label: "Delivered",       time: "",             done: false },
-    ],
-  },
-  {
-    id: "ORD-1038", date: "Sep 28, 2024", status: "Delivered",
-    items: [{ name: "8×8 Matrix Panel", qty: 4, price: 48 }],
-    subtotal: 48, shipping: 2, total: 50,
-    address: "Number 8, Sesame Street, NYC, USA",
-    service: "Standard",
-  },
-];
-
 type Tab = "account" | "orders";
-type OrderStatus = "Pending" | "Confirmed" | "Shipping" | "Delivered" | "Cancelled";
 
 const STATUS_CFG: Record<string, { badge: string; icon: React.ReactNode }> = {
   Pending:   { badge: "bg-amber-100 text-amber-700 border-amber-400",  icon: <Circle size={12} /> },
@@ -71,17 +40,21 @@ function StatusBadge({ status }: { status: string }) {
 function AccountInfoTab() {
   const [editMode, setEditMode] = useState(false);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const { addresses, isLoading, addAddress, removeAddress, setDefaultAddress } = useAddresses();
   const inputCls = "w-full bg-gray-50 border-2 border-black py-2 px-3 text-sm outline-none focus:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
 
   return (
-    <div className="flex flex-col gap-6">
-      <AddAddressModal isOpen={isAddressModalOpen} onClose={() => setIsAddressModalOpen(false)} />
+    <div className="flex flex-col gap-4">
+      <AddAddressModal isOpen={isAddressModalOpen} onClose={() => setIsAddressModalOpen(false)} onSave={(address) => { addAddress(address); setIsAddressModalOpen(false); }} />
       {/* Personal Info */}
-      <div className="neo-box-no-hover bg-white p-6">
-        <div className="flex items-center justify-between mb-5 border-b-2 border-black pb-3">
+      <div className="profile-card profile-enter profile-enter-delay-1">
+        <div className="flex items-center justify-between mb-5 border-b border-primary-light pb-3">
           <div className="flex items-center gap-2">
-            <User size={18} />
-            <h3 className="font-black text-lg uppercase tracking-wide">Thông tin cá nhân</h3>
+            <span className="profile-section-icon"><User size={18} /></span>
+            <div>
+              <h3 className="font-black text-lg uppercase tracking-wide">Thông tin cá nhân</h3>
+              <p className="text-xs text-text-muted">Quản lý thông tin tài khoản của bạn.</p>
+            </div>
           </div>
           <button
             onClick={() => setEditMode(v => !v)}
@@ -100,7 +73,7 @@ function AccountInfoTab() {
             { label: "Ngày sinh", id: "dob", value: "01/01/1995", icon: <Calendar size={14} /> },
           ].map(({ label, id, value, icon }) => (
             <div key={id}>
-              <label htmlFor={id} className="flex items-center gap-1.5 text-xs font-bold uppercase mb-1 text-text-muted">
+              <label htmlFor={id} className="flex items-center gap-1.5 text-xs font-bold mb-1 text-text-muted">
                 {icon} {label}
               </label>
               <input
@@ -129,11 +102,14 @@ function AccountInfoTab() {
       </div>
 
       {/* Shipping Addresses */}
-      <div className="neo-box-no-hover bg-white p-6">
-        <div className="flex items-center justify-between mb-5 border-b-2 border-black pb-3">
+      <div className="profile-card profile-enter profile-enter-delay-2">
+        <div className="flex items-center justify-between mb-5 border-b border-primary-light pb-3">
           <div className="flex items-center gap-2">
-            <MapPin size={18} />
-            <h3 className="font-black text-lg uppercase tracking-wide">Địa chỉ giao hàng</h3>
+            <span className="profile-section-icon"><MapPin size={18} /></span>
+            <div>
+              <h3 className="font-black text-lg uppercase tracking-wide">Địa chỉ giao hàng</h3>
+              <p className="text-xs text-text-muted">Quản lý địa chỉ giao hàng của bạn.</p>
+            </div>
           </div>
           <button onClick={() => setIsAddressModalOpen(true)} className="flex items-center gap-1.5 btn-primary text-xs py-1.5 px-3">
             <Plus size={13} /> Thêm địa chỉ
@@ -141,25 +117,26 @@ function AccountInfoTab() {
         </div>
 
         <div className="flex flex-col gap-3">
-          {[
-            { name: "John Doe", phone: "(+84) 123 456 789", address: "Number 8, Sesame Street, NYC, USA", default: true },
-            { name: "John Doe", phone: "(+84) 987 654 321", address: "456 Nguyen Hue, Q1, TP.HCM", default: false },
-          ].map((addr, i) => (
-            <div key={i} className={`border-2 ${addr.default ? "border-primary shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]" : "border-black"} p-4 relative`}>
-              {addr.default && (
+          {isLoading ? <p className="text-sm text-text-muted">Đang tải địa chỉ...</p> : addresses.length === 0 ? <p className="text-sm text-text-muted">Bạn chưa có địa chỉ nào.</p> : addresses.map((addr) => (
+            <div key={addr.id} className={`address-card ${addr.isDefault ? "address-card-default" : ""}`}>
+              {addr.isDefault && (
                 <span className="absolute top-2 right-2 bg-primary border border-black text-[10px] font-black px-2 py-0.5 uppercase">Mặc định</span>
               )}
-              <p className="font-black">{addr.name}</p>
-              <p className="text-sm text-text-muted">{addr.phone}</p>
-              <p className="text-sm mt-1">{addr.address}</p>
+              <div className="flex items-start gap-3">
+                <span className="address-icon"><MapPin size={16} /></span>
+                <div>
+                  <p className="font-black">{addr.fullName}</p>
+              <p className="text-sm text-text-muted">{addr.phoneNumber}</p>
+              <p className="text-sm mt-1">{addr.fullAddress}</p>
+                </div>
+              </div>
               <div className="flex items-center gap-3 mt-3">
-                <button className="text-xs font-bold text-primary-dark hover:underline flex items-center gap-1"><Edit2 size={11} /> Sửa</button>
-                {!addr.default && (
-                  <>
-                    <button className="text-xs font-bold text-text-muted hover:underline flex items-center gap-1"><Trash2 size={11} /> Xóa</button>
-                    <button className="text-xs font-bold hover:underline">Đặt làm mặc định</button>
-                  </>
-                )}
+                <>
+                    <button onClick={() => removeAddress(addr.id)} className="text-xs font-bold text-text-muted hover:underline flex items-center gap-1"><Trash2 size={11} /> Xóa</button>
+                    {!addr.isDefault && (
+                    <button onClick={() => setDefaultAddress(addr.id)} className="text-xs font-bold hover:underline">Đặt làm mặc định</button>
+                    )}
+                </>
               </div>
             </div>
           ))}
@@ -171,21 +148,24 @@ function AccountInfoTab() {
 
 /* ── Order History Tab ── */
 function OrderHistoryTab() {
+  const { user } = useAuth();
+  const { orders } = useOrders();
+  const customerOrders = orders.filter((order) => order.customer.userId === user?.userId);
   return (
-    <div className="neo-box-no-hover bg-white">
+    <div className="profile-card profile-enter profile-enter-delay-1">
       <div className="flex items-center gap-2 p-5 border-b-2 border-black">
         <Package size={18} />
         <h3 className="font-black text-lg uppercase tracking-wide">Lịch sử đơn hàng</h3>
       </div>
 
       <div className="divide-y-2 divide-black">
-        {MOCK_ORDERS.map((order) => (
+        {customerOrders.length === 0 ? <p className="p-8 text-center text-sm text-text-muted">Bạn chưa có đơn hàng nào.</p> : customerOrders.map((order) => (
           <div key={order.id} className="p-5 hover:bg-gray-50 transition-colors">
             <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
               <div>
                 <p className="font-black text-primary-dark">#{order.id}</p>
                 <p className="text-xs text-text-muted flex items-center gap-1 mt-0.5">
-                  <Clock size={11} /> {order.date} · {order.service}
+                  <Clock size={11} /> {new Date(order.createdAt).toLocaleDateString("vi-VN")} · {order.service}
                 </p>
               </div>
               <StatusBadge status={order.status} />
@@ -194,7 +174,7 @@ function OrderHistoryTab() {
             <div className="flex flex-col gap-1 mb-3">
               {order.items.map((item, i) => (
                 <p key={i} className="text-sm font-medium">
-                  {item.name} <span className="text-text-muted">× {item.qty}</span> — <span className="font-bold">${item.price}</span>
+                  {item.name} <span className="text-text-muted">× {item.quantity}</span> — <span className="font-bold">${item.price}</span>
                 </p>
               ))}
             </div>
@@ -222,30 +202,31 @@ export default function ProfilePage() {
   return (
     <>
       <Header />
-      <main className="flex-1 bg-background py-10">
-        <div className="container mx-auto px-4 max-w-5xl">
+      <main className="profile-page flex-1 bg-background py-7 md:py-10">
+        <div className="profile-pixels profile-pixels-left" aria-hidden="true" />
+        <div className="profile-pixels profile-pixels-right" aria-hidden="true" />
+        <div className="container relative z-10 mx-auto px-4 max-w-3xl">
 
           {/* Header */}
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-16 h-16 bg-primary border-2 border-black flex items-center justify-center font-black text-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              J
+          <div className="profile-enter flex items-center gap-4 mb-5">
+            <div className="profile-avatar">
+              <span className="profile-avatar-face">J</span>
             </div>
             <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight">John Doe</h1>
+              <h1 className="text-3xl font-black tracking-tight">John Doe</h1>
               <p className="text-text-muted text-sm">john@example.com</p>
             </div>
           </div>
 
           {/* Tab switcher */}
-          <div className="flex border-b-2 border-black mb-6">
+          <div className="profile-tabs profile-enter profile-enter-delay-1 mb-4">
             {(["account", "orders"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`px-6 py-3 text-sm font-black uppercase tracking-wide border-r-2 border-black transition-colors
-                  ${tab === t ? "bg-primary" : "bg-white hover:bg-gray-50"}`}
+                className={`profile-tab ${tab === t ? "profile-tab-active" : ""}`}
               >
-                {t === "account" ? "Thông tin tài khoản" : "Lịch sử đơn hàng"}
+                {t === "account" ? <><User size={16} /> Thông tin tài khoản</> : <><Package size={16} /> Lịch sử đơn hàng</>}
               </button>
             ))}
           </div>

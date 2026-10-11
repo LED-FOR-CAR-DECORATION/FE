@@ -35,15 +35,15 @@ export default function ManagerSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 min-h-screen bg-white border-r-2 border-black flex flex-col flex-shrink-0">
+    <aside className="manager-sidebar w-60 min-h-screen bg-white border-r flex flex-col flex-shrink-0">
       {/* Logo */}
-      <div className="flex items-center gap-2 px-4 py-4 border-b-2 border-black">
+      <div className="manager-brand flex items-center gap-2 px-4 py-4 border-b">
         {/* Pixel icon placeholder */}
-        <div className="w-8 h-8 bg-primary border-2 border-black flex items-center justify-center text-xs font-black">
+        <div className="manager-brand-icon w-8 h-8 bg-primary border flex items-center justify-center text-xs font-black">
           PH
         </div>
         <span className="font-black text-base tracking-tight">PIXEL HUB</span>
-        <span className="ml-auto bg-primary border-2 border-black text-[10px] font-black px-1.5 py-0.5 uppercase">
+        <span className="ml-auto bg-primary border text-[10px] font-black px-1.5 py-0.5 uppercase rounded-full">
           Quản lý
         </span>
       </div>
@@ -56,7 +56,7 @@ export default function ManagerSidebar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-none transition-colors
+              className={`manager-nav-link flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors
                 ${active
                   ? "bg-primary border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                   : "hover:bg-primary/30 border-2 border-transparent"
@@ -70,7 +70,7 @@ export default function ManagerSidebar() {
       </nav>
 
       {/* Account section */}
-      <div className="border-t-2 border-black px-2 py-3">
+      <div className="border-t px-2 py-3">
         <p className="text-[10px] font-black uppercase tracking-widest text-text-muted px-3 mb-1">Tài khoản</p>
         {accountItems.map(({ label, href, icon: Icon }) => {
           const active = pathname === href;
@@ -78,7 +78,7 @@ export default function ManagerSidebar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-semibold transition-colors
+              className={`manager-nav-link flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors
                 ${active
                   ? "bg-primary border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                   : "hover:bg-primary/30 border-2 border-transparent"

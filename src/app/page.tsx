@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useState } from "react";
 import {
   Check,
-  ChevronDown,
   Grid2X2,
   Heart,
   Monitor,
@@ -18,6 +17,7 @@ import {
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { PRODUCTS, type CatalogProduct } from "@/features/cart/catalog";
+import type { ProductType } from "@/features/cart/types";
 import { useCart } from "@/features/cart/context/CartContext";
 
 const formatPrice = (price: number) => `${(price * 24500).toLocaleString("vi-VN")} đ`;
@@ -71,7 +71,51 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState<"all" | "LED_MODEL" | "CHARACTER">("all");
   const [sort, setSort] = useState("Phổ biến");
   const [notice, setNotice] = useState("");
-  const filteredProducts = PRODUCTS.filter((product) => activeCategory === "all" || product.productType === activeCategory);
+  const [selectedTypes, setSelectedTypes] = useState<ProductType[]>(["LED_MODEL", "CHARACTER"]);
+  const [selectedStatuses, setSelectedStatuses] = useState<("IN_STOCK" | "OUT_OF_STOCK")[]>(["IN_STOCK"]);
+  const [minPriceInput, setMinPriceInput] = useState("");
+  const [maxPriceInput, setMaxPriceInput] = useState("");
+  const [minPrice, setMinPrice] = useState<number | null>(null);
+  const [maxPrice, setMaxPrice] = useState<number | null>(null);
+  const [priceError, setPriceError] = useState("");
+  const toggleType = (type: ProductType) => {
+    setSelectedTypes((current) => current.includes(type) ? current.filter((value) => value !== type) : [...current, type]);
+  };
+  const toggleStatus = (status: "IN_STOCK" | "OUT_OF_STOCK") => {
+    setSelectedStatuses((current) => current.includes(status) ? current.filter((value) => value !== status) : [...current, status]);
+  };
+  const applyPriceFilter = () => {
+    const nextMin = minPriceInput === "" ? null : Number(minPriceInput);
+    const nextMax = maxPriceInput === "" ? null : Number(maxPriceInput);
+    if ((nextMin !== null && (!Number.isFinite(nextMin) || nextMin < 0)) ||
+      (nextMax !== null && (!Number.isFinite(nextMax) || nextMax < 0)) ||
+      (nextMin !== null && nextMax !== null && nextMin > nextMax)) {
+      setPriceError("Vui lòng nhập khoảng giá hợp lệ.");
+      return;
+    }
+    setPriceError("");
+    setMinPrice(nextMin);
+    setMaxPrice(nextMax);
+  };
+  const clearFilters = () => {
+    setActiveCategory("all");
+    setSelectedTypes(["LED_MODEL", "CHARACTER"]);
+    setSelectedStatuses(["IN_STOCK"]);
+    setMinPriceInput("");
+    setMaxPriceInput("");
+    setMinPrice(null);
+    setMaxPrice(null);
+    setPriceError("");
+  };
+  const filteredProducts = PRODUCTS.filter((product) => {
+    const matchesCategory = activeCategory === "all" || product.productType === activeCategory;
+    const matchesType = selectedTypes.includes(product.productType);
+    const isInStock = true;
+    const matchesStatus = (isInStock && selectedStatuses.includes("IN_STOCK")) || (!isInStock && selectedStatuses.includes("OUT_OF_STOCK"));
+    const matchesMinPrice = minPrice === null || product.price >= minPrice;
+    const matchesMaxPrice = maxPrice === null || product.price <= maxPrice;
+    return matchesCategory && matchesType && matchesStatus && matchesMinPrice && matchesMaxPrice;
+  });
   const sortedProducts = [...filteredProducts].sort((a, b) => sort === "Giá thấp" ? a.price - b.price : sort === "Giá cao" ? b.price - a.price : 0);
 
   const addProduct = (product: CatalogProduct) => {
@@ -93,16 +137,18 @@ export default function Home() {
                 { label: "Tất cả sản phẩm", count: PRODUCTS.length, value: "all" as const, icon: <Grid2X2 size={17} /> },
                 { label: "Thiết bị LED", count: PRODUCTS.filter((p) => p.productType === "LED_MODEL").length, value: "LED_MODEL" as const, icon: <Monitor size={17} /> },
                 { label: "Character", count: PRODUCTS.filter((p) => p.productType === "CHARACTER").length, value: "CHARACTER" as const, icon: <PawPrint size={17} /> },
-              ].map((category) => <button key={category.value} onClick={() => setActiveCategory(category.value)} className={`mb-1 flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs font-semibold ${activeCategory === category.value ? "bg-[#e4efdc] text-[#126356]" : "hover:bg-gray-50"}`}>{category.icon}<span className="flex-1">{category.label}</span><span className="text-gray-400">({category.count})</span></button>)}
+              ].map((category) => <button key={category.value} onClick={() => { setActiveCategory(category.value); if (category.value === "all") setSelectedTypes(["LED_MODEL", "CHARACTER"]); else setSelectedTypes([category.value]); }} className={`mb-1 flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs font-semibold ${activeCategory === category.value ? "bg-[#e4efdc] text-[#126356]" : "hover:bg-gray-50"}`}>{category.icon}<span className="flex-1">{category.label}</span><span className="text-gray-400">({category.count})</span></button>)}
               <hr className="my-4 border-[#e6e9e0]" />
               <h2 className="mb-3 flex items-center gap-2 text-sm font-black"><SlidersHorizontal size={15} />Bộ lọc</h2>
               <p className="text-xs font-bold">Khoảng giá</p>
-              <div className="mt-2 flex gap-1"><input placeholder="Từ" className="w-1/2 rounded border border-gray-300 px-2 py-1 text-xs" /><input placeholder="Đến" className="w-1/2 rounded border border-gray-300 px-2 py-1 text-xs" /></div>
-              <button className="mt-2 w-full rounded bg-[#126356] py-1.5 text-xs font-bold text-white">Áp dụng</button>
+              <div className="mt-2 flex gap-1"><input type="number" min="0" value={minPriceInput} onChange={(event) => setMinPriceInput(event.target.value)} placeholder="Từ ($)" className="w-1/2 rounded border border-gray-300 px-2 py-1 text-xs" /><input type="number" min="0" value={maxPriceInput} onChange={(event) => setMaxPriceInput(event.target.value)} placeholder="Đến ($)" className="w-1/2 rounded border border-gray-300 px-2 py-1 text-xs" /></div>
+              {priceError && <p className="mt-1 text-[11px] text-red-600">{priceError}</p>}
+              <button onClick={applyPriceFilter} className="mt-2 w-full rounded bg-[#126356] py-1.5 text-xs font-bold text-white">Áp dụng</button>
               <p className="mb-2 mt-4 text-xs font-bold">Loại sản phẩm</p>
-              {["Thiết bị LED", "Character"].map((label) => <label key={label} className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" className="accent-[#126356]" />{label}</label>)}
+              {[["Thiết bị LED", "LED_MODEL"], ["Character", "CHARACTER"]].map(([label, type]) => <label key={label} className="mb-2 flex cursor-pointer items-center gap-2 text-xs"><input type="checkbox" checked={selectedTypes.includes(type as ProductType)} onChange={() => { toggleType(type as ProductType); setActiveCategory("all"); }} className="accent-[#126356]" />{label} ({PRODUCTS.filter((product) => product.productType === type).length})</label>)}
               <p className="mb-2 mt-4 text-xs font-bold">Trạng thái</p>
-              {["Còn hàng", "Hết hàng"].map((label, index) => <label key={label} className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" defaultChecked={index === 0} className="accent-[#126356]" />{label} ({index === 0 ? PRODUCTS.length : 0})</label>)}
+              {[["Còn hàng", "IN_STOCK", PRODUCTS.length], ["Hết hàng", "OUT_OF_STOCK", 0] as const].map(([label, status, count]) => <label key={label} className={`mb-2 flex items-center gap-2 text-xs ${count === 0 ? "text-gray-400" : "cursor-pointer"}`}><input type="checkbox" checked={selectedStatuses.includes(status as "IN_STOCK" | "OUT_OF_STOCK")} onChange={() => toggleStatus(status as "IN_STOCK" | "OUT_OF_STOCK")} className="accent-[#126356]" />{label} ({count})</label>)}
+              <button onClick={clearFilters} className="mt-3 w-full text-right text-[11px] font-bold text-[#126356] hover:underline">Xóa tất cả bộ lọc</button>
             </aside>
 
             <div>
@@ -123,10 +169,10 @@ export default function Home() {
                   { label: "Character", icon: <PawPrint size={20} />, value: "CHARACTER" as const },
                   { label: "Bộ sưu tập", icon: <Sparkles size={20} />, value: "all" as const },
                   { label: "Khuyến mãi", icon: <Tag size={20} />, value: "all" as const },
-                ].map((tab) => <button key={tab.label} onClick={() => setActiveCategory(tab.value)} className={`flex flex-col items-center gap-1 border-r border-[#e0e5da] px-2 py-3 text-[11px] font-bold last:border-0 ${activeCategory === tab.value && tab.label !== "Bộ sưu tập" && tab.label !== "Khuyến mãi" ? "text-[#126356]" : "text-gray-700 hover:bg-[#f3f8ef]"}`}>{tab.icon}{tab.label}</button>)}
+                ].map((tab) => <button key={tab.label} onClick={() => { setActiveCategory(tab.value); if (tab.value === "all") setSelectedTypes(["LED_MODEL", "CHARACTER"]); else setSelectedTypes([tab.value]); }} className={`flex flex-col items-center gap-1 border-r border-[#e0e5da] px-2 py-3 text-[11px] font-bold last:border-0 ${activeCategory === tab.value && tab.label !== "Bộ sưu tập" && tab.label !== "Khuyến mãi" ? "text-[#126356]" : "text-gray-700 hover:bg-[#f3f8ef]"}`}>{tab.icon}{tab.label}</button>)}
               </div>
               <div className="mb-3 flex items-center justify-between"><p className="text-sm font-black">{sortedProducts.length} sản phẩm</p><label className="flex items-center gap-2 text-xs">Sắp xếp:<select value={sort} onChange={(event) => setSort(event.target.value)} className="rounded border border-gray-300 bg-white px-2 py-1"><option>Phổ biến</option><option>Giá thấp</option><option>Giá cao</option></select></label></div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{sortedProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={addProduct} />)}</div>
+              {sortedProducts.length > 0 ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{sortedProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={addProduct} />)}</div> : <div className="rounded border border-dashed border-[#b8cbb8] bg-white p-10 text-center text-sm text-gray-500">Không có sản phẩm phù hợp với bộ lọc hiện tại.<button onClick={clearFilters} className="ml-1 font-bold text-[#126356] underline">Xóa bộ lọc</button></div>}
               <div className="mt-5 flex items-center justify-center gap-2 rounded border border-[#dbe2d7] bg-white p-3 text-xs text-gray-500"><Check size={16} className="text-[#126356]" />Sản phẩm được chọn lọc cho hệ sinh thái Pixel Hub</div>
             </div>
           </div>

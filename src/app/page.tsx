@@ -24,7 +24,7 @@ const formatPrice = (price: number) => `${(price * 24500).toLocaleString("vi-VN"
 
 function ProductArtwork({ product }: { product: CatalogProduct }) {
   if (product.previewUrl) {
-    return <Image src={product.previewUrl} alt={product.name} fill className="object-contain p-5" />;
+    return <Image src={product.previewUrl} alt={product.name} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" className="object-contain p-5" />;
   }
 
   return (

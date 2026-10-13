@@ -68,13 +68,13 @@ export default function ProductDetailPage() {
           <div className="flex w-14 flex-col gap-2">
             {[item.previewUrl, item.previewUrl, item.previewUrl, item.previewUrl].map((image, index) => (
               <button key={index} onClick={() => setActiveMedia(index)} className={`relative aspect-square overflow-hidden rounded border-2 bg-[#e4e3c8] ${activeMedia === index ? "border-[#126356]" : "border-transparent"}`} aria-label={`Xem ảnh ${index + 1}`}>
-                {image ? <Image src={image} alt="" fill className="object-contain p-1" /> : <Sparkles size={18} className="m-auto text-[#126356]" />}
+                {image ? <Image src={image} alt="" fill sizes="56px" className="object-contain p-1" /> : <Sparkles size={18} className="m-auto text-[#126356]" />}
               </button>
             ))}
             <button className="grid aspect-square place-items-center rounded border-2 border-transparent bg-[#e4e3c8] text-[#126356]" aria-label="Xem video"><Monitor size={18} /></button>
           </div>
           <div className="relative min-h-[330px] flex-1 overflow-hidden rounded bg-[#d9d8b4]">
-            {item.previewUrl ? <Image src={item.previewUrl} alt={`Ảnh sản phẩm ${item.name}`} fill priority className="object-contain p-8" /> : <div className="grid h-full place-items-center text-sm font-bold text-gray-500">Ảnh sản phẩm</div>}
+            {item.previewUrl ? <Image src={item.previewUrl} alt={`Ảnh sản phẩm ${item.name}`} fill sizes="(max-width: 1024px) 100vw, 45vw" priority className="object-contain p-8" /> : <div className="grid h-full place-items-center text-sm font-bold text-gray-500">Ảnh sản phẩm</div>}
             <div className="absolute bottom-0 left-0 right-0 flex items-center gap-3 bg-black/60 px-4 py-3 text-white">
               <button className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#126356]" aria-label="Phát xem trước">▶</button>
               <div className="h-1 flex-1 rounded-full bg-white/40"><div className="h-full w-1/3 rounded-full bg-white" /></div>
@@ -143,7 +143,7 @@ export default function ProductDetailPage() {
 
       {relatedProducts.length > 0 && <section className="mt-6">
         <div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-black">Các {isCharacter ? "Character" : "thiết bị LED"} khác</h2><Link href="/products" className="text-xs font-bold text-[#126356] hover:underline">Xem tất cả <ChevronRight size={13} className="inline" /></Link></div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{relatedProducts.map((product) => <Link key={product.id} href={`/products/${product.id}`} className="rounded border border-gray-200 bg-white p-2 transition hover:-translate-y-1 hover:border-[#126356]"><div className="relative aspect-square rounded bg-[#e4e3c8]">{product.previewUrl ? <Image src={product.previewUrl} alt={product.name} fill className="object-contain p-2" /> : <Monitor size={24} className="absolute inset-0 m-auto text-[#126356]" />}</div><p className="mt-2 truncate text-xs font-bold text-gray-800">{product.name}</p><p className="text-xs font-black text-[#126356]">{formatPrice(product.price)}</p></Link>)}</div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{relatedProducts.map((product) => <Link key={product.id} href={`/products/${product.id}`} className="rounded border border-gray-200 bg-white p-2 transition hover:-translate-y-1 hover:border-[#126356]"><div className="relative aspect-square rounded bg-[#e4e3c8]">{product.previewUrl ? <Image src={product.previewUrl} alt={product.name} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw" className="object-contain p-2" /> : <Monitor size={24} className="absolute inset-0 m-auto text-[#126356]" />}</div><p className="mt-2 truncate text-xs font-bold text-gray-800">{product.name}</p><p className="text-xs font-black text-[#126356]">{formatPrice(product.price)}</p></Link>)}</div>
       </section>}
     </div>
   </main><Footer /></>;

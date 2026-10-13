@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -29,7 +30,13 @@ export default function CartPage() {
               <div className="neo-box-no-hover bg-white lg:col-span-2">
                 {items.map((item) => (
                   <div key={item.id} className="flex flex-wrap items-center gap-4 border-b-2 border-gray-100 p-4 last:border-0">
-                    <div className="grid h-20 w-20 place-items-center border-2 border-black bg-gray-100 text-xs font-bold">[IMG]</div>
+                    <div className="relative h-20 w-20 overflow-hidden border-2 border-black bg-gray-100">
+                      {item.previewUrl ? (
+                        <Image src={item.previewUrl} alt={item.name} fill sizes="80px" className="object-contain p-1" />
+                      ) : (
+                        <span className="grid h-full place-items-center text-xs font-bold">[IMG]</span>
+                      )}
+                    </div>
                     <div className="min-w-40 flex-1"><h2 className="font-black">{item.name}</h2><p className="text-sm text-text-muted">${item.price.toFixed(2)} / sản phẩm</p></div>
                     <div className="flex h-9 border-2 border-black"><button onClick={() => updateQuantity(item.id, item.quantity - 1)} disabled={item.quantity <= 1} className="w-9 border-r-2 border-black disabled:opacity-40"><Minus size={14} className="mx-auto" /></button><span className="grid w-10 place-items-center font-bold">{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-9 border-l-2 border-black"><Plus size={14} className="mx-auto" /></button></div>
                     <strong className="w-20 text-right text-primary-dark">${(item.price * item.quantity).toFixed(2)}</strong>

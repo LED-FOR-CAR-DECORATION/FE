@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { CartItem } from "@/features/cart/types";
+import { PRODUCTS } from "@/features/cart/catalog";
 
 const CART_KEY = "led_controller_mock_cart";
 
@@ -24,7 +25,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(CART_KEY);
-      setItems(saved ? JSON.parse(saved) as CartItem[] : []);
+      const savedItems = saved ? JSON.parse(saved) as CartItem[] : [];
+      setItems(savedItems.map((item) => {
+        const catalogItem = PRODUCTS.find((product) => product.id === item.id);
+        return catalogItem ? { ...catalogItem, quantity: item.quantity } : item;
+      }));
     } catch {
       setItems([]);
     } finally {
@@ -38,7 +43,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItem = useCallback((item: Omit<CartItem, "quantity">, quantity = 1) => {
     setItems((current) => {
       const existing = current.find((entry) => entry.id === item.id);
-      if (existing) return current.map((entry) => entry.id === item.id ? { ...entry, quantity: entry.quantity + quantity } : entry);
+      if (existing) return current.map((entry) => entry.id === item.id ? { ...entry, ...item, quantity: entry.quantity + quantity } : entry);
       return [...current, { ...item, quantity }];
     });
   }, []);

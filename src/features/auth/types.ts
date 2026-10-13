@@ -4,6 +4,8 @@ export interface AuthUser {
   userId: string;
   email: string;
   fullName: string;
+  phoneNumber?: string;
+  dateOfBirth?: string;
   role: UserRole;
 }
 

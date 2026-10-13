@@ -3,6 +3,15 @@
 import { useState } from "react";
 import { Bell, ChevronDown, LogOut, Search } from "lucide-react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import type { UserRole } from "@/features/auth/types";
+
+const roleLabels: Record<UserRole, string> = {
+  CUSTOMER: "Khách hàng",
+  DESIGNER: "Designer",
+  STAFF: "Nhân viên vận hành",
+  MANAGER: "Quản lý cửa hàng",
+  ADMIN: "Quản trị viên",
+};
 
 export default function ManagerTopBar() {
   const { user, logout } = useAuth();
@@ -50,10 +59,8 @@ export default function ManagerTopBar() {
             {user?.fullName?.charAt(0) ?? "M"}
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-black">{user?.fullName ?? "Nhân viên"}</p>
-            <p className="text-[10px] text-text-muted font-semibold">
-              {user?.role === "STAFF" ? "Nhân viên vận hành" : "Quản lý cửa hàng"}
-            </p>
+            <p className="text-sm font-black">{user?.fullName ?? "Người dùng"}</p>
+            <p className="text-[10px] font-semibold text-text-muted">{user ? roleLabels[user.role] : "Khu vực quản trị"}</p>
           </div>
           <ChevronDown size={13} className="ml-1" />
         </div>

@@ -9,12 +9,19 @@ export default function ManagerRouteGuard({ children }: { children: ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuth();
+  const isAllowedPath =
+    (user?.role === "STAFF" && pathname === "/staff") ||
+    (user?.role === "MANAGER" && pathname === "/manager") ||
+    (user?.role === "STAFF" && pathname.startsWith("/staff/profile")) ||
+    (user?.role === "MANAGER" && pathname.startsWith("/manager/profile")) ||
+    (user?.role === "STAFF" && ["/staff/orders", "/staff/deliveries", "/staff/chat", "/staff/commission"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
+    (user?.role === "MANAGER" && ["/staff/inventory", "/staff/pricing", "/staff/warranty", "/staff/returns", "/staff/commission/pricing"].some((path) => pathname === path || pathname.startsWith(`${path}/`)));
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated && user?.role !== "MANAGER" && user?.role !== "STAFF") {
-      router.replace(user?.role === "CUSTOMER" ? "/" : "/login");
+    if (!isLoading && isAuthenticated && (user?.role !== "MANAGER" && user?.role !== "STAFF" || !isAllowedPath)) {
+      router.replace(user?.role === "CUSTOMER" ? "/" : user?.role === "ADMIN" ? "/admin" : "/login");
     }
-  }, [isAuthenticated, isLoading, router, user?.role]);
+  }, [isAllowedPath, isAuthenticated, isLoading, router, user?.role]);
 
   if (isLoading) {
     return <main className="min-h-screen bg-background flex items-center justify-center text-sm font-semibold text-text-muted">Đang kiểm tra quyền truy cập...</main>;
@@ -32,7 +39,7 @@ export default function ManagerRouteGuard({ children }: { children: ReactNode })
       </main>
     );
   }
-  if (user?.role !== "MANAGER" && user?.role !== "STAFF") {
+  if ((user?.role !== "MANAGER" && user?.role !== "STAFF") || !isAllowedPath) {
     return <main className="min-h-screen bg-background flex items-center justify-center text-sm font-semibold text-text-muted">Đang chuyển đến khu vực phù hợp...</main>;
   }
 

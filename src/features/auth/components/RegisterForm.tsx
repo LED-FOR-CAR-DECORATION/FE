@@ -37,7 +37,7 @@ export default function RegisterForm() {
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
       {message && <p role={message.error ? "alert" : "status"} className={`border-2 px-3 py-2 text-xs font-semibold ${message.error ? "border-red-500 bg-red-50 text-red-700" : "border-green-600 bg-green-50 text-green-700"}`}>{message.text}</p>}
-      <AuthField id="reg-name" label="Họ và tên" value={form.fullName} onChange={update("fullName")} placeholder="Nguyễn Văn A" icon={<User size={15} />} />
+      <AuthField id="reg-name" label="Họ tên hiển thị" value={form.fullName} onChange={update("fullName")} placeholder="Nguyễn Văn A" icon={<User size={15} />} />
       <AuthField id="reg-email" label="Email" value={form.email} onChange={update("email")} placeholder="you@example.com" icon={<Mail size={15} />} />
       <AuthField id="reg-password" label="Mật khẩu" value={form.password} onChange={update("password")} type={showPassword ? "text" : "password"} placeholder="••••••••" icon={<Lock size={15} />}
         action={<button type="button" onClick={() => setShowPassword((value) => !value)} aria-label="Hiện hoặc ẩn mật khẩu" className="text-text-muted">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>} />

@@ -10,6 +10,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (user: AuthUser) => void;
+  updateProfile: (profile: Pick<AuthUser, "fullName" | "phoneNumber" | "dateOfBirth">) => void;
   logout: () => Promise<void>;
 }
 
@@ -29,13 +30,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(nextUser);
   }, []);
 
+  const updateProfile = useCallback((profile: Pick<AuthUser, "fullName" | "phoneNumber" | "dateOfBirth">) => {
+    setUser((currentUser) => {
+      if (!currentUser) return currentUser;
+      const nextUser = { ...currentUser, ...profile };
+      saveSession(nextUser);
+      return nextUser;
+    });
+  }, []);
+
   const logout = useCallback(async () => {
     await authService.logout();
     clearSession();
     setUser(null);
   }, []);
 
-  return <AuthContext.Provider value={{ user, isAuthenticated: user !== null, isLoading, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, isAuthenticated: user !== null, isLoading, login, updateProfile, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuthContext(): AuthContextValue {

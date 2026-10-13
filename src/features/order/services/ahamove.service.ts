@@ -33,7 +33,7 @@ export const ahamoveService = {
       order_time: 0,
       service_id: "SGN-2H",
       path: [
-        { lat: 10.7769, lng: 106.7009, address: "Pixel Hub Store", short_address: "Pixel Hub" },
+        { lat: 10.7769, lng: 106.7009, address: "Mirage Store", short_address: "Mirage" },
         { lat: 10.7769, lng: 106.7009, address: order.address.fullAddress, short_address: order.address.fullAddress },
       ],
       requests: order.items.map((item) => ({

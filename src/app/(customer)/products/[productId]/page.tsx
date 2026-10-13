@@ -114,7 +114,7 @@ export default function ProductDetailPage() {
           <h2 className="font-black text-gray-900"><Monitor size={16} className="mr-2 inline text-[#126356]" />Tương thích thiết bị</h2>
           <p className="mt-3 text-xs leading-relaxed text-gray-500">Hoạt động tốt trên các thiết bị LED hỗ trợ độ phân giải từ 8×8 trở lên.</p>
           <ul className="mt-3 space-y-2 text-xs font-semibold text-gray-700">
-            {["PIXEL Mini 8×8", "PIXEL Matrix 16×16", "PIXEL Matrix 32×32", "PIXEL Matrix Pro 64×32", "PIXEL Dock"].map((device) => <li key={device}><Check size={14} className="mr-2 inline rounded-full bg-[#126356] p-0.5 text-white" />{device}</li>)}
+            {["Mirage Mini 8×8", "Mirage Matrix 16×16", "Mirage Matrix 32×32", "Mirage Matrix Pro 64×32", "Mirage Dock"].map((device) => <li key={device}><Check size={14} className="mr-2 inline rounded-full bg-[#126356] p-0.5 text-white" />{device}</li>)}
           </ul>
           <p className="mt-3 text-xs font-semibold text-gray-600"><Check size={14} className="mr-2 inline rounded-full bg-[#126356] p-0.5 text-white" />Các thiết bị tương thích khác</p>
         </aside>

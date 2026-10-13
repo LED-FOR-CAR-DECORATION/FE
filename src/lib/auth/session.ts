@@ -1,4 +1,4 @@
-import type { AuthUser } from "@/features/auth/types";
+import type { AuthUser, UserRole } from "@/features/auth/types";
 
 const SESSION_KEY = "led_controller_mock_session";
 
@@ -14,7 +14,8 @@ export function loadSession(): AuthUser | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     const parsed = raw ? JSON.parse(raw) as Partial<AuthUser> : null;
-    if (!parsed?.userId || !parsed.email || !parsed.fullName || !["CUSTOMER", "MANAGER"].includes(parsed.role as string)) return null;
+    const validRoles: UserRole[] = ["CUSTOMER", "DESIGNER", "STAFF", "MANAGER", "ADMIN"];
+    if (!parsed?.userId || !parsed.email || !parsed.fullName || !validRoles.includes(parsed.role as UserRole)) return null;
     return parsed as AuthUser;
   } catch {
     return null;

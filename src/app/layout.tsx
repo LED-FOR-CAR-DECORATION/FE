@@ -14,8 +14,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "LED Windshield Controller",
-  description: "Customize your car with beautiful character sprites",
+  title: "Mirage",
+  description: "Mirage - bảng LED trang trí và các nhân vật kỹ thuật số cho xe",
 };
 
 export default function RootLayout({

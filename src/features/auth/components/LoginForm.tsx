@@ -34,7 +34,7 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
       const user = await authService.login(trimmedEmail, password);
       login(user);
       setSuccess("Đăng nhập thành công. Đang chuyển hướng...");
-      const roleHome = user.role === "MANAGER" ? "/manager" : "/";
+      const roleHome = user.role === "ADMIN" ? "/admin" : user.role === "MANAGER" ? "/manager" : user.role === "STAFF" ? "/staff" : "/";
       const requestedRedirect = user.role === "CUSTOMER" && redirectTo !== "/manager" ? redirectTo : roleHome;
       window.setTimeout(() => window.location.assign(requestedRedirect), 350);
     } catch (error) {
@@ -58,6 +58,8 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
       <div className="border-t border-primary-light pt-3 text-center text-[11px] text-text-muted">
         <p>Customer: <strong>customer123@gmail.com</strong> / <strong>Customer123@</strong></p>
         <p>Manager: <strong>manager123@gmail.com</strong> / <strong>Manager123@</strong></p>
+        <p>Staff: <strong>staff123@gmail.com</strong> / <strong>Staff123@</strong></p>
+        <p>Admin: <strong>admin123@gmail.com</strong> / <strong>Admin123@</strong></p>
       </div>
     </form>
   );

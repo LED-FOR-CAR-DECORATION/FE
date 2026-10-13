@@ -156,7 +156,7 @@ export default function Home() {
                 <div className="absolute -right-8 -top-12 h-48 w-48 rounded-full bg-[#c4dfbd]" />
                 <Sparkles className="absolute right-56 top-8 text-white" size={20} />
                 <div className="relative max-w-lg">
-                  <p className="text-[11px] font-bold tracking-[0.3em] text-[#126356]">PIXEL HUB</p>
+                  <p className="text-[11px] font-bold tracking-[0.3em] text-[#126356]">MIRAGE</p>
                   <h1 className="mt-1 text-2xl font-black uppercase leading-tight text-[#126356] md:text-3xl">Nhân vật Pixel<br />cho không gian của bạn</h1>
                   <p className="mt-2 max-w-md text-xs text-gray-600">Khám phá bộ sưu tập Character và thiết bị LED để tạo nên không gian sáng tạo và sống động hơn.</p>
                 </div>
@@ -173,7 +173,7 @@ export default function Home() {
               </div>
               <div className="mb-3 flex items-center justify-between"><p className="text-sm font-black">{sortedProducts.length} sản phẩm</p><label className="flex items-center gap-2 text-xs">Sắp xếp:<select value={sort} onChange={(event) => setSort(event.target.value)} className="rounded border border-gray-300 bg-white px-2 py-1"><option>Phổ biến</option><option>Giá thấp</option><option>Giá cao</option></select></label></div>
               {sortedProducts.length > 0 ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{sortedProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={addProduct} />)}</div> : <div className="rounded border border-dashed border-[#b8cbb8] bg-white p-10 text-center text-sm text-gray-500">Không có sản phẩm phù hợp với bộ lọc hiện tại.<button onClick={clearFilters} className="ml-1 font-bold text-[#126356] underline">Xóa bộ lọc</button></div>}
-              <div className="mt-5 flex items-center justify-center gap-2 rounded border border-[#dbe2d7] bg-white p-3 text-xs text-gray-500"><Check size={16} className="text-[#126356]" />Sản phẩm được chọn lọc cho hệ sinh thái Pixel Hub</div>
+              <div className="mt-5 flex items-center justify-center gap-2 rounded border border-[#dbe2d7] bg-white p-3 text-xs text-gray-500"><Check size={16} className="text-[#126356]" />Sản phẩm được chọn lọc cho hệ sinh thái Mirage</div>
             </div>
           </div>
         </div>

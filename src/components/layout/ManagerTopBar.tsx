@@ -50,8 +50,10 @@ export default function ManagerTopBar() {
             {user?.fullName?.charAt(0) ?? "M"}
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-black">{user?.fullName ?? "Manager"}</p>
-            <p className="text-[10px] text-text-muted font-semibold">Quản lý cửa hàng</p>
+            <p className="text-sm font-black">{user?.fullName ?? "Nhân viên"}</p>
+            <p className="text-[10px] text-text-muted font-semibold">
+              {user?.role === "STAFF" ? "Nhân viên vận hành" : "Quản lý cửa hàng"}
+            </p>
           </div>
           <ChevronDown size={13} className="ml-1" />
         </div>

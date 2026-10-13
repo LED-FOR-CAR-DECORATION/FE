@@ -13,7 +13,7 @@ export const CHARACTERS: Character[] = [
   },
   {
     characterId: "character-cat-hero",
-    name: "Pixel Cat Hero",
+    name: "Mirage Cat Hero",
     description: "Chú mèo pixel năng động với hoạt ảnh chào mừng.",
     previewUrl: "/characters/pixel-cat-hero.png",
     format: "LED_BINARY",

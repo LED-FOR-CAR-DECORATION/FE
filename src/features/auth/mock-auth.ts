@@ -21,4 +21,24 @@ export const DEMO_ACCOUNTS = [
       role: "MANAGER" as const,
     },
   },
+  {
+    email: "staff123@gmail.com",
+    password: "Staff123@",
+    user: {
+      userId: "mock-staff-001",
+      email: "staff123@gmail.com",
+      fullName: "Staff 123",
+      role: "STAFF" as const,
+    },
+  },
+  {
+    email: "admin123@gmail.com",
+    password: "Admin123@",
+    user: {
+      userId: "mock-admin-001",
+      email: "admin123@gmail.com",
+      fullName: "Admin 123",
+      role: "ADMIN" as const,
+    },
+  },
 ] satisfies ReadonlyArray<{ email: string; password: string; user: AuthUser }>;

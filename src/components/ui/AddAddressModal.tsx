@@ -3,24 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Minus, User, Phone, Home, Building2, MapPin, Navigation } from "lucide-react";
 import GoongMapAddress from "../common/GoongMapAddress";
+import type { AddressFormData } from "@/features/address/types";
 
 interface AddAddressModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave?: (address: AddressFormData) => void;
-}
-
-export interface AddressFormData {
-  fullName: string;
-  phoneNumber: string;
-  streetNumber: string;
-  streetName: string;
-  ward: string;
-  district: string;
-  province: string;
-  latitude?: number;
-  longitude?: number;
-  fullAddress?: string;
 }
 
 export default function AddAddressModal({

@@ -12,7 +12,7 @@ export default function AuthWindow({ title, children }: AuthWindowProps) {
   return (
     <div className="w-full bg-white border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
       {/* Title bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#d9d9d9] border-b-2 border-black">
+      <div className="flex items-center justify-between px-4 py-2 bg-[#d9d9d9] border-b-2 border-black">
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-full bg-primary border-2 border-black flex items-center justify-center">
             <div className="w-2 h-2 rounded-full bg-black" />
@@ -29,7 +29,7 @@ export default function AuthWindow({ title, children }: AuthWindowProps) {
         </div>
       </div>
       {/* Body */}
-      <div>{children}</div>
+      <div className="bg-white">{children}</div>
     </div>
   );
 }

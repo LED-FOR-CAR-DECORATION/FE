@@ -1,1 +1,3 @@
-export default function PlaceholderPage() { return <div className='p-8 text-center font-bold'>Under Construction</div>; }
+import CustomerPage from "@/components/layout/CustomerPage";
+import CommissionWorkspace from "@/features/commission/CommissionWorkspace";
+export default function CommissionPage() { return <CustomerPage><CommissionWorkspace /></CustomerPage>; }

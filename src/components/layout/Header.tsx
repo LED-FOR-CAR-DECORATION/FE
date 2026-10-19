@@ -116,14 +116,16 @@ export default function Header() {
         {/* Right-side actions */}
         <div className="flex items-center gap-3">
           {/* Search bar */}
-          <div className="hidden md:flex items-center bg-white border-2 border-black px-3 py-1">
+          <form action="/products" className="hidden md:flex items-center bg-white border-2 border-black px-3 py-1">
             <input
               type="text"
+              name="q"
+              aria-label="Tìm sản phẩm"
               placeholder="Tìm sản phẩm..."
               className="outline-none bg-transparent w-48 text-sm"
             />
-            <Search size={18} />
-          </div>
+            <button aria-label="Tìm kiếm"><Search size={18} /></button>
+          </form>
 
           {/* Auth-aware zone */}
           {isLoading ? (

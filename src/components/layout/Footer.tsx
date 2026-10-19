@@ -1,3 +1,4 @@
+import Link from "next/link";
 export default function Footer() {
   return (
     <footer className="bg-primary border-t-2 border-black pt-12 pb-8">
@@ -9,27 +10,23 @@ export default function Footer() {
             Chúng tôi mang đến trải nghiệm tốt hơn để khách hàng tùy chỉnh và thể hiện cá tính
             qua bảng LED ma trận trang trí và chợ sản phẩm nghệ thuật.
           </p>
-          <button className="btn-secondary neo-box-no-hover py-1 text-sm">Liên hệ với chúng tôi!</button>
+          <Link href="/about#support" className="btn-secondary neo-box-no-hover inline-block py-1 text-sm">Kết nối với Mirage</Link>
         </div>
         
         <div>
           <h3 className="font-bold text-lg mb-4 uppercase">Thông tin</h3>
           <ul className="flex flex-col gap-2 text-sm font-medium">
-            <li><a href="#" className="hover:underline">Về chúng tôi</a></li>
-            <li><a href="#" className="hover:underline">Hỗ trợ kỹ thuật</a></li>
-            <li><a href="#" className="hover:underline">Vận chuyển & đổi trả</a></li>
-            <li><a href="#" className="hover:underline">Điều khoản dịch vụ</a></li>
-            <li><a href="#" className="hover:underline">Chính sách bảo mật</a></li>
+            <li><Link href="/about" className="hover:underline">Về chúng tôi</Link></li>
+            <li><Link href="/about#support" className="hover:underline">Hỗ trợ</Link></li>
+            <li><Link href="/profile/orders" className="hover:underline">Theo dõi đơn hàng</Link></li>
+            <li><Link href="/commission" className="hover:underline">Thiết kế theo yêu cầu</Link></li>
+            <li><Link href="/profile/security" className="hover:underline">Bảo mật tài khoản</Link></li>
           </ul>
         </div>
 
         <div>
-          <h3 className="font-bold text-lg mb-4 uppercase">Mạng xã hội</h3>
-          <div className="flex flex-wrap gap-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="w-10 h-10 bg-white border-2 border-black rounded-full hover:bg-black transition-colors" />
-            ))}
-          </div>
+          <h3 className="font-bold text-lg mb-4 uppercase">Khám phá</h3>
+          <div className="flex flex-col gap-2 text-sm font-medium"><Link href="/products" className="hover:underline">Bảng LED và Character</Link><Link href="/profile/gallery" className="hover:underline">Gallery của bạn</Link><Link href="/profile/devices" className="hover:underline">Thiết bị của bạn</Link></div>
         </div>
       </div>
       
@@ -38,7 +35,7 @@ export default function Footer() {
           © 2026 Mirage Team. Bảo lưu mọi quyền.
         </p>
         <div className="bg-white border-2 border-black px-4 py-1 text-sm font-bold mt-4 md:mt-0">
-          Logo
+          MIRAGE
         </div>
       </div>
     </footer>

@@ -160,6 +160,9 @@ function MenuLink({ item, activeHref }: { item: MenuItem; activeHref?: string })
   return (
     <Link
       href={item.href}
+      aria-label={item.label}
+      aria-current={active ? "page" : undefined}
+      title={item.label}
       className={`manager-nav-link flex items-start gap-3 rounded-lg border-2 px-3 py-2.5 text-sm transition-colors ${
         active
           ? "bg-primary border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
@@ -212,7 +215,7 @@ export default function ManagerSidebar() {
     ? { ...overviewItem, href: getRoleHome(role) }
     : undefined;
   const roleItems = visibleItems.filter((item) => item !== overviewItem);
-  const profileItem: MenuItem | undefined = role === "ADMIN"
+  const profileItem: MenuItem | undefined = role && ["ADMIN", "STAFF", "MANAGER"].includes(role)
     ? {
         label: "Hồ sơ cá nhân",
         description: "Thông tin tài khoản của bạn",

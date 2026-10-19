@@ -1,0 +1,3 @@
+"use client";
+import Link from "next/link";
+export default function ErrorPage({ retry }: { error: Error & { digest?: string }; retry: () => void }) { return <main className="grid min-h-[80vh] place-items-center p-6"><section className="max-w-lg rounded-xl border-2 border-black bg-white p-10 text-center"><h1 className="text-2xl font-black">Đã xảy ra lỗi</h1><p className="my-4 text-text-muted">Không thể tải nội dung. Vui lòng thử lại.</p><div className="flex justify-center gap-3"><button onClick={retry} className="btn-primary">Thử lại</button><Link href="/" className="btn-secondary">Về trang chủ</Link></div></section></main>; }

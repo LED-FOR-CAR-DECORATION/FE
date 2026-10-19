@@ -4,7 +4,6 @@ import type { Address } from "@/features/address/types";
 import type { MockOrder, OrderStatus } from "@/features/order/types";
 import type { DeliveryStatus } from "@/features/order/types";
 import { ahamoveService } from "./ahamove.service";
-import { entitlementService } from "@/features/character/services/entitlement.service";
 
 export const ORDER_STORAGE_KEY = "led_controller_mock_orders";
 export const ORDERS_CHANGED_EVENT = "led-controller-orders-changed";
@@ -56,6 +55,9 @@ export const orderService = {
     shipping: number;
     paymentMethod: string;
   }): MockOrder {
+    if (!input.items.length || input.items.some(item => item.productType !== "LED_MODEL")) {
+      throw new Error("Đơn hàng chỉ dành cho thiết bị LED. Character được nhận trực tiếp trong Gallery sau thanh toán.");
+    }
     const subtotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const order: MockOrder = {
       id: `ORD-${Date.now().toString().slice(-6)}`,
@@ -72,11 +74,6 @@ export const orderService = {
       service: "ViettelPost Fast",
     };
     writeOrders([order, ...readOrders()]);
-    entitlementService.grantFromOrder(
-      input.customer.userId,
-      order.id,
-      input.items.filter((item) => item.productType === "CHARACTER").map((item) => item.id),
-    );
     return order;
   },
   updateStatus(id: string, status: OrderStatus): MockOrder | null {

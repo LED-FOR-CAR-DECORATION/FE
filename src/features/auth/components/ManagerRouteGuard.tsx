@@ -4,18 +4,13 @@ import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { canAccessOperatingRoute } from "@/lib/auth/permissions";
 
 export default function ManagerRouteGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuth();
-  const isAllowedPath =
-    (user?.role === "STAFF" && pathname === "/staff") ||
-    (user?.role === "MANAGER" && pathname === "/manager") ||
-    (user?.role === "STAFF" && pathname.startsWith("/staff/profile")) ||
-    (user?.role === "MANAGER" && pathname.startsWith("/manager/profile")) ||
-    (user?.role === "STAFF" && ["/staff/orders", "/staff/deliveries", "/staff/chat", "/staff/commission"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
-    (user?.role === "MANAGER" && ["/staff/inventory", "/staff/pricing", "/staff/warranty", "/staff/returns", "/staff/commission/pricing"].some((path) => pathname === path || pathname.startsWith(`${path}/`)));
+  const isAllowedPath = canAccessOperatingRoute(user?.role, pathname);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && (user?.role !== "MANAGER" && user?.role !== "STAFF" || !isAllowedPath)) {

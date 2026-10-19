@@ -28,7 +28,7 @@ const STATUS_CFG: Record<string, { badge: string; icon: React.ReactNode }> = {
   Cancelled: { badge: "bg-red-100   text-red-700   border-red-400",    icon: <X size={12} /> },
 };
 
-const STATUS_LABEL: Record<string, string> = { Pending: "Chờ xử lý", Confirmed: "Đã xác nhận", Shipping: "Đang giao", Delivered: "Đã giao", Cancelled: "Đã hủy" };
+const STATUS_LABEL: Record<string, string> = { Pending: "Đã tạo đơn", Confirmed: "Đã nhận hàng", Shipping: "Đang giao", Delivered: "Đã giao hàng", Cancelled: "Đã hủy" };
 
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.Pending;

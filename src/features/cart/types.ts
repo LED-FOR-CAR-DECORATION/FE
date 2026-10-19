@@ -1,4 +1,4 @@
-export type ProductType = "LED_MODEL" | "CHARACTER";
+export type ProductType = "LED_MODEL" | "CHARACTER" | "BUNDLE";
 
 export interface CartItem {
   id: string;
@@ -10,4 +10,5 @@ export interface CartItem {
   previewUrl?: string;
   format?: string;
   animationType?: string;
+  components?: CartItem[];
 }

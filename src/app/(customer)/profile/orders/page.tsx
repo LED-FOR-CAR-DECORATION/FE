@@ -6,17 +6,20 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useOrders } from "@/features/order/context/OrderContext";
+import { isCharacterOnlyOrder } from "@/features/order/fulfillment";
 import type { OrderStatus } from "@/features/order/types";
 
-const STATUS_CONFIG: Record<OrderStatus, { label: string; className: string; icon: React.ReactNode }> = {
-  Pending: { label: "Chờ xử lý", className: "bg-amber-100 text-amber-700 border-amber-400", icon: <Circle size={12} /> },
-  Confirmed: { label: "Đã xác nhận", className: "bg-blue-100 text-blue-700 border-blue-400", icon: <CheckCircle size={12} /> },
+type DisplayStatus = OrderStatus | "Paid";
+const STATUS_CONFIG: Record<DisplayStatus, { label: string; className: string; icon: React.ReactNode }> = {
+  Pending: { label: "Đã tạo đơn", className: "bg-amber-100 text-amber-700 border-amber-400", icon: <Circle size={12} /> },
+  Confirmed: { label: "Đã nhận hàng", className: "bg-blue-100 text-blue-700 border-blue-400", icon: <CheckCircle size={12} /> },
   Shipping: { label: "Đang giao", className: "bg-green-100 text-green-700 border-green-400", icon: <Truck size={12} /> },
-  Delivered: { label: "Đã giao", className: "bg-gray-100 text-gray-600 border-gray-400", icon: <CheckCircle size={12} /> },
+  Delivered: { label: "Đã giao hàng", className: "bg-gray-100 text-gray-600 border-gray-400", icon: <CheckCircle size={12} /> },
   Cancelled: { label: "Đã hủy", className: "bg-red-100 text-red-700 border-red-400", icon: <X size={12} /> },
+  Paid: { label: "Đã thanh toán", className: "bg-green-100 text-green-700 border-green-400", icon: <CheckCircle size={12} /> },
 };
 
-function StatusBadge({ status }: { status: OrderStatus }) {
+function StatusBadge({ status }: { status: DisplayStatus }) {
   const config = STATUS_CONFIG[status];
   return <span className={`inline-flex items-center gap-1 border px-2 py-1 text-[11px] font-bold rounded-sm ${config.className}`}>{config.icon} {config.label}</span>;
 }
@@ -25,6 +28,7 @@ export default function OrderHistoryPage() {
   const { user } = useAuth();
   const { orders } = useOrders();
   const customerOrders = orders.filter((order) => order.customer.userId === user?.userId);
+  const displayStatus = (order: (typeof orders)[number]): DisplayStatus => isCharacterOnlyOrder(order) && order.paymentStatus === "Paid" ? "Paid" : order.status;
 
   return (
     <>
@@ -41,7 +45,7 @@ export default function OrderHistoryPage() {
           <div className="profile-card profile-enter profile-enter-delay-1 p-0 overflow-hidden">
             {customerOrders.length === 0 ? <div className="p-12 text-center text-sm font-semibold text-text-muted">Bạn chưa có đơn hàng nào.</div> : <div className="divide-y divide-primary-light">
               {customerOrders.map((order) => <article key={order.id} className="p-5 transition-colors hover:bg-green-50/60">
-                <div className="mb-3 flex items-start justify-between gap-3 flex-wrap"><div><p className="font-black text-primary-dark">#{order.id}</p><p className="mt-1 flex items-center gap-1 text-xs text-text-muted"><Clock size={11} /> {new Date(order.createdAt).toLocaleDateString("vi-VN")} · {order.service}</p></div><StatusBadge status={order.status} /></div>
+                <div className="mb-3 flex items-start justify-between gap-3 flex-wrap"><div><p className="font-black text-primary-dark">#{order.id}</p><p className="mt-1 flex items-center gap-1 text-xs text-text-muted"><Clock size={11} /> {new Date(order.createdAt).toLocaleDateString("vi-VN")} · {order.paymentMethod}</p></div><StatusBadge status={displayStatus(order)} /></div>
                 <div className="mb-4 flex flex-col gap-1">{order.items.map((item) => <p key={`${order.id}-${item.id}`} className="text-sm font-medium">{item.name} <span className="text-text-muted">× {item.quantity}</span></p>)}</div>
                 <div className="flex items-center justify-between gap-3"><p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">${order.total.toFixed(2)}</span></p><Link href={`/profile/orders/${order.id}`} className="inline-flex items-center gap-1.5 rounded-sm border border-black px-3 py-1.5 text-xs font-bold transition-colors hover:bg-primary/20"><Eye size={13} /> Xem chi tiết</Link></div>
               </article>)}

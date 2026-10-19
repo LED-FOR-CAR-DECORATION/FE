@@ -17,7 +17,7 @@ const STATUS_CONFIG: Record<DeliveryStatus, { label: string; className: string }
   "Picked up": { label: "Đã lấy hàng", className: "border-cyan-200 bg-cyan-50 text-cyan-700" },
   "In transit": { label: "Đang vận chuyển", className: "border-amber-200 bg-amber-50 text-amber-700" },
   "Out for delivery": { label: "Đang giao hàng", className: "border-green-200 bg-green-50 text-green-700" },
-  Delivered: { label: "Đã giao", className: "border-gray-200 bg-gray-100 text-gray-600" },
+  Delivered: { label: "Đã giao hàng", className: "border-gray-200 bg-gray-100 text-gray-600" },
   Exception: { label: "Có vấn đề", className: "border-red-200 bg-red-50 text-red-700" },
 };
 

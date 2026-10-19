@@ -28,16 +28,16 @@ export const entitlementService = {
   listByUser(userId: string) {
     return read().filter((item) => item.userId === userId);
   },
-  grantFromOrder(userId: string, orderId: string, characterIds: string[]) {
+  grantFromPayment(userId: string, paymentId: string, characterIds: string[]) {
     const current = read();
-    const additions = characterIds
+    const additions = [...new Set(characterIds)]
       .filter((characterId) => !current.some((item) => item.userId === userId && item.characterId === characterId))
       .map((characterId) => ({
         entitlementId: `ENT-${Date.now()}-${characterId}`,
         userId,
         characterId,
-        sourceType: "ORDER" as const,
-        sourceReferenceId: orderId,
+        sourceType: "PAYMENT" as const,
+        sourceReferenceId: paymentId,
         grantedAt: new Date().toISOString(),
       }));
     write([...additions, ...current]);

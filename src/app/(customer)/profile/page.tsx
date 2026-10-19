@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useOrders } from "@/features/order/context/OrderContext";
 import { authService } from "@/features/auth/services/auth.service";
+import { profileLinks } from "@/components/layout/CustomerPage";
 
 /* ── Shared order data (mock) ── */
 type Tab = "account" | "orders";
@@ -382,6 +383,7 @@ function OrderHistoryTab() {
 /* ── Profile Page ── */
 export default function ProfilePage() {
   const [tab, setTab] = useState<Tab>("account");
+  const { user } = useAuth();
 
   return (
     <>
@@ -394,14 +396,15 @@ export default function ProfilePage() {
           {/* Header */}
           <div className="profile-enter flex items-center gap-4 mb-5">
             <div className="profile-avatar">
-              <span className="profile-avatar-face">J</span>
+              <span className="profile-avatar-face">{user?.fullName?.charAt(0) ?? "M"}</span>
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight">John Doe</h1>
-              <p className="text-text-muted text-sm">john@example.com</p>
+              <h1 className="text-3xl font-black tracking-tight">{user?.fullName}</h1>
+              <p className="text-text-muted text-sm">{user?.email}</p>
             </div>
           </div>
 
+          <nav aria-label="Tài khoản" className="mb-5 flex flex-wrap gap-2">{profileLinks.filter(([href]) => href !== "/profile").map(([href, label]) => <Link key={href} href={href} className="rounded border border-green-200 bg-white px-3 py-2 text-xs font-bold hover:bg-green-50">{label}</Link>)}</nav>
           {/* Tab switcher */}
           <div className="profile-tabs profile-enter profile-enter-delay-1 mb-4">
             {(["account", "orders"] as Tab[]).map((t) => (

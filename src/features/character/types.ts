@@ -16,7 +16,7 @@ export interface UserEntitlement {
   entitlementId: string;
   userId: string;
   characterId: string;
-  sourceType: "ORDER";
+  sourceType: "ORDER" | "PAYMENT";
   sourceReferenceId: string;
   grantedAt: string;
 }

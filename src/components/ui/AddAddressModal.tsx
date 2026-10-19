@@ -27,6 +27,7 @@ export default function AddAddressModal({
   });
 
   const backdropRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState("");
 
   // Close on Escape key
   useEffect(() => {
@@ -54,7 +55,12 @@ export default function AddAddressModal({
   };
 
   const handleSave = () => {
-    onSave?.(form);
+    if (form.fullName.trim().length < 2 || !/^\+?[\d\s()-]{9,18}$/.test(form.phoneNumber.trim()) || (!form.fullAddress?.trim() && (!form.streetName.trim() || !form.province.trim()))) {
+      setError("Vui lòng nhập họ tên, số điện thoại hợp lệ và địa chỉ (tên đường, tỉnh/thành).");
+      return;
+    }
+    setError("");
+    onSave?.({ ...form, fullName: form.fullName.trim(), phoneNumber: form.phoneNumber.trim() });
     onClose();
   };
 
@@ -72,7 +78,7 @@ export default function AddAddressModal({
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in px-4 py-6 overflow-y-auto"
     >
       {/* Window */}
-      <div className="relative w-full max-w-4xl mx-auto my-auto bg-[#d9d9d9] border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] animate-slide-up">
+      <div role="dialog" aria-modal="true" aria-label="Thêm địa chỉ mới" className="relative w-full max-w-4xl mx-auto my-auto bg-[#d9d9d9] border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] animate-slide-up">
 
         {/* Title bar */}
         <div className="flex items-center justify-between px-3 py-1.5 bg-[#d9d9d9] border-b-2 border-black">
@@ -112,6 +118,7 @@ export default function AddAddressModal({
               Thông tin địa chỉ
             </h2>
 
+            {error && <p role="alert" className="mb-4 text-sm font-bold text-red-700">{error}</p>}
             <div className="flex flex-col gap-4">
               
               {/* Full name & Phone */}

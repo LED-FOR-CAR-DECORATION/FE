@@ -246,6 +246,14 @@ body {
     width: 19px;
     height: 19px;
   }
+  .manager-sidebar .manager-nav-link > span,
+  .manager-sidebar h2 {
+    display: none;
+  }
+  .manager-sidebar .manager-nav-link {
+    min-height: 44px;
+    align-items: center;
+  }
   .manager-sidebar .manager-brand {
     justify-content: center;
     padding-left: .5rem;
@@ -267,6 +275,17 @@ body {
   .manager-topbar .leading-tight,
   .manager-topbar .leading-tight + svg {
     display: none;
+  }
+}
+@media (max-width: 480px) {
+  .manager-topbar > div:first-child {
+    display: none;
+  }
+  .manager-topbar button {
+    white-space: nowrap;
+  }
+  .manager-main {
+    padding: 16px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

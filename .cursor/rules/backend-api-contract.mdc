@@ -1,0 +1,17 @@
+---
+description: Backend API response, error, security, and integration rules for frontend service adapters
+globs: "src/lib/api/**/*.ts,src/features/**/services/**/*.ts,src/features/checkout/**/*.ts"
+alwaysApply: false
+---
+
+# Frontend integration with the backend
+
+- Read `../backend/README.md` for the backend's current public contracts. Backend-only Java/Spring structure is not a frontend folder convention.
+- Parse successful response bodies through top-level `data`; use documented pagination DTOs inside it. Treat optional metadata according to the endpoint contract and do not parse JSON from `204 No Content`.
+- Handle errors with `{ code, message, status, timestamp, traceId, details }`; preserve machine-readable codes, structured validation details, and trace IDs for support. Distinguish network/technical failure from empty results or expected business outcomes.
+- Use plural lowercase `/api/...` resources without trailing slashes, explicit transport types, and adapters that do not expose vendor-specific payloads to UI components.
+- Do not use frontend route guards, browser storage, or editable mock role records as authoritative access or ownership checks. The backend makes the final security and business decisions.
+- Keep database access and privileged payment/provider operations in the backend. Never expose secrets through client code, browser storage, logs, or analytics.
+- Grant Character ownership only after confirmed successful payment. The current local mock is a prototype, not proof of server-side authorization or payment verification.
+- Preserve failure causes where useful. Define timeouts and bounded retries; retry side effects only with backend-supported idempotency. Never treat an outage as success, `false`, `null`, or an empty successful list.
+- Keep mock behavior explicitly identified and separate from production API adapters. Do not claim a backend integration or persistence exists when only local demo state is implemented.

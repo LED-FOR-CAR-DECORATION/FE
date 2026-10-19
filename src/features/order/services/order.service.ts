@@ -5,38 +5,36 @@ import type { MockOrder, OrderStatus } from "@/features/order/types";
 import type { DeliveryStatus } from "@/features/order/types";
 import { ahamoveService } from "./ahamove.service";
 import { entitlementService } from "@/features/character/services/entitlement.service";
+import { getOrderFulfillment } from "@/features/order/fulfillment";
 
 export const ORDER_STORAGE_KEY = "led_controller_mock_orders";
 export const ORDERS_CHANGED_EVENT = "led-controller-orders-changed";
-
-const seedOrders: MockOrder[] = [
-  {
-    id: "ORD-1049",
-    customer: { userId: "mock-customer-001", email: "customer123@gmail.com", fullName: "Customer 123" },
-    items: [{ id: "matrix-32", productType: "LED_MODEL", name: "32×32 Matrix Panel", price: 40, quantity: 2 }, { id: "sprite-a", productType: "CHARACTER", name: "Character Sprite Pack A", price: 5, quantity: 1 }],
-    subtotal: 85, shipping: 5, total: 90,
-    address: { fullName: "Customer 123", phoneNumber: "(+84) 123 456 789", fullAddress: "Number 8, Sesame Street, Q1, TP.HCM" },
-    paymentMethod: "COD", paymentStatus: "Pending", status: "Pending", createdAt: "2024-10-08T10:24:00.000Z", service: "ViettelPost Fast",
-  },
-  {
-    id: "ORD-1047",
-    customer: { userId: "mock-customer-002", email: "customer2@example.com", fullName: "Tran Thi Anh" },
-    items: [{ id: "matrix-16", productType: "LED_MODEL", name: "16×16 Matrix Panel", price: 45, quantity: 1 }],
-    subtotal: 45, shipping: 2, total: 47,
-    address: { fullName: "Tran Thi Anh", phoneNumber: "0987654321", fullAddress: "456 Nguyen Hue, Q3, TP.HCM" },
-    paymentMethod: "MOCK_CARD", paymentStatus: "Paid", status: "Confirmed", createdAt: "2024-10-08T09:12:00.000Z", service: "Standard",
-  },
-];
+const ORDER_DATA_RESET_KEY = "led_controller_mock_orders_reset_v1";
+const VNPAY_MIGRATION_KEY = "led_controller_vnpay_migration_v1";
 
 function readOrders(): MockOrder[] {
   if (typeof window === "undefined") return [];
+  if (!localStorage.getItem(ORDER_DATA_RESET_KEY)) {
+    localStorage.removeItem(ORDER_STORAGE_KEY);
+    localStorage.setItem(ORDER_DATA_RESET_KEY, "true");
+    return [];
+  }
   try {
     const saved = localStorage.getItem(ORDER_STORAGE_KEY);
-    if (saved) return JSON.parse(saved) as MockOrder[];
+    if (saved) {
+      const orders = JSON.parse(saved) as MockOrder[];
+      if (!localStorage.getItem(VNPAY_MIGRATION_KEY)) {
+        const migrated = orders.map((order) => ({ ...order, paymentMethod: "VNPAY", paymentStatus: "Paid" as const }));
+        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(migrated));
+        localStorage.setItem(VNPAY_MIGRATION_KEY, "true");
+        return migrated;
+      }
+      return orders;
+    }
   } catch {
-    // The provider will recover with seed data when browser storage is unavailable.
+    // The provider will recover with an empty order list when browser storage is unavailable.
   }
-  return seedOrders;
+  return [];
 }
 
 function writeOrders(orders: MockOrder[]): MockOrder[] {
@@ -65,18 +63,16 @@ export const orderService = {
       shipping: input.shipping,
       total: subtotal + input.shipping,
       address: { fullName: input.address.fullName, phoneNumber: input.address.phoneNumber, fullAddress: input.address.fullAddress },
-      paymentMethod: input.paymentMethod,
-      paymentStatus: input.paymentMethod === "MOCK_CARD" ? "Paid" : "Pending",
+      paymentMethod: "VNPAY",
+      paymentStatus: "Paid",
       status: "Pending",
       createdAt: new Date().toISOString(),
       service: "ViettelPost Fast",
     };
     writeOrders([order, ...readOrders()]);
-    entitlementService.grantFromOrder(
-      input.customer.userId,
-      order.id,
-      input.items.filter((item) => item.productType === "CHARACTER").map((item) => item.id),
-    );
+    if (order.paymentStatus === "Paid") {
+      entitlementService.grantFromOrder(input.customer.userId, order.id, getOrderFulfillment(order).characterIds);
+    }
     return order;
   },
   updateStatus(id: string, status: OrderStatus): MockOrder | null {
@@ -90,7 +86,7 @@ export const orderService = {
   async createDelivery(id: string): Promise<MockOrder | null> {
     const orders = readOrders();
     const target = orders.find((order) => order.id === id);
-    if (!target || target.status !== "Confirmed" || target.delivery || !target.items.some((item) => item.productType === "LED_MODEL")) return target ?? null;
+    if (!target || target.status !== "Confirmed" || target.delivery || !getOrderFulfillment(target).requiresDelivery) return target ?? null;
     const result = await ahamoveService.createOrder(target);
     const updated: MockOrder = {
       ...target,

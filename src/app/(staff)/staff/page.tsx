@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, BarChart2, CalendarDays, ChevronDown, ClipboardCheck, Layers, Package, ShieldCheck, ShoppingCart, Truck, TrendingDown, TrendingUp, Zap } from "lucide-react";
 
-const STATUS_LABEL: Record<string, string> = { Pending: "Chờ xử lý", Confirmed: "Đã xác nhận", Shipping: "Đang giao", Delivered: "Đã giao" };
+const STATUS_LABEL: Record<string, string> = { Pending: "Đã tạo đơn", Confirmed: "Đã nhận hàng", Shipping: "Đang giao", Delivered: "Đã giao hàng" };
 const STATUS_STYLE: Record<string, string> = {
   Pending: "bg-amber-100 text-amber-700 border-amber-400",
   Confirmed: "bg-blue-100 text-blue-700 border-blue-400",
@@ -31,14 +31,9 @@ function StatCard({ label, value, delta, icon }: { label: string; value: number;
 }
 
 export default function ManagerDashboard() {
-  const recentOrders = [
-    ["#ORD-1048", "Nguyen Minh", "$90.00", "Pending", "08/10, 10:24"],
-    ["#ORD-1047", "Tran Anh", "$45.00", "Confirmed", "08/10, 09:12"],
-    ["#ORD-1046", "Le Hoang", "$120.00", "Shipping", "07/10, 18:40"],
-    ["#ORD-1045", "Pham Linh", "$16.00", "Delivered", "07/10, 14:20"],
-  ];
+  const recentOrders: string[][] = [];
   const todos = [
-    ["Xác nhận đơn chờ xử lý", 6, <ShoppingCart size={14} />],
+    ["Tiếp nhận đơn đã tạo", 6, <ShoppingCart size={14} />],
     ["Tạo đơn vận chuyển", 12, <Truck size={14} />],
     ["Kiểm tra hàng sắp hết", 3, <AlertTriangle size={14} />],
     ["Xem yêu cầu bảo hành", 4, <ShieldCheck size={14} />],

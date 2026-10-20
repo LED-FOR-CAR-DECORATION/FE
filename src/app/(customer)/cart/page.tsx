@@ -8,6 +8,8 @@ import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { useCart } from "@/features/cart/context/CartContext";
 import { getOrderFulfillment } from "@/features/order/fulfillment";
 
+const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} đ`;
+
 export default function CartPage() {
   const { items, isLoading, updateQuantity, removeItem, clearItems, subtotal } = useCart();
   const shipping = getOrderFulfillment({ items }).requiresDelivery && subtotal > 0 ? 5 : 0;
@@ -38,9 +40,9 @@ export default function CartPage() {
                         <span className="grid h-full place-items-center text-xs font-bold">[IMG]</span>
                       )}
                     </div>
-                    <div className="min-w-40 flex-1"><h2 className="font-black">{item.name}</h2><p className="text-sm text-text-muted">${item.price.toFixed(2)} / sản phẩm</p></div>
+                    <div className="min-w-40 flex-1"><h2 className="font-black">{item.name}</h2><p className="text-sm text-text-muted">{formatPrice(item.price)} / sản phẩm</p></div>
                     <div className="flex h-9 border-2 border-black"><button onClick={() => updateQuantity(item.id, item.quantity - 1)} disabled={item.quantity <= 1} className="w-9 border-r-2 border-black disabled:opacity-40"><Minus size={14} className="mx-auto" /></button><span className="grid w-10 place-items-center font-bold">{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-9 border-l-2 border-black"><Plus size={14} className="mx-auto" /></button></div>
-                    <strong className="w-20 text-right text-primary-dark">${(item.price * item.quantity).toFixed(2)}</strong>
+                    <strong className="w-20 text-right text-primary-dark">{formatPrice(item.price * item.quantity)}</strong>
                     <button onClick={() => removeItem(item.id)} className="p-2 text-red-600" aria-label={`Xóa ${item.name}`}><Trash2 size={17} /></button>
                   </div>
                 ))}
@@ -48,9 +50,9 @@ export default function CartPage() {
               </div>
               <div className="neo-box-no-hover h-fit bg-primary p-5">
                 <h2 className="mb-4 border-b-2 border-black pb-3 text-lg font-black uppercase">Tóm tắt</h2>
-                <div className="flex justify-between text-sm font-bold"><span>Tạm tính</span><span>${subtotal.toFixed(2)}</span></div>
-                <div className="mt-2 flex justify-between text-sm font-bold"><span>Vận chuyển</span><span>${shipping.toFixed(2)}</span></div>
-                <div className="mt-4 flex justify-between border-t-2 border-black pt-3 text-xl font-black"><span>Tổng</span><span>${(subtotal + shipping).toFixed(2)}</span></div>
+                <div className="flex justify-between text-sm font-bold"><span>Tạm tính</span><span>{formatPrice(subtotal)}</span></div>
+                <div className="mt-2 flex justify-between text-sm font-bold"><span>Vận chuyển</span><span>{formatPrice(shipping)}</span></div>
+                <div className="mt-4 flex justify-between border-t-2 border-black pt-3 text-xl font-black"><span>Tổng</span><span>{formatPrice(subtotal + shipping)}</span></div>
                 <Link href="/checkout" className="btn-secondary mt-5 block w-full text-center">Tiến hành thanh toán</Link>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import type { CartItem } from "@/features/cart/types";
+import type { ProductDefinition } from "@/features/cart/types";
 import type { MockOrder } from "./types";
 
 export interface OrderFulfillment {
@@ -9,7 +9,7 @@ export interface OrderFulfillment {
   characterIds: string[];
 }
 
-function classifyItem(item: CartItem, result: OrderFulfillment): void {
+function classifyItem(item: ProductDefinition, result: OrderFulfillment): void {
   if (item.productType === "LED_MODEL") {
     result.hasLED = true;
     result.requiresDelivery = true;

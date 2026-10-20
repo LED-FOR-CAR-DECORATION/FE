@@ -22,7 +22,7 @@ import Footer from "@/components/layout/Footer";
 import { useCart } from "@/features/cart/context/CartContext";
 import { getProductById, PRODUCTS } from "@/features/cart/catalog";
 
-const formatPrice = (price: number) => `${(price * 24500).toLocaleString("vi-VN")} đ`;
+const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} đ`;
 
 export default function ProductDetailPage() {
   const params = useParams<{ productId: string }>();
@@ -37,14 +37,15 @@ export default function ProductDetailPage() {
   }
 
   const isCharacter = item.productType === "CHARACTER";
-  const productTypeLabel = isCharacter ? "Character" : "Thiết bị LED";
+  const isBundle = item.productType === "BUNDLE";
+  const productTypeLabel = isBundle ? "Bundle" : isCharacter ? "Character" : "Thiết bị LED";
   const relatedProducts = PRODUCTS.filter((product) => product.id !== item.id && product.productType === item.productType).slice(0, 6);
   const specifications = [
     ["Tên sản phẩm", item.name],
-    ["Định dạng tệp", item.format ?? "Thiết bị phần cứng"],
-    ["Độ phân giải", isCharacter ? "32 × 32 pixel" : item.name.match(/\d+\s*×\s*\d+/)?.[0] ?? "Tùy thiết bị"],
-    ["Số khung hình", item.animationType === "LOOP" ? "12 khung hình" : "1 khung hình"],
-    ["Thời lượng vòng lặp", item.animationType === "LOOP" ? "Khoảng 3 giây" : "Không áp dụng"],
+    ["Định dạng tệp", item.format ?? (isBundle ? "Gói sản phẩm" : "Thiết bị phần cứng")],
+    ["Độ phân giải", isCharacter ? "32 × 32 pixel" : isBundle ? "Bao gồm nhiều sản phẩm" : item.name.match(/\d+\s*×\s*\d+/)?.[0] ?? "Tùy thiết bị"],
+    ["Số khung hình", isBundle ? "Không áp dụng" : item.animationType === "LOOP" ? "12 khung hình" : "1 khung hình"],
+    ["Thời lượng vòng lặp", isBundle ? "Không áp dụng" : item.animationType === "LOOP" ? "Khoảng 3 giây" : "Không áp dụng"],
     ["Dung lượng tệp", isCharacter ? "Khoảng 500 KB" : "Không áp dụng"],
     ["Màu sắc", isCharacter ? "Cam, trắng, nâu, đen" : "Theo mẫu thiết bị"],
     ["Tương thích", isCharacter ? "Các thiết bị LED hỗ trợ 8×8 trở lên" : "Bluetooth và ứng dụng điều khiển"],
@@ -91,7 +92,7 @@ export default function ProductDetailPage() {
           <h1 className="mt-3 text-2xl font-black text-gray-900 md:text-3xl">{item.name}</h1>
           <div className="mt-2 flex items-center gap-2 text-sm"><span className="flex text-amber-400">{[1, 2, 3, 4, 5].map((star) => <Star key={star} size={15} fill="currentColor" />)}</span><span className="text-gray-600">4.8 (128 đánh giá)</span></div>
           <p className="mt-2 text-2xl font-black text-[#126356]">{formatPrice(item.price)}</p>
-          <p className="mt-2 text-sm leading-relaxed text-gray-600">{item.description} {isCharacter ? "Hiển thị rõ nét trên bảng LED và phù hợp cho nhiều phong cách pixel art." : "Thiết kế nhỏ gọn, dễ lắp đặt và điều khiển bằng ứng dụng."}</p>
+          <p className="mt-2 text-sm leading-relaxed text-gray-600">{item.description} {isBundle ? "Gói sản phẩm được tuyển chọn sẵn để bạn dễ dàng tạo không gian pixel hoàn chỉnh." : isCharacter ? "Hiển thị rõ nét trên bảng LED và phù hợp cho nhiều phong cách pixel art." : "Thiết kế nhỏ gọn, dễ lắp đặt và điều khiển bằng ứng dụng."}</p>
           <p className="mt-5 text-xs font-bold text-gray-700">Số lượng</p>
           <div className="mt-2 flex h-9 w-fit border border-gray-300 bg-white">
             <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-9 border-r border-gray-300" aria-label="Giảm số lượng"><Minus size={14} className="mx-auto" /></button>
@@ -142,7 +143,7 @@ export default function ProductDetailPage() {
       </section>
 
       {relatedProducts.length > 0 && <section className="mt-6">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-black">Các {isCharacter ? "Character" : "thiết bị LED"} khác</h2><Link href="/products" className="text-xs font-bold text-[#126356] hover:underline">Xem tất cả <ChevronRight size={13} className="inline" /></Link></div>
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-black">Các {isBundle ? "bundle" : isCharacter ? "Character" : "thiết bị LED"} khác</h2><Link href="/products" className="text-xs font-bold text-[#126356] hover:underline">Xem tất cả <ChevronRight size={13} className="inline" /></Link></div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{relatedProducts.map((product) => <Link key={product.id} href={`/products/${product.id}`} className="rounded border border-gray-200 bg-white p-2 transition hover:-translate-y-1 hover:border-[#126356]"><div className="relative aspect-square rounded bg-[#e4e3c8]">{product.previewUrl ? <Image src={product.previewUrl} alt={product.name} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw" className="object-contain p-2" /> : <Monitor size={24} className="absolute inset-0 m-auto text-[#126356]" />}</div><p className="mt-2 truncate text-xs font-bold text-gray-800">{product.name}</p><p className="text-xs font-black text-[#126356]">{formatPrice(product.price)}</p></Link>)}</div>
       </section>}
     </div>

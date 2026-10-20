@@ -1,4 +1,4 @@
-import type { CartItem } from "@/features/cart/types";
+import type { ProductDefinition } from "@/features/cart/types";
 import type { UserEntitlement } from "@/features/character/types";
 import type { MockOrder } from "./types";
 import { getOrderFulfillment } from "./fulfillment";
@@ -18,9 +18,9 @@ export interface CharacterSaleItem {
   bundleId?: string;
 }
 
-function collectCharacters(item: CartItem, result: CharacterSaleItem[], multiplier = 1, bundleId?: string): void {
+function collectCharacters(item: ProductDefinition, result: CharacterSaleItem[], multiplier = 1, bundleId?: string): void {
   if (item.productType === "CHARACTER") {
-    const quantity = item.quantity * multiplier;
+    const quantity = (item.quantity ?? 1) * multiplier;
     result.push({
       id: `${bundleId ?? item.id}-${item.id}`,
       name: item.name,
@@ -35,7 +35,7 @@ function collectCharacters(item: CartItem, result: CharacterSaleItem[], multipli
     return;
   }
   if (item.productType === "BUNDLE") {
-    item.components?.forEach((component) => collectCharacters(component, result, multiplier * item.quantity, item.id));
+    item.components?.forEach((component) => collectCharacters(component, result, multiplier * (item.quantity ?? 1), item.id));
   }
 }
 

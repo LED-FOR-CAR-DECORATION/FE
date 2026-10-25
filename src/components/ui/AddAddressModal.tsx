@@ -88,7 +88,7 @@ export default function AddAddressModal({
             <button
               onClick={onClose}
               className="w-6 h-6 border-2 border-black bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
-              aria-label="Minimize"
+              aria-label="Thu nhỏ"
             >
               <Minus size={12} />
             </button>
@@ -96,7 +96,7 @@ export default function AddAddressModal({
             <button
               onClick={onClose}
               className="w-6 h-6 border-2 border-black bg-white flex items-center justify-center hover:bg-red-100 transition-colors"
-              aria-label="Close"
+              aria-label="Đóng"
             >
               <X size={12} />
             </button>
@@ -244,7 +244,7 @@ export default function AddAddressModal({
               {/* Display full address preview */}
               {(form.fullAddress || form.streetNumber || form.streetName || form.ward || form.district || form.province) && (
                 <div className="text-xs text-text-muted font-medium bg-primary/10 border-2 border-primary/20 p-2">
-                  <span className="font-bold">Preview: </span>
+                  <span className="font-bold">Xem trước: </span>
                   {form.fullAddress || [form.streetNumber && form.streetName ? `${form.streetNumber} ${form.streetName}` : form.streetNumber || form.streetName, form.ward, form.district, form.province, "Việt Nam"].filter(Boolean).join(", ")}
                 </div>
               )}

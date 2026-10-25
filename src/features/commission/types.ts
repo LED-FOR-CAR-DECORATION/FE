@@ -1,18 +1,41 @@
 export const COMMISSION_FIELDS = [
-  { key: "characterDesign", label: "Character Design Type", description: "Loại thiết kế nhân vật" },
-  { key: "complexity", label: "Character Complexity", description: "Độ phức tạp nhân vật" },
-  { key: "animation", label: "Animation Type", description: "Loại animation" },
-  { key: "frames", label: "Animation Frame Count", description: "Số khung hình" },
-  { key: "details", label: "Additional Details / Accessories", description: "Phụ kiện và chi tiết thêm" },
-  { key: "background", label: "Background / Scene", description: "Bối cảnh" },
-  { key: "characters", label: "Additional Character", description: "Số nhân vật bổ sung" },
-  { key: "priority", label: "Delivery Priority", description: "Độ ưu tiên giao hàng" },
-  { key: "license", label: "Usage License", description: "Quyền sử dụng" },
-  { key: "deliverables", label: "Additional Deliverables", description: "Sản phẩm bàn giao thêm" },
+  { key: "characterDesign", label: "Loại thiết kế nhân vật", description: "Chọn thiết kế mới hoặc thiết kế lại nhân vật" },
+  { key: "complexity", label: "Độ phức tạp nhân vật", description: "Mức độ chi tiết của nhân vật" },
+  { key: "animation", label: "Loại hoạt ảnh", description: "Nhân vật tĩnh hoặc có chuyển động" },
+  { key: "frames", label: "Số khung hình hoạt ảnh", description: "Số khung hình" },
+  { key: "details", label: "Chi tiết và phụ kiện thêm", description: "Trang phục, hiệu ứng hoặc đạo cụ đi kèm" },
+  { key: "background", label: "Phông nền / Bối cảnh", description: "Mức độ phức tạp của phông nền" },
+  { key: "characters", label: "Nhân vật bổ sung", description: "Số nhân vật bổ sung" },
+  { key: "priority", label: "Mức ưu tiên giao hàng", description: "Thời gian hoàn thiện mong muốn" },
+  { key: "license", label: "Giấy phép sử dụng", description: "Quyền sử dụng" },
+  { key: "deliverables", label: "Sản phẩm bàn giao thêm", description: "Sản phẩm bàn giao thêm" },
 ] as const;
 
 export type CommissionFieldKey = (typeof COMMISSION_FIELDS)[number]["key"];
 export type CommissionStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type DesignerCommissionStatus = "ASSIGNED" | "IN_PROGRESS" | "SUBMITTED_FOR_REVIEW" | "CHANGES_REQUESTED" | "APPROVED" | "COMPLETED";
+export type SubmissionStatus = "SUBMITTED_FOR_REVIEW" | "CHANGES_REQUESTED" | "APPROVED" | "REJECTED";
+
+export type CommissionSubmission = {
+  id: string;
+  version: number;
+  title: string;
+  file: { name: string; type: string; size: number; dataUrl?: string };
+  note: string;
+  status: SubmissionStatus;
+  feedback?: string;
+  revisionRequestId?: string;
+  createdAt: string;
+};
+
+export type CommissionRevisionRequest = {
+  id: string;
+  number: number;
+  request: string;
+  staffNote?: string;
+  status: "OPEN" | "RESOLVED";
+  createdAt: string;
+};
 
 export type CommissionOption = {
   value: string;
@@ -22,53 +45,53 @@ export type CommissionOption = {
 
 export const COMMISSION_OPTIONS: Record<CommissionFieldKey, CommissionOption[]> = {
   characterDesign: [
-    { value: "new", label: "New Character", surcharge: 500000 },
-    { value: "redesign", label: "Redesign Existing Character", surcharge: 350000 },
+    { value: "new", label: "Nhân vật mới", surcharge: 500000 },
+    { value: "redesign", label: "Thiết kế lại nhân vật có sẵn", surcharge: 350000 },
   ],
   complexity: [
-    { value: "simple", label: "Simple", surcharge: 0 },
-    { value: "standard", label: "Standard", surcharge: 150000 },
-    { value: "complex", label: "Complex", surcharge: 400000 },
+    { value: "simple", label: "Đơn giản", surcharge: 0 },
+    { value: "standard", label: "Tiêu chuẩn", surcharge: 150000 },
+    { value: "complex", label: "Phức tạp", surcharge: 400000 },
   ],
   animation: [
-    { value: "static", label: "Static Character", surcharge: 0 },
-    { value: "simple-animation", label: "Simple Animation", surcharge: 250000 },
-    { value: "complex-animation", label: "Complex Animation", surcharge: 600000 },
+    { value: "static", label: "Nhân vật tĩnh", surcharge: 0 },
+    { value: "simple-animation", label: "Hoạt ảnh đơn giản", surcharge: 250000 },
+    { value: "complex-animation", label: "Hoạt ảnh phức tạp", surcharge: 600000 },
   ],
   frames: [
-    { value: "static", label: "Static", surcharge: 0 },
-    { value: "2-4", label: "2–4 Frames", surcharge: 100000 },
-    { value: "5-8", label: "5–8 Frames", surcharge: 250000 },
+    { value: "static", label: "Tĩnh", surcharge: 0 },
+    { value: "2-4", label: "2–4 khung hình", surcharge: 100000 },
+    { value: "5-8", label: "5–8 khung hình", surcharge: 250000 },
   ],
   details: [
-    { value: "basic", label: "Basic Accessories", surcharge: 0 },
-    { value: "outfit", label: "Complex Outfit", surcharge: 200000 },
-    { value: "effects", label: "Special Effects", surcharge: 300000 },
-    { value: "props", label: "Custom Props", surcharge: 250000 },
+    { value: "basic", label: "Phụ kiện cơ bản", surcharge: 0 },
+    { value: "outfit", label: "Trang phục phức tạp", surcharge: 200000 },
+    { value: "effects", label: "Hiệu ứng đặc biệt", surcharge: 300000 },
+    { value: "props", label: "Đạo cụ tùy chỉnh", surcharge: 250000 },
   ],
   background: [
-    { value: "transparent", label: "Transparent/No Background", surcharge: 0 },
-    { value: "simple", label: "Simple Background", surcharge: 150000 },
-    { value: "detailed", label: "Detailed Scene (báo giá sau)", surcharge: null },
+    { value: "transparent", label: "Nền trong suốt / Không có nền", surcharge: 0 },
+    { value: "simple", label: "Nền đơn giản", surcharge: 150000 },
+    { value: "detailed", label: "Bối cảnh chi tiết (báo giá sau)", surcharge: null },
   ],
   characters: [
-    { value: "one", label: "One Character", surcharge: 0 },
-    { value: "plus-one", label: "+1 Character", surcharge: 400000 },
-    { value: "plus-two", label: "+2 Characters", surcharge: 750000 },
+    { value: "one", label: "Một nhân vật", surcharge: 0 },
+    { value: "plus-one", label: "+1 nhân vật", surcharge: 400000 },
+    { value: "plus-two", label: "+2 nhân vật", surcharge: 750000 },
   ],
   priority: [
-    { value: "standard", label: "Standard", surcharge: 0 },
-    { value: "rush", label: "Rush", surcharge: 300000 },
+    { value: "standard", label: "Tiêu chuẩn", surcharge: 0 },
+    { value: "rush", label: "Gấp", surcharge: 300000 },
   ],
   license: [
-    { value: "personal", label: "Personal Use", surcharge: 0 },
-    { value: "commercial", label: "Commercial Use", surcharge: 500000 },
+    { value: "personal", label: "Sử dụng cá nhân", surcharge: 0 },
+    { value: "commercial", label: "Sử dụng thương mại", surcharge: 500000 },
   ],
   deliverables: [
-    { value: "standard", label: "Standard Output", surcharge: 0 },
-    { value: "expression", label: "Extra Expression", surcharge: 120000 },
-    { value: "pose", label: "Alternate Pose/Color", surcharge: 150000 },
-    { value: "source", label: "Source File", surcharge: 250000 },
+    { value: "standard", label: "Đầu ra tiêu chuẩn", surcharge: 0 },
+    { value: "expression", label: "Thêm biểu cảm", surcharge: 120000 },
+    { value: "pose", label: "Tư thế / Màu sắc thay thế", surcharge: 150000 },
+    { value: "source", label: "File nguồn", surcharge: 250000 },
   ],
 };
 
@@ -83,6 +106,12 @@ export type CommissionRequest = {
     name: string;
     dataUrl: string;
   };
+  assignedDesignerId?: string;
+  assignedDesignerName?: string;
+  assignmentDate?: string;
+  designerStatus?: DesignerCommissionStatus;
+  submissions?: CommissionSubmission[];
+  revisions?: CommissionRevisionRequest[];
   estimatedPrice: number | null;
   status: CommissionStatus;
   createdAt: string;

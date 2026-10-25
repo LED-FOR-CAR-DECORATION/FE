@@ -57,7 +57,7 @@ function ProductCard({ product, onAdd }: { product: CatalogProduct; onAdd: (prod
           <button type="button" onClick={(event) => event.preventDefault()} className="absolute right-2 top-2 rounded-full bg-white/80 p-1.5 text-gray-500 opacity-0 transition group-hover:opacity-100" aria-label="Yêu thích"><Heart size={15} /></button>
         </div>
         <div className="p-3">
-          <p className="text-xs font-semibold text-[#66736b]">{isBundle ? "Bundle" : isCharacter ? "Character" : "Thiết bị LED"}</p>
+          <p className="text-xs font-semibold text-[#66736b]">{isBundle ? "Gói sản phẩm" : isCharacter ? "Nhân vật" : "Thiết bị LED"}</p>
           <h2 className="mt-1 min-h-10 text-[15px] font-black leading-5 text-[#26352f]">{product.name}</h2>
           <div className="mt-2 flex items-center justify-between gap-2">
             <strong className="text-sm font-black text-[#155e59]">{formatPrice(product.price)}</strong>
@@ -147,8 +147,8 @@ export default function Home() {
               {[
                 { label: "Tất cả sản phẩm", count: PRODUCTS.length, value: "all" as const, icon: <Grid2X2 size={17} /> },
                 { label: "Thiết bị LED", count: PRODUCTS.filter((p) => p.productType === "LED_MODEL").length, value: "LED_MODEL" as const, icon: <Monitor size={17} /> },
-                { label: "Character", count: PRODUCTS.filter((p) => p.productType === "CHARACTER").length, value: "CHARACTER" as const, icon: <PawPrint size={17} /> },
-                { label: "Bundle", count: PRODUCTS.filter((p) => p.productType === "BUNDLE").length, value: "BUNDLE" as const, icon: <Sparkles size={17} /> },
+                { label: "Nhân vật", count: PRODUCTS.filter((p) => p.productType === "CHARACTER").length, value: "CHARACTER" as const, icon: <PawPrint size={17} /> },
+                { label: "Gói sản phẩm", count: PRODUCTS.filter((p) => p.productType === "BUNDLE").length, value: "BUNDLE" as const, icon: <Sparkles size={17} /> },
               ].map((category) => <button key={category.value} onClick={() => { setActiveCategory(category.value); if (category.value === "all") setSelectedTypes(["LED_MODEL", "CHARACTER", "BUNDLE"]); else setSelectedTypes([category.value]); }} className={`mb-1 flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs font-semibold ${activeCategory === category.value ? "bg-[#e4efdc] text-[#126356]" : "hover:bg-gray-50"}`}>{category.icon}<span className="flex-1">{category.label}</span><span className="text-gray-400">({category.count})</span></button>)}
               <hr className="my-5 border-[#e2e4db]" />
               <h2 className="mb-4 flex items-center gap-2 text-base font-black text-[#155e59]"><SlidersHorizontal size={16} />Bộ lọc</h2>

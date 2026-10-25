@@ -54,7 +54,7 @@ function UserDropdown() {
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-gray-50"
           >
-            <ShoppingBag size={15} /> Gallery Character
+            <ShoppingBag size={15} /> Thư viện nhân vật
           </Link>
           {user?.role === "CUSTOMER" && (
             <Link
@@ -157,7 +157,7 @@ export default function Header() {
           <button
             onClick={() => setMobileOpen((v) => !v)}
             className="border border-[#155e59] bg-white p-2 text-[#155e59] md:hidden"
-            aria-label="Open menu"
+            aria-label="Mở trình đơn"
           >
             <Menu size={24} />
           </button>

@@ -6,10 +6,11 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { useCart } from "@/features/cart/context/CartContext";
+import { getOrderFulfillment } from "@/features/order/fulfillment";
 
 export default function CartPage() {
   const { items, isLoading, updateQuantity, removeItem, clearItems, subtotal } = useCart();
-  const shipping = items.some((item) => item.productType === "LED_MODEL") && subtotal > 0 ? 5 : 0;
+  const shipping = getOrderFulfillment({ items }).requiresDelivery && subtotal > 0 ? 5 : 0;
 
   if (isLoading) return <><Header /><main className="flex-1 grid place-items-center p-20">Đang tải giỏ hàng...</main><Footer /></>;
 

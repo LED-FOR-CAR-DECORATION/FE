@@ -6,6 +6,7 @@ import {
   Boxes,
   ChartNoAxesCombined,
   ClipboardList,
+  Image,
   LayoutDashboard,
   MessageCircle,
   RotateCcw,
@@ -71,6 +72,13 @@ const menuItems: MenuItem[] = [
     description: "Theo dõi mẫu thiết bị và số lượng tồn kho",
     href: "/staff/inventory",
     icon: Boxes,
+    roles: ["MANAGER"],
+  },
+  {
+    label: "Quản lý đơn Character",
+    description: "Theo dõi doanh thu và cấp quyền Character",
+    href: "/manager/character-orders",
+    icon: Image,
     roles: ["MANAGER"],
   },
   {

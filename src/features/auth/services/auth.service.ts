@@ -1,5 +1,7 @@
 import { DEMO_ACCOUNTS } from "../mock-auth";
 import type { AuthUser, RegisterInput } from "../types";
+import { loginWithPassword, registerAccount } from "@/lib/api/auth";
+import { clearSession, loadSession } from "@/lib/auth/session";
 
 const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -10,25 +12,15 @@ export class MockAuthError extends Error {
   }
 }
 
-/** Prototype-only boundary. Replace these methods with backend API calls later. */
+/** Login and registration use the backend; password recovery remains prototype-only. */
 export const authService = {
   async login(email: string, password: string): Promise<AuthUser> {
-    await wait(500);
-    const account = DEMO_ACCOUNTS.find(
-      (item) => item.email === email.trim().toLowerCase() && item.password === password,
-    );
-    if (!account) {
-      throw new MockAuthError("Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại thông tin đăng nhập.");
-    }
-    return account.user;
+    return loginWithPassword(email, password);
   },
-  async logout(): Promise<void> { await wait(150); },
-  async getCurrentUser(): Promise<AuthUser | null> { return null; },
+  async logout(): Promise<void> { clearSession(); },
+  async getCurrentUser(): Promise<AuthUser | null> { return loadSession(); },
   async register(data: RegisterInput): Promise<void> {
-    await wait(600);
-    if (DEMO_ACCOUNTS.some((account) => account.email === data.email.trim().toLowerCase())) {
-      throw new MockAuthError("Email này đã được dùng trong tài khoản demo.");
-    }
+    await registerAccount(data);
   },
   async requestPasswordReset(email: string): Promise<void> {
     await wait(600);

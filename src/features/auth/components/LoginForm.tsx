@@ -35,7 +35,8 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
       login(user);
       setSuccess("Đăng nhập thành công. Đang chuyển hướng...");
       const roleHome = user.role === "ADMIN" ? "/admin" : user.role === "MANAGER" ? "/manager" : user.role === "STAFF" ? "/staff" : "/";
-      const requestedRedirect = user.role === "CUSTOMER" && redirectTo !== "/manager" ? redirectTo : roleHome;
+      const safeRedirect = redirectTo.startsWith("/") && !redirectTo.startsWith("//") && !redirectTo.includes("\\");
+      const requestedRedirect = user.role === "CUSTOMER" && safeRedirect && !/^\/(admin|manager|staff)(\/|$)/.test(redirectTo) ? redirectTo : roleHome;
       window.setTimeout(() => window.location.assign(requestedRedirect), 350);
     } catch (error) {
       setErrors({ form: error instanceof Error ? error.message : "Đăng nhập không thành công." });
@@ -55,12 +56,6 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
         {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
       </button>
       <p className="text-center text-xs font-medium text-text-muted">Chưa có tài khoản? <Link href="/register" className="font-bold text-black hover:underline">Đăng ký ngay!</Link></p>
-      <div className="border-t border-primary-light pt-3 text-center text-[11px] text-text-muted">
-        <p>Customer: <strong>customer123@gmail.com</strong> / <strong>Customer123@</strong></p>
-        <p>Manager: <strong>manager123@gmail.com</strong> / <strong>Manager123@</strong></p>
-        <p>Staff: <strong>staff123@gmail.com</strong> / <strong>Staff123@</strong></p>
-        <p>Admin: <strong>admin123@gmail.com</strong> / <strong>Admin123@</strong></p>
-      </div>
     </form>
   );
 }

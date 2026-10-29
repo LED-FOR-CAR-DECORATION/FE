@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:auth": "node --test scripts/test-auth.cjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
   },
   "dependencies": {
     "@types/maplibre-gl": "^1.13.2",
+    "axios": "^1.21.0",
     "lucide-react": "^1.52.0",
     "maplibre-gl": "^6.13.0",
     "next": "16.4.0",

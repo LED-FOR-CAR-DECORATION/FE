@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { authService } from "@/features/auth/services/auth.service";
 import type { AuthUser } from "@/features/auth/types";
-import { clearSession, loadSession, saveSession } from "@/lib/auth/session";
+import { clearSession, loadSession, saveSession, SESSION_CHANGED } from "@/lib/auth/session";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -23,6 +23,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setUser(loadSession());
     setIsLoading(false);
+    const synchronize = () => setUser(loadSession());
+    window.addEventListener(SESSION_CHANGED, synchronize);
+    window.addEventListener("focus", synchronize);
+    const timer = window.setInterval(synchronize, 30_000);
+    return () => {
+      window.removeEventListener(SESSION_CHANGED, synchronize);
+      window.removeEventListener("focus", synchronize);
+      window.clearInterval(timer);
+    };
   }, []);
 
   const login = useCallback((nextUser: AuthUser) => {

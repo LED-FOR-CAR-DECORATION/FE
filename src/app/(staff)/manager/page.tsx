@@ -1,2 +1,5 @@
-// Re-export the dashboard page at /manager
-export { default } from "@/app/(staff)/staff/page";
+import ManagerDashboard from "@/features/dashboard/components/ManagerDashboard";
+
+export default function ManagerDashboardPage() {
+  return <ManagerDashboard />;
+}

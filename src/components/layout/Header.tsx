@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown } from "lucide-react";
+import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, MessageSquare } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useCart } from "@/features/cart/context/CartContext";
@@ -116,6 +116,13 @@ export default function Header() {
           <nav className="hidden items-center gap-7 text-sm font-bold text-[#155e59] md:flex">
             <Link href="/" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">CỬA HÀNG</Link>
             <Link href="/about" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">GIỚI THIỆU</Link>
+            <Link
+              href="/chat"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#155e59] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#0e4b47]"
+            >
+              <MessageSquare size={15} />
+              Chat ngay
+            </Link>
           </nav>
         </div>
 

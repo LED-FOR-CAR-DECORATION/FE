@@ -69,7 +69,7 @@ const menuItems: MenuItem[] = [
     roles: ["STAFF"],
   },
   {
-    label: "Chatbox hỗ trợ",
+    label: "Quản lý Chat",
     description: "Trả lời khách hàng và hỗ trợ sau bán hàng",
     href: "/staff/chat",
     icon: MessageCircle,

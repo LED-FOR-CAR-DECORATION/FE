@@ -180,8 +180,8 @@ export default function StoreListingDashboard() {
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={(event) => onTabKeyDown(event, index)}
                 className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${selected
-                    ? "border-primary-dark text-primary-dark"
-                    : "border-transparent text-text-muted hover:text-[#173b28]"
+                  ? "border-primary-dark text-primary-dark"
+                  : "border-transparent text-text-muted hover:text-[#173b28]"
                   }`}
               >
                 {tab.label}

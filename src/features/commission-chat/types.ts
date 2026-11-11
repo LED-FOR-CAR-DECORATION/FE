@@ -1,6 +1,13 @@
 export type OrderState = "NO_ORDER" | "IN_PROGRESS" | "REVIEW";
 export type ProgressStep = "WAITING_PAYMENT" | "DRAWING" | "REVIEWING";
 
+export interface QuoteSpecItem {
+  fieldKey: string;
+  fieldName: string;
+  optionLabel: string;
+  price: number | null;
+}
+
 export interface QuoteData {
   characterName: string;
   description: string;
@@ -8,6 +15,10 @@ export interface QuoteData {
   deliveryDate: string;
   isPaid?: boolean;
   isApproved?: boolean;
+  /** Lưu các tùy chọn động được chọn từ mảng `commissionConfigs` */
+  selections?: Record<string, string>;
+  /** Danh sách chi tiết các tiêu chí đã chọn từ `commissionConfigs` */
+  specsBreakdown?: QuoteSpecItem[];
 }
 
 export interface ChatMessage {
@@ -34,4 +45,3 @@ export interface Conversation {
   commission: QuoteData;
   messages: ChatMessage[];
 }
-

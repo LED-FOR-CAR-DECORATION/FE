@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError } from "@/lib/api/client";
+import { isAxiosError } from "axios";
 import { listManagedUsers } from "@/lib/api/users";
 import type { ManagedUserList, ManagedUserQuery } from "../types";
 
@@ -10,28 +10,28 @@ type Result = {
 };
 
 export function useManagedUsers(
-  token: string,
+  accountId: string | undefined,
   query: ManagedUserQuery,
   attempt: number,
 ) {
   const [result, setResult] = useState<{
-    token: string;
+    accountId: string | undefined;
     query: ManagedUserQuery;
     attempt: number;
     value: Result;
   }>();
 
   useEffect(() => {
-    if (!token) return;
+    if (!accountId) return;
     const controller = new AbortController();
     const finish = (value: Result) => {
       if (!controller.signal.aborted)
-        setResult({ token, query, attempt, value });
+        setResult({ accountId, query, attempt, value });
     };
-    listManagedUsers(query, token, controller.signal).then(
+    listManagedUsers(query, controller.signal).then(
       (data) => finish({ data }),
       (error: unknown) => {
-        const status = error instanceof ApiError ? error.status : undefined;
+        const status = isAxiosError(error) ? error.response?.status : undefined;
         finish({
           unauthorized: status === 401,
           error:
@@ -44,9 +44,10 @@ export function useManagedUsers(
       },
     );
     return () => controller.abort();
-  }, [token, query, attempt]);
+  }, [accountId, query, attempt]);
 
-  return result?.token === token &&
+  return result?.accountId === accountId &&
+    result &&
     result.query === query &&
     result.attempt === attempt
     ? result.value

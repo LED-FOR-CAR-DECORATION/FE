@@ -37,10 +37,6 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ### IAM-13: Danh sách tài khoản nội bộ
 
-Chạy backend có endpoint IAM-13 (`GET /api/management/admin/users`). FE mặc định chuyển tiếp
-đến `http://localhost:8080`. Nếu backend chạy ở địa chỉ khác, đặt `BACKEND_API_ORIGIN`
-trong `.env.local` rồi khởi động lại Next.js. Giá trị là origin, không kèm `/api`.
-
-Mở `/admin/users` và xác thực bằng tài khoản Admin hoặc Manager thật của backend.
-Phiên demo không cấp token. Màn hình giữ access token trong bộ nhớ và yêu cầu xác thực
-lại khi tải lại trang hoặc khi phiên hết hạn.
+Chạy backend có endpoint IAM-13 (`GET /api/management/admin/users`). FE dùng
+`NEXT_PUBLIC_API_URL` và mặc định kết nối đến `http://localhost:8080`.
+Đăng nhập bằng tài khoản Admin hoặc Manager thật, rồi mở `/admin/users`.

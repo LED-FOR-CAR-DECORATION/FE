@@ -1,24 +1,29 @@
+import axios from "axios";
 import type {
   ManagedUserList,
   ManagedUserQuery,
 } from "@/features/managed-users/types";
-import { apiRequest } from "./client";
+import { OpenAPI } from "./client";
+import { getSessionToken } from "../auth/session";
 
-export function listManagedUsers(
+export async function listManagedUsers(
   query: ManagedUserQuery,
-  token: string,
   signal?: AbortSignal,
-) {
-  const params = new URLSearchParams({
-    page: String(query.page),
-    size: String(query.size),
-  });
-  if (query.search?.trim()) params.set("search", query.search.trim());
-  if (query.role) params.set("role", query.role);
-  if (query.active !== undefined) params.set("active", String(query.active));
-
-  return apiRequest<ManagedUserList>(`management/admin/users?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal,
-  });
+): Promise<ManagedUserList> {
+  const token = await getSessionToken();
+  const { data } = await axios.get<{ data: ManagedUserList }>(
+    "/api/management/admin/users",
+    {
+      baseURL: OpenAPI.BASE,
+      withCredentials: OpenAPI.WITH_CREDENTIALS,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: {
+        ...query,
+        search: query.search?.trim() || undefined,
+        role: query.role || undefined,
+      },
+      signal,
+    },
+  );
+  return data.data;
 }

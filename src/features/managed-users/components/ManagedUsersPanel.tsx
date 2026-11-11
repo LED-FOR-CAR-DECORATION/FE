@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { loginToBackend } from "@/lib/api/auth";
-import { ApiError } from "@/lib/api/client";
+import Link from "next/link";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useManagedUsers } from "../hooks/useManagedUsers";
 import type { ManagedUserQuery } from "../types";
 
@@ -10,39 +10,15 @@ const initialQuery: ManagedUserQuery = { page: 0, size: 10 };
 const field = "rounded border border-gray-300 bg-white px-3 py-2";
 
 export default function ManagedUsersPanel() {
-  const [token, setToken] = useState("");
+  const { user, isLoading } = useAuth();
+  const canList = user?.role === "ADMIN" || user?.role === "MANAGER";
   const [query, setQuery] = useState(initialQuery);
   const [attempt, setAttempt] = useState(0);
-  const [signingIn, setSigningIn] = useState(false);
-  const [loginError, setLoginError] = useState("");
-  const result = useManagedUsers(token, query, attempt);
-
-  async function signIn(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (signingIn) return;
-    const form = event.currentTarget;
-    const values = new FormData(form);
-    setSigningIn(true);
-    setLoginError("");
-    try {
-      const session = await loginToBackend(
-        String(values.get("email")).trim(),
-        String(values.get("password")),
-      );
-      if (!session.accessToken) throw new Error("Missing access token");
-      form.reset();
-      setToken(session.accessToken);
-      setQuery(initialQuery);
-    } catch (error) {
-      setLoginError(
-        error instanceof ApiError && [400, 401, 403].includes(error.status)
-          ? "Không thể xác thực tài khoản. Vui lòng kiểm tra thông tin đăng nhập."
-          : "Không kết nối được với hệ thống xác thực.",
-      );
-    } finally {
-      setSigningIn(false);
-    }
-  }
+  const result = useManagedUsers(
+    canList ? user.userId : undefined,
+    query,
+    attempt,
+  );
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,35 +38,20 @@ export default function ManagedUsersPanel() {
   return (
     <section className="space-y-5">
       <h1 className="text-2xl font-black">Quản lý người dùng</h1>
-      {!token || result?.unauthorized ? (
-        <form onSubmit={signIn} className="grid max-w-sm gap-3">
-          <p>Xác thực bằng tài khoản Admin hoặc Manager trên hệ thống.</p>
-          {result?.unauthorized && <p role="status">{result.error}</p>}
-          <label className="grid gap-1">
-            Email
-            <input
-              className={field}
-              name="email"
-              type="email"
-              autoComplete="username"
-              required
-            />
-          </label>
-          <label className="grid gap-1">
-            Mật khẩu
-            <input
-              className={field}
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </label>
-          {loginError && <p role="alert">{loginError}</p>}
-          <button className="btn-primary" disabled={signingIn}>
-            {signingIn ? "Đang xác thực…" : "Xác thực"}
-          </button>
-        </form>
+      {isLoading ? (
+        <p role="status">Đang kiểm tra phiên đăng nhập…</p>
+      ) : !user || result?.unauthorized ? (
+        <p>
+          {result?.error ??
+            "Vui lòng đăng nhập bằng tài khoản Admin hoặc Manager."}{" "}
+          <Link className="underline" href="/login">
+            Đăng nhập
+          </Link>
+        </p>
+      ) : !canList ? (
+        <p role="alert">
+          Chỉ tài khoản Admin hoặc Manager được xem danh sách này.
+        </p>
       ) : (
         <>
           <form
@@ -132,13 +93,6 @@ export default function ManagedUsersPanel() {
               </select>
             </label>
             <button className="btn-primary">Áp dụng</button>
-            <button
-              className={field}
-              type="button"
-              onClick={() => setToken("")}
-            >
-              Đổi tài khoản
-            </button>
           </form>
           {!result && <p role="status">Đang tải danh sách…</p>}
           {result?.error && (

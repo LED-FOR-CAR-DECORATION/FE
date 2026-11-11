@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { authService } from "../services/auth.service";
+import { authService, USE_MOCK_AUTH } from "../services/auth.service";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { DEMO_ACCOUNTS } from "@/features/auth/mock-auth";
 import type { UserRole } from "@/features/auth/types";
@@ -122,10 +122,29 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
               : user.role === "DESIGNER"
                 ? "/designer/dashboard"
                 : "/";
-      const requestedRedirect =
-        user.role === "CUSTOMER" && redirectTo !== "/manager" ? redirectTo : roleHome;
 
-      window.setTimeout(() => window.location.assign(requestedRedirect), 300);
+      let targetRedirect = roleHome;
+      if (redirectTo && redirectTo !== "/") {
+        const isStaffArea =
+          redirectTo.startsWith("/manager") ||
+          redirectTo.startsWith("/staff") ||
+          redirectTo.startsWith("/admin") ||
+          redirectTo.startsWith("/designer");
+
+        if (user.role === "ADMIN" && (redirectTo.startsWith("/admin") || redirectTo.startsWith("/manager") || redirectTo.startsWith("/staff"))) {
+          targetRedirect = redirectTo;
+        } else if (user.role === "MANAGER" && (redirectTo.startsWith("/manager") || redirectTo.startsWith("/staff"))) {
+          targetRedirect = redirectTo;
+        } else if (user.role === "STAFF" && redirectTo.startsWith("/staff")) {
+          targetRedirect = redirectTo;
+        } else if (user.role === "DESIGNER" && redirectTo.startsWith("/designer")) {
+          targetRedirect = redirectTo;
+        } else if (user.role === "CUSTOMER" && !isStaffArea) {
+          targetRedirect = redirectTo;
+        }
+      }
+
+      window.setTimeout(() => window.location.assign(targetRedirect), 300);
     } catch (error) {
       setErrors({
         form: error instanceof Error ? error.message : "Đăng nhập không thành công. Vui lòng kiểm tra lại.",
@@ -141,11 +160,14 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
       <div className="border-b border-[#e3efe6] pb-3 text-left">
         <h2 className="text-xl font-black text-[#173b28] tracking-tight">Đăng nhập tài khoản</h2>
         <p className="mt-0.5 text-xs font-medium text-text-muted">
-          Nhập thông tin hoặc chọn tài khoản mẫu bên dưới để thử nghiệm nhanh các vai trò.
+          {USE_MOCK_AUTH
+            ? "Nhập thông tin hoặc chọn tài khoản mẫu bên dưới để thử nghiệm nhanh các vai trò."
+            : "Nhập email và mật khẩu đã đăng ký để đăng nhập."}
         </p>
       </div>
 
-      {/* Quick Account Switcher */}
+      {/* Quick Account Switcher (chỉ hiện ở chế độ mock) */}
+      {USE_MOCK_AUTH && (
       <div className="rounded-xl border border-[#d8e6dc] bg-[#f9fcfa] p-3 text-left">
         <div className="flex items-center justify-between mb-2">
           <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-[#173b28]">
@@ -184,6 +206,7 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
           })}
         </div>
       </div>
+      )}
 
       {/* Main form */}
       <form onSubmit={submit} className="flex flex-col gap-3.5 text-left" noValidate>
@@ -215,7 +238,7 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
             setEmail(val);
             if (selectedRole) setSelectedRole(null);
           }}
-          placeholder="vd: manager123@gmail.com"
+          placeholder={USE_MOCK_AUTH ? "vd: manager123@gmail.com" : "you@example.com"}
           error={errors.email}
           icon={<Mail size={15} />}
           required

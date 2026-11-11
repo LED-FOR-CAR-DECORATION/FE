@@ -190,10 +190,10 @@ export default function Header() {
         <div className="flex gap-8 whitespace-nowrap animate-pulse text-xs font-bold text-primary-dark tracking-widest uppercase">
           <span>CÓ THIẾT KẾ MỚI</span>
           <span>GIẢM 20% BẢNG LED 32x32</span>
-          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN $50</span>
+          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN 500.000 VNĐ</span>
           <span>CÓ THIẾT KẾ MỚI</span>
           <span>GIẢM 20% BẢNG LED 32x32</span>
-          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN $50</span>
+          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN 500.000 VNĐ</span>
         </div>
       </div>
     </header>

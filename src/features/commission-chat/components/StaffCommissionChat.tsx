@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Search,
   Send,
@@ -12,7 +12,16 @@ import {
   Check,
   Palette,
   Clock,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
+import DynamicCommissionFormFields from "@/features/commission/components/DynamicCommissionFormFields";
+import {
+  COMMISSION_BASE_PRICE,
+  buildSpecsSummaryFromConfigs,
+  calculateDynamicCommissionQuote,
+} from "@/features/commission/config/commissionConfigs";
+import { useCommissionConfigs } from "@/features/commission/hooks/useCommissionConfigs";
 import { useCommissionChat } from "../hooks/useCommissionChat";
 import { formatVND } from "../services/commission-chat.service";
 import type { ChatMessage, ProgressStep, QuoteData } from "../types";
@@ -26,17 +35,23 @@ export default function StaffCommissionChat() {
     updateActiveConversation,
   } = useCommissionChat();
 
+  // Lấy mảng cấu hình động `commissionConfigs` (Data-Driven)
+  const { configs: commissionConfigs } = useCommissionConfigs();
+
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [messageInput, setMessageInput] = useState<string>("");
 
-  // State 1 (Chưa có đơn - Dành riêng cho Staff): Form tạo Commission
+  // State 1 (Chưa có đơn - Dành cho Staff): Form Báo Giá Commission (Data-Driven)
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
   const [formCharacterName, setFormCharacterName] = useState<string>("Rồng Lửa");
   const [formDescription, setFormDescription] = useState<string>(
     "Pixel Art 64x64px, hiệu ứng lửa cháy quanh cánh, tông màu đỏ cam rực rỡ."
   );
-  const [formPrice, setFormPrice] = useState<string>("500000");
-  const [formDeliveryDate, setFormDeliveryDate] = useState<string>("2026-11-10");
+  const [formDeliveryDate, setFormDeliveryDate] = useState<string>("2026-11-15");
+  const [formSelections, setFormSelections] = useState<Record<string, string | undefined>>(
+    {}
+  );
+  const [customPriceOverride, setCustomPriceOverride] = useState<string>("");
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -52,17 +67,41 @@ export default function StaffCommissionChat() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeConversation.messages.length, activeConversation.id]);
 
-  // Đồng bộ giá trị mặc định của form khi chuyển hội thoại
+  // Khởi tạo giá trị mặc định từ `commissionConfigs` khi mở form hoặc đổi hội thoại
   useEffect(() => {
     setFormCharacterName(activeConversation.commission.characterName || "Rồng Lửa");
     setFormDescription(
       activeConversation.commission.description ||
         "Thiết kế nhân vật Pixel Art 64x64px tương thích bảng LED MIRAGE."
     );
-    setFormPrice(String(activeConversation.commission.price || 500000));
     setFormDeliveryDate(activeConversation.commission.deliveryDate || "2026-11-15");
+
+    const defaultSelections: Record<string, string | undefined> = {};
+    commissionConfigs.forEach((field) => {
+      defaultSelections[field.key] =
+        activeConversation.commission.selections?.[field.key] ??
+        field.options[0]?.value;
+    });
+    setFormSelections(defaultSelections);
+    setCustomPriceOverride("");
     setIsFormOpen(false);
-  }, [activeConversation.id]);
+  }, [activeConversation.id, commissionConfigs]);
+
+  // Tính giá tự động từ các tùy chọn trong `commissionConfigs`
+  const dynamicQuoteCalc = useMemo(
+    () =>
+      calculateDynamicCommissionQuote(
+        formSelections,
+        commissionConfigs,
+        COMMISSION_BASE_PRICE
+      ),
+    [formSelections, commissionConfigs]
+  );
+
+  const finalQuotePrice =
+    customPriceOverride.trim() !== ""
+      ? Number(customPriceOverride.replace(/\D/g, "")) || dynamicQuoteCalc.total
+      : dynamicQuoteCalc.total;
 
   const filteredConversations = conversations.filter(
     (conv) =>
@@ -71,7 +110,6 @@ export default function StaffCommissionChat() {
       conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Nhân viên gửi tin nhắn tư vấn
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = messageInput.trim();
@@ -94,7 +132,6 @@ export default function StaffCommissionChat() {
     setMessageInput("");
   };
 
-  // Nhân viên gửi ảnh phác thảo
   const handleAttachDraftImage = () => {
     const newMsg: ChatMessage = {
       id: `msg-img-${Date.now()}`,
@@ -113,22 +150,31 @@ export default function StaffCommissionChat() {
     showToast("Đã gửi hình ảnh phác thảo cho khách hàng!");
   };
 
-  // Staff tạo Form Commission (State 1 -> State 2 + đẩy System Action Card vào timeline)
+  // Staff gửi Form Báo Giá (Data-Driven từ commissionConfigs)
   const handleCreateCommissionForm = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedPrice = Number(formPrice.replace(/\D/g, "")) || 500000;
     const charName = formCharacterName.trim() || "Rồng Lửa";
+    const specsSummary = buildSpecsSummaryFromConfigs(formSelections, commissionConfigs);
     const desc =
-      formDescription.trim() || "Thiết kế nhân vật Pixel Art theo yêu cầu riêng.";
+      formDescription.trim() ||
+      specsSummary ||
+      "Thiết kế nhân vật Pixel Art theo yêu cầu riêng.";
     const deliv = formDeliveryDate || "2026-11-15";
+
+    const cleanedSelections: Record<string, string> = {};
+    Object.entries(formSelections).forEach(([k, v]) => {
+      if (v) cleanedSelections[k] = v;
+    });
 
     const quoteData: QuoteData = {
       characterName: charName,
       description: desc,
-      price: parsedPrice,
+      price: finalQuotePrice,
       deliveryDate: deliv,
       isPaid: false,
       isApproved: false,
+      selections: cleanedSelections,
+      specsBreakdown: dynamicQuoteCalc.breakdown,
     };
 
     const systemCardMsg: ChatMessage = {
@@ -143,16 +189,17 @@ export default function StaffCommissionChat() {
       orderState: "IN_PROGRESS",
       progressStep: "WAITING_PAYMENT",
       commission: quoteData,
-      lastMessage: `Nhân viên đã tạo một yêu cầu: ${charName} - ${formatVND(parsedPrice)}`,
+      lastMessage: `Nhân viên đã tạo một yêu cầu: ${charName} - ${formatVND(finalQuotePrice)}`,
       lastTime: "Vừa xong",
       messages: [...conv.messages, systemCardMsg],
     }));
 
     setIsFormOpen(false);
-    showToast(`Đã tạo báo giá "${charName}" và gửi Thẻ thanh toán cho khách hàng!`);
+    showToast(
+      `Đã tạo báo giá "${charName}" (${formatVND(finalQuotePrice)}) và gửi Thẻ thanh toán cho khách hàng!`
+    );
   };
 
-  // Staff chuyển trạng thái tiến độ hoặc gửi bản vẽ sang Nghiệm thu (State 3)
   const handleMoveToReview = () => {
     const notifyMsg: ChatMessage = {
       id: `msg-review-${Date.now()}`,
@@ -175,7 +222,6 @@ export default function StaffCommissionChat() {
 
   return (
     <div className="flex h-[calc(100vh-7rem)] min-h-[640px] w-full flex-col overflow-hidden rounded-xl border border-[#dce8df] bg-[#f8f7ef] p-3 text-[#26352f] shadow-sm">
-      {/* CORE LAYOUT 3 CỘT KIỂU ZALO PC DÀNH CHO STAFF (25% - 50% - 25%) */}
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
         {/* ===================================================================
             CỘT 1: DANH SÁCH KHÁCH HÀNG ĐANG CHAT (25% CHIỀU RỘNG - CỘT TRÁI)
@@ -189,7 +235,6 @@ export default function StaffCommissionChat() {
               </span>
             </div>
 
-            {/* Thanh tìm kiếm hội thoại */}
             <div className="relative flex items-center">
               <Search
                 size={15}
@@ -205,7 +250,6 @@ export default function StaffCommissionChat() {
             </div>
           </div>
 
-          {/* Danh sách khách hàng đang chat */}
           <div className="flex-1 space-y-1 divide-y divide-[#f0f5f1] overflow-y-auto p-2">
             {filteredConversations.map((conv) => {
               const isActive = conv.id === activeConversation.id;
@@ -280,7 +324,6 @@ export default function StaffCommissionChat() {
             CỘT 2: KHUNG CHAT CHÍNH (50% CHIỀU RỘNG - CỘT GIỮA)
         =================================================================== */}
         <section className="flex w-2/4 flex-1 flex-col overflow-hidden rounded-xl border border-[#dce8df] bg-white shadow-sm">
-          {/* Header hiển thị thông tin khách hàng đang chat */}
           <div className="flex items-center justify-between border-b border-[#cfe3d0] bg-[#eaf5e8] px-5 py-3.5">
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -311,10 +354,8 @@ export default function StaffCommissionChat() {
             </span>
           </div>
 
-          {/* Vùng hiển thị tin nhắn (Chat timeline) */}
           <div className="flex-1 space-y-4 overflow-y-auto bg-[#fbfaf4] p-5">
             {activeConversation.messages.map((msg) => {
-              // System Action Card hiển thị trong timeline
               if (msg.sender === "SYSTEM" && msg.quoteCard) {
                 const card = msg.quoteCard;
                 return (
@@ -341,6 +382,26 @@ export default function StaffCommissionChat() {
                             <strong className="text-[#155e59]">Mô tả:</strong>{" "}
                             {card.description}
                           </p>
+
+                          {/* Hiển thị danh sách tiêu chí động đã chọn từ commissionConfigs */}
+                          {card.specsBreakdown && card.specsBreakdown.length > 0 && (
+                            <div className="mt-2 space-y-1 border-t border-[#e2e8e3] pt-2">
+                              <p className="text-[10px] font-black text-[#155e59] uppercase">
+                                Cấu hình chi tiết ({card.specsBreakdown.length} tiêu chí):
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {card.specsBreakdown.map((item) => (
+                                  <span
+                                    key={item.fieldKey}
+                                    className="rounded-md border border-[#cfe3d0] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#26352f]"
+                                  >
+                                    {item.fieldName}: <strong>{item.optionLabel}</strong>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex items-center justify-between border-t border-[#e2e8e3] pt-1.5">
                             <span className="text-[#66736b]">Ngày giao dự kiến:</span>
                             <strong className="text-[#155e59]">{card.deliveryDate}</strong>
@@ -378,7 +439,6 @@ export default function StaffCommissionChat() {
                 );
               }
 
-              // Bong bóng chat của Staff (bên phải) và Customer (bên trái)
               const isStaff = msg.sender === "STAFF";
               return (
                 <div
@@ -406,7 +466,6 @@ export default function StaffCommissionChat() {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Vùng nhập liệu (Input area) */}
           <form
             onSubmit={handleSendMessage}
             className="flex items-center gap-2.5 border-t border-[#dce8df] bg-white p-3.5"
@@ -447,14 +506,12 @@ export default function StaffCommissionChat() {
               Nghiệp vụ chốt đơn Commission
             </h2>
             <p className="mt-0.5 text-[11px] text-[#546d5e]">
-              Tạo báo giá, cập nhật tiến độ & gửi nghiệm thu
+              Tạo báo giá động, cập nhật tiến độ & gửi nghiệm thu
             </p>
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {/* ===============================================================
-                STATE 1 (CHƯA CÓ ĐƠN - DÀNH CHO STAFF): NÚT [+ TẠO FORM COMMISSION]
-            =============================================================== */}
+            {/* STATE 1 (CHƯA CÓ ĐƠN - DÀNH CHO STAFF): NÚT [+ TẠO FORM COMMISSION] */}
             {activeConversation.orderState === "NO_ORDER" && (
               <div className="space-y-4">
                 <div className="rounded-xl border border-[#dce8df] bg-[#f8f7ef] p-4 text-center">
@@ -466,108 +523,26 @@ export default function StaffCommissionChat() {
                   </h3>
                   <p className="mt-1 text-xs leading-relaxed text-[#66736b]">
                     Khách hàng <strong>{activeConversation.customerName}</strong> đang chờ
-                    báo giá. Hãy tạo Form Commission để gửi thẻ thanh toán vào khung chat.
+                    báo giá. Bấm nút bên dưới để mở Form Báo Giá động từ{" "}
+                    <code className="font-mono font-bold text-[#155e59]">
+                      commissionConfigs
+                    </code>
+                    .
                   </p>
                 </div>
 
-                {!isFormOpen ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsFormOpen(true)}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#155e59] px-4 py-4 text-sm font-black text-white shadow-sm transition hover:bg-[#0f4743] cursor-pointer"
-                  >
-                    <Plus size={18} />
-                    + Tạo Form Commission
-                  </button>
-                ) : (
-                  <form
-                    onSubmit={handleCreateCommissionForm}
-                    className="space-y-3 rounded-xl border border-[#8fc7a0] bg-[#f8f7ef] p-4 shadow-xs"
-                  >
-                    <div className="flex items-center justify-between border-b border-[#dce8df] pb-2">
-                      <h4 className="text-xs font-black text-[#155e59] uppercase">
-                        Form Báo Giá Commission
-                      </h4>
-                      <button
-                        type="button"
-                        onClick={() => setIsFormOpen(false)}
-                        className="text-xs font-bold text-[#66736b] hover:text-[#155e59]"
-                      >
-                        Đóng
-                      </button>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-[#155e59]">
-                        Tên nhân vật
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formCharacterName}
-                        onChange={(e) => setFormCharacterName(e.target.value)}
-                        placeholder="VD: Rồng Lửa"
-                        className="mt-1 w-full rounded-xl border border-[#cfe3d0] bg-white px-3 py-2 text-xs outline-none focus:border-[#155e59]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-[#155e59]">
-                        Mô tả
-                      </label>
-                      <textarea
-                        rows={3}
-                        required
-                        value={formDescription}
-                        onChange={(e) => setFormDescription(e.target.value)}
-                        placeholder="Mô tả chi tiết kích thước pixel, hiệu ứng..."
-                        className="mt-1 w-full rounded-xl border border-[#cfe3d0] bg-white px-3 py-2 text-xs outline-none focus:border-[#155e59]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-[#155e59]">
-                        Giá tiền (VNĐ)
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min={50000}
-                        step={10000}
-                        value={formPrice}
-                        onChange={(e) => setFormPrice(e.target.value)}
-                        placeholder="500000"
-                        className="mt-1 w-full rounded-xl border border-[#cfe3d0] bg-white px-3 py-2 text-xs font-bold text-[#155e59] outline-none focus:border-[#155e59]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-[#155e59]">
-                        Ngày giao
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={formDeliveryDate}
-                        onChange={(e) => setFormDeliveryDate(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-[#cfe3d0] bg-white px-3 py-2 text-xs outline-none focus:border-[#155e59]"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full rounded-xl bg-[#155e59] py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#0f4743] cursor-pointer"
-                    >
-                      Tạo & Gửi Thẻ Báo Giá
-                    </button>
-                  </form>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setIsFormOpen(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#155e59] px-4 py-4 text-sm font-black text-white shadow-sm transition hover:bg-[#0f4743] cursor-pointer"
+                >
+                  <Plus size={18} />
+                  + Tạo Form Commission
+                </button>
               </div>
             )}
 
-            {/* ===============================================================
-                STATE 2 (ĐANG THỰC HIỆN): HIỂN THỊ & CẬP NHẬT TIẾN ĐỘ ĐƠN VẼ
-            =============================================================== */}
+            {/* STATE 2 (ĐANG THỰC HIỆN) */}
             {activeConversation.orderState === "IN_PROGRESS" && (
               <div className="space-y-4">
                 <div className="space-y-2 rounded-xl border border-[#dce8df] bg-[#f8f7ef] p-3.5">
@@ -588,7 +563,7 @@ export default function StaffCommissionChat() {
                     {activeConversation.commission.description}
                   </p>
                   <div className="flex items-center justify-between border-t border-[#e2e8e3] pt-2 text-xs">
-                    <span className="text-[#66736b]">Giá trị:</span>
+                    <span className="text-[#66736b]">Giá trị báo giá:</span>
                     <strong className="text-sm font-black text-[#155e59]">
                       {formatVND(activeConversation.commission.price)}
                     </strong>
@@ -601,7 +576,6 @@ export default function StaffCommissionChat() {
                   </div>
                 </div>
 
-                {/* Cập nhật tiến độ đơn vẽ */}
                 <div className="rounded-xl border border-[#dce8df] bg-white p-4 shadow-xs">
                   <h4 className="mb-3 text-xs font-black text-[#155e59] uppercase">
                     Tiến độ đơn vẽ (Click để cập nhật)
@@ -689,12 +663,19 @@ export default function StaffCommissionChat() {
                     Gửi bản Preview sang bước Nghiệm thu
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsFormOpen(true)}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#155e59] bg-white py-2.5 text-xs font-bold text-[#155e59] transition hover:bg-[#eaf5e8]"
+                >
+                  <SlidersHorizontal size={14} />
+                  Cập nhật lại Form Báo Giá
+                </button>
               </div>
             )}
 
-            {/* ===============================================================
-                STATE 3 (ĐANG NGHIỆM THU): STAFF THEO DÕI KẾT QUẢ NGHIỆM THU
-            =============================================================== */}
+            {/* STATE 3 (ĐANG NGHIỆM THU) */}
             {activeConversation.orderState === "REVIEW" && (
               <div className="space-y-4">
                 <div className="rounded-xl border border-[#8fc7a0] bg-[#eaf5e8] p-3">
@@ -715,7 +696,6 @@ export default function StaffCommissionChat() {
                   </p>
                 </div>
 
-                {/* Bản Preview có Watermark đã gửi cho khách */}
                 <WatermarkedPixelPreview
                   characterName={activeConversation.commission.characterName}
                   isApproved={activeConversation.commission.isApproved}
@@ -741,6 +721,190 @@ export default function StaffCommissionChat() {
         </aside>
       </div>
 
+      {/* =====================================================================
+          MODAL FORM BÁO GIÁ COMMISSION (CỦA STAFF) - DATA-DRIVEN FORM RENDERING
+          Sử dụng `commissionConfigs.map()` thông qua <DynamicCommissionFormFields />
+      ===================================================================== */}
+      {isFormOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="staff-quote-modal-title"
+        >
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[#cfe3d0] bg-[#f8f7ef] shadow-2xl">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between border-b border-[#cfe3d0] bg-[#eaf5e8] px-6 py-4">
+              <div>
+                <p className="flex items-center gap-1.5 text-[11px] font-black tracking-wider text-[#155e59] uppercase">
+                  <Sparkles size={13} /> DATA-DRIVEN STAFF QUOTE FORM
+                </p>
+                <h3
+                  id="staff-quote-modal-title"
+                  className="text-lg font-black text-[#155e59]"
+                >
+                  Tạo Form Báo Giá Commission cho {activeConversation.customerName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(false)}
+                className="rounded-xl p-2 text-[#66736b] hover:bg-white hover:text-[#155e59]"
+                aria-label="Đóng form báo giá"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body Modal */}
+            <form
+              onSubmit={handleCreateCommissionForm}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6 lg:grid-cols-[1fr_290px]">
+                <div className="space-y-4">
+                  {/* Thông tin định danh cơ bản của đơn */}
+                  <div className="grid gap-3 rounded-xl border border-[#dce8df] bg-white p-4 shadow-sm sm:grid-cols-2">
+                    <div>
+                      <label className="block text-xs font-black text-[#155e59]">
+                        Tên nhân vật <span className="text-red-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formCharacterName}
+                        onChange={(e) => setFormCharacterName(e.target.value)}
+                        placeholder="VD: Rồng Lửa"
+                        className="mt-1.5 w-full rounded-xl border border-[#cfe3d0] bg-[#fbfaf5] px-3 py-2 text-xs font-bold outline-none focus:border-[#155e59] focus:bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-[#155e59]">
+                        Ngày giao dự kiến <span className="text-red-600">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={formDeliveryDate}
+                        onChange={(e) => setFormDeliveryDate(e.target.value)}
+                        className="mt-1.5 w-full rounded-xl border border-[#cfe3d0] bg-[#fbfaf5] px-3 py-2 text-xs font-bold outline-none focus:border-[#155e59] focus:bg-white"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-black text-[#155e59]">
+                        Mô tả yêu cầu & Ghi chú báo giá
+                      </label>
+                      <textarea
+                        rows={2}
+                        required
+                        value={formDescription}
+                        onChange={(e) => setFormDescription(e.target.value)}
+                        placeholder="Mô tả chi tiết kích thước pixel, hiệu ứng..."
+                        className="mt-1.5 w-full rounded-xl border border-[#cfe3d0] bg-[#fbfaf5] px-3 py-2 text-xs outline-none focus:border-[#155e59] focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* DATA-DRIVEN RENDERING: Tự động render <RadioGroup> & <select> từ mảng commissionConfigs */}
+                  <div>
+                    <div className="mb-2.5 flex items-center justify-between">
+                      <h4 className="text-xs font-black tracking-wide text-[#155e59] uppercase">
+                        Cấu hình tiêu chí & Phụ phí (Render động từ commissionConfigs)
+                      </h4>
+                      <span className="text-[11px] font-semibold text-[#66736b]">
+                        {commissionConfigs.length} trường cấu hình
+                      </span>
+                    </div>
+
+                    <DynamicCommissionFormFields
+                      configs={commissionConfigs}
+                      selections={formSelections}
+                      onSelectChange={(fieldKey, optionValue) =>
+                        setFormSelections((prev) => ({
+                          ...prev,
+                          [fieldKey]: optionValue,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Cột phải trong Modal: Bảng tính toán Báo giá tự động */}
+                <aside className="h-fit space-y-3 rounded-xl border border-[#cfe3d0] bg-[#eaf5e8] p-4 shadow-sm lg:sticky lg:top-0">
+                  <h4 className="text-sm font-black text-[#155e59]">
+                    Bảng tính Báo Giá tự động
+                  </h4>
+
+                  <div className="flex items-center justify-between border-b border-[#cfe3d0] pb-2 text-xs">
+                    <span>Giá cơ bản:</span>
+                    <strong>{formatVND(dynamicQuoteCalc.basePrice)}</strong>
+                  </div>
+
+                  <div className="max-h-56 space-y-1.5 overflow-y-auto border-b border-[#cfe3d0] pb-2.5 text-xs">
+                    {dynamicQuoteCalc.breakdown.map((item) => (
+                      <div
+                        key={item.fieldKey}
+                        className="flex items-start justify-between gap-2 text-[#486355]"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <strong className="text-[#155e59]">{item.fieldName}:</strong>{" "}
+                          {item.optionLabel}
+                        </span>
+                        <span className="shrink-0 font-bold text-[#155e59]">
+                          {item.price === null
+                            ? "Tùy chỉnh"
+                            : item.price > 0
+                            ? `+${formatVND(item.price)}`
+                            : "+0đ"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span>Tổng theo cấu hình:</span>
+                    <strong className="text-sm font-black text-[#155e59]">
+                      {formatVND(dynamicQuoteCalc.total)}
+                    </strong>
+                  </div>
+
+                  <div className="pt-1">
+                    <label className="block text-[11px] font-bold text-[#155e59]">
+                      Điều chỉnh giá chốt cuối cùng (VNĐ - Không bắt buộc)
+                    </label>
+                    <input
+                      type="number"
+                      min={50000}
+                      step={10000}
+                      value={customPriceOverride}
+                      onChange={(e) => setCustomPriceOverride(e.target.value)}
+                      placeholder={String(dynamicQuoteCalc.total)}
+                      className="mt-1 w-full rounded-xl border border-[#8fc7a0] bg-white px-3 py-2 text-xs font-black text-[#155e59] outline-none focus:border-[#155e59]"
+                    />
+                  </div>
+
+                  <div className="rounded-xl bg-[#155e59] p-3 text-white">
+                    <p className="text-[11px] text-[#b8dfc2]">
+                      Tổng báo giá gửi khách hàng
+                    </p>
+                    <p className="mt-0.5 text-xl font-black">
+                      {formatVND(finalQuotePrice)}
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full rounded-xl bg-[#198653] py-3 text-xs font-black text-white shadow-sm transition hover:bg-[#126b40] cursor-pointer"
+                  >
+                    Tạo & Gửi Thẻ Báo Giá Vào Chat
+                  </button>
+                </aside>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {toastMessage && (
         <div
           role="status"
@@ -753,4 +917,3 @@ export default function StaffCommissionChat() {
     </div>
   );
 }
-

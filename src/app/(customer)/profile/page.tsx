@@ -28,7 +28,7 @@ const STATUS_CFG: Record<string, { badge: string; icon: React.ReactNode }> = {
 };
 
 const STATUS_LABEL: Record<string, string> = { Pending: "Đã tạo đơn", Confirmed: "Đã nhận hàng", Shipping: "Đang giao", Delivered: "Đã giao hàng", Cancelled: "Đã hủy" };
-const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} đ`;
+import { formatPrice } from "@/lib/currency";
 
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.Pending;
@@ -365,7 +365,7 @@ function OrderHistoryTab() {
             </div>
 
             <div className="flex items-center justify-between">
-              <p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">${order.total}</span></p>
+              <p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">{formatPrice(order.total)}</span></p>
               <Link
                 href={`/profile/orders/${order.id}`}
                 className="flex items-center gap-1.5 text-xs font-bold border-2 border-black px-3 py-1.5 hover:bg-primary/20 transition-colors"

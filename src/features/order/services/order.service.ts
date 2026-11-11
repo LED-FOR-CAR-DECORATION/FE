@@ -11,6 +11,7 @@ export const ORDER_STORAGE_KEY = "led_controller_mock_orders";
 export const ORDERS_CHANGED_EVENT = "led-controller-orders-changed";
 const ORDER_DATA_RESET_KEY = "led_controller_mock_orders_reset_v1";
 const VNPAY_MIGRATION_KEY = "led_controller_vnpay_migration_v1";
+const VND_SHIPPING_MIGRATION_KEY = "led_controller_vnd_shipping_v1";
 
 function readOrders(): MockOrder[] {
   if (typeof window === "undefined") return [];
@@ -22,13 +23,35 @@ function readOrders(): MockOrder[] {
   try {
     const saved = localStorage.getItem(ORDER_STORAGE_KEY);
     if (saved) {
-      const orders = JSON.parse(saved) as MockOrder[];
+      let orders = JSON.parse(saved) as MockOrder[];
+      let updated = false;
+
       if (!localStorage.getItem(VNPAY_MIGRATION_KEY)) {
-        const migrated = orders.map((order) => ({ ...order, paymentMethod: "VNPAY", paymentStatus: "Paid" as const }));
-        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(migrated));
+        orders = orders.map((order) => ({ ...order, paymentMethod: "VNPAY", paymentStatus: "Paid" as const }));
         localStorage.setItem(VNPAY_MIGRATION_KEY, "true");
-        return migrated;
+        updated = true;
       }
+
+      if (!localStorage.getItem(VND_SHIPPING_MIGRATION_KEY)) {
+        orders = orders.map((order) => {
+          if (order.shipping === 5) {
+            const newShipping = order.subtotal >= 500000 ? 0 : 30000;
+            return {
+              ...order,
+              shipping: newShipping,
+              total: order.subtotal + newShipping,
+            };
+          }
+          return order;
+        });
+        localStorage.setItem(VND_SHIPPING_MIGRATION_KEY, "true");
+        updated = true;
+      }
+
+      if (updated) {
+        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(orders));
+      }
+
       return orders;
     }
   } catch {

@@ -37,6 +37,6 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ### IAM-13: Danh sách tài khoản nội bộ
 
-Chạy backend có endpoint IAM-13 (`GET /api/management/admin/users`). FE dùng
-`NEXT_PUBLIC_API_URL` và mặc định kết nối đến `http://localhost:8080`.
+Chạy backend có endpoint IAM-13 (`GET /api/management/admin/users`). Sao chép `.env.example` thành `.env`, đặt `NEXT_PUBLIC_API_URL` thành địa chỉ backend
+rồi khởi động lại Next.js. Đặt cùng biến môi trường trước khi build để deploy.
 Đăng nhập bằng tài khoản Admin hoặc Manager thật, rồi mở `/admin/users`.

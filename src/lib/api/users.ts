@@ -3,7 +3,7 @@ import type {
   ManagedUserList,
   ManagedUserQuery,
 } from "@/features/managed-users/types";
-import { OpenAPI } from "./client";
+import { getApiBaseUrl, OpenAPI } from "./client";
 import { getSessionToken } from "../auth/session";
 
 export async function listManagedUsers(
@@ -14,7 +14,7 @@ export async function listManagedUsers(
   const { data } = await axios.get<{ data: ManagedUserList }>(
     "/api/management/admin/users",
     {
-      baseURL: OpenAPI.BASE,
+      baseURL: getApiBaseUrl(),
       withCredentials: OpenAPI.WITH_CREDENTIALS,
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       params: {

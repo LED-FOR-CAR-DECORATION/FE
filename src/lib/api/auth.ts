@@ -1,4 +1,5 @@
-import { ApiError, AuthenticationService } from '@/api_client';
+import { ApiError, AuthenticationService, OpenAPI } from '@/api_client';
+import { request } from '@/api_client/core/request';
 import type { ErrorResponse, LoginResponse } from '@/api_client';
 // Import ./client để chắc chắn OpenAPI (BASE, TOKEN, interceptor refresh) đã được cấu hình.
 import './client';
@@ -11,8 +12,9 @@ const STATUS_MESSAGES: Record<number, string> = {
     404: 'Không tìm thấy tài khoản với email này.',
     409: 'Email này đã được đăng ký.',
     423: 'Tài khoản tạm khoá 15 phút do đăng nhập sai quá nhiều lần.',
-    429: 'Bạn thao tác quá nhanh. Vui lòng thử lại sau.',
+    429: 'Bạn thao tác quá nhanh hoặc đã vượt giới hạn trong ngày. Vui lòng thử lại sau.',
     500: 'Máy chủ gặp sự cố. Vui lòng thử lại sau.',
+    503: 'Hệ thống gửi mã tạm thời không khả dụng. Vui lòng thử lại sau.',
 };
 
 /** Chuyển mọi lỗi (ApiError, lỗi mạng, ...) thành câu thông báo hiển thị cho người dùng. */
@@ -59,6 +61,34 @@ export async function apiVerifyEmail(email: string, otp: string): Promise<void> 
 
 export async function apiResendVerification(email: string): Promise<void> {
     await AuthenticationService.resendVerification({ email });
+}
+
+export async function apiForgotPassword(email: string): Promise<{ message: string }> {
+    const res = await request<{ data?: { message: string }; message?: string }>(OpenAPI, {
+        method: 'POST',
+        url: '/api/auth/forgot-password',
+        body: { email },
+        errors: {
+            400: 'Email không đúng định dạng.',
+            429: 'Yêu cầu gửi mã đã bị khoá trong 24 giờ do vượt quá số lần cho phép.',
+            503: 'Hệ thống gửi mã tạm thời không khả dụng. Vui lòng thử lại sau.',
+        },
+    });
+    return res.data || { message: res.message || 'Mã xác thực đã được gửi nếu email tồn tại trong hệ thống.' };
+}
+
+export async function apiResetPassword(email: string, otp: string, newPassword: string): Promise<void> {
+    await request<void>(OpenAPI, {
+        method: 'POST',
+        url: '/api/auth/reset-password',
+        body: { email, otp, newPassword },
+        errors: {
+            400: 'Mã OTP không đúng hoặc mật khẩu không hợp lệ.',
+            404: 'Không tìm thấy tài khoản với email này.',
+            429: 'Thao tác quá nhiều lần. Vui lòng thử lại sau.',
+            500: 'Lỗi hệ thống khi đặt lại mật khẩu.',
+        },
+    });
 }
 
 /** Thu hồi refresh token ở backend (nếu có) rồi xoá token cục bộ. Không ném lỗi. */

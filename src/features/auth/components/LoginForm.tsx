@@ -23,6 +23,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { DEMO_ACCOUNTS } from "@/features/auth/mock-auth";
 import type { UserRole } from "@/features/auth/types";
 import AuthField from "./AuthField";
+import ForgotPasswordModal from "./ForgotPasswordModal";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -77,6 +78,7 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
   const handleQuickFill = (role: UserRole) => {
     const demo = DEMO_ACCOUNTS.find((item) => item.user.role === role);
@@ -282,13 +284,7 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
           </label>
           <button
             type="button"
-            onClick={() => {
-              if (email.trim()) {
-                alert(`Liên kết khôi phục mật khẩu giả lập đã được gửi tới ${email.trim()}`);
-              } else {
-                alert("Vui lòng nhập email trước khi yêu cầu khôi phục mật khẩu.");
-              }
-            }}
+            onClick={() => setIsForgotPasswordOpen(true)}
             className="font-bold text-text-muted hover:text-[#165d3a] hover:underline"
           >
             Quên mật khẩu?
@@ -322,6 +318,18 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
           </Link>
         </div>
       </form>
+
+      {/* Modal Quên mật khẩu & Đặt lại mật khẩu */}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        initialEmail={email}
+        onClose={() => setIsForgotPasswordOpen(false)}
+        onSuccess={(resetEmail) => {
+          setEmail(resetEmail);
+          setPassword("");
+          setSuccess("Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.");
+        }}
+      />
     </div>
   );
 }

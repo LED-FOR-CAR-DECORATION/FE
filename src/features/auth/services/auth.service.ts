@@ -1,9 +1,11 @@
 import { DEMO_ACCOUNTS } from "../mock-auth";
 import type { AuthUser, RegisterInput, UserRole } from "../types";
 import {
+  apiForgotPassword,
   apiLogin,
   apiLogout,
   apiRegister,
+  apiResetPassword,
   apiResendVerification,
   apiVerifyEmail,
   decodeJwtPayload,
@@ -154,10 +156,27 @@ const realAuthService = {
   async resendVerification(email: string): Promise<void> {
     await withFriendlyError(() => apiResendVerification(email.trim().toLowerCase()), "Không gửi lại được mã OTP.");
   },
-  requestPasswordReset: (_email: string): Promise<void> => notSupported("Quên mật khẩu"),
+  async requestPasswordReset(email: string): Promise<void> {
+    await withFriendlyError(
+      () => apiForgotPassword(email.trim().toLowerCase()),
+      "Không thể gửi yêu cầu đặt lại mật khẩu."
+    );
+  },
+  async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
+    try {
+      await withFriendlyError(
+        () => apiResetPassword(email.trim().toLowerCase(), otp.trim(), newPassword),
+        "Không thể đổi mật khẩu."
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("404")) {
+        throw new Error("Backend hiện chưa hỗ trợ API đổi mật khẩu (Issue #8). Mã OTP đã được gửi về email của bạn!");
+      }
+      throw error;
+    }
+  },
   verifyCurrentPassword: (_email: string, _password: string): Promise<void> => notSupported("Đổi mật khẩu"),
   sendPasswordOtp: (_email: string): Promise<void> => notSupported("Đổi mật khẩu"),
-  resetPassword: (_email: string, _otp: string, _newPassword: string): Promise<void> => notSupported("Đổi mật khẩu"),
 };
 
 export const authService = USE_MOCK_AUTH ? mockAuthService : realAuthService;

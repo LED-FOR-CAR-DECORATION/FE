@@ -15,6 +15,11 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { motion, type Variants } from "framer-motion";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Autoplay, Pagination } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/pagination";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { PRODUCTS, type CatalogProduct } from "@/features/cart/catalog";
@@ -23,6 +28,89 @@ import { useCart } from "@/features/cart/context/CartContext";
 
 const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} đ`;
 const PRODUCTS_PER_PAGE = 12;
+
+// ---- Animation variants (module-level => stable references, no re-creation on render) ----
+const slideUp: Variants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+};
+
+const gridContainer: Variants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08, delayChildren: 0.15 } },
+};
+
+const cardItem: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
+};
+
+const cardHover = { y: -5, boxShadow: "0 14px 28px rgba(38,53,47,0.16)" };
+const buttonTap = { scale: 0.95 };
+
+// ---- Hero banner mock slides ----
+const HERO_SLIDES = [
+  {
+    id: "mirage",
+    tag: "MIRAGE COLLECTION",
+    title: "Nhân vật pixel cho không gian của bạn",
+    desc: "Khám phá bộ sưu tập Character và thiết bị LED để tạo nên không gian sáng tạo mang dấu ấn riêng.",
+    bg: "bg-[#dcebd4] border-[#cfe3d0]",
+    circle: "bg-[#c4dfbd]",
+    emoji: "🐱",
+  },
+  {
+    id: "led",
+    tag: "LED MATRIX",
+    title: "Bảng LED sống động cho mọi góc nhìn",
+    desc: "Các mẫu bảng LED matrix nhiều kích thước, dễ lắp đặt và điều khiển chỉ với vài thao tác.",
+    bg: "bg-[#d6e8f0] border-[#bfd9e6]",
+    circle: "bg-[#bcd8e6]",
+    emoji: "🎮",
+  },
+  {
+    id: "bundle",
+    tag: "COMBO ƯU ĐÃI",
+    title: "Gói sản phẩm tiết kiệm hơn",
+    desc: "Kết hợp thiết bị LED và nhân vật pixel trong một gói duy nhất với mức giá hấp dẫn.",
+    bg: "bg-[#f3e3d3] border-[#ead3bb]",
+    circle: "bg-[#ebd0b3]",
+    emoji: "✨",
+  },
+];
+
+function HeroCarousel({ onExplore }: { onExplore: () => void }) {
+  return (
+    <Swiper
+      modules={[Autoplay, Pagination]}
+      autoplay={{ delay: 4000, disableOnInteraction: false }}
+      loop
+      pagination={{ clickable: true }}
+      className="mb-5 overflow-hidden rounded-2xl shadow-sm"
+    >
+      {HERO_SLIDES.map((slide) => (
+        <SwiperSlide key={slide.id}>
+          <section className={`relative min-h-[210px] overflow-hidden rounded-2xl border px-7 py-7 pb-10 md:px-10 ${slide.bg}`}>
+            <div className={`absolute -right-8 -top-12 h-48 w-48 rounded-full ${slide.circle}`} />
+            <Sparkles className="absolute right-56 top-8 text-white" size={20} />
+            <div className="relative max-w-lg">
+              <p className="text-xs font-bold tracking-[0.25em] text-[#155e59]">{slide.tag}</p>
+              <h1 className="mt-2 max-w-xl text-3xl font-black leading-tight text-[#155e59] md:text-4xl">{slide.title}</h1>
+              <p className="mt-3 max-w-lg text-sm leading-6 text-[#66736b]">{slide.desc}</p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <motion.button whileTap={buttonTap} type="button" onClick={onExplore} className="rounded-lg bg-[#155e59] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#0e4b47]">Khám phá sản phẩm</motion.button>
+                <motion.div whileTap={buttonTap} className="inline-block">
+                  <Link href="/commission" className="block rounded-lg border border-[#155e59] bg-white px-4 py-2.5 text-sm font-bold text-[#155e59] shadow-sm transition hover:bg-[#f3f8ef]">Yêu cầu thiết kế</Link>
+                </motion.div>
+              </div>
+            </div>
+            <div className="absolute bottom-3 right-16 text-6xl">{slide.emoji}</div>
+          </section>
+        </SwiperSlide>
+      ))}
+    </Swiper>
+  );
+}
 
 function ProductArtwork({ product }: { product: CatalogProduct }) {
   if (product.previewUrl) {
@@ -48,7 +136,7 @@ function ProductCard({ product, onAdd }: { product: CatalogProduct; onAdd: (prod
   const isCharacter = product.productType === "CHARACTER";
   const isBundle = product.productType === "BUNDLE";
   return (
-    <article className="group overflow-hidden rounded-xl border border-[#e2e4db] bg-white shadow-[0_4px_14px_rgba(38,53,47,0.05)] transition hover:-translate-y-0.5 hover:border-[#8fc7a0] hover:shadow-[0_8px_20px_rgba(38,53,47,0.1)]">
+    <motion.article variants={cardItem} whileHover={cardHover} className="group overflow-hidden rounded-xl border border-[#e2e4db] bg-white shadow-[0_4px_14px_rgba(38,53,47,0.05)] transition-colors hover:border-[#8fc7a0]">
       <Link href={`/products/${product.id}`} className="block">
         <div className="relative aspect-square overflow-hidden bg-[#f8f7ef]">
           {product.id === "matrix-32" && <span className="absolute left-2 top-2 z-10 rounded bg-[#126356] px-2 py-1 text-[11px] font-bold text-white">Bán chạy</span>}
@@ -65,7 +153,7 @@ function ProductCard({ product, onAdd }: { product: CatalogProduct; onAdd: (prod
           </div>
         </div>
       </Link>
-    </article>
+    </motion.article>
   );
 }
 
@@ -142,7 +230,7 @@ export default function Home() {
         <div className="mx-auto w-full max-w-[1320px] px-4 lg:px-8">
           <div className="mb-5 flex items-center gap-2 text-sm text-[#66736b]"><Link href="/" className="hover:text-[#155e59]">Trang chủ</Link><span>›</span><span className="font-bold text-[#26352f]">Sản phẩm</span></div>
           <div className="grid gap-6 lg:grid-cols-[232px_minmax(0,1fr)]">
-            <aside className="h-fit rounded-xl border border-[#e2e4db] bg-white p-5 shadow-sm lg:sticky lg:top-24">
+            <motion.aside variants={slideUp} initial="hidden" animate="visible" className="h-fit rounded-xl border border-[#e2e4db] bg-white p-5 shadow-sm lg:sticky lg:top-24">
               <h2 className="mb-4 text-base font-black text-[#155e59]">Danh mục</h2>
               {[
                 { label: "Tất cả sản phẩm", count: PRODUCTS.length, value: "all" as const, icon: <Grid2X2 size={17} /> },
@@ -161,23 +249,10 @@ export default function Home() {
               <p className="mb-3 mt-5 text-sm font-bold">Trạng thái</p>
               {[["Còn hàng", "IN_STOCK", PRODUCTS.length], ["Hết hàng", "OUT_OF_STOCK", 0] as const].map(([label, status, count]) => <label key={label} className={`mb-2 flex items-center gap-2 text-xs ${count === 0 ? "text-gray-400" : "cursor-pointer"}`}><input type="checkbox" checked={selectedStatuses.includes(status as "IN_STOCK" | "OUT_OF_STOCK")} onChange={() => toggleStatus(status as "IN_STOCK" | "OUT_OF_STOCK")} className="accent-[#126356]" />{label} ({count})</label>)}
               <button onClick={clearFilters} className="mt-4 w-full text-right text-xs font-bold text-[#155e59] hover:underline">Xóa tất cả bộ lọc</button>
-            </aside>
+            </motion.aside>
 
-            <div>
-              <section className="relative mb-5 min-h-[210px] overflow-hidden rounded-2xl border border-[#cfe3d0] bg-[#dcebd4] px-7 py-7 shadow-sm md:px-10">
-                <div className="absolute -right-8 -top-12 h-48 w-48 rounded-full bg-[#c4dfbd]" />
-                <Sparkles className="absolute right-56 top-8 text-white" size={20} />
-                <div className="relative max-w-lg">
-                  <p className="text-xs font-bold tracking-[0.25em] text-[#155e59]">MIRAGE COLLECTION</p>
-                  <h1 className="mt-2 max-w-xl text-3xl font-black leading-tight text-[#155e59] md:text-4xl">Nhân vật pixel cho không gian của bạn</h1>
-                  <p className="mt-3 max-w-lg text-sm leading-6 text-[#66736b]">Khám phá bộ sưu tập Character và thiết bị LED để tạo nên không gian sáng tạo mang dấu ấn riêng.</p>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => { setActiveCategory("all"); setSelectedTypes(["LED_MODEL", "CHARACTER", "BUNDLE"]); }} className="rounded-lg bg-[#155e59] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#0e4b47]">Khám phá sản phẩm</button>
-                    <Link href="/commission" className="rounded-lg border border-[#155e59] bg-white px-4 py-2.5 text-sm font-bold text-[#155e59] shadow-sm transition hover:bg-[#f3f8ef]">Yêu cầu thiết kế</Link>
-                  </div>
-                </div>
-                <div className="absolute bottom-3 right-16 text-6xl">🐱</div>
-              </section>
+            <motion.div variants={slideUp} initial="hidden" animate="visible">
+              <HeroCarousel onExplore={() => { setActiveCategory("all"); setSelectedTypes(["LED_MODEL", "CHARACTER", "BUNDLE"]); }} />
               <div className="mb-5 grid grid-cols-2 overflow-hidden rounded-xl border border-[#e2e4db] bg-white sm:grid-cols-5">
                 {[
                   { label: "Tất cả sản phẩm", icon: <Grid2X2 size={20} />, value: "all" as const },
@@ -188,9 +263,9 @@ export default function Home() {
                 ].map((tab) => <button key={tab.label} onClick={() => { setActiveCategory(tab.value); if (tab.value === "all") setSelectedTypes(["LED_MODEL", "CHARACTER", "BUNDLE"]); else setSelectedTypes([tab.value]); }} className={`flex flex-col items-center gap-1 border-r border-[#e0e5da] px-2 py-3 text-[11px] font-bold last:border-0 ${activeCategory === tab.value && tab.label !== "Bộ sưu tập" && tab.label !== "Khuyến mãi" ? "text-[#126356]" : "text-gray-700 hover:bg-[#f3f8ef]"}`}>{tab.icon}{tab.label}</button>)}
               </div>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-[#155e59]">Khám phá sản phẩm</h2><p className="mt-1 text-sm text-[#66736b]">{sortedProducts.length} sản phẩm</p></div><label className="flex items-center gap-2 text-sm font-semibold text-[#66736b]">Sắp xếp:<select value={sort} onChange={(event) => setSort(event.target.value)} className="rounded-lg border border-[#d4ddd5] bg-white px-3 py-2 text-sm text-[#26352f] outline-none focus:border-[#155e59]"><option>Phổ biến</option><option>Giá thấp</option><option>Giá cao</option></select></label></div>
-              {sortedProducts.length > 0 ? <><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{paginatedProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={addProduct} />)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded border border-[#dbe2d7] bg-white p-3"><p className="text-xs text-gray-500">Hiển thị {(currentPage - 1) * PRODUCTS_PER_PAGE + 1} - {Math.min(currentPage * PRODUCTS_PER_PAGE, sortedProducts.length)} / {sortedProducts.length} sản phẩm</p><div className="flex items-center gap-1"><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={currentPage === 1} className="rounded border border-gray-300 p-1.5 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Trang trước"><ChevronLeft size={16} /></button>{Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => <button key={pageNumber} type="button" onClick={() => setPage(pageNumber)} className={`min-w-8 rounded border px-2 py-1 text-xs font-bold ${currentPage === pageNumber ? "border-[#126356] bg-[#e4efdc] text-[#126356]" : "border-gray-300 hover:bg-[#f3f8ef]"}`} aria-label={`Trang ${pageNumber}`}>{pageNumber}</button>)}<button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={currentPage === pageCount} className="rounded border border-gray-300 p-1.5 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Trang sau"><ChevronRight size={16} /></button></div></div></> : <div className="rounded border border-dashed border-[#b8cbb8] bg-white p-10 text-center text-sm text-gray-500">Không có sản phẩm phù hợp với bộ lọc hiện tại.<button onClick={clearFilters} className="ml-1 font-bold text-[#126356] underline">Xóa bộ lọc</button></div>}
+              {sortedProducts.length > 0 ? <><motion.div variants={gridContainer} initial="hidden" animate="visible" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{paginatedProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={addProduct} />)}</motion.div><div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded border border-[#dbe2d7] bg-white p-3"><p className="text-xs text-gray-500">Hiển thị {(currentPage - 1) * PRODUCTS_PER_PAGE + 1} - {Math.min(currentPage * PRODUCTS_PER_PAGE, sortedProducts.length)} / {sortedProducts.length} sản phẩm</p><div className="flex items-center gap-1"><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={currentPage === 1} className="rounded border border-gray-300 p-1.5 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Trang trước"><ChevronLeft size={16} /></button>{Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => <button key={pageNumber} type="button" onClick={() => setPage(pageNumber)} className={`min-w-8 rounded border px-2 py-1 text-xs font-bold ${currentPage === pageNumber ? "border-[#126356] bg-[#e4efdc] text-[#126356]" : "border-gray-300 hover:bg-[#f3f8ef]"}`} aria-label={`Trang ${pageNumber}`}>{pageNumber}</button>)}<button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={currentPage === pageCount} className="rounded border border-gray-300 p-1.5 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Trang sau"><ChevronRight size={16} /></button></div></div></> : <div className="rounded border border-dashed border-[#b8cbb8] bg-white p-10 text-center text-sm text-gray-500">Không có sản phẩm phù hợp với bộ lọc hiện tại.<button onClick={clearFilters} className="ml-1 font-bold text-[#126356] underline">Xóa bộ lọc</button></div>}
               <div className="mt-5 flex items-center justify-center gap-2 rounded border border-[#dbe2d7] bg-white p-3 text-xs text-gray-500"><Check size={16} className="text-[#126356]" />Sản phẩm được chọn lọc cho hệ sinh thái Mirage</div>
-            </div>
+            </motion.div>
           </div>
         </div>
         {notice && <div role="status" className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded bg-[#126356] px-5 py-3 text-sm font-bold text-white shadow-lg">{notice}</div>}

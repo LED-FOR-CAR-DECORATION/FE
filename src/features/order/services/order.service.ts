@@ -20,27 +20,41 @@ export const ORDERS_CHANGED_EVENT = "led-controller-orders-changed";
 export function mapBackendOrderStatus(status?: string): OrderStatus {
   switch (status) {
     case "PENDING_PAYMENT":
-      return "PendingPayment";
+      return "PENDING_PAYMENT";
     case "PROCESSING":
-      return "Preparing";
+      return "PROCESSING";
     case "PARTIALLY_FULFILLED":
-      return "HandedOver";
+      return "PARTIALLY_FULFILLED";
     case "SHIPPING":
-      return "Shipping";
+      return "SHIPPING";
     case "DELIVERED":
-      return "Delivered";
+      return "DELIVERED";
     case "COMPLETED":
-      return "Completed";
+      return "COMPLETED";
     case "DELIVERY_FAILED":
+      return "DELIVERY_FAILED";
     case "REFUNDED":
+      return "REFUNDED";
     case "CANCELED":
-      return "Cancelled";
+      return "CANCELED";
+    case "PendingPayment":
     case "Pending":
-      return "PendingPayment";
+      return "PENDING_PAYMENT";
+    case "Preparing":
     case "Confirmed":
-      return "Preparing";
+      return "PROCESSING";
+    case "HandedOver":
+      return "PARTIALLY_FULFILLED";
+    case "Shipping":
+      return "SHIPPING";
+    case "Delivered":
+      return "DELIVERED";
+    case "Completed":
+      return "COMPLETED";
+    case "Cancelled":
+      return "CANCELED";
     default:
-      return "PendingPayment";
+      return "PENDING_PAYMENT";
   }
 }
 
@@ -241,9 +255,9 @@ export const orderService = {
   },
   async updateStaffStatus(orderId: number | string, status: string): Promise<void> {
     let backendStatus = status;
-    if (status === "Completed" || status === "Confirmed") backendStatus = "COMPLETED";
-    else if (status === "Preparing") backendStatus = "PROCESSING";
-    else if (status === "Cancelled") backendStatus = "CANCELED";
+    if (status === "Completed" || status === "COMPLETED" || status === "Confirmed") backendStatus = "COMPLETED";
+    else if (status === "Preparing" || status === "PROCESSING") backendStatus = "PROCESSING";
+    else if (status === "Cancelled" || status === "CANCELED") backendStatus = "CANCELED";
     await apiUpdateStaffOrderStatus(orderId, backendStatus);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));

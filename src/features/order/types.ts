@@ -2,6 +2,15 @@ import type { CartItem } from "@/features/cart/types";
 import type { AuthUser } from "@/features/auth/types";
 
 export type OrderStatus =
+  | "PENDING_PAYMENT"
+  | "PROCESSING"
+  | "PARTIALLY_FULFILLED"
+  | "SHIPPING"
+  | "DELIVERED"
+  | "COMPLETED"
+  | "DELIVERY_FAILED"
+  | "REFUNDED"
+  | "CANCELED"
   | "PendingPayment"
   | "Preparing"
   | "HandedOver"

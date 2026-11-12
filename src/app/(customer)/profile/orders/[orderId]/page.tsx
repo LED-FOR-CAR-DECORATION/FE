@@ -13,21 +13,41 @@ import type { OrderStatus, PaymentStatus } from "@/features/order/types";
 import { formatPrice } from "@/lib/currency";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
+  PENDING_PAYMENT: "Chờ thanh toán",
+  PROCESSING: "Chờ đóng hàng",
+  PARTIALLY_FULFILLED: "Đã cấp nhân vật và chờ đóng hàng",
+  SHIPPING: "Đang vận chuyển",
+  DELIVERED: "Đã giao",
+  COMPLETED: "Đã hoàn thành",
+  DELIVERY_FAILED: "Vận chuyển thất bại",
+  REFUNDED: "Đã hoàn tiền",
+  CANCELED: "Đã hủy",
+  // Aliases for compatibility
   PendingPayment: "Chờ thanh toán",
-  Preparing: "Đang chuẩn bị",
-  HandedOver: "Đã giao cho đơn vị vận chuyển",
+  Preparing: "Chờ đóng hàng",
+  HandedOver: "Đã cấp nhân vật và chờ đóng hàng",
   Shipping: "Đang vận chuyển",
   Delivered: "Đã giao",
-  Completed: "Đã nhận hàng",
+  Completed: "Đã hoàn thành",
   Cancelled: "Đã hủy",
   Pending: "Chờ thanh toán",
-  Confirmed: "Đang chuẩn bị",
+  Confirmed: "Chờ đóng hàng",
 };
 const STATUS_CLASS: Record<OrderStatus, string> = {
+  PENDING_PAYMENT: "bg-amber-100 text-amber-700 border-amber-400",
+  PROCESSING: "bg-blue-100 text-blue-700 border-blue-400",
+  PARTIALLY_FULFILLED: "bg-purple-100 text-purple-700 border-purple-400",
+  SHIPPING: "bg-cyan-100 text-cyan-700 border-cyan-400",
+  DELIVERED: "bg-teal-100 text-teal-700 border-teal-400",
+  COMPLETED: "bg-emerald-100 text-emerald-700 border-emerald-400",
+  DELIVERY_FAILED: "bg-orange-100 text-orange-700 border-orange-400",
+  REFUNDED: "bg-gray-100 text-gray-700 border-gray-400",
+  CANCELED: "bg-red-100 text-red-700 border-red-400",
+  // Aliases for compatibility
   PendingPayment: "bg-amber-100 text-amber-700 border-amber-400",
   Preparing: "bg-blue-100 text-blue-700 border-blue-400",
-  HandedOver: "bg-cyan-100 text-cyan-700 border-cyan-400",
-  Shipping: "bg-indigo-100 text-indigo-700 border-indigo-400",
+  HandedOver: "bg-purple-100 text-purple-700 border-purple-400",
+  Shipping: "bg-cyan-100 text-cyan-700 border-cyan-400",
   Delivered: "bg-teal-100 text-teal-700 border-teal-400",
   Completed: "bg-emerald-100 text-emerald-700 border-emerald-400",
   Cancelled: "bg-red-100 text-red-700 border-red-400",
@@ -44,11 +64,11 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
 function DeliveryProgress({ status }: { status: OrderStatus }) {
   const steps = [
     { label: "Chờ thanh toán", done: true },
-    { label: "Đang chuẩn bị", done: ["Preparing", "HandedOver", "Shipping", "Delivered", "Completed", "Confirmed"].includes(status) },
-    { label: "Đã giao cho đơn vị vận chuyển", done: ["HandedOver", "Shipping", "Delivered", "Completed"].includes(status) },
-    { label: "Đang vận chuyển", done: ["Shipping", "Delivered", "Completed"].includes(status) },
-    { label: "Đã giao", done: ["Delivered", "Completed"].includes(status) },
-    { label: "Đã nhận hàng", done: status === "Completed" },
+    { label: "Chờ đóng hàng", done: !["PENDING_PAYMENT", "PendingPayment", "Pending"].includes(status) },
+    { label: "Đã cấp nhân vật và chờ đóng hàng", done: ["PARTIALLY_FULFILLED", "SHIPPING", "DELIVERED", "COMPLETED", "HandedOver", "Shipping", "Delivered", "Completed"].includes(status) },
+    { label: "Đang vận chuyển", done: ["SHIPPING", "DELIVERED", "COMPLETED", "Shipping", "Delivered", "Completed"].includes(status) },
+    { label: "Đã giao", done: ["DELIVERED", "COMPLETED", "Delivered", "Completed"].includes(status) },
+    { label: "Đã hoàn thành", done: ["COMPLETED", "Completed"].includes(status) },
   ];
   return (
     <section className="neo-box-no-hover bg-white p-6">

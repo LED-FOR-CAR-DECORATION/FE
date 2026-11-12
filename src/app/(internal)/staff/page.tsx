@@ -7,21 +7,41 @@ import type { MockOrder, OrderStatus } from "@/features/order/types";
 import { getAvailableStock, getInventoryStatus, LED_INVENTORY } from "@/features/product/inventory";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
+  PENDING_PAYMENT: "Chờ thanh toán",
+  PROCESSING: "Chờ đóng hàng",
+  PARTIALLY_FULFILLED: "Đã cấp nhân vật và chờ đóng hàng",
+  SHIPPING: "Đang vận chuyển",
+  DELIVERED: "Đã giao",
+  COMPLETED: "Đã hoàn thành",
+  DELIVERY_FAILED: "Vận chuyển thất bại",
+  REFUNDED: "Đã hoàn tiền",
+  CANCELED: "Đã hủy",
+  // Aliases for compatibility
   PendingPayment: "Chờ thanh toán",
-  Preparing: "Đang chuẩn bị",
-  HandedOver: "Đã giao cho đơn vị vận chuyển",
+  Preparing: "Chờ đóng hàng",
+  HandedOver: "Đã cấp nhân vật và chờ đóng hàng",
   Shipping: "Đang vận chuyển",
   Delivered: "Đã giao",
-  Completed: "Đã nhận hàng",
+  Completed: "Đã hoàn thành",
   Cancelled: "Đã hủy",
   Pending: "Chờ thanh toán",
-  Confirmed: "Đang chuẩn bị",
+  Confirmed: "Chờ đóng hàng",
 };
 
 const STATUS_CLASS: Record<OrderStatus, string> = {
+  PENDING_PAYMENT: "bg-amber-50 text-amber-700",
+  PROCESSING: "bg-blue-50 text-blue-700",
+  PARTIALLY_FULFILLED: "bg-purple-50 text-purple-700",
+  SHIPPING: "bg-[#e3f2e9] text-[#155e59]",
+  DELIVERED: "bg-teal-50 text-teal-700",
+  COMPLETED: "bg-emerald-50 text-emerald-700",
+  DELIVERY_FAILED: "bg-orange-50 text-orange-700",
+  REFUNDED: "bg-gray-50 text-gray-700",
+  CANCELED: "bg-red-50 text-red-700",
+  // Aliases for compatibility
   PendingPayment: "bg-amber-50 text-amber-700",
   Preparing: "bg-blue-50 text-blue-700",
-  HandedOver: "bg-cyan-50 text-cyan-700",
+  HandedOver: "bg-purple-50 text-purple-700",
   Shipping: "bg-[#e3f2e9] text-[#155e59]",
   Delivered: "bg-teal-50 text-teal-700",
   Completed: "bg-emerald-50 text-emerald-700",

@@ -12,16 +12,26 @@ import { formatPrice } from "@/lib/currency";
 
 type DisplayStatus = OrderStatus | "Paid";
 const STATUS_CONFIG: Record<DisplayStatus, { label: string; className: string; icon: React.ReactNode }> = {
+  PENDING_PAYMENT: { label: "Chờ thanh toán", className: "bg-amber-100 text-amber-700 border-amber-400", icon: <Circle size={12} /> },
+  PROCESSING: { label: "Chờ đóng hàng", className: "bg-blue-100 text-blue-700 border-blue-400", icon: <CheckCircle size={12} /> },
+  PARTIALLY_FULFILLED: { label: "Đã cấp nhân vật và chờ đóng hàng", className: "bg-purple-100 text-purple-700 border-purple-400", icon: <Truck size={12} /> },
+  SHIPPING: { label: "Đang vận chuyển", className: "bg-indigo-100 text-indigo-700 border-indigo-400", icon: <Truck size={12} /> },
+  DELIVERED: { label: "Đã giao", className: "bg-teal-100 text-teal-700 border-teal-400", icon: <CheckCircle size={12} /> },
+  COMPLETED: { label: "Đã hoàn thành", className: "bg-emerald-100 text-emerald-700 border-emerald-400", icon: <CheckCircle size={12} /> },
+  DELIVERY_FAILED: { label: "Vận chuyển thất bại", className: "bg-orange-100 text-orange-700 border-orange-400", icon: <X size={12} /> },
+  REFUNDED: { label: "Đã hoàn tiền", className: "bg-gray-100 text-gray-700 border-gray-400", icon: <Circle size={12} /> },
+  CANCELED: { label: "Đã hủy", className: "bg-red-100 text-red-700 border-red-400", icon: <X size={12} /> },
+  Paid: { label: "Đã thanh toán", className: "bg-green-100 text-green-700 border-green-400", icon: <CheckCircle size={12} /> },
+  // Aliases for compatibility
   PendingPayment: { label: "Chờ thanh toán", className: "bg-amber-100 text-amber-700 border-amber-400", icon: <Circle size={12} /> },
-  Preparing: { label: "Đang chuẩn bị", className: "bg-blue-100 text-blue-700 border-blue-400", icon: <CheckCircle size={12} /> },
-  HandedOver: { label: "Đã giao cho đơn vị vận chuyển", className: "bg-cyan-100 text-cyan-700 border-cyan-400", icon: <Truck size={12} /> },
+  Preparing: { label: "Chờ đóng hàng", className: "bg-blue-100 text-blue-700 border-blue-400", icon: <CheckCircle size={12} /> },
+  HandedOver: { label: "Đã cấp nhân vật và chờ đóng hàng", className: "bg-purple-100 text-purple-700 border-purple-400", icon: <Truck size={12} /> },
   Shipping: { label: "Đang vận chuyển", className: "bg-indigo-100 text-indigo-700 border-indigo-400", icon: <Truck size={12} /> },
   Delivered: { label: "Đã giao", className: "bg-teal-100 text-teal-700 border-teal-400", icon: <CheckCircle size={12} /> },
-  Completed: { label: "Đã nhận hàng", className: "bg-emerald-100 text-emerald-700 border-emerald-400", icon: <CheckCircle size={12} /> },
-  Paid: { label: "Đã thanh toán", className: "bg-green-100 text-green-700 border-green-400", icon: <CheckCircle size={12} /> },
+  Completed: { label: "Đã hoàn thành", className: "bg-emerald-100 text-emerald-700 border-emerald-400", icon: <CheckCircle size={12} /> },
   Cancelled: { label: "Đã hủy", className: "bg-red-100 text-red-700 border-red-400", icon: <X size={12} /> },
   Pending: { label: "Chờ thanh toán", className: "bg-amber-100 text-amber-700 border-amber-400", icon: <Circle size={12} /> },
-  Confirmed: { label: "Đang chuẩn bị", className: "bg-blue-100 text-blue-700 border-blue-400", icon: <CheckCircle size={12} /> },
+  Confirmed: { label: "Chờ đóng hàng", className: "bg-blue-100 text-blue-700 border-blue-400", icon: <CheckCircle size={12} /> },
 };
 
 function StatusBadge({ status }: { status: DisplayStatus }) {

@@ -3,14 +3,18 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse } from '../models/ApiResponse';
+import type { ApiResponseForgotPasswordResponse } from '../models/ApiResponseForgotPasswordResponse';
 import type { ApiResponseLoginResponse } from '../models/ApiResponseLoginResponse';
 import type { ApiResponseRegisterResponse } from '../models/ApiResponseRegisterResponse';
+import type { ApiResponseResetPasswordResponse } from '../models/ApiResponseResetPasswordResponse';
+import type { ForgotPasswordRequest } from '../models/ForgotPasswordRequest';
 import type { GoogleLoginRequest } from '../models/GoogleLoginRequest';
 import type { LoginRequest } from '../models/LoginRequest';
 import type { LogoutRequest } from '../models/LogoutRequest';
 import type { RefreshTokenRequest } from '../models/RefreshTokenRequest';
 import type { RegisterRequest } from '../models/RegisterRequest';
 import type { ResendVerificationRequest } from '../models/ResendVerificationRequest';
+import type { ResetPasswordRequest } from '../models/ResetPasswordRequest';
 import type { VerifyEmailRequest } from '../models/VerifyEmailRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -36,6 +40,30 @@ export class AuthenticationService {
                 404: `User account not found for provided email`,
                 429: `Too many failed OTP attempts: maximum retry threshold exceeded`,
                 500: `Internal server error: Unexpected system failure`,
+            },
+        });
+    }
+    /**
+     * Reset password using OTP
+     * Public endpoint. Validates 6-digit OTP code against Redis, updates and hashes the new password, revokes all existing sessions/refresh tokens across all devices, and logs an audit event if internal staff.
+     * @param requestBody
+     * @returns ApiResponseResetPasswordResponse ApiResponse<ResetPasswordResponse>: password reset successfully
+     * @throws ApiError
+     */
+    public static resetPassword(
+        requestBody: ResetPasswordRequest,
+    ): CancelablePromise<ApiResponseResetPasswordResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/auth/reset-password',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Validation failed: request payload contains missing/invalid fields, weak password, or invalid/expired OTP`,
+                404: `User account not found with the provided email address`,
+                429: `Maximum OTP verification attempts reached: token invalidated`,
+                500: `Unexpected internal server failure`,
+                503: `Redis unavailable`,
             },
         });
     }
@@ -170,6 +198,29 @@ export class AuthenticationService {
                 401: `Unauthorized: Invalid or expired Google ID token, or Google login rejected for staff/inactive accounts`,
                 423: `Locked: Account is temporarily locked due to consecutive failed attempts`,
                 500: `Internal server error: Unexpected system failure during Google authentication`,
+            },
+        });
+    }
+    /**
+     * Request a password reset OTP
+     * Public endpoint. Sends a six-digit code valid for five minutes if the email exists. The first three requests in 24 hours are allowed; the fourth locks requests for 24 hours. Unknown email returns the same acknowledgement and has the same request limits.
+     * @param requestBody
+     * @returns ApiResponseForgotPasswordResponse ApiResponse<ForgotPasswordResponse>: generic acknowledgement
+     * @throws ApiError
+     */
+    public static forgotPassword(
+        requestBody: ForgotPasswordRequest,
+    ): CancelablePromise<ApiResponseForgotPasswordResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/auth/forgot-password',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Invalid email`,
+                429: `Email locked for 24 hours`,
+                500: `Unexpected failure`,
+                503: `Redis or email provider unavailable`,
             },
         });
     }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle, CreditCard, MapPin, ShoppingBag, Truck } from "lucide-react";
+import { CheckCircle, MapPin, ShoppingBag, Zap } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/features/cart/context/CartContext";
@@ -128,26 +128,34 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </section>
-                <section className="neo-box-no-hover bg-white p-5">
-                  <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 font-black uppercase">
-                    <Truck size={18} /> Vận chuyển
-                  </h2>
-                  <label className="flex items-center justify-between border-2 border-primary bg-primary/10 p-3 text-sm font-bold">
-                    <span>Giao hàng tiêu chuẩn (GHN / AhaMove)</span>
-                    <span>{shipping === 0 ? "Miễn phí" : formatPrice(shipping)}</span>
-                  </label>
-                </section>
-                <section className="neo-box-no-hover bg-white p-5">
-                  <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 font-black uppercase">
-                    <CreditCard size={18} /> Thanh toán
-                  </h2>
-                  <div className="border-2 border-primary bg-primary/10 p-3 text-sm font-bold">
-                    <p>SePay / VietQR</p>
-                    <p className="mt-1 text-xs font-medium text-text-muted">
-                      Khởi tạo giao dịch thanh toán trực tuyến qua cổng SePay VietQR của hệ thống.
-                    </p>
-                  </div>
-                </section>
+                {hasLedItems && (
+                  <button
+                    type="button"
+                    className="neo-box-no-hover flex w-full items-center justify-between border-2 border-black bg-primary/20 p-4 text-left transition hover:bg-primary/30"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-10 w-10 place-items-center rounded-lg border-2 border-black bg-primary text-black">
+                        <Zap size={20} className="fill-current" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-black uppercase tracking-wide text-black">
+                            Vận chuyển hỏa tốc
+                          </span>
+                          <span className="rounded bg-black px-2 py-0.5 text-[10px] font-black uppercase text-primary">
+                            AhaMove
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs font-medium text-text-muted">
+                          Giao hàng hỏa tốc qua AhaMove · Thanh toán tự động qua SePay VietQR
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-black text-black">
+                      {shipping === 0 ? "Miễn phí" : formatPrice(shipping)}
+                    </span>
+                  </button>
+                )}
                 {checkoutError && (
                   <p role="alert" className="border-2 border-red-600 bg-red-50 p-3 text-xs font-bold text-red-700">
                     {checkoutError}
@@ -177,7 +185,7 @@ export default function CheckoutPage() {
                     <span>{formatPrice(subtotal)}</span>
                   </div>
                   <div className="mt-2 flex justify-between">
-                    <span>Vận chuyển</span>
+                    <span>Vận chuyển hỏa tốc</span>
                     <span>{shipping === 0 ? "Miễn phí" : formatPrice(shipping)}</span>
                   </div>
                   <div className="mt-3 flex justify-between border-t-2 border-dashed border-black pt-3 text-xl">

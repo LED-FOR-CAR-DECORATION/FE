@@ -115,8 +115,19 @@ function HeroCarousel({ onExplore }: { onExplore: () => void }) {
 }
 
 function ProductArtwork({ product }: { product: CatalogProduct }) {
-  if (product.previewUrl) {
-    return <Image src={product.previewUrl} alt={product.name} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" className="object-contain p-3 [image-rendering:pixelated]" />;
+  const [imgError, setImgError] = useState(false);
+
+  if (product.previewUrl && !imgError) {
+    return (
+      <Image
+        src={product.previewUrl}
+        alt={product.name}
+        fill
+        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+        className="object-contain p-3 [image-rendering:pixelated]"
+        onError={() => setImgError(true)}
+      />
+    );
   }
 
   return (

@@ -8,11 +8,15 @@ import { getOrderFulfillment, isCharacterOnlyOrder } from "@/features/order/fulf
 import type { OrderStatus } from "@/features/order/types";
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; className: string }> = {
-  Pending: { label: "Đã tạo đơn", className: "bg-amber-100 text-amber-700 border-amber-400" },
-  Confirmed: { label: "Đã nhận hàng", className: "bg-blue-100 text-blue-700 border-blue-400" },
-  Shipping: { label: "Đang giao", className: "bg-green-100 text-green-700 border-green-400" },
-  Delivered: { label: "Đã giao hàng", className: "bg-gray-100 text-gray-600 border-gray-400" },
+  PendingPayment: { label: "Chờ thanh toán", className: "bg-amber-100 text-amber-700 border-amber-400" },
+  Preparing: { label: "Đang chuẩn bị", className: "bg-blue-100 text-blue-700 border-blue-400" },
+  HandedOver: { label: "Đã giao cho đơn vị vận chuyển", className: "bg-cyan-100 text-cyan-700 border-cyan-400" },
+  Shipping: { label: "Đang vận chuyển", className: "bg-indigo-100 text-indigo-700 border-indigo-400" },
+  Delivered: { label: "Đã giao", className: "bg-teal-100 text-teal-700 border-teal-400" },
+  Completed: { label: "Đã nhận hàng", className: "bg-emerald-100 text-emerald-700 border-emerald-400" },
   Cancelled: { label: "Đã hủy", className: "bg-red-100 text-red-700 border-red-400" },
+  Pending: { label: "Chờ thanh toán", className: "bg-amber-100 text-amber-700 border-amber-400" },
+  Confirmed: { label: "Đang chuẩn bị", className: "bg-blue-100 text-blue-700 border-blue-400" },
 };
 
 function formatMoney(value: number) {
@@ -30,7 +34,7 @@ export default function ManagerOrderDetailPage({ params }: { params: Promise<{ o
 
   const requiresDelivery = getOrderFulfillment(order).requiresDelivery;
   const displayStatus = isCharacterOnlyOrder(order) && order.paymentStatus === "Paid" ? "Paid" : order.status;
-  const canCreateDelivery = order.status === "Confirmed" && !order.delivery && requiresDelivery;
+  const canCreateDelivery = (order.status === "Preparing" || order.status === "HandedOver" || order.status === "Confirmed") && !order.delivery && requiresDelivery;
   const handleCreateDelivery = async () => {
     setIsCreatingDelivery(true);
     setDeliveryError("");
@@ -97,7 +101,43 @@ export default function ManagerOrderDetailPage({ params }: { params: Promise<{ o
           </div>
           <div className="mt-5 rounded-lg border border-primary-dark/30 bg-primary/10 p-3"><div className="flex items-center justify-between"><span className="text-sm font-bold">Phí vận chuyển ước tính</span><strong className="text-lg text-primary-dark">{formatMoney(order.shipping)}</strong></div><p className="mt-1 text-[11px] text-text-muted">Phí chính xác có thể thay đổi theo thực tế giao hàng.</p></div>
           {deliveryError && <p role="alert" className="mt-3 text-xs font-semibold text-red-600">{deliveryError}</p>}
-          {order.delivery ? <Link href="/staff/deliveries" className="btn-primary mt-4 flex w-full items-center justify-center gap-2 text-sm"><Truck size={16} /> Xem thông tin vận chuyển</Link> : <><button onClick={handleCreateDelivery} disabled={!canCreateDelivery || isCreatingDelivery} className="btn-primary mt-4 flex w-full items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"><Truck size={16} />{isCreatingDelivery ? "Đang tạo đơn..." : "Tạo đơn vận chuyển"}</button>{order.status === "Pending" && <button onClick={() => updateOrderStatus(order.id, "Confirmed")} className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-bold hover:bg-gray-50"><CheckCircle size={15} /> Đánh dấu đã nhận hàng</button>}</>}
+          {order.delivery ? (
+            <div className="flex flex-col gap-2">
+              <Link href="/staff/deliveries" className="btn-primary mt-4 flex w-full items-center justify-center gap-2 text-sm">
+                <Truck size={16} /> Xem thông tin vận chuyển
+              </Link>
+              {(order.status === "Delivered" || order.status === "Shipping") && (
+                <button
+                  type="button"
+                  onClick={() => updateOrderStatus(order.id, "Completed")}
+                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-bold hover:bg-gray-50"
+                >
+                  <CheckCircle size={15} /> Đánh dấu đã nhận hàng
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleCreateDelivery}
+                disabled={!canCreateDelivery || isCreatingDelivery}
+                className="btn-primary mt-4 flex w-full items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Truck size={16} />
+                {isCreatingDelivery ? "Đang tạo đơn..." : "Tạo đơn vận chuyển"}
+              </button>
+              {(order.status === "Delivered" || order.status === "Shipping" || order.status === "Confirmed" || order.status === "Pending") && (
+                <button
+                  type="button"
+                  onClick={() => updateOrderStatus(order.id, "Completed")}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-bold hover:bg-gray-50"
+                >
+                  <CheckCircle size={15} /> Đánh dấu đã nhận hàng
+                </button>
+              )}
+            </>
+          )}
         </section>}
       </div>
     </div>

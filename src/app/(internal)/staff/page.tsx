@@ -7,19 +7,27 @@ import type { MockOrder, OrderStatus } from "@/features/order/types";
 import { getAvailableStock, getInventoryStatus, LED_INVENTORY } from "@/features/product/inventory";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  Pending: "Đã tạo đơn",
-  Confirmed: "Đã nhận hàng",
-  Shipping: "Đang giao",
-  Delivered: "Đã giao hàng",
+  PendingPayment: "Chờ thanh toán",
+  Preparing: "Đang chuẩn bị",
+  HandedOver: "Đã giao cho đơn vị vận chuyển",
+  Shipping: "Đang vận chuyển",
+  Delivered: "Đã giao",
+  Completed: "Đã nhận hàng",
   Cancelled: "Đã hủy",
+  Pending: "Chờ thanh toán",
+  Confirmed: "Đang chuẩn bị",
 };
 
 const STATUS_CLASS: Record<OrderStatus, string> = {
+  PendingPayment: "bg-amber-50 text-amber-700",
+  Preparing: "bg-blue-50 text-blue-700",
+  HandedOver: "bg-cyan-50 text-cyan-700",
+  Shipping: "bg-[#e3f2e9] text-[#155e59]",
+  Delivered: "bg-teal-50 text-teal-700",
+  Completed: "bg-emerald-50 text-emerald-700",
+  Cancelled: "bg-red-50 text-red-700",
   Pending: "bg-amber-50 text-amber-700",
   Confirmed: "bg-blue-50 text-blue-700",
-  Shipping: "bg-[#e3f2e9] text-[#155e59]",
-  Delivered: "bg-emerald-50 text-emerald-700",
-  Cancelled: "bg-red-50 text-red-700",
 };
 
 function formatMoney(value: number) {

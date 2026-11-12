@@ -20,21 +20,27 @@ export const ORDERS_CHANGED_EVENT = "led-controller-orders-changed";
 export function mapBackendOrderStatus(status?: string): OrderStatus {
   switch (status) {
     case "PENDING_PAYMENT":
-      return "Pending";
+      return "PendingPayment";
     case "PROCESSING":
+      return "Preparing";
     case "PARTIALLY_FULFILLED":
-      return "Confirmed";
+      return "HandedOver";
     case "SHIPPING":
       return "Shipping";
     case "DELIVERED":
-    case "COMPLETED":
       return "Delivered";
+    case "COMPLETED":
+      return "Completed";
     case "DELIVERY_FAILED":
     case "REFUNDED":
     case "CANCELED":
       return "Cancelled";
+    case "Pending":
+      return "PendingPayment";
+    case "Confirmed":
+      return "Preparing";
     default:
-      return "Pending";
+      return "PendingPayment";
   }
 }
 
@@ -234,7 +240,11 @@ export const orderService = {
     }
   },
   async updateStaffStatus(orderId: number | string, status: string): Promise<void> {
-    await apiUpdateStaffOrderStatus(orderId, status);
+    let backendStatus = status;
+    if (status === "Completed" || status === "Confirmed") backendStatus = "COMPLETED";
+    else if (status === "Preparing") backendStatus = "PROCESSING";
+    else if (status === "Cancelled") backendStatus = "CANCELED";
+    await apiUpdateStaffOrderStatus(orderId, backendStatus);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
     }

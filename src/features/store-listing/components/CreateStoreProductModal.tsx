@@ -10,12 +10,17 @@ import { CreateStoreProductRequest } from "@/api_client/models/CreateStoreProduc
 interface CreateStoreProductModalProps {
   onClose: () => void;
   onSuccess: (productName: string) => void;
+  initialType?: "LED" | "CHARACTER";
 }
 
-export default function CreateStoreProductModal({ onClose, onSuccess }: CreateStoreProductModalProps) {
-  const [productType, setProductType] = useState<"CHARACTER" | "LED">("CHARACTER");
+export default function CreateStoreProductModal({
+  onClose,
+  onSuccess,
+  initialType = "LED",
+}: CreateStoreProductModalProps) {
+  const [productType, setProductType] = useState<"CHARACTER" | "LED">(initialType);
   const [productName, setProductName] = useState("");
-  const [basePrice, setBasePrice] = useState<string>("199000");
+  const [basePrice, setBasePrice] = useState<string>(initialType === "LED" ? "1490000" : "199000");
   const [description, setDescription] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [galleryUrlsText, setGalleryUrlsText] = useState("");
@@ -118,8 +123,8 @@ export default function CreateStoreProductModal({ onClose, onSuccess }: CreateSt
 
   return (
     <Modal
-      title="Tạo sản phẩm mới cho Store"
-      description="Chỉ dành cho Manager: Khởi tạo sản phẩm phần cứng LED hoặc nhân vật Pixel Art."
+      title="Tạo sản phẩm bày bán (Store Product)"
+      description="Chỉ dành cho Manager: Khởi tạo sản phẩm phần cứng LED hoặc nhân vật Pixel Art theo user story POST /api/management/admin/store/products."
       onClose={onClose}
       busy={isSubmitting}
       size="lg"
@@ -140,7 +145,7 @@ export default function CreateStoreProductModal({ onClose, onSuccess }: CreateSt
             className="inline-flex items-center gap-2 rounded-lg border border-[#3b8555] bg-[#439660] px-5 py-2 text-sm font-black text-white shadow-xs hover:bg-[#387e51] disabled:opacity-60"
           >
             {isSubmitting && <Loader2 size={15} className="animate-spin" />}
-            Tạo sản phẩm
+            {productType === "LED" ? "Tạo sản phẩm LED" : "Tạo nhân vật"}
           </button>
         </>
       }
@@ -158,25 +163,16 @@ export default function CreateStoreProductModal({ onClose, onSuccess }: CreateSt
           <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-900">UNPUBLISHED</span>. Sau khi tạo xong, bạn có thể kiểm tra và bấm Publish bất cứ lúc nào.
         </div>
 
-        {/* Loại sản phẩm */}
+        {/* 2 Chức năng chính: Tạo sản phẩm LED và Tạo nhân vật */}
         <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">Loại sản phẩm (AC02)</label>
+          <label className="mb-1 block font-bold text-[#1f432b]">Chọn chức năng tạo sản phẩm (AC02)</label>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => setProductType("CHARACTER")}
-              className={`flex items-center justify-center gap-2 rounded-lg border p-3 font-bold transition ${
-                productType === "CHARACTER"
-                  ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b] shadow-xs"
-                  : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
-              }`}
-            >
-              <Sparkles size={16} />
-              Digital Character Art
-            </button>
-            <button
-              type="button"
-              onClick={() => setProductType("LED")}
+              onClick={() => {
+                setProductType("LED");
+                if (basePrice === "199000") setBasePrice("1490000");
+              }}
               className={`flex items-center justify-center gap-2 rounded-lg border p-3 font-bold transition ${
                 productType === "LED"
                   ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b] shadow-xs"
@@ -184,7 +180,22 @@ export default function CreateStoreProductModal({ onClose, onSuccess }: CreateSt
               }`}
             >
               <Cpu size={16} />
-              Thiết bị LED phần cứng
+              Tạo sản phẩm LED
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setProductType("CHARACTER");
+                if (basePrice === "1490000") setBasePrice("199000");
+              }}
+              className={`flex items-center justify-center gap-2 rounded-lg border p-3 font-bold transition ${
+                productType === "CHARACTER"
+                  ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b] shadow-xs"
+                  : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
+              }`}
+            >
+              <Sparkles size={16} />
+              Tạo nhân vật
             </button>
           </div>
         </div>

@@ -13,18 +13,26 @@ import type { OrderStatus, PaymentStatus } from "@/features/order/types";
 import { formatPrice } from "@/lib/currency";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  Pending: "Đã tạo đơn",
-  Confirmed: "Đã nhận hàng",
-  Shipping: "Đang giao",
-  Delivered: "Đã giao hàng",
+  PendingPayment: "Chờ thanh toán",
+  Preparing: "Đang chuẩn bị",
+  HandedOver: "Đã giao cho đơn vị vận chuyển",
+  Shipping: "Đang vận chuyển",
+  Delivered: "Đã giao",
+  Completed: "Đã nhận hàng",
   Cancelled: "Đã hủy",
+  Pending: "Chờ thanh toán",
+  Confirmed: "Đang chuẩn bị",
 };
 const STATUS_CLASS: Record<OrderStatus, string> = {
+  PendingPayment: "bg-amber-100 text-amber-700 border-amber-400",
+  Preparing: "bg-blue-100 text-blue-700 border-blue-400",
+  HandedOver: "bg-cyan-100 text-cyan-700 border-cyan-400",
+  Shipping: "bg-indigo-100 text-indigo-700 border-indigo-400",
+  Delivered: "bg-teal-100 text-teal-700 border-teal-400",
+  Completed: "bg-emerald-100 text-emerald-700 border-emerald-400",
+  Cancelled: "bg-red-100 text-red-700 border-red-400",
   Pending: "bg-amber-100 text-amber-700 border-amber-400",
   Confirmed: "bg-blue-100 text-blue-700 border-blue-400",
-  Shipping: "bg-green-100 text-green-700 border-green-400",
-  Delivered: "bg-gray-100 text-gray-600 border-gray-400",
-  Cancelled: "bg-red-100 text-red-700 border-red-400",
 };
 const PAYMENT_LABEL: Record<PaymentStatus, string> = {
   Pending: "Chưa thanh toán",
@@ -35,10 +43,12 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
 
 function DeliveryProgress({ status }: { status: OrderStatus }) {
   const steps = [
-    { label: "Đã tạo đơn", done: true },
-    { label: "Đã nhận hàng", done: ["Confirmed", "Shipping", "Delivered"].includes(status) },
-    { label: "Đang giao", done: ["Shipping", "Delivered"].includes(status) },
-    { label: "Đã giao hàng", done: status === "Delivered" },
+    { label: "Chờ thanh toán", done: true },
+    { label: "Đang chuẩn bị", done: ["Preparing", "HandedOver", "Shipping", "Delivered", "Completed", "Confirmed"].includes(status) },
+    { label: "Đã giao cho đơn vị vận chuyển", done: ["HandedOver", "Shipping", "Delivered", "Completed"].includes(status) },
+    { label: "Đang vận chuyển", done: ["Shipping", "Delivered", "Completed"].includes(status) },
+    { label: "Đã giao", done: ["Delivered", "Completed"].includes(status) },
+    { label: "Đã nhận hàng", done: status === "Completed" },
   ];
   return (
     <section className="neo-box-no-hover bg-white p-6">

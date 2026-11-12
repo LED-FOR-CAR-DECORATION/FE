@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CheckCircle2, Clock3, EyeOff, Lock, Plus, Store, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, Cpu, EyeOff, Lock, Plus, Sparkles, Store, X } from "lucide-react";
 import { apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
 import type { CatalogProduct } from "@/features/cart/catalog";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
@@ -18,7 +18,7 @@ import DeleteProductConfirmModal from "./DeleteProductConfirmModal";
 type TabId = "characters" | "led-models" | "bundles";
 
 type ModalState =
-  | { kind: "create" }
+  | { kind: "create"; defaultType?: "LED" | "CHARACTER" }
   | { kind: "edit"; product: EditableProductData }
   | { kind: "publish"; character: StoreCharacterRow; mode: PublishMode }
   | { kind: "unlist"; character: StoreCharacterRow }
@@ -35,11 +35,28 @@ export default function StoreListingDashboard() {
   const [activeTab, setActiveTab] = useState<TabId>("characters");
   const [modal, setModal] = useState<ModalState>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const createMenuRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
     characters: null,
     "led-models": null,
     bundles: null,
   });
+
+  // Đóng menu tạo sản phẩm khi bấm ra ngoài
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
+        setCreateMenuOpen(false);
+      }
+    };
+    if (createMenuOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [createMenuOpen]);
 
   const refreshCatalog = () => {
     fetchStoreProducts({ size: 100 })
@@ -128,14 +145,58 @@ export default function StoreListingDashboard() {
         </div>
 
         {canManage && (
-          <button
-            type="button"
-            onClick={() => setModal({ kind: "create" })}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2.5 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]"
-          >
-            <Plus size={16} />
-            Tạo sản phẩm mới
-          </button>
+          <div className="relative" ref={createMenuRef}>
+            <button
+              type="button"
+              onClick={() => setCreateMenuOpen((prev) => !prev)}
+              aria-expanded={createMenuOpen}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2.5 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]"
+            >
+              <Plus size={16} />
+              Tạo sản phẩm bày bán
+              <ChevronDown size={14} className={`transition-transform ${createMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {createMenuOpen && (
+              <div className="absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-[#cfe5d6] bg-white p-2 shadow-xl">
+                <div className="px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-[#1e4d30]">
+                  Chọn loại sản phẩm (AC02)
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setModal({ kind: "create", defaultType: "LED" });
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-[#143d24] transition hover:bg-[#eef8f0]"
+                >
+                  <span className="grid h-7 w-7 place-items-center rounded-md bg-[#e2f5e8] text-[#1c6b39]">
+                    <Cpu size={15} />
+                  </span>
+                  <div>
+                    <p className="font-black">Tạo sản phẩm LED</p>
+                    <p className="text-[10px] font-normal text-text-muted">Phần cứng, model, spec & tồn kho</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setModal({ kind: "create", defaultType: "CHARACTER" });
+                  }}
+                  className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-[#143d24] transition hover:bg-[#eef8f0]"
+                >
+                  <span className="grid h-7 w-7 place-items-center rounded-md bg-[#e2f5e8] text-[#1c6b39]">
+                    <Sparkles size={15} />
+                  </span>
+                  <div>
+                    <p className="font-black">Tạo nhân vật</p>
+                    <p className="text-[10px] font-normal text-text-muted">Digital character version & art</p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </header>
 
@@ -326,6 +387,7 @@ export default function StoreListingDashboard() {
 
       {modal?.kind === "create" && (
         <CreateStoreProductModal
+          initialType={modal.defaultType}
           onClose={() => setModal(null)}
           onSuccess={(productName) => {
             setNotice(`Tạo sản phẩm "${productName}" thành công ở trạng thái Chưa mở bán (UNPUBLISHED).`);

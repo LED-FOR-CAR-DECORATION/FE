@@ -1,7 +1,16 @@
 import type { CartItem } from "@/features/cart/types";
 import type { AuthUser } from "@/features/auth/types";
 
-export type OrderStatus = "Pending" | "Confirmed" | "Shipping" | "Delivered" | "Cancelled";
+export type OrderStatus =
+  | "PendingPayment"
+  | "Preparing"
+  | "HandedOver"
+  | "Shipping"
+  | "Delivered"
+  | "Completed"
+  | "Cancelled"
+  | "Pending"
+  | "Confirmed";
 export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Cancelled";
 export type DeliveryStatus = "Created" | "Picked up" | "In transit" | "Out for delivery" | "Delivered" | "Exception";
 

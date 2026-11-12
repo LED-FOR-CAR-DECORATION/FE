@@ -12,6 +12,16 @@ export const DEMO_ACCOUNTS = [
     },
   },
   {
+    email: "designer123@gmail.com",
+    password: "Designer123@",
+    user: {
+      userId: "mock-designer-001",
+      email: "designer123@gmail.com",
+      fullName: "Designer 123",
+      role: "DESIGNER" as const,
+    },
+  },
+  {
     email: "manager123@gmail.com",
     password: "Manager123@",
     user: {

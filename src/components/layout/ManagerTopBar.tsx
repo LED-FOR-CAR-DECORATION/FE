@@ -7,7 +7,7 @@ import type { UserRole } from "@/features/auth/types";
 
 const roleLabels: Record<UserRole, string> = {
   CUSTOMER: "Khách hàng",
-  DESIGNER: "Designer",
+  DESIGNER: "Thiết kế",
   STAFF: "Nhân viên vận hành",
   MANAGER: "Quản lý cửa hàng",
   ADMIN: "Quản trị viên",
@@ -45,7 +45,7 @@ export default function ManagerTopBar() {
 
       <div className="flex items-center gap-3 ml-auto">
         {/* Notifications */}
-        <button className="relative p-2 border border-transparent hover:border-primary-dark rounded-lg transition-colors" aria-label="Notifications">
+        <button className="relative p-2 border border-transparent hover:border-primary-dark rounded-lg transition-colors" aria-label="Thông báo">
           <Bell size={20} />
           <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border border-white">
             3

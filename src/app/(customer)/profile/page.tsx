@@ -27,7 +27,8 @@ const STATUS_CFG: Record<string, { badge: string; icon: React.ReactNode }> = {
   Cancelled: { badge: "bg-red-100   text-red-700   border-red-400",    icon: <X size={12} /> },
 };
 
-const STATUS_LABEL: Record<string, string> = { Pending: "Chờ xử lý", Confirmed: "Đã xác nhận", Shipping: "Đang giao", Delivered: "Đã giao", Cancelled: "Đã hủy" };
+const STATUS_LABEL: Record<string, string> = { Pending: "Đã tạo đơn", Confirmed: "Đã nhận hàng", Shipping: "Đang giao", Delivered: "Đã giao hàng", Cancelled: "Đã hủy" };
+import { formatPrice } from "@/lib/currency";
 
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.Pending;
@@ -358,13 +359,13 @@ function OrderHistoryTab() {
             <div className="flex flex-col gap-1 mb-3">
               {order.items.map((item, i) => (
                 <p key={i} className="text-sm font-medium">
-                  {item.name} <span className="text-text-muted">× {item.quantity}</span> — <span className="font-bold">${item.price}</span>
+                  {item.name} <span className="text-text-muted">× {item.quantity}</span> — <span className="font-bold">{formatPrice(item.price)}</span>
                 </p>
               ))}
             </div>
 
             <div className="flex items-center justify-between">
-              <p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">${order.total}</span></p>
+              <p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">{formatPrice(order.total)}</span></p>
               <Link
                 href={`/profile/orders/${order.id}`}
                 className="flex items-center gap-1.5 text-xs font-bold border-2 border-black px-3 py-1.5 hover:bg-primary/20 transition-colors"
@@ -382,6 +383,9 @@ function OrderHistoryTab() {
 /* ── Profile Page ── */
 export default function ProfilePage() {
   const [tab, setTab] = useState<Tab>("account");
+  const { user } = useAuth();
+  const displayName = user?.fullName ?? "Người dùng";
+  const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <>
@@ -394,11 +398,11 @@ export default function ProfilePage() {
           {/* Header */}
           <div className="profile-enter flex items-center gap-4 mb-5">
             <div className="profile-avatar">
-              <span className="profile-avatar-face">J</span>
+              <span className="profile-avatar-face">{avatarInitial}</span>
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight">John Doe</h1>
-              <p className="text-text-muted text-sm">john@example.com</p>
+              <h1 className="text-3xl font-black tracking-tight">{displayName}</h1>
+              <p className="text-text-muted text-sm">{user?.email ?? ""}</p>
             </div>
           </div>
 

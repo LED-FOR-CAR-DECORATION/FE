@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown } from "lucide-react";
+import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, MessageSquare } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useCart } from "@/features/cart/context/CartContext";
@@ -54,8 +54,17 @@ function UserDropdown() {
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-gray-50"
           >
-            <ShoppingBag size={15} /> Gallery Character
+            <ShoppingBag size={15} /> Thư viện nhân vật
           </Link>
+          {user?.role === "CUSTOMER" && (
+            <Link
+              href="/commission"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-[#eaf5e8]"
+            >
+              Yêu cầu thiết kế
+            </Link>
+          )}
           <button
             onClick={async () => { await logout(); setOpen(false); window.location.assign("/"); }}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-red-50 text-red-600"
@@ -95,34 +104,38 @@ export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-primary border-b-2 border-black">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-50 w-full border-b border-[#d7e2d8] bg-[#8fc7a0]">
+      <div className="mx-auto flex h-[72px] w-full max-w-[1320px] items-center justify-between px-4 lg:px-8">
         
         {/* Logo + Nav */}
         <div className="flex items-center gap-8">
-          <Link
-            href="/"
-            className="bg-white border-2 border-black px-4 py-1 font-bold text-xl neo-box-no-hover shadow-none"
-          >
-            Mirage
+          <Link href="/" className="rounded-lg border-2 border-[#155e59] bg-[#fffdf5] px-4 py-1.5 text-xl font-black tracking-tight text-[#155e59] shadow-[3px_3px_0_#155e59]">
+            MIRAGE
           </Link>
 
-          <nav className="hidden md:flex items-center gap-6 font-semibold">
-            <Link href="/"        className="hover:underline underline-offset-4">CỬA HÀNG</Link>
-            <Link href="/about"   className="hover:underline underline-offset-4">GIỚI THIỆU</Link>
+          <nav className="hidden items-center gap-7 text-sm font-bold text-[#155e59] md:flex">
+            <Link href="/" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">CỬA HÀNG</Link>
+            <Link href="/about" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">GIỚI THIỆU</Link>
+            <Link
+              href="/chat"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#155e59] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#0e4b47]"
+            >
+              <MessageSquare size={15} />
+              Chat ngay
+            </Link>
           </nav>
         </div>
 
         {/* Right-side actions */}
         <div className="flex items-center gap-3">
           {/* Search bar */}
-          <div className="hidden md:flex items-center bg-white border-2 border-black px-3 py-1">
+          <div className="hidden items-center rounded-lg border border-[#b7d1ba] bg-white px-3 py-2 md:flex">
             <input
               type="text"
               placeholder="Tìm sản phẩm..."
-              className="outline-none bg-transparent w-48 text-sm"
+              className="w-64 bg-transparent text-sm text-[#26352f] outline-none placeholder:text-[#66736b]"
             />
-            <Search size={18} />
+            <Search size={18} className="text-[#155e59]" />
           </div>
 
           {/* Auth-aware zone */}
@@ -133,11 +146,11 @@ export default function Header() {
               {/* Cart (only for logged-in users) */}
               <Link
                 href="/cart"
-                className="p-2 border-2 border-transparent hover:border-black rounded-md transition-colors relative"
+                className="relative rounded-lg p-2 text-[#155e59] transition-colors hover:bg-white/50 focus:outline-none focus:ring-2 focus:ring-white"
                 aria-label="Giỏ hàng"
               >
                 <ShoppingBag size={24} />
-                <span className="absolute top-0 right-0 bg-white text-black text-xs font-bold border-2 border-black rounded-full h-5 w-5 flex items-center justify-center translate-x-1 -translate-y-1">
+                <span className="absolute right-0 top-0 flex h-5 w-5 -translate-y-1 translate-x-1 items-center justify-center rounded-full border border-[#155e59] bg-[#f2a65a] text-xs font-bold text-[#26352f]">
                   {itemCount}
                 </span>
               </Link>
@@ -150,8 +163,8 @@ export default function Header() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen((v) => !v)}
-            className="md:hidden p-2 border-2 border-black bg-white"
-            aria-label="Open menu"
+            className="border border-[#155e59] bg-white p-2 text-[#155e59] md:hidden"
+            aria-label="Mở trình đơn"
           >
             <Menu size={24} />
           </button>
@@ -177,10 +190,10 @@ export default function Header() {
         <div className="flex gap-8 whitespace-nowrap animate-pulse text-xs font-bold text-primary-dark tracking-widest uppercase">
           <span>CÓ THIẾT KẾ MỚI</span>
           <span>GIẢM 20% BẢNG LED 32x32</span>
-          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN $50</span>
+          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN 500.000 VNĐ</span>
           <span>CÓ THIẾT KẾ MỚI</span>
           <span>GIẢM 20% BẢNG LED 32x32</span>
-          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN $50</span>
+          <span>MIỄN PHÍ VẬN CHUYỂN CHO ĐƠN TRÊN 500.000 VNĐ</span>
         </div>
       </div>
     </header>

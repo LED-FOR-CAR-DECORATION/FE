@@ -6,6 +6,8 @@ import {
   Boxes,
   ChartNoAxesCombined,
   ClipboardList,
+  Palette,
+  Image,
   LayoutDashboard,
   MessageCircle,
   RotateCcw,
@@ -32,6 +34,20 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   {
+    label: "Bảng điều khiển nhà thiết kế",
+    description: "Commission được phân công cho bạn",
+    href: "/designer/dashboard",
+    icon: LayoutDashboard,
+    roles: ["DESIGNER"],
+  },
+  {
+    label: "Commission được giao",
+    description: "Xem yêu cầu và gửi thiết kế",
+    href: "/designer/commissions",
+    icon: Palette,
+    roles: ["DESIGNER"],
+  },
+  {
     label: "Tổng quan",
     description: "Thống kê và tình trạng hoạt động hệ thống",
     href: "/",
@@ -53,7 +69,7 @@ const menuItems: MenuItem[] = [
     roles: ["STAFF"],
   },
   {
-    label: "Chatbox hỗ trợ",
+    label: "Quản lý Chat",
     description: "Trả lời khách hàng và hỗ trợ sau bán hàng",
     href: "/staff/chat",
     icon: MessageCircle,
@@ -61,7 +77,7 @@ const menuItems: MenuItem[] = [
   },
   {
     label: "Quản lý Commission",
-    description: "Duyệt yêu cầu, báo giá và phân công Designer",
+    description: "Duyệt yêu cầu, báo giá và phân công nhà thiết kế",
     href: "/staff/commission",
     icon: ClipboardList,
     roles: ["STAFF"],
@@ -71,6 +87,13 @@ const menuItems: MenuItem[] = [
     description: "Theo dõi mẫu thiết bị và số lượng tồn kho",
     href: "/staff/inventory",
     icon: Boxes,
+    roles: ["MANAGER"],
+  },
+  {
+    label: "Quản lý đơn Character",
+    description: "Theo dõi doanh thu và cấp quyền Character",
+    href: "/manager/character-orders",
+    icon: Image,
     roles: ["MANAGER"],
   },
   {
@@ -103,14 +126,14 @@ const menuItems: MenuItem[] = [
   },
   {
     label: "Quản lý người dùng",
-    description: "Xem, tạo, cập nhật và khóa tài khoản",
+    description: "Xem danh sách tài khoản nội bộ",
     href: "/admin/users",
     icon: Users,
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "MANAGER"],
   },
   {
     label: "Quản lý vai trò",
-    description: "Quản lý Customer, Staff, Manager và Designer",
+    description: "Quản lý khách hàng, nhân viên, quản lý và nhà thiết kế",
     href: "/admin/roles",
     icon: UserCog,
     roles: ["ADMIN"],
@@ -150,6 +173,7 @@ function getRoleHome(role: UserRole | undefined): string {
   if (role === "STAFF") return "/staff";
   if (role === "MANAGER") return "/manager";
   if (role === "ADMIN") return "/admin";
+  if (role === "DESIGNER") return "/designer/dashboard";
   return "/";
 }
 

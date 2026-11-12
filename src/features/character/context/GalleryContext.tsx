@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { entitlementService } from "@/features/character/services/entitlement.service";
+import { ENTITLEMENTS_CHANGED_EVENT, entitlementService } from "@/features/character/services/entitlement.service";
 import type { UserEntitlement } from "@/features/character/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
@@ -16,7 +16,11 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [entitlements, setEntitlements] = useState<UserEntitlement[]>([]);
   const refresh = useCallback(() => setEntitlements(user ? entitlementService.listByUser(user.userId) : []), [user]);
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    window.addEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
+  }, [refresh]);
   return <GalleryContext.Provider value={{ entitlements, refresh }}>{children}</GalleryContext.Provider>;
 }
 

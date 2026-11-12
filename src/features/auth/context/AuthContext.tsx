@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { authService } from "@/features/auth/services/auth.service";
+import { authService, USE_MOCK_AUTH } from "@/features/auth/services/auth.service";
 import type { AuthUser } from "@/features/auth/types";
-import { clearSession, loadSession, saveSession } from "@/lib/auth/session";
+import { clearSession, getRefreshToken, getSessionToken, loadSession, saveSession } from "@/lib/auth/session";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -21,8 +21,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setUser(loadSession());
-    setIsLoading(false);
+    let cancelled = false;
+    (async () => {
+      const saved = loadSession();
+      // Với backend thật: nếu không còn access token lẫn refresh token thì phiên đã hết hạn.
+      if (saved && !USE_MOCK_AUTH && !(await getSessionToken()) && !getRefreshToken()) {
+        clearSession();
+        if (!cancelled) { setUser(null); setIsLoading(false); }
+        return;
+      }
+      if (!cancelled) { setUser(saved); setIsLoading(false); }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const login = useCallback((nextUser: AuthUser) => {

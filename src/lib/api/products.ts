@@ -5,9 +5,13 @@ import {
   StoreTagsService,
   type ApiResponseListProductItem,
   type ApiResponseProductDetailResponse,
+  type CreateStoreProductRequest,
+  type CreatedStoreProductResponse,
   type ProductDetailResponse,
   type ProductItem,
   type TagItem,
+  type UpdateStoreProductRequest,
+  type UpdatedStoreProductResponse,
 } from "@/api_client";
 import { request } from "@/api_client/core/request";
 import type { CatalogProduct } from "@/features/cart/catalog";
@@ -153,4 +157,54 @@ export async function apiUpdateProductStatus(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+}
+
+export async function apiCreateStoreProduct(
+  payload: CreateStoreProductRequest,
+): Promise<CreatedStoreProductResponse> {
+  const token = await getSessionToken();
+  const { data } = await axios.post<{ data: CreatedStoreProductResponse }>(
+    "/api/management/admin/store/products",
+    payload,
+    {
+      baseURL: getApiBaseUrl(),
+      withCredentials: OpenAPI.WITH_CREDENTIALS,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    },
+  );
+  return data.data;
+}
+
+export async function apiUpdateStoreProduct(
+  productId: number,
+  payload: UpdateStoreProductRequest,
+): Promise<UpdatedStoreProductResponse> {
+  const token = await getSessionToken();
+  const { data } = await axios.put<{ data: UpdatedStoreProductResponse }>(
+    `/api/management/admin/store/products/${productId}`,
+    payload,
+    {
+      baseURL: getApiBaseUrl(),
+      withCredentials: OpenAPI.WITH_CREDENTIALS,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    },
+  );
+  return data.data;
+}
+
+export async function apiDeleteStoreProduct(productId: number): Promise<void> {
+  const token = await getSessionToken();
+  try {
+    await axios.delete(`/api/management/admin/store/products/${productId}`, {
+      baseURL: getApiBaseUrl(),
+      withCredentials: OpenAPI.WITH_CREDENTIALS,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      // Đã được xóa mềm trên server trước đó
+      return;
+    }
+    throw err;
+  }
 }

@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock3, EyeOff } from "lucide-react";
+import { Archive, CheckCircle2, Clock3, EyeOff, Trash2 } from "lucide-react";
 import type { ListingStatus } from "../types";
 
 /** Vietnamese display labels. Underlying values stay as defined in the domain types. */
@@ -6,12 +6,16 @@ export const STATUS_LABEL: Record<ListingStatus, string> = {
   "Pending Review": "Chờ duyệt",
   Published: "Đã publish",
   Hidden: "Đã ẩn",
+  Archived: "Đã lưu trữ",
+  Deleted: "Đã xóa",
 };
 
 const STATUS_STYLE: Record<ListingStatus, { className: string; icon: React.ReactNode }> = {
   "Pending Review": { className: "border-amber-300 bg-amber-50 text-amber-800", icon: <Clock3 size={12} /> },
   Published: { className: "border-green-300 bg-green-50 text-green-800", icon: <CheckCircle2 size={12} /> },
   Hidden: { className: "border-gray-300 bg-gray-100 text-gray-600", icon: <EyeOff size={12} /> },
+  Archived: { className: "border-blue-300 bg-blue-50 text-blue-800", icon: <Archive size={12} /> },
+  Deleted: { className: "border-neutral-300 bg-neutral-200 text-neutral-700", icon: <Trash2 size={12} /> },
 };
 
 export default function StatusBadge({ status }: { status: ListingStatus }) {

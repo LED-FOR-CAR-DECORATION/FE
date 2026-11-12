@@ -2,7 +2,18 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { AlertTriangle, ArrowLeftRight, EyeOff, RotateCcw, Rocket, Search, Undo2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Archive,
+  ArrowLeftRight,
+  Edit,
+  EyeOff,
+  Rocket,
+  RotateCcw,
+  Search,
+  Trash2,
+  Undo2,
+} from "lucide-react";
 import { formatDateTime } from "../format";
 import type { ListingStatus, PublishMode, StoreCharacterRow } from "../types";
 import StatusBadge, { STATUS_LABEL } from "./StatusBadge";
@@ -18,6 +29,9 @@ interface CharacterListingTableProps {
   canManage: boolean;
   onPublish: (character: StoreCharacterRow, mode: PublishMode) => void;
   onUnlist: (character: StoreCharacterRow) => void;
+  onEdit?: (character: StoreCharacterRow) => void;
+  onArchive?: (character: StoreCharacterRow) => void;
+  onDelete?: (character: StoreCharacterRow) => void;
 }
 
 const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
@@ -25,6 +39,8 @@ const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "Pending Review", label: STATUS_LABEL["Pending Review"] },
   { value: "Published", label: STATUS_LABEL["Published"] },
   { value: "Hidden", label: STATUS_LABEL["Hidden"] },
+  { value: "Archived", label: STATUS_LABEL["Archived"] },
+  { value: "Deleted", label: STATUS_LABEL["Deleted"] },
 ];
 
 const HEADINGS = [
@@ -47,6 +63,9 @@ export default function CharacterListingTable({
   canManage,
   onPublish,
   onUnlist,
+  onEdit,
+  onArchive,
+  onDelete,
 }: CharacterListingTableProps) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("All");
@@ -155,34 +174,52 @@ export default function CharacterListingTable({
 
             {!isLoading &&
               !error &&
-              filtered.map((row) => (
-                <tr key={row.characterId} className="border-b border-[#eef5f0] last:border-0 hover:bg-[#f9fdfa]">
-                  <td className="whitespace-nowrap px-4 py-3 font-black text-primary-dark">{row.characterId}</td>
-                  <td className="px-4 py-3">
-                    <Image
-                      src={row.thumbnailUrl}
-                      alt={`Thumbnail của ${row.name}`}
-                      width={44}
-                      height={44}
-                      className="h-11 w-11 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] object-contain"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-bold">{row.name}</p>
-                    <p className="text-[11px] text-text-muted">Cập nhật lúc {formatDateTime(row.updatedAt)}</p>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-medium">{row.creatorName}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <ActiveVersionCell row={row} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={row.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <RowActions row={row} canManage={canManage} onPublish={onPublish} onUnlist={onUnlist} />
-                  </td>
-                </tr>
-              ))}
+              filtered.map((row) => {
+                const isDeleted = row.status === "Deleted";
+                return (
+                  <tr
+                    key={row.characterId}
+                    className={`border-b border-[#eef5f0] last:border-0 transition-all ${
+                      isDeleted
+                        ? "bg-neutral-100/60 opacity-40 grayscale"
+                        : "hover:bg-[#f9fdfa]"
+                    }`}
+                  >
+                    <td className="whitespace-nowrap px-4 py-3 font-black text-primary-dark">{row.characterId}</td>
+                    <td className="px-4 py-3">
+                      <Image
+                        src={row.thumbnailUrl}
+                        alt={`Thumbnail của ${row.name}`}
+                        width={44}
+                        height={44}
+                        className="h-11 w-11 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] object-contain"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className={`font-bold ${isDeleted ? "line-through text-neutral-500" : ""}`}>{row.name}</p>
+                      <p className="text-[11px] text-text-muted">Cập nhật lúc {formatDateTime(row.updatedAt)}</p>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium">{row.creatorName}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <ActiveVersionCell row={row} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={row.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <RowActions
+                        row={row}
+                        canManage={canManage}
+                        onPublish={onPublish}
+                        onUnlist={onUnlist}
+                        onEdit={onEdit}
+                        onArchive={onArchive}
+                        onDelete={onDelete}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
@@ -197,6 +234,9 @@ export default function CharacterListingTable({
 }
 
 function ActiveVersionCell({ row }: { row: StoreCharacterRow }) {
+  if (row.status === "Deleted") {
+    return <span className="text-xs font-semibold text-neutral-400">—</span>;
+  }
   if (!row.activeVersion) {
     return <span className="text-xs font-semibold text-text-muted">— chưa chọn</span>;
   }
@@ -219,15 +259,43 @@ interface RowActionsProps {
   canManage: boolean;
   onPublish: CharacterListingTableProps["onPublish"];
   onUnlist: CharacterListingTableProps["onUnlist"];
+  onEdit?: CharacterListingTableProps["onEdit"];
+  onArchive?: CharacterListingTableProps["onArchive"];
+  onDelete?: CharacterListingTableProps["onDelete"];
 }
 
 /** Thao tác tùy thuộc theo trạng thái của Character. BR-14: vô hiệu nếu tài khoản không phải Manager. */
-function RowActions({ row, canManage, onPublish, onUnlist }: RowActionsProps) {
+function RowActions({
+  row,
+  canManage,
+  onPublish,
+  onUnlist,
+  onEdit,
+  onArchive,
+  onDelete,
+}: RowActionsProps) {
+  // Khi sản phẩm đã bị xóa mềm: không hiển thị bất kỳ nút nào!
+  if (row.status === "Deleted") {
+    return null;
+  }
+
   const title = canManage ? undefined : FORBIDDEN_HINT;
 
-  switch (row.status) {
-    case "Pending Review":
-      return (
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {onEdit && (
+        <ActionButton
+          variant="secondary"
+          disabled={!canManage}
+          title={title}
+          onClick={() => onEdit(row)}
+          icon={<Edit size={13} />}
+        >
+          Sửa
+        </ActionButton>
+      )}
+
+      {row.status === "Pending Review" && (
         <ActionButton
           variant="primary"
           disabled={!canManage}
@@ -235,12 +303,12 @@ function RowActions({ row, canManage, onPublish, onUnlist }: RowActionsProps) {
           onClick={() => onPublish(row, "review")}
           icon={<Rocket size={13} />}
         >
-          Review &amp; Publish
+          Publish
         </ActionButton>
-      );
-    case "Published":
-      return (
-        <div className="flex flex-wrap gap-2">
+      )}
+
+      {row.status === "Published" && (
+        <>
           <ActionButton
             variant="secondary"
             disabled={!canManage}
@@ -251,29 +319,89 @@ function RowActions({ row, canManage, onPublish, onUnlist }: RowActionsProps) {
             Đổi Version
           </ActionButton>
           <ActionButton
-            variant="danger"
+            variant="secondary"
             disabled={!canManage}
             title={title}
             onClick={() => onUnlist(row)}
             icon={<EyeOff size={13} />}
           >
-            Ẩn (Unlist)
+            Ẩn
           </ActionButton>
-        </div>
-      );
-    case "Hidden":
-      return (
+          {onArchive && (
+            <ActionButton
+              variant="secondary"
+              disabled={!canManage}
+              title={title}
+              onClick={() => onArchive(row)}
+              icon={<Archive size={13} />}
+            >
+              Lưu trữ
+            </ActionButton>
+          )}
+        </>
+      )}
+
+      {row.status === "Hidden" && (
+        <>
+          <ActionButton
+            variant="primary"
+            disabled={!canManage}
+            title={title}
+            onClick={() => onPublish(row, "republish")}
+            icon={<Undo2 size={13} />}
+          >
+            Republish
+          </ActionButton>
+          {onArchive && (
+            <ActionButton
+              variant="secondary"
+              disabled={!canManage}
+              title={title}
+              onClick={() => onArchive(row)}
+              icon={<Archive size={13} />}
+            >
+              Lưu trữ
+            </ActionButton>
+          )}
+        </>
+      )}
+
+      {row.status === "Archived" && (
+        <>
+          <ActionButton
+            variant="primary"
+            disabled={!canManage}
+            title={title}
+            onClick={() => onPublish(row, "republish")}
+            icon={<Undo2 size={13} />}
+          >
+            Mở bán lại
+          </ActionButton>
+          <ActionButton
+            variant="secondary"
+            disabled={!canManage}
+            title={title}
+            onClick={() => onUnlist(row)}
+            icon={<EyeOff size={13} />}
+          >
+            Ẩn
+          </ActionButton>
+        </>
+      )}
+
+      {onDelete && (
         <ActionButton
-          variant="secondary"
+          variant="danger"
           disabled={!canManage}
           title={title}
-          onClick={() => onPublish(row, "republish")}
-          icon={<Undo2 size={13} />}
+          onClick={() => onDelete(row)}
+          icon={<Trash2 size={13} />}
         >
-          Republish
+          Xóa
         </ActionButton>
-      );
-  }
+      )}
+    </div>
+  );
 }
 
 const VARIANT: Record<"primary" | "secondary" | "danger", string> = {

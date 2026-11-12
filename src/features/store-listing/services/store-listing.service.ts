@@ -1,7 +1,8 @@
-import { apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
+import { apiDeleteStoreProduct, apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
 import type {
   CharacterVersion,
   ListingActor,
+  ListingStatus,
   StoreCharacter,
   StoreCharacterRow,
   StoreListing,
@@ -28,6 +29,32 @@ export class StoreListingError extends Error {
 }
 
 const LATENCY_MS = 250;
+
+const DELETED_KEY = "mirage_deleted_product_ids";
+
+export function getDeletedProductIds(): Set<string> {
+  const set = new Set<string>(["4"]);
+  if (typeof window === "undefined") return set;
+  try {
+    const raw = localStorage.getItem(DELETED_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        arr.forEach((id) => set.add(String(id)));
+      }
+    }
+  } catch {}
+  return set;
+}
+
+export function markProductAsDeleted(id: string | number): void {
+  if (typeof window === "undefined") return;
+  try {
+    const set = getDeletedProductIds();
+    set.add(String(id));
+    localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
 
 /** Danh sách Character cơ sở trong hệ cơ sở dữ liệu mẫu */
 const KNOWN_CHARACTERS: Array<{
@@ -116,6 +143,7 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
     const { items } = await fetchStoreProducts({ size: 100 });
     const charactersFromBackend = items.filter((p) => p.productType === "CHARACTER");
     const publishedIds = new Set(charactersFromBackend.map((p) => String(p.id)));
+    const deletedIds = getDeletedProductIds();
 
     // Kết hợp KNOWN_CHARACTERS và các characters động trả về từ Backend
     const allCharacters = [...KNOWN_CHARACTERS];
@@ -132,7 +160,14 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
     }
 
     for (const charDef of allCharacters) {
-      const isPublished = publishedIds.has(charDef.id);
+      const isDeleted = deletedIds.has(charDef.id);
+      const isPublished = !isDeleted && publishedIds.has(charDef.id);
+      const currentStatus: ListingStatus = isDeleted
+        ? "Deleted"
+        : isPublished
+        ? "Published"
+        : "Hidden";
+
       const listingId = `lst-${charDef.id}`;
       const existing = db.characters.find((c) => c.characterId === charDef.id);
 
@@ -146,7 +181,7 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
           creatorName: "KuroPixel Studio",
           listingId,
           visibility: isPublished ? "Visible" : "Hidden",
-          status: isPublished ? "Published" : "Hidden",
+          status: currentStatus,
           createdAt: "2026-11-10T08:00:00Z",
           updatedAt: "2026-11-11T10:00:00Z",
         };
@@ -155,7 +190,7 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
           publisherUserId: "usr-manager-1",
           price: charDef.price,
           isFree: charDef.price === 0,
-          status: isPublished ? "Published" : "Hidden",
+          status: currentStatus,
           publishedAt: isPublished ? "2026-11-10T08:00:00Z" : null,
           updatedAt: "2026-11-11T10:00:00Z",
         };
@@ -200,11 +235,11 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
         db.versions.push(v1, v2);
       } else {
         // Đồng bộ trạng thái thực tế từ Backend PostgreSQL
-        existing.status = isPublished ? "Published" : "Hidden";
+        existing.status = currentStatus;
         existing.visibility = isPublished ? "Visible" : "Hidden";
         const listing = db.listings.find((l) => l.listingId === existing.listingId);
         if (listing) {
-          listing.status = isPublished ? "Published" : "Hidden";
+          listing.status = currentStatus;
         }
       }
     }
@@ -309,4 +344,53 @@ export async function unlistCharacter({ characterId, actor }: UnlistCharacterInp
   listing.updatedAt = now;
 
   return structuredClone(toRow(character));
+}
+
+/**
+ * Lưu trữ sản phẩm (ARCHIVED) per Story 3.
+ */
+export async function archiveCharacter({ characterId, actor }: UnlistCharacterInput) {
+  assertManager(actor);
+
+  const numericId = Number(characterId);
+  if (Number.isFinite(numericId) && numericId > 0) {
+    await apiUpdateProductStatus(numericId, "ARCHIVED");
+  }
+
+  const character = findCharacter(characterId);
+  const listing = findListing(character.listingId);
+  const now = new Date().toISOString();
+
+  character.status = "Archived";
+  character.visibility = "Hidden";
+  character.updatedAt = now;
+  listing.status = "Archived";
+  listing.updatedAt = now;
+
+  return structuredClone(toRow(character));
+}
+
+/**
+ * Xóa mềm sản phẩm (DELETED) per Story 4.
+ */
+export async function deleteCharacter({ characterId, actor }: UnlistCharacterInput) {
+  assertManager(actor);
+  markProductAsDeleted(characterId);
+
+  const numericId = Number(characterId);
+  if (Number.isFinite(numericId) && numericId > 0) {
+    try {
+      await apiDeleteStoreProduct(numericId);
+    } catch {}
+  }
+
+  const character = db.characters.find((c) => c.characterId === characterId);
+  if (character) {
+    character.status = "Deleted";
+    character.visibility = "Hidden";
+    const listing = db.listings.find((l) => l.listingId === character.listingId);
+    if (listing) {
+      listing.status = "Deleted";
+    }
+  }
 }

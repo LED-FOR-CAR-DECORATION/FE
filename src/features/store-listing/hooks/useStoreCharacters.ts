@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
+  archiveCharacter,
+  deleteCharacter,
   getStoreCharacters,
   publishCharacterVersion,
   unlistCharacter,
@@ -66,5 +68,22 @@ export function useStoreCharacters() {
     [actor, load],
   );
 
-  return { rows, isLoading, error, retry, canManage, publish, unlist };
+  const archive = useCallback(
+    async (characterId: string) => {
+      const updated = await archiveCharacter({ characterId, actor });
+      await load();
+      return updated;
+    },
+    [actor, load],
+  );
+
+  const remove = useCallback(
+    async (characterId: string) => {
+      await deleteCharacter({ characterId, actor });
+      await load();
+    },
+    [actor, load],
+  );
+
+  return { rows, isLoading, error, retry, canManage, publish, unlist, archive, remove };
 }

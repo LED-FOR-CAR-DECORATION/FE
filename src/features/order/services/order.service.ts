@@ -145,14 +145,18 @@ export function mapOrderSummaryAndDetailToOrder(
     },
     paymentMethod: detail?.payment?.paymentGateway ?? "SEPAY",
     paymentStatus,
+    paidAt: (detail?.payment as any)?.paidAt,
     status,
     createdAt: detail?.createdAt ?? summary.createdAt,
-    service: detail?.delivery?.carrier ?? "GHN / AhaMove",
+    service: detail?.delivery?.carrier ?? "AhaMove",
     delivery: detail?.delivery
       ? {
-          provider: "AHAMOVE",
+          provider: detail.delivery.carrier || "AHAMOVE",
           orderId: detail.delivery.trackingNumber || `DEL-${summary.orderId}`,
           status: mapBackendDeliveryStatus(detail.delivery.deliveryStatus),
+          rawStatus: detail.delivery.deliveryStatus,
+          trackingUrl: detail.delivery.trackingUrl || undefined,
+          carrierFee: (detail.delivery as any)?.carrierFee,
           createdAt: detail.createdAt,
           expectedAt: detail.delivery.estimatedDeliveryAt || detail.createdAt,
         }
@@ -209,14 +213,18 @@ export function mapStaffOrderSummaryAndDetailToOrder(
     },
     paymentMethod: detail?.payment?.gateway ?? "SEPAY",
     paymentStatus,
+    paidAt: detail?.payment?.paidAt,
     status,
     createdAt: detail?.createdAt ?? summary.createdAt,
-    service: detail?.delivery?.carrier ?? "GHN",
+    service: detail?.delivery?.carrier ?? "AhaMove",
     delivery: (detail?.delivery || summary.deliveryStatus)
       ? {
-          provider: (detail?.delivery?.carrier || "GHN") as any,
+          provider: (detail?.delivery?.carrier || "AHAMOVE"),
           orderId: detail?.delivery?.trackingNumber || `DEL-${summary.orderId}`,
           status: mapBackendDeliveryStatus(detail?.delivery?.deliveryStatus ?? summary.deliveryStatus),
+          rawStatus: detail?.delivery?.deliveryStatus ?? summary.deliveryStatus,
+          trackingUrl: detail?.delivery?.trackingUrl || undefined,
+          carrierFee: detail?.delivery?.carrierFee,
           createdAt: detail?.createdAt ?? summary.createdAt,
           expectedAt: detail?.delivery?.estimatedDeliveryAt || summary.createdAt,
         }

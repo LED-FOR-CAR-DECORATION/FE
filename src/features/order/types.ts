@@ -39,13 +39,17 @@ export interface MockOrder {
   address: OrderAddressSnapshot;
   paymentMethod: string;
   paymentStatus: PaymentStatus;
+  paidAt?: string;
   status: OrderStatus;
   createdAt: string;
   service: string;
   delivery?: {
-    provider: "AHAMOVE";
+    provider: "AHAMOVE" | string;
     orderId: string;
     status: DeliveryStatus;
+    rawStatus?: string;
+    trackingUrl?: string;
+    carrierFee?: number;
     createdAt: string;
     expectedAt: string;
   };

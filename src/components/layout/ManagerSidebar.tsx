@@ -62,13 +62,6 @@ const menuItems: MenuItem[] = [
     roles: ["STAFF"],
   },
   {
-    label: "Quản lý giao hàng",
-    description: "Tạo yêu cầu và theo dõi vận chuyển",
-    href: "/staff/deliveries",
-    icon: Truck,
-    roles: ["STAFF"],
-  },
-  {
     label: "Quản lý Chat",
     description: "Trả lời khách hàng và hỗ trợ sau bán hàng",
     href: "/staff/chat",

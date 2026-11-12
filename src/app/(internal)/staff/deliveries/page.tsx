@@ -21,11 +21,7 @@ const STATUS_CONFIG: Record<DeliveryStatus, { label: string; className: string }
   Exception: { label: "Có vấn đề", className: "border-red-200 bg-red-50 text-red-700" },
 };
 
-const MOCK_DELIVERIES: Delivery[] = [
-  { id: "DEL-1048", orderId: "ORD-1048", trackingCode: "VC-ORD-1048", customer: "Nguyen Van Minh", phone: "0912345678", address: "123 Le Loi, Q1, TP.HCM", service: "Tiêu chuẩn", createdAt: "08/10/2024 10:32", expectedAt: "10/10/2024", cod: 90, status: "In transit", lastUpdate: "Đang trên đường đến kho giao hàng" },
-  { id: "DEL-1046", orderId: "ORD-1046", trackingCode: "VC-ORD-1046", customer: "Le Van Hoang", phone: "0976543210", address: "789 Tran Hung Dao, Q5, TP.HCM", service: "Tiêu chuẩn", createdAt: "07/10/2024 18:45", expectedAt: "09/10/2024", cod: 120, status: "Out for delivery", lastUpdate: "Đang giao hàng trong ngày hôm nay" },
-  { id: "DEL-1042", orderId: "ORD-1042", trackingCode: "VC-ORD-1042", customer: "Bui Van Nam", phone: "0932109876", address: "147 Dinh Tien Hoang, Bình Thạnh, HCM", service: "Tiêu chuẩn", createdAt: "06/10/2024 09:15", expectedAt: "11/10/2024", cod: 80, status: "Delivered", lastUpdate: "Giao hàng thành công cho người nhận" },
-];
+const MOCK_DELIVERIES: Delivery[] = [];
 
 function StatusBadge({ status }: { status: DeliveryStatus }) {
   const config = STATUS_CONFIG[status];
@@ -51,7 +47,7 @@ function ActivityTimeline({ delivery }: { delivery: Delivery }) {
 export default function DeliveriesPage() {
   const { orders } = useOrders();
   const [deliveries, setDeliveries] = useState(MOCK_DELIVERIES);
-  const [selectedId, setSelectedId] = useState(MOCK_DELIVERIES[0].id);
+  const [selectedId, setSelectedId] = useState(MOCK_DELIVERIES[0]?.id ?? "");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
 

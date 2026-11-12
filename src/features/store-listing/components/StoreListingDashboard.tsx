@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { CheckCircle2, Clock3, EyeOff, Lock, Store, X } from "lucide-react";
-import { PRODUCTS } from "@/features/cart/catalog";
+import { fetchStoreProducts } from "@/lib/api/products";
+import type { CatalogProduct } from "@/features/cart/catalog";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
 import type { PublishMode, StoreCharacterRow } from "../types";
 import CatalogListingTable from "./CatalogListingTable";
@@ -22,6 +23,7 @@ const NOTICE_DURATION_MS = 5000;
 /** Quản lý Store Listing — Dashboard dành cho Manager với các tab Characters / LED Models / Bundles. */
 export default function StoreListingDashboard() {
   const { rows, isLoading, error, retry, canManage, publish, unlist } = useStoreCharacters();
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("characters");
   const [modal, setModal] = useState<ModalState>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -30,6 +32,12 @@ export default function StoreListingDashboard() {
     "led-models": null,
     bundles: null,
   });
+
+  useEffect(() => {
+    fetchStoreProducts({ size: 100 })
+      .then((res) => setCatalogProducts(res.items))
+      .catch((err) => console.error("Failed to load catalog products:", err));
+  }, []);
 
   useEffect(() => {
     if (!notice) return;
@@ -51,12 +59,12 @@ export default function StoreListingDashboard() {
     {
       id: "led-models",
       label: "LED Models",
-      count: PRODUCTS.filter((product) => product.productType === "LED_MODEL").length,
+      count: catalogProducts.filter((product) => product.productType === "LED_MODEL").length,
     },
     {
       id: "bundles",
       label: "Bundles",
-      count: PRODUCTS.filter((product) => product.productType === "BUNDLE").length,
+      count: catalogProducts.filter((product) => product.productType === "BUNDLE").length,
     },
   ];
 
@@ -210,8 +218,18 @@ export default function StoreListingDashboard() {
               onUnlist={(character) => setModal({ kind: "unlist", character })}
             />
           )}
-          {activeTab === "led-models" && <CatalogListingTable kind="LED_MODEL" />}
-          {activeTab === "bundles" && <CatalogListingTable kind="BUNDLE" />}
+          {activeTab === "led-models" && (
+            <CatalogListingTable
+              kind="LED_MODEL"
+              items={catalogProducts.filter((product) => product.productType === "LED_MODEL")}
+            />
+          )}
+          {activeTab === "bundles" && (
+            <CatalogListingTable
+              kind="BUNDLE"
+              items={catalogProducts.filter((product) => product.productType === "BUNDLE")}
+            />
+          )}
         </div>
       </section>
 

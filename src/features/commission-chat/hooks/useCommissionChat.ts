@@ -27,10 +27,11 @@ export function useCommissionChat() {
   }, []);
 
   const activeConversation =
-    conversations.find((c) => c.id === activeConvId) ?? conversations[0];
+    conversations.find((c) => c.id === activeConvId) ?? conversations[0] ?? null;
 
   const updateActiveConversation = useCallback(
     (updater: (conv: Conversation) => Conversation) => {
+      if (!activeConversation) return;
       setConversations((prev) => {
         const next = prev.map((conv) =>
           conv.id === activeConversation.id ? updater(conv) : conv
@@ -39,7 +40,7 @@ export function useCommissionChat() {
         return next;
       });
     },
-    [activeConversation.id]
+    [activeConversation?.id]
   );
 
   return {

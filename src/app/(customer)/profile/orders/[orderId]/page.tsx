@@ -50,10 +50,9 @@ function DeliveryProgress({ status }: { status: OrderStatus }) {
 
 export default function CustomerOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
-  const { user } = useAuth();
   const { orders } = useOrders();
   const { entitlements } = useGallery();
-  const order = orders.find((entry) => entry.id === orderId && entry.customer.userId === user?.userId);
+  const order = orders.find((entry) => entry.id === orderId);
 
   if (!order) return <><Header /><main className="flex-1 grid place-items-center py-24"><div className="text-center"><p className="mb-4 text-2xl font-black">Không tìm thấy đơn hàng</p><Link href="/profile/orders" className="btn-primary">← Về lịch sử đơn hàng</Link></div></main><Footer /></>;
 

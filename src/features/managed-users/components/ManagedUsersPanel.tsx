@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useManagedUsers } from "../hooks/useManagedUsers";
 import type { ManagedUserQuery } from "../types";
@@ -11,6 +12,7 @@ const field = "rounded border border-gray-300 bg-white px-3 py-2";
 
 export default function ManagedUsersPanel() {
   const { user, isLoading } = useAuth();
+  const router = useRouter();
   const canList = user?.role === "ADMIN" || user?.role === "MANAGER";
   const [query, setQuery] = useState(initialQuery);
   const [attempt, setAttempt] = useState(0);
@@ -93,6 +95,15 @@ export default function ManagedUsersPanel() {
               </select>
             </label>
             <button className="btn-primary">Áp dụng</button>
+            {user?.role === "ADMIN" && (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => router.push("/admin/users/create")}
+              >
+                + Thêm người dùng
+              </button>
+            )}
           </form>
           {!result && <p role="status">Đang tải danh sách…</p>}
           {result?.error && (
@@ -121,6 +132,7 @@ export default function ManagedUsersPanel() {
                           "Điện thoại",
                           "Vai trò",
                           "Trạng thái",
+                          "Hành động",
                         ].map((label) => (
                           <th key={label} scope="col" className="p-3">
                             {label}
@@ -140,6 +152,14 @@ export default function ManagedUsersPanel() {
                           <td className="p-3">{user.role}</td>
                           <td className="p-3">
                             {user.active ? "Đang hoạt động" : user.status}
+                          </td>
+                          <td className="p-3">
+                            <Link
+                              href={`/admin/users/${user.accountId}`}
+                              className="font-semibold text-[#155e59] underline"
+                            >
+                              Chi tiết
+                            </Link>
                           </td>
                         </tr>
                       ))}

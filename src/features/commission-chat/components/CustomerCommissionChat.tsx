@@ -15,6 +15,7 @@ import {
   Check,
   Clock,
   Plus,
+  Palette,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import DynamicCommissionFormFields from "@/features/commission/components/DynamicCommissionFormFields";
@@ -69,8 +70,9 @@ export default function CustomerCommissionChat() {
   };
 
   useEffect(() => {
+    if (!activeConversation) return;
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeConversation.messages.length, activeConversation.id]);
+  }, [activeConversation?.messages?.length, activeConversation?.id]);
 
   // Tính toán chi phí dự kiến tự động từ `commissionConfigs` cho Form Yêu cầu của Customer
   const customerEstimate = useMemo(
@@ -86,7 +88,7 @@ export default function CustomerCommissionChat() {
   const filteredConversations = conversations.filter(
     (conv) =>
       conv.staffName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      conv.commission.characterName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (conv.commission?.characterName ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -291,7 +293,7 @@ export default function CustomerCommissionChat() {
 
           <div className="flex-1 space-y-1 divide-y divide-[#f0f5f1] overflow-y-auto p-2">
             {filteredConversations.map((conv) => {
-              const isActive = conv.id === activeConversation.id;
+              const isActive = conv.id === activeConversation?.id;
               const badge =
                 conv.orderState === "REVIEW"
                   ? { label: "Chờ nghiệm thu", cls: "bg-amber-100 text-amber-800" }
@@ -359,9 +361,25 @@ export default function CustomerCommissionChat() {
           </div>
         </section>
 
-        {/* ===================================================================
-            CỘT 2: KHUNG CHAT CHÍNH (50% CHIỀU RỘNG - CỘT GIỮA)
-        =================================================================== */}
+        {!activeConversation ? (
+          <div className="flex flex-1 items-center justify-center rounded-xl border border-[#dce8df] bg-white p-8 text-center text-[#66736b]">
+            <div className="max-w-md">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eaf5e8] text-[#155e59]">
+                <Palette size={28} />
+              </div>
+              <h2 className="text-base font-black text-[#155e59]">
+                Chưa có cuộc trò chuyện nào
+              </h2>
+              <p className="mt-1.5 text-xs text-[#7a8c80]">
+                Hãy chọn một cuộc trò chuyện từ danh sách bên trái hoặc bấm &quot;Gửi yêu cầu vẽ mới&quot;.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* ===================================================================
+                CỘT 2: KHUNG CHAT CHÍNH (50% CHIỀU RỘNG - CỘT GIỮA)
+            =================================================================== */}
         <section className="flex w-2/4 flex-1 flex-col overflow-hidden rounded-xl border border-[#dce8df] bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-[#cfe3d0] bg-[#eaf5e8] px-5 py-3.5">
             <div className="flex items-center gap-3">
@@ -735,6 +753,8 @@ export default function CustomerCommissionChat() {
             )}
           </div>
         </aside>
+          </>
+        )}
       </main>
 
       {/* =====================================================================

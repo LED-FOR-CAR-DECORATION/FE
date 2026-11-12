@@ -333,9 +333,8 @@ function AccountInfoTab() {
 
 /* ── Order History Tab ── */
 function OrderHistoryTab() {
-  const { user } = useAuth();
   const { orders } = useOrders();
-  const customerOrders = orders.filter((order) => order.customer.userId === user?.userId);
+  const customerOrders = orders;
   return (
     <div className="profile-card profile-enter profile-enter-delay-1">
       <div className="flex items-center gap-2 p-5 border-b-2 border-black">

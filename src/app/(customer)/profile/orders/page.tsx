@@ -26,9 +26,8 @@ function StatusBadge({ status }: { status: DisplayStatus }) {
 }
 
 export default function OrderHistoryPage() {
-  const { user } = useAuth();
   const { orders } = useOrders();
-  const customerOrders = orders.filter((order) => order.customer.userId === user?.userId);
+  const customerOrders = orders;
   const displayStatus = (order: (typeof orders)[number]): DisplayStatus => isCharacterOnlyOrder(order) && order.paymentStatus === "Paid" ? "Paid" : order.status;
 
   return (

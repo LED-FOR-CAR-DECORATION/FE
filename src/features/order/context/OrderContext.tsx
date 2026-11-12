@@ -3,13 +3,22 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Address } from "@/features/address/types";
 import type { AuthUser } from "@/features/auth/types";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CartItem } from "@/features/cart/types";
 import type { MockOrder, OrderStatus } from "@/features/order/types";
 import { ORDERS_CHANGED_EVENT, orderService } from "@/features/order/services/order.service";
 
 interface OrderContextValue {
   orders: MockOrder[];
-  createOrder: (input: { customer: AuthUser; items: CartItem[]; address: Address; shipping: number; paymentMethod: string }) => MockOrder;
+  isLoading: boolean;
+  refreshOrders: () => Promise<void>;
+  createOrder: (input: {
+    customer: AuthUser;
+    items: CartItem[];
+    address: Address;
+    shipping: number;
+    paymentMethod: string;
+  }) => Promise<{ id: string }>;
   updateOrderStatus: (id: string, status: OrderStatus) => void;
   createDelivery: (id: string) => Promise<void>;
 }
@@ -17,32 +26,90 @@ interface OrderContextValue {
 const OrderContext = createContext<OrderContextValue | null>(null);
 
 export function OrderProvider({ children }: { children: ReactNode }) {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [orders, setOrders] = useState<MockOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const refresh = useCallback(() => setOrders(orderService.list()), []);
+  const refreshOrders = useCallback(async () => {
+    if (!isAuthenticated || !user) {
+      setOrders([]);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      if (user.role === "CUSTOMER") {
+        const remoteOrders = await orderService.fetchCustomerOrders(user);
+        setOrders(remoteOrders);
+      } else if (user.role === "STAFF" || user.role === "MANAGER" || user.role === "ADMIN") {
+        const remoteOrders = await orderService.fetchStaffOrders();
+        setOrders(remoteOrders);
+      } else {
+        setOrders([]);
+      }
+    } catch {
+      setOrders([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, user]);
+
   useEffect(() => {
-    refresh();
-    const handleChange = () => refresh();
+    if (authLoading) return;
+    void refreshOrders();
+    const handleChange = () => {
+      void refreshOrders();
+    };
     window.addEventListener(ORDERS_CHANGED_EVENT, handleChange);
     return () => window.removeEventListener(ORDERS_CHANGED_EVENT, handleChange);
-  }, [refresh]);
+  }, [authLoading, refreshOrders]);
 
-  const createOrder = useCallback((input: Parameters<OrderContextValue["createOrder"]>[0]) => {
-    const order = orderService.create(input);
-    setOrders((current) => [order, ...current]);
-    return order;
-  }, []);
+  const createOrder = useCallback(
+    async (input: Parameters<OrderContextValue["createOrder"]>[0]) => {
+      const result = await orderService.checkout({
+        customer: input.customer,
+        items: input.items,
+        address: input.address,
+      });
+      await refreshOrders();
+      return { id: result.orderId };
+    },
+    [refreshOrders],
+  );
 
-  const updateOrderStatus = useCallback((id: string, status: OrderStatus) => {
-    const updated = orderService.updateStatus(id, status);
-    if (updated) setOrders((current) => current.map((order) => order.id === id ? updated : order));
-  }, []);
-  const createDelivery = useCallback(async (id: string) => {
-    const updated = await orderService.createDelivery(id);
-    if (updated) setOrders((current) => current.map((order) => order.id === id ? updated : order));
-  }, []);
+  const updateOrderStatus = useCallback(
+    async (id: string, status: OrderStatus) => {
+      setOrders((current) => current.map((order) => (order.id === id ? { ...order, status } : order)));
+      if (user?.role === "STAFF" || user?.role === "MANAGER" || user?.role === "ADMIN") {
+        try {
+          const targetBackendStatus =
+            status === "Cancelled"
+              ? "CANCELED"
+              : status === "Confirmed"
+                ? "PROCESSING"
+                : status === "Delivered"
+                  ? "COMPLETED"
+                  : undefined;
+          if (targetBackendStatus) {
+            await orderService.updateStaffStatus(id, targetBackendStatus);
+          }
+        } catch (err) {
+          console.error("Failed to update status on server:", err);
+        }
+      }
+    },
+    [user?.role],
+  );
 
-  return <OrderContext.Provider value={{ orders, createOrder, updateOrderStatus, createDelivery }}>{children}</OrderContext.Provider>;
+  const createDelivery = useCallback(async (_id: string) => {
+    await refreshOrders();
+  }, [refreshOrders]);
+
+  return (
+    <OrderContext.Provider value={{ orders, isLoading, refreshOrders, createOrder, updateOrderStatus, createDelivery }}>
+      {children}
+    </OrderContext.Provider>
+  );
 }
 
 export function useOrders() {

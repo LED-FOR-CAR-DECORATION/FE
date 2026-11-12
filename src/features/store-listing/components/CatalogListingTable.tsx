@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Info } from "lucide-react";
-import { PRODUCTS } from "@/features/cart/catalog";
+import { fetchStoreProducts } from "@/lib/api/products";
+import type { CatalogProduct } from "@/features/cart/catalog";
 import type { ProductType } from "@/features/cart/types";
 import { formatVnd } from "../format";
 
@@ -20,8 +22,33 @@ const COPY: Record<CatalogKind, { label: string; notice: string }> = {
 };
 
 /** Bảng xem thông tin các sản phẩm bán trên Store chưa có luồng duyệt phiên bản riêng. */
-export default function CatalogListingTable({ kind }: { kind: CatalogKind }) {
-  const items = PRODUCTS.filter((product) => product.productType === kind);
+export default function CatalogListingTable({
+  kind,
+  items: initialItems,
+}: {
+  kind: CatalogKind;
+  items?: CatalogProduct[];
+}) {
+  const [items, setItems] = useState<CatalogProduct[]>(initialItems ?? []);
+
+  useEffect(() => {
+    if (initialItems && initialItems.length > 0) {
+      setItems(initialItems);
+      return;
+    }
+    let active = true;
+    fetchStoreProducts({ size: 100 })
+      .then((res) => {
+        if (active) {
+          setItems(res.items.filter((product) => product.productType === kind));
+        }
+      })
+      .catch((err) => console.error("Failed to load catalog products:", err));
+    return () => {
+      active = false;
+    };
+  }, [initialItems, kind]);
+
   const isBundle = kind === "BUNDLE";
   const headings = [
     "Mã sản phẩm",

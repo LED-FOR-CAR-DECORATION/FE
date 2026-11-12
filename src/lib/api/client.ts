@@ -2,12 +2,22 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { AuthenticationService, OpenAPI } from '@/api_client';
 import { clearSession, clearTokens, getRefreshToken, getSessionToken, saveTokens } from '../auth/session';
 
-OpenAPI.BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
+
+export function getApiBaseUrl(): string {
+    if (!apiBaseUrl) {
+        throw new Error('Thiếu cấu hình NEXT_PUBLIC_API_URL.');
+    }
+    return apiBaseUrl;
+}
+
+OpenAPI.BASE = apiBaseUrl ?? '';
 OpenAPI.WITH_CREDENTIALS = true;
 
 // Gán một HÀM (Callback), tuyệt đối KHÔNG gọi hàm để gán giá trị tĩnh!
 // OpenAPI sẽ tự động chạy hàm này trước mỗi lần gửi request để gắp token.
 OpenAPI.TOKEN = async () => {
+    getApiBaseUrl();
     const token = await getSessionToken();
     return token || '';
 };

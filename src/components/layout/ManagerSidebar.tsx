@@ -126,10 +126,10 @@ const menuItems: MenuItem[] = [
   },
   {
     label: "Quản lý người dùng",
-    description: "Xem, tạo, cập nhật và khóa tài khoản",
+    description: "Xem danh sách tài khoản nội bộ",
     href: "/admin/users",
     icon: Users,
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "MANAGER"],
   },
   {
     label: "Quản lý vai trò",

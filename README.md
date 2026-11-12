@@ -34,3 +34,9 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+### IAM-13: Danh sách tài khoản nội bộ
+
+Chạy backend có endpoint IAM-13 (`GET /api/management/admin/users`). Sao chép `.env.example` thành `.env`, đặt `NEXT_PUBLIC_API_URL` thành địa chỉ backend
+rồi khởi động lại Next.js. Đặt cùng biến môi trường trước khi build để deploy.
+Đăng nhập bằng tài khoản Admin hoặc Manager thật, rồi mở `/admin/users`.

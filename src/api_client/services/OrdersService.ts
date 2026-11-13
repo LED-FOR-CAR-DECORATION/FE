@@ -2,10 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponseCancelOrderResponse } from '../models/ApiResponseCancelOrderResponse';
 import type { ApiResponseCheckoutResponse } from '../models/ApiResponseCheckoutResponse';
 import type { ApiResponseConfirmOrderDeliveryResponse } from '../models/ApiResponseConfirmOrderDeliveryResponse';
 import type { ApiResponseListOrderSummaryItem } from '../models/ApiResponseListOrderSummaryItem';
 import type { ApiResponseOrderDetailResponse } from '../models/ApiResponseOrderDetailResponse';
+import type { CancelOrderRequest } from '../models/CancelOrderRequest';
 import type { CheckoutRequest } from '../models/CheckoutRequest';
 import type { OrderFilterRequest } from '../models/OrderFilterRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -34,6 +36,36 @@ export class OrdersService {
                 403: `Forbidden: account type is not CUSTOMER (e.g. EMPLOYEE accounts are denied)`,
                 404: `Not Found: order does not exist or belongs to another customer`,
                 409: `Conflict: order is not in DELIVERED status or was concurrently modified`,
+                500: `Internal server error`,
+            },
+        });
+    }
+    /**
+     * Cancel an order
+     * Allows the owning authenticated CUSTOMER to cancel an undispatched order. PENDING_PAYMENT orders transition to CANCELED, and paid PROCESSING orders transition to REFUNDED. Automatically restores reserved LED physical inventory to stock.
+     * @param id Numeric purchase order identifier
+     * @param requestBody
+     * @returns ApiResponseCancelOrderResponse Order cancelled successfully
+     * @throws ApiError
+     */
+    public static cancelOrder(
+        id: number,
+        requestBody?: CancelOrderRequest,
+    ): CancelablePromise<ApiResponseCancelOrderResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/orders/{id}/cancel',
+            path: {
+                'id': id,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Bad Request: invalid or non-positive order id path parameter or invalid payload`,
+                401: `Unauthorized: missing, expired, or invalid JWT authentication token`,
+                403: `Forbidden: account type is not CUSTOMER (e.g. EMPLOYEE accounts are denied)`,
+                404: `Not Found: order does not exist or belongs to another customer`,
+                409: `Conflict: order is already dispatched or in a non-cancellable state, or concurrent modification occurred`,
                 500: `Internal server error`,
             },
         });

@@ -13,6 +13,7 @@ export type { AhamoveWebhookRequest } from './models/AhamoveWebhookRequest';
 export { AhamoveWebhookResponse } from './models/AhamoveWebhookResponse';
 export type { ApiResponse } from './models/ApiResponse';
 export type { ApiResponseAhamoveWebhookResponse } from './models/ApiResponseAhamoveWebhookResponse';
+export type { ApiResponseCancelOrderResponse } from './models/ApiResponseCancelOrderResponse';
 export type { ApiResponseCartResponse } from './models/ApiResponseCartResponse';
 export type { ApiResponseCheckoutResponse } from './models/ApiResponseCheckoutResponse';
 export type { ApiResponseConfirmOrderDeliveryResponse } from './models/ApiResponseConfirmOrderDeliveryResponse';
@@ -38,6 +39,8 @@ export type { ApiResponseUpdatedStoreProductResponse } from './models/ApiRespons
 export type { ApiResponseUpdatedStoreProductStatusResponse } from './models/ApiResponseUpdatedStoreProductStatusResponse';
 export type { BundleDetail } from './models/BundleDetail';
 export { BundleItemDetail } from './models/BundleItemDetail';
+export type { CancelOrderRequest } from './models/CancelOrderRequest';
+export { CancelOrderResponse } from './models/CancelOrderResponse';
 export { CartItemResponse } from './models/CartItemResponse';
 export type { CartResponse } from './models/CartResponse';
 export type { CharacterDetail } from './models/CharacterDetail';

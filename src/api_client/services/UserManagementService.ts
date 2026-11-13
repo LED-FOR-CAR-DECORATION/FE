@@ -6,6 +6,7 @@ import type { ApiResponseManagedUserDetailResponse } from '../models/ApiResponse
 import type { ApiResponseManagedUserListResponse } from '../models/ApiResponseManagedUserListResponse';
 import type { CreateInternalUserRequest } from '../models/CreateInternalUserRequest';
 import type { ManagedUserFilterRequest } from '../models/ManagedUserFilterRequest';
+import type { SoftDeleteUserRequest } from '../models/SoftDeleteUserRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -80,6 +81,35 @@ export class UserManagementService {
                 403: `Forbidden caller or CUSTOMER target`,
                 404: `Target account or employee profile missing`,
                 500: `Unexpected infrastructure or profile integrity failure`,
+            },
+        });
+    }
+    /**
+     * Soft delete an account
+     * Sets the account to DELETED and audits the supplied reason code after commit. The caller and default administrator are protected. Repeating a completed deletion returns 204.
+     * @param id
+     * @param requestBody
+     * @returns void
+     * @throws ApiError
+     */
+    public static delete1(
+        id: number,
+        requestBody: SoftDeleteUserRequest,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/management/admin/users/{id}',
+            path: {
+                'id': id,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Invalid account ID or reason`,
+                401: `Authentication required`,
+                403: `Caller not authorized or account protected`,
+                404: `Account not found`,
+                500: `Unexpected error`,
             },
         });
     }

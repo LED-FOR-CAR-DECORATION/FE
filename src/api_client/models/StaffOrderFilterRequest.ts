@@ -19,10 +19,6 @@ export type StaffOrderFilterRequest = {
      */
     deliveryStatus?: StaffOrderFilterRequest.deliveryStatus;
     /**
-     * When true, includes orders of all statuses instead of defaulting to PROCESSING and PARTIALLY_FULFILLED
-     */
-    allStatuses?: boolean | null;
-    /**
      * Zero-based page index (0 to 1000000)
      */
     page?: number;

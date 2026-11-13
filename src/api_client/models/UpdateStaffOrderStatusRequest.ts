@@ -17,7 +17,6 @@ export namespace UpdateStaffOrderStatusRequest {
      */
     export enum status {
         PROCESSING = 'PROCESSING',
-        COMPLETED = 'COMPLETED',
         CANCELED = 'CANCELED',
         CANCELLED = 'CANCELLED',
     }

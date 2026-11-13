@@ -130,6 +130,18 @@ export interface BackendStaffOrderDetail {
   };
 }
 
+const ALL_STAFF_ORDER_STATUSES = [
+  "PENDING_PAYMENT",
+  "PROCESSING",
+  "PARTIALLY_FULFILLED",
+  "SHIPPING",
+  "DELIVERED",
+  "COMPLETED",
+  "DELIVERY_FAILED",
+  "REFUNDED",
+  "CANCELED",
+] as const;
+
 export async function fetchStaffOrders(params: {
   status?: string;
   paymentStatus?: string;
@@ -142,6 +154,43 @@ export async function fetchStaffOrders(params: {
   totalElements: number;
   totalPages: number;
 }> {
+  if (params.allStatuses !== false && !params.status) {
+    const responses = await Promise.all(
+      ALL_STAFF_ORDER_STATUSES.map((orderStatus) =>
+        request<{ data: BackendStaffOrderSummary[]; meta?: any }>(OpenAPI, {
+          method: "GET",
+          url: "/api/management/staff/orders",
+          query: {
+            status: orderStatus,
+            paymentStatus: params.paymentStatus,
+            deliveryStatus: params.deliveryStatus,
+            page: 0,
+            size: params.size ?? 50,
+          },
+        }).catch(() => ({ data: [] as BackendStaffOrderSummary[] })),
+      ),
+    );
+
+    const uniqueById = new Map<number, BackendStaffOrderSummary>();
+    for (const res of responses) {
+      for (const item of res.data ?? []) {
+        uniqueById.set(item.orderId, item);
+      }
+    }
+
+    const items = Array.from(uniqueById.values()).sort((a, b) => {
+      const timeDiff = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+      if (Number.isFinite(timeDiff) && timeDiff !== 0) return timeDiff;
+      return b.orderId - a.orderId;
+    });
+
+    return {
+      items,
+      totalElements: items.length,
+      totalPages: 1,
+    };
+  }
+
   const res = await request<{ data: BackendStaffOrderSummary[]; meta?: any }>(OpenAPI, {
     method: "GET",
     url: "/api/management/staff/orders",
@@ -149,7 +198,6 @@ export async function fetchStaffOrders(params: {
       status: params.status,
       paymentStatus: params.paymentStatus,
       deliveryStatus: params.deliveryStatus,
-      allStatuses: params.allStatuses ?? true,
       page: params.page ?? 0,
       size: params.size ?? 50,
     },

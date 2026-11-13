@@ -7,6 +7,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CartItem } from "@/features/cart/types";
 import type { MockOrder, OrderStatus } from "@/features/order/types";
 import { ORDERS_CHANGED_EVENT, orderService } from "@/features/order/services/order.service";
+import type { DispatchOrderRequest, DispatchOrderResponse } from "@/lib/api/orders";
 
 interface OrderContextValue {
   orders: MockOrder[];
@@ -21,6 +22,7 @@ interface OrderContextValue {
   }) => Promise<{ id: string }>;
   updateOrderStatus: (id: string, status: OrderStatus) => void;
   createDelivery: (id: string) => Promise<void>;
+  dispatchOrder: (id: string, payload: DispatchOrderRequest) => Promise<DispatchOrderResponse>;
 }
 
 const OrderContext = createContext<OrderContextValue | null>(null);
@@ -105,8 +107,39 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     await refreshOrders();
   }, [refreshOrders]);
 
+  const dispatchOrder = useCallback(
+    async (id: string, payload: DispatchOrderRequest): Promise<DispatchOrderResponse> => {
+      const res = await orderService.dispatchOrderToAhamove(id, payload);
+      setOrders((current) =>
+        current.map((order) => {
+          if (order.id !== String(id)) return order;
+          const nextShipping =
+            typeof res.carrierFee === "number" ? res.carrierFee : order.shipping;
+          return {
+            ...order,
+            status: "SHIPPING",
+            shipping: nextShipping,
+            total: order.subtotal + nextShipping,
+            delivery: {
+              provider: "AHAMOVE",
+              orderId: res.trackingNumber,
+              status: "Created",
+              rawStatus: res.deliveryStatus || "ASSIGNED",
+              trackingUrl: res.trackingUrl || undefined,
+              carrierFee: res.carrierFee ?? undefined,
+              createdAt: order.delivery?.createdAt || new Date().toISOString(),
+              expectedAt: order.delivery?.expectedAt || new Date().toISOString(),
+            },
+          };
+        }),
+      );
+      return res;
+    },
+    [],
+  );
+
   return (
-    <OrderContext.Provider value={{ orders, isLoading, refreshOrders, createOrder, updateOrderStatus, createDelivery }}>
+    <OrderContext.Provider value={{ orders, isLoading, refreshOrders, createOrder, updateOrderStatus, createDelivery, dispatchOrder }}>
       {children}
     </OrderContext.Provider>
   );

@@ -4,11 +4,12 @@ import type {
   ApiResponseOrderDetailResponse,
   CheckoutRequest,
   CheckoutResponse,
+  ErrorResponse,
   OrderDetailResponse,
   OrderFilterRequest,
   OrderSummaryItem,
 } from "@/api_client";
-import { OrdersService } from "@/api_client";
+import { ApiError, OrdersService } from "@/api_client";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "./client";
 
@@ -181,4 +182,88 @@ export async function apiUpdateStaffOrderStatus(orderId: number | string, status
     path: { id: numericId },
     body: { status },
   });
+}
+
+export interface DispatchOrderRequest {
+  /** Mã gói dịch vụ AhaMove (vd: SGN-BIKE, BIKE, 2H) */
+  serviceId: string;
+  /** Ghi chú dặn dò tài xế giao hàng */
+  remarks?: string | null;
+  /** Khối lượng kiện hàng tính bằng kg (vd: 1.5) */
+  weight?: number | null;
+}
+
+export interface DispatchOrderResponse {
+  orderId: number;
+  orderStatus: "SHIPPING";
+  deliveryStatus: "ASSIGNED";
+  trackingNumber: string;
+  trackingUrl?: string | null;
+  carrierFee?: number | null;
+}
+
+const DISPATCH_ERROR_MESSAGES: Record<string, string> = {
+  VALIDATION_FAILED: "Dữ liệu bàn giao không hợp lệ. Vui lòng kiểm tra lại dịch vụ và khối lượng.",
+  CARRIER_BAD_REQUEST: "Thông tin địa chỉ hoặc người nhận chưa đúng chuẩn AhaMove.",
+  UNAUTHORIZED: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+  FORBIDDEN: "Bạn không có quyền bàn giao vận chuyển.",
+  ORDER_NOT_FOUND: "Đơn hàng không tồn tại trong hệ thống.",
+  CARRIER_RESOURCE_NOT_FOUND: "Gói dịch vụ AhaMove đã chọn không khả dụng tại khu vực này.",
+  NOT_ENOUGH_CREDIT: "Tài khoản AhaMove của shop không đủ số dư. Vui lòng nạp thêm tiền trước khi bàn giao.",
+  INVALID_DELIVERY_AREA: "Địa chỉ người nhận nằm ngoài phạm vi phục vụ của AhaMove.",
+  INVALID_SERVICE_HOUR: "Gói dịch vụ đã chọn hiện đã ngoài khung giờ nhận đơn trong ngày.",
+  INVALID_ORDER_STATUS_TRANSITION:
+    "Đơn hàng không ở trạng thái chờ đóng hàng, là đơn hàng số, hoặc đã có chuyến giao hàng đang hoạt động.",
+  CARRIER_CONFLICT: "Chuyến giao hàng cho đơn này đã được tạo trước đó trên AhaMove.",
+  CARRIER_NOT_CONFIGURED: "Chưa cấu hình tích hợp AhaMove, vui lòng liên hệ kỹ thuật.",
+  CARRIER_UNAVAILABLE: "Dịch vụ giao vận AhaMove tạm thời không phản hồi. Vui lòng thử lại sau ít phút.",
+  INTERNAL_SERVER_ERROR: "Lỗi máy chủ khi tạo đơn giao vận.",
+};
+
+export function getDispatchErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const body = error.body as ErrorResponse | undefined;
+    const code = (body as { code?: string } | undefined)?.code;
+    if (code && DISPATCH_ERROR_MESSAGES[code]) {
+      return DISPATCH_ERROR_MESSAGES[code];
+    }
+    const detail = body?.details?.find((d) => d.message)?.message;
+    if (body?.message) return body.message;
+    if (detail) return detail;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Không thể bàn giao đơn hàng sang AhaMove. Vui lòng thử lại.";
+}
+
+export async function apiDispatchOrder(
+  orderId: number | string,
+  payload: DispatchOrderRequest,
+): Promise<DispatchOrderResponse> {
+  const numericId = Number(orderId);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    throw new Error("Mã đơn hàng không hợp lệ.");
+  }
+
+  try {
+    const res = await request<{ data: DispatchOrderResponse }>(OpenAPI, {
+      method: "POST",
+      url: "/api/management/staff/orders/{id}/dispatch",
+      path: { id: numericId },
+      body: {
+        serviceId: payload.serviceId.trim().toUpperCase(),
+        remarks: payload.remarks?.trim() || null,
+        weight: payload.weight ? Number(payload.weight) : null,
+      },
+      mediaType: "application/json",
+    });
+
+    if (!res.data) {
+      throw new Error("Không nhận được phản hồi bàn giao vận chuyển từ máy chủ.");
+    }
+    return res.data;
+  } catch (error) {
+    throw new Error(getDispatchErrorMessage(error));
+  }
 }

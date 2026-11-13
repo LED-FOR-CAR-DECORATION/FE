@@ -3,20 +3,22 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   CheckCircle2,
   Circle,
-  Clock,
   ExternalLink,
+  MapPin,
+  Package,
+  Phone,
   Printer,
-  RefreshCw,
   Truck,
+  User,
+  X,
   XCircle,
-  AlertTriangle,
 } from "lucide-react";
 import { useOrders } from "@/features/order/context/OrderContext";
-import type { OrderStatus } from "@/features/order/types";
 
 const ORDER_STEPS = [
   { key: "PENDING_PAYMENT", label: "Chờ thanh toán" },
@@ -25,6 +27,25 @@ const ORDER_STEPS = [
   { key: "SHIPPING", label: "Đang vận chuyển" },
   { key: "DELIVERED", label: "Đã giao" },
   { key: "COMPLETED", label: "Đã hoàn thành" },
+];
+
+const AHAMOVE_SERVICES = [
+  {
+    id: "SGN-BIKE",
+    name: "SGN-BIKE — Xe máy nội thành TP.HCM (Khuyên dùng cho đơn LED lẻ)",
+  },
+  {
+    id: "BIKE",
+    name: "BIKE — Xe máy tiêu chuẩn ngoại thành / tỉnh lân cận",
+  },
+  {
+    id: "2H",
+    name: "2H — Giao hàng siêu tốc trong 2 giờ",
+  },
+  {
+    id: "SGN-TRUCK-500",
+    name: "SGN-TRUCK-500 — Xe tải 500kg (Đơn sỉ số lượng lớn)",
+  },
 ];
 
 function getStepIndex(status: string): number {
@@ -104,12 +125,19 @@ export default function OrderDetailPage({
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = use(params);
-  const { orders, updateOrderStatus } = useOrders();
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const { orders, updateOrderStatus, dispatchOrder } = useOrders();
+
+  const [isPrepareModalOpen, setIsPrepareModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<OrderStatus>("PROCESSING");
+  const [serviceId, setServiceId] = useState("SGN-BIKE");
+  const [weight, setWeight] = useState("1.5");
+  const [remarks, setRemarks] = useState("Handle fragile LED package with care");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [dispatchSuccessBanner, setDispatchSuccessBanner] = useState<{
+    trackingNumber: string;
+    trackingUrl?: string | null;
+  } | null>(null);
 
   const order = orders.find((entry) => String(entry.id) === String(orderId));
 
@@ -135,20 +163,81 @@ export default function OrderDetailPage({
     text: "text-white",
   };
 
+  // Điều kiện được phép bấm "Chuẩn bị hàng" -> Dispatch sang AhaMove
+  const isReadyStatus =
+    order.status === "PROCESSING" ||
+    order.status === "PARTIALLY_FULFILLED" ||
+    order.status === "Preparing" ||
+    order.status === "HandedOver" ||
+    order.status === "Confirmed";
+
+  const hasPhysicalItem = order.items.some((item) => item.productType !== "CHARACTER" && item.productType !== "SUBSCRIPTION");
+  const rawDeliveryStatus = order.delivery?.rawStatus || "";
+  const isDeliveryNotDispatched =
+    !rawDeliveryStatus || ["PENDING", "FAILED", "RETURNED"].includes(rawDeliveryStatus.toUpperCase());
+
+  const canPrepareOrder = isReadyStatus && hasPhysicalItem && isDeliveryNotDispatched;
+
+  // Hành trình vận chuyển chỉ bắt đầu hoạt động khi đơn đã được đóng gói & bàn giao AhaMove
+  const isJourneyActive =
+    order.status === "SHIPPING" ||
+    order.status === "Shipping" ||
+    order.status === "DELIVERED" ||
+    order.status === "Delivered" ||
+    order.status === "COMPLETED" ||
+    order.status === "Completed" ||
+    order.status === "DELIVERY_FAILED" ||
+    order.status === "REFUNDED" ||
+    Boolean(rawDeliveryStatus && rawDeliveryStatus.toUpperCase() !== "PENDING");
+
+  const handleOpenPrepareModal = () => {
+    const physicalQty = order.items
+      .filter((i) => i.productType !== "CHARACTER" && i.productType !== "SUBSCRIPTION")
+      .reduce((sum, i) => sum + i.quantity, 0);
+    setServiceId("SGN-BIKE");
+    setWeight(String(Math.max(0.5, Number((physicalQty * 0.8).toFixed(1)) || 1.5)));
+    setRemarks("Linh kiện LED dán kính xe dễ vỡ, vui lòng liên hệ trước khi giao.");
+    setErrorMessage("");
+    setIsPrepareModalOpen(true);
+  };
+
   const handlePrintInvoice = () => {
     if (typeof window !== "undefined") {
       window.print();
     }
   };
 
-  const handleStatusChange = async () => {
+  const handleDispatchPackage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isSubmitting) return;
+
+    const numericWeight = Number(weight);
+    if (!serviceId.trim()) {
+      setErrorMessage("Vui lòng chọn gói dịch vụ vận chuyển AhaMove.");
+      return;
+    }
+    if (weight.trim() && (!Number.isFinite(numericWeight) || numericWeight <= 0 || numericWeight > 10000)) {
+      setErrorMessage("Khối lượng kiện hàng phải lớn hơn 0 và không vượt quá 10.000 kg.");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage("");
     try {
-      await updateOrderStatus(order.id, selectedStatus);
-      setIsUpdateModalOpen(false);
+      const result = await dispatchOrder(order.id, {
+        serviceId: serviceId.trim(),
+        remarks: remarks.trim() || null,
+        weight: weight.trim() ? numericWeight : null,
+      });
+      setIsPrepareModalOpen(false);
+      setDispatchSuccessBanner({
+        trackingNumber: result.trackingNumber,
+        trackingUrl: result.trackingUrl,
+      });
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Cập nhật trạng thái thất bại.");
+      setErrorMessage(
+        err instanceof Error ? err.message : "Không thể bàn giao đơn hàng sang AhaMove."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -158,7 +247,7 @@ export default function OrderDetailPage({
     setIsSubmitting(true);
     setErrorMessage("");
     try {
-      await updateOrderStatus(order.id, "CANCELED");
+      await updateOrderStatus(order.id, "Cancelled");
       setIsCancelModalOpen(false);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Hủy đơn hàng thất bại.");
@@ -167,73 +256,93 @@ export default function OrderDetailPage({
     }
   };
 
-  // Timeline AhaMove computation
   const getTimelineMilestones = () => {
-    const rawDeliveryStatus = order.delivery?.rawStatus || "";
-    const isCompleted = order.status === "COMPLETED" || order.status === "DELIVERED" || rawDeliveryStatus === "DELIVERED";
-    const isShipping = order.status === "SHIPPING" || rawDeliveryStatus === "SHIPPING" || rawDeliveryStatus === "IN_TRANSIT";
-    const isPartially = order.status === "PARTIALLY_FULFILLED" || order.status === "HandedOver";
-    const isProcessing = order.status === "PROCESSING" || order.status === "Preparing" || order.status === "Confirmed";
-    const isDeliveryFailed = order.status === "DELIVERY_FAILED" || rawDeliveryStatus === "FAILED";
-    const isRefunded = order.status === "REFUNDED" || rawDeliveryStatus === "RETURNED";
+    const upperDelivery = rawDeliveryStatus.toUpperCase();
+    const isCompleted =
+      order.status === "COMPLETED" ||
+      order.status === "Completed" ||
+      order.status === "DELIVERED" ||
+      order.status === "Delivered" ||
+      upperDelivery === "DELIVERED";
+    const isDeliveryFailed = order.status === "DELIVERY_FAILED" || upperDelivery === "FAILED";
+    const isRefunded = order.status === "REFUNDED" || upperDelivery === "RETURNED";
+    const isPickedUp = upperDelivery === "PICKED_UP" || upperDelivery === "PICKING_UP";
+    const isInTransit = upperDelivery === "SHIPPING" || upperDelivery === "IN_TRANSIT" || upperDelivery === "DRIVING";
+    const isAssigned = upperDelivery === "ASSIGNED" || upperDelivery === "ASSIGNING_DRIVER";
 
-    let activeTimelineStep = 0;
-    if (isRefunded) activeTimelineStep = 6;
-    else if (isDeliveryFailed) activeTimelineStep = 5;
-    else if (isCompleted) activeTimelineStep = 4;
-    else if (isShipping) activeTimelineStep = 3;
-    else if (isPartially) activeTimelineStep = 2;
-    else if (isProcessing) activeTimelineStep = 1;
-    else activeTimelineStep = 0;
+    let activeTimelineStep = -1;
+    if (isJourneyActive) {
+      if (isRefunded) activeTimelineStep = 6;
+      else if (isDeliveryFailed) activeTimelineStep = 5;
+      else if (isCompleted) activeTimelineStep = 4;
+      else if (isInTransit) activeTimelineStep = 3;
+      else if (isPickedUp) activeTimelineStep = 2;
+      else if (isAssigned || order.status === "SHIPPING" || order.status === "Shipping") activeTimelineStep = 1;
+      else activeTimelineStep = 0;
+    }
+
+    const baseTime = order.delivery?.createdAt || order.createdAt;
 
     return [
       {
         index: 0,
         title: "Đang chờ",
-        subTitle: "Đang chờ xử lý",
-        time: formatShortTime(order.createdAt, 15),
+        subTitle: "Đơn vận chuyển đã được tạo trên AhaMove",
+        time: formatShortTime(baseTime, 0),
       },
       {
         index: 1,
         title: "Đang tìm tài xế",
-        subTitle: "Tài xế Nguyễn Văn Tài đã nhận đơn",
-        time: formatShortTime(order.createdAt, 60),
+        subTitle: "Hệ thống AhaMove đang điều phối tài xế nhận đơn",
+        time: formatShortTime(baseTime, 2),
       },
       {
         index: 2,
         title: "Đã lấy hàng",
-        subTitle: "Đã bàn giao hàng cho tài xế",
-        time: formatShortTime(order.createdAt, 105),
+        subTitle: "Đã bàn giao kiện hàng cho tài xế",
+        time: formatShortTime(baseTime, 20),
       },
       {
         index: 3,
         title: "Đang giao",
-        subTitle: "Tài xế đang trên đường giao hàng",
-        time: formatShortTime(order.createdAt, 180),
+        subTitle: "Tài xế đang trên đường giao hàng đến khách",
+        time: formatShortTime(baseTime, 45),
       },
       {
         index: 4,
         title: "Đã giao",
         subTitle: "Đã giao hàng thành công đến khách nhận",
-        time: isCompleted ? formatShortTime(order.createdAt, 240) : undefined,
+        time: isCompleted ? formatShortTime(baseTime, 75) : undefined,
       },
       {
         index: 5,
         title: "Vận chuyển thất bại",
         subTitle: "Không liên lạc được hoặc giao không thành công",
-        time: isDeliveryFailed ? formatShortTime(order.createdAt, 260) : undefined,
+        time: isDeliveryFailed ? formatShortTime(baseTime, 90) : undefined,
       },
       {
         index: 6,
         title: "Hoàn hàng",
         subTitle: "Đơn hàng được chuyển hoàn về kho",
-        time: isRefunded ? formatShortTime(order.createdAt, 300) : undefined,
+        time: isRefunded ? formatShortTime(baseTime, 120) : undefined,
       },
     ].map((m) => {
+      if (!isJourneyActive) {
+        return { ...m, time: undefined, status: "pending" as const };
+      }
       let status: "done" | "current" | "pending" = "pending";
-      if (m.index < activeTimelineStep) status = "done";
-      else if (m.index === activeTimelineStep) status = "current";
-      return { ...m, status };
+      if (isCompleted && m.index <= 4) {
+        status = "done";
+      } else if (m.index < activeTimelineStep) {
+        status = "done";
+      } else if (m.index === activeTimelineStep) {
+        status = "current";
+      }
+      return {
+        ...m,
+        time: status === "pending" ? undefined : m.time,
+        status,
+      };
     });
   };
 
@@ -251,7 +360,7 @@ export default function OrderDetailPage({
             <ArrowLeft size={14} /> Quay lại danh sách
           </Link>
           <h2 className="text-base font-bold text-gray-900">Trạng thái đơn hàng</h2>
-          <div className="w-12 md:block hidden" />
+          <div className="hidden w-12 md:block" />
         </div>
 
         {/* Stepper (6 steps) */}
@@ -259,11 +368,9 @@ export default function OrderDetailPage({
           {ORDER_STEPS.map((step, idx) => {
             const isDone = idx < currentStepIndex;
             const isCurrent = idx === currentStepIndex;
-            const isPending = idx > currentStepIndex;
 
             return (
               <div key={step.key} className="flex flex-1 items-center">
-                {/* Step Item */}
                 <div className="flex flex-col items-center gap-1.5">
                   {isDone ? (
                     <div className="flex items-center gap-1.5">
@@ -291,7 +398,6 @@ export default function OrderDetailPage({
                   )}
                 </div>
 
-                {/* Connecting Line to next step */}
                 {idx < ORDER_STEPS.length - 1 && (
                   <div className="mx-2 flex-1">
                     {idx < currentStepIndex ? (
@@ -306,6 +412,42 @@ export default function OrderDetailPage({
           })}
         </div>
       </div>
+
+      {/* Dispatch Success Notification Banner */}
+      {dispatchSuccessBanner && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+            <span>
+              Đóng gói và bàn giao AhaMove thành công! Mã vận đơn:{" "}
+              <strong>#{dispatchSuccessBanner.trackingNumber}</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {dispatchSuccessBanner.trackingUrl && (
+              <a
+                href={dispatchSuccessBanner.trackingUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-bold text-[#0F5B38] underline"
+              >
+                <ExternalLink size={13} /> Theo dõi hành trình tài xế
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => setDispatchSuccessBanner(null)}
+              className="text-emerald-700 hover:text-emerald-950"
+              aria-label="Đóng thông báo"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Order Header: ID, Badge, Date & Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -328,25 +470,32 @@ export default function OrderDetailPage({
           >
             <Printer size={14} /> In hóa đơn
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedStatus(order.status);
-              setIsUpdateModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#48BB78] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-[#38A169]"
-          >
-            <RefreshCw size={14} /> Cập nhật trạng thái
-          </button>
-          {order.status !== "CANCELED" && order.status !== "Cancelled" && (
+
+          {canPrepareOrder && (
             <button
               type="button"
-              onClick={() => setIsCancelModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#9AE6B4] px-3.5 py-1.5 text-xs font-bold text-[#1A4731] transition hover:bg-[#68D391]"
+              onClick={handleOpenPrepareModal}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#48BB78] px-4 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#38A169]"
             >
-              <XCircle size={14} /> Hủy đơn
+              <Package size={14} /> Chuẩn bị hàng
             </button>
           )}
+
+          {order.status !== "CANCELED" &&
+            order.status !== "Cancelled" &&
+            order.status !== "COMPLETED" &&
+            order.status !== "Completed" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMessage("");
+                  setIsCancelModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#9AE6B4] px-3.5 py-1.5 text-xs font-bold text-[#1A4731] transition hover:bg-[#68D391]"
+              >
+                <XCircle size={14} /> Hủy đơn
+              </button>
+            )}
         </div>
       </div>
 
@@ -399,15 +548,15 @@ export default function OrderDetailPage({
                       </td>
                       <td className="py-3.5 pr-3">
                         {isCharacter ? (
-                          <span className="inline-block rounded-full bg-[#6B21A8] px-3 py-1 text-xs font-bold text-white whitespace-nowrap">
+                          <span className="inline-block whitespace-nowrap rounded-full bg-[#6B21A8] px-3 py-1 text-xs font-bold text-white">
                             Vật phẩm ảo (Digital)
                           </span>
                         ) : isLed ? (
-                          <span className="inline-block rounded-full bg-[#1D4ED8] px-3 py-1 text-xs font-bold text-white whitespace-nowrap">
+                          <span className="inline-block whitespace-nowrap rounded-full bg-[#1D4ED8] px-3 py-1 text-xs font-bold text-white">
                             Bảng LED (Vật lý)
                           </span>
                         ) : (
-                          <span className="inline-block rounded-full bg-[#0F766E] px-3 py-1 text-xs font-bold text-white whitespace-nowrap">
+                          <span className="inline-block whitespace-nowrap rounded-full bg-[#0F766E] px-3 py-1 text-xs font-bold text-white">
                             Gói combo (Bundle)
                           </span>
                         )}
@@ -447,13 +596,12 @@ export default function OrderDetailPage({
               <span>{formatMoney(order.total)}</span>
             </div>
 
-            {/* Payment badge note */}
             <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-[#15803D]">
               <CheckCircle2 size={14} />
               <span>
                 {order.paymentStatus === "Paid"
                   ? `Đã thanh toán (SePay - ${formatDate(order.paidAt || order.createdAt)})`
-                  : `Chờ thanh toán (SePay)`}
+                  : "Chờ thanh toán (SePay)"}
               </span>
             </div>
           </div>
@@ -471,7 +619,7 @@ export default function OrderDetailPage({
               </p>
               <p>
                 <strong className="text-gray-900">Điện thoại: </strong>
-                <span className="text-gray-700">{order.address.phoneNumber || "0901234567"}</span>
+                <span className="text-gray-700">{order.address.phoneNumber || "—"}</span>
               </p>
               <p>
                 <strong className="text-gray-900">Địa chỉ: </strong>
@@ -490,9 +638,19 @@ export default function OrderDetailPage({
                 <div className="mt-1 flex items-center justify-between">
                   <span className="text-xs font-bold text-gray-500">Mã vận đơn:</span>
                   <span className="text-xs font-bold text-blue-600">
-                    {order.delivery?.orderId || `DEL-${order.id}`}
+                    {isJourneyActive
+                      ? order.delivery?.orderId || `DEL-${order.id}`
+                      : "Chưa tạo vận đơn"}
                   </span>
                 </div>
+                {typeof order.delivery?.carrierFee === "number" && (
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-500">Cước AhaMove:</span>
+                    <span className="text-xs font-bold text-gray-900">
+                      {formatMoney(order.delivery.carrierFee)}
+                    </span>
+                  </div>
+                )}
                 {order.delivery?.trackingUrl && (
                   <div className="mt-2 text-right">
                     <a
@@ -511,14 +669,34 @@ export default function OrderDetailPage({
 
           {/* Card 2: Hành trình vận chuyển */}
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-base font-black text-gray-900">Hành trình vận chuyển</h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-black text-gray-900">Hành trình vận chuyển</h2>
+              {isJourneyActive ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-ping" />
+                  Đang hoạt động
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-bold text-gray-500">
+                  Chưa kích hoạt
+                </span>
+              )}
+            </div>
+
+            {!isJourneyActive && (
+              <div className="mb-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                Hành trình sẽ tự động kích hoạt sau khi bạn bấm{" "}
+                <strong className="text-gray-700">Chuẩn bị hàng</strong> ➔{" "}
+                <strong className="text-gray-700">Đóng gói hàng</strong> để bàn giao cho AhaMove.
+              </div>
+            )}
+
             <div className="relative flex flex-col gap-4 pl-2">
               {timelineMilestones.map((milestone, idx) => {
                 const isLast = idx === timelineMilestones.length - 1;
 
                 return (
                   <div key={milestone.title} className="relative flex items-start gap-3">
-                    {/* Vertical Connecting Line */}
                     {!isLast && (
                       <div
                         className={`absolute left-[7px] top-[18px] bottom-[-16px] w-0.5 ${
@@ -527,7 +705,6 @@ export default function OrderDetailPage({
                       />
                     )}
 
-                    {/* Step Icon */}
                     <div className="relative z-10 shrink-0">
                       {milestone.status === "done" ? (
                         <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#15803D] text-white shadow-sm">
@@ -542,7 +719,6 @@ export default function OrderDetailPage({
                       )}
                     </div>
 
-                    {/* Text Details */}
                     <div className="flex-1 pb-1">
                       <div className="flex flex-wrap items-center gap-2">
                         {milestone.time && (
@@ -572,53 +748,229 @@ export default function OrderDetailPage({
         </div>
       </div>
 
-      {/* Modal Cập nhật trạng thái */}
-      {isUpdateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-black text-gray-900">Cập nhật trạng thái đơn hàng</h3>
-            <p className="mt-1 text-xs text-gray-500">
-              Chọn trạng thái mới cần áp dụng cho đơn hàng #ORD-{order.id}.
-            </p>
-
-            <div className="mt-4 flex flex-col gap-2">
-              <label className="text-xs font-bold text-gray-700">Trạng thái mới:</label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value as OrderStatus)}
-                className="w-full rounded-lg border border-gray-300 bg-white p-2.5 text-sm font-semibold outline-none focus:border-[#0F5B38]"
-              >
-                <option value="PROCESSING">Chờ đóng hàng (PROCESSING)</option>
-                <option value="SHIPPING">Đang vận chuyển (SHIPPING)</option>
-                <option value="DELIVERED">Đã giao (DELIVERED)</option>
-                <option value="COMPLETED">Đã hoàn thành (COMPLETED)</option>
-                <option value="CANCELED">Đã hủy (CANCELED)</option>
-              </select>
-            </div>
-
-            {errorMessage && (
-              <p className="mt-3 text-xs font-semibold text-red-600">{errorMessage}</p>
-            )}
-
-            <div className="mt-6 flex justify-end gap-2.5">
+      {/* Pop-up Chuẩn bị hàng & Đóng gói hàng (POST /api/management/staff/orders/{id}/dispatch) */}
+      {isPrepareModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="prepare-order-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+        >
+          <form
+            onSubmit={handleDispatchPackage}
+            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+          >
+            {/* Header Pop-up */}
+            <div className="flex items-center justify-between border-b border-gray-200 bg-[#f8faf9] px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0F5B38] text-white">
+                  <Package size={18} />
+                </div>
+                <div>
+                  <h3 id="prepare-order-title" className="text-base font-black text-gray-900">
+                    Chuẩn bị hàng & Bàn giao vận chuyển AhaMove
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Đơn hàng #ORD-{order.id} · Truy xuất thông tin khách hàng & kiện hàng trước khi xuất kho
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsUpdateModalOpen(false)}
+                onClick={() => setIsPrepareModalOpen(false)}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                aria-label="Đóng"
               >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleStatusChange}
-                disabled={isSubmitting}
-                className="rounded-lg bg-[#48BB78] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#38A169] disabled:opacity-50"
-              >
-                {isSubmitting ? "Đang cập nhật..." : "Xác nhận cập nhật"}
+                <X size={18} />
               </button>
             </div>
-          </div>
+
+            {/* Body Pop-up (Scrollable) */}
+            <div className="flex flex-col gap-5 overflow-y-auto px-6 py-5">
+              {/* 1. Thông tin khách hàng & Địa chỉ giao hàng truy xuất từ đơn hàng */}
+              <section className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+                <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
+                  <User size={14} /> Thông tin khách hàng nhận hàng
+                </h4>
+                <div className="grid grid-cols-1 gap-2.5 text-xs sm:grid-cols-2">
+                  <div>
+                    <span className="text-gray-500">Người nhận:</span>
+                    <p className="mt-0.5 font-bold text-gray-900">
+                      {order.address.fullName || order.customer.fullName}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="flex items-center gap-1 text-gray-500">
+                      <Phone size={11} /> Số điện thoại:
+                    </span>
+                    <p className="mt-0.5 font-bold text-gray-900">
+                      {order.address.phoneNumber || "Chưa có số điện thoại"}
+                    </p>
+                  </div>
+                  {order.customer.email && (
+                    <div className="sm:col-span-2">
+                      <span className="text-gray-500">Email khách hàng:</span>
+                      <p className="mt-0.5 font-semibold text-gray-800">{order.customer.email}</p>
+                    </div>
+                  )}
+                  <div className="sm:col-span-2">
+                    <span className="flex items-center gap-1 text-gray-500">
+                      <MapPin size={11} /> Địa chỉ giao hàng:
+                    </span>
+                    <p className="mt-0.5 font-bold text-gray-900">{order.address.fullAddress}</p>
+                  </div>
+                </div>
+              </section>
+
+              {/* 2. Danh sách sản phẩm trong đơn hàng cần đóng gói */}
+              <section className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-gray-700">
+                    Sản phẩm cần đóng gói ({order.items.length} mặt hàng)
+                  </h4>
+                  <span className="text-xs font-black text-[#0F5B38]">
+                    Tổng giá trị: {formatMoney(order.total)}
+                  </span>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {order.items.map((item, idx) => (
+                    <div
+                      key={`${item.id}-${idx}`}
+                      className="flex items-center justify-between gap-3 py-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-100">
+                          {item.previewUrl ? (
+                            <img
+                              src={item.previewUrl}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="grid h-full w-full place-items-center text-sm">📦</div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-bold text-gray-900">{item.name}</p>
+                          <p className="text-[11px] text-gray-500">
+                            {item.productType === "CHARACTER"
+                              ? "Vật phẩm ảo (Đã cấp trực tiếp)"
+                              : item.productType === "LED_MODEL"
+                              ? "Bảng LED (Cần đóng gói vật lý)"
+                              : "Gói Combo"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-bold text-gray-900">× {item.quantity}</p>
+                        <p className="text-[11px] text-gray-500">
+                          {formatMoney(item.price * item.quantity)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* 3. Thông số bàn giao AhaMove */}
+              <section className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
+                  <Truck size={14} /> Thông số điều phối AhaMove
+                </h4>
+
+                <div>
+                  <label htmlFor="dispatch-service-id" className="text-xs font-bold text-gray-700">
+                    Gói dịch vụ vận chuyển (serviceId) <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="dispatch-service-id"
+                    value={serviceId}
+                    onChange={(e) => setServiceId(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 outline-none focus:border-[#0F5B38]"
+                  >
+                    {AHAMOVE_SERVICES.map((svc) => (
+                      <option key={svc.id} value={svc.id}>
+                        {svc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="dispatch-weight" className="text-xs font-bold text-gray-700">
+                      Khối lượng kiện hàng (kg)
+                    </label>
+                    <input
+                      id="dispatch-weight"
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max="10000"
+                      value={weight}
+                      onChange={(e) => setWeight(e.target.value)}
+                      placeholder="1.5"
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 outline-none focus:border-[#0F5B38]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-700">Đơn vị giao vận</label>
+                    <input
+                      readOnly
+                      value="AhaMove Partner v3"
+                      className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-bold text-gray-600"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="dispatch-remarks" className="text-xs font-bold text-gray-700">
+                    Ghi chú dặn dò tài xế (remarks)
+                  </label>
+                  <textarea
+                    id="dispatch-remarks"
+                    rows={2}
+                    maxLength={500}
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Ví dụ: Linh kiện LED dễ vỡ, gọi trước khi giao..."
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 outline-none focus:border-[#0F5B38]"
+                  />
+                </div>
+              </section>
+
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-700"
+                >
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Pop-up với nút "Đóng gói hàng" */}
+            <div className="flex items-center justify-end gap-2.5 border-t border-gray-200 bg-gray-50 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setIsPrepareModalOpen(false)}
+                disabled={isSubmitting}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0F5B38] px-5 py-2 text-xs font-black text-white shadow transition hover:bg-[#0c4a2d] disabled:opacity-50"
+              >
+                <Truck size={15} />
+                {isSubmitting ? "Đang gửi đơn AhaMove..." : "Đóng gói hàng"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

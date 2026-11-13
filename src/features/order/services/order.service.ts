@@ -5,6 +5,7 @@ import type { CartItem } from "@/features/cart/types";
 import type { DeliveryStatus, MockOrder, OrderStatus, PaymentStatus } from "@/features/order/types";
 import {
   apiCheckoutOrder,
+  apiDispatchOrder,
   apiUpdateStaffOrderStatus,
   fetchMyOrders,
   fetchOrderDetail,
@@ -12,6 +13,8 @@ import {
   fetchStaffOrders,
   type BackendStaffOrderDetail,
   type BackendStaffOrderSummary,
+  type DispatchOrderRequest,
+  type DispatchOrderResponse,
 } from "@/lib/api/orders";
 import { mapBackendProductType } from "@/lib/api/products";
 
@@ -270,6 +273,16 @@ export const orderService = {
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
     }
+  },
+  async dispatchOrderToAhamove(
+    orderId: number | string,
+    payload: DispatchOrderRequest,
+  ): Promise<DispatchOrderResponse> {
+    const result = await apiDispatchOrder(orderId, payload);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+    return result;
   },
   async checkout(input: {
     customer: AuthUser;

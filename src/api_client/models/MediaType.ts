@@ -9,8 +9,8 @@ export type MediaType = {
     qualityValue?: number;
     charset?: string;
     concrete?: boolean;
-    wildcardSubtype?: boolean;
     wildcardType?: boolean;
     subtypeSuffix?: string;
+    wildcardSubtype?: boolean;
 };
 

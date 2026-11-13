@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { use } from "react";
-import { ArrowLeft, CheckCircle, Circle, Clock, MapPin, Package, Truck, X } from "lucide-react";
+import { ArrowLeft, CheckCircle, Circle, Clock, MapPin, Package, Truck } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useGallery } from "@/features/character/context/GalleryContext";
+import SePayOrderPaymentCard from "@/features/order/components/SePayOrderPaymentCard";
 import { useOrders } from "@/features/order/context/OrderContext";
 import { getOrderFulfillment } from "@/features/order/fulfillment";
 import type { OrderStatus, PaymentStatus } from "@/features/order/types";
@@ -80,11 +80,15 @@ function DeliveryProgress({ status }: { status: OrderStatus }) {
 
 export default function CustomerOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
-  const { orders } = useOrders();
+  const { orders, refreshOrders } = useOrders();
   const { entitlements } = useGallery();
   const order = orders.find((entry) => entry.id === orderId);
 
   if (!order) return <><Header /><main className="flex-1 grid place-items-center py-24"><div className="text-center"><p className="mb-4 text-2xl font-black">Không tìm thấy đơn hàng</p><Link href="/profile/orders" className="btn-primary">← Về lịch sử đơn hàng</Link></div></main><Footer /></>;
+
+  const isPendingPayment =
+    (order.status === "PENDING_PAYMENT" || order.status === "PendingPayment" || order.status === "Pending") &&
+    order.paymentStatus !== "Paid";
 
   const fulfillment = getOrderFulfillment(order);
   const grantedCharacterIds = new Set(entitlements.filter((item) => item.sourceReferenceId === order.id).map((item) => item.characterId));
@@ -98,6 +102,18 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
   return <><Header /><main className="flex-1 bg-background py-10"><div className="container mx-auto max-w-4xl px-4">
     <Link href="/profile/orders" className="mb-5 inline-flex items-center gap-1.5 text-sm font-bold hover:text-primary-dark"><ArrowLeft size={15} /> Lịch sử đơn hàng</Link>
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-black uppercase">Đơn hàng #{order.id}</h1><p className="mt-1 flex items-center gap-1.5 text-sm text-text-muted"><Clock size={13} /> {new Date(order.createdAt).toLocaleDateString("vi-VN")}</p></div><span className={`rounded-sm border px-3 py-1.5 text-sm font-black ${STATUS_CLASS[order.status]}`}>{STATUS_LABEL[order.status]}</span></div>
+    {isPendingPayment && (
+      <div className="mb-6">
+        <SePayOrderPaymentCard
+          orderId={order.id}
+          initialPaymentCode={order.paymentCode}
+          redirectOnSuccess
+          onPaymentSuccess={() => {
+            void refreshOrders();
+          }}
+        />
+      </div>
+    )}
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
       <div className="flex flex-col gap-5 lg:col-span-3">
         {fulfillment.requiresCharacterEntitlement && <section className="neo-box-no-hover bg-white p-6"><div className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3"><Package size={17} /><h2 className="font-black uppercase">Character kỹ thuật số</h2></div><div className={`flex items-start gap-3 border-2 p-3 text-sm font-bold ${entitlementComplete ? "border-green-600 bg-green-50 text-green-800" : "border-amber-500 bg-amber-50 text-amber-800"}`}>{entitlementComplete ? <CheckCircle size={18} /> : <Clock size={18} />}<p>{entitlementMessage}</p></div>{entitlementComplete && <Link href="/profile/gallery" className="btn-primary mt-4 inline-block">Mở Gallery</Link>}</section>}
@@ -105,7 +121,25 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
         <section className="neo-box-no-hover bg-white p-6"><div className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3"><Package size={17} /><h2 className="font-black uppercase">Sản phẩm đã đặt</h2></div>{order.items.map((item) => <div key={item.id} className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0"><div><p className="font-bold">{item.name}</p><p className="text-xs text-text-muted">Số lượng: {item.quantity}</p></div><p className="font-black">{formatPrice(item.price * item.quantity)}</p></div>)}</section>
       </div>
       <div className="flex flex-col gap-5 lg:col-span-2">
-        <section className="neo-box-no-hover bg-white p-5"><h2 className="mb-4 border-b-2 border-black pb-2 font-black uppercase">Tóm tắt</h2><div className="flex flex-col gap-2 text-sm font-bold"><div className="flex justify-between"><span className="text-text-muted">Tạm tính</span><span>{formatPrice(order.subtotal)}</span></div>{(fulfillment.requiresDelivery || order.shipping > 0) && <div className="flex justify-between"><span className="text-text-muted">Vận chuyển</span><span>{order.shipping === 0 ? "Miễn phí" : formatPrice(order.shipping)}</span></div>}<div className="mt-1 flex justify-between border-t-2 border-dashed border-black pt-2 text-lg"><span>Tổng cộng</span><span className="text-primary-dark">{formatPrice(order.total)}</span></div></div><p className="mt-3 border-2 border-black bg-gray-50 px-3 py-2 text-xs font-semibold">Thanh toán: {order.paymentMethod} · {PAYMENT_LABEL[order.paymentStatus]}</p></section>
+        <section className="neo-box-no-hover bg-white p-5">
+          <h2 className="mb-4 border-b-2 border-black pb-2 font-black uppercase">Tóm tắt</h2>
+          <div className="flex flex-col gap-2 text-sm font-bold">
+            <div className="flex justify-between"><span className="text-text-muted">Tạm tính</span><span>{formatPrice(order.subtotal)}</span></div>
+            {(fulfillment.requiresDelivery || order.shipping > 0) && <div className="flex justify-between"><span className="text-text-muted">Vận chuyển</span><span>{order.shipping === 0 ? "Miễn phí" : formatPrice(order.shipping)}</span></div>}
+            <div className="mt-1 flex justify-between border-t-2 border-dashed border-black pt-2 text-lg"><span>Tổng cộng</span><span className="text-primary-dark">{formatPrice(order.total)}</span></div>
+          </div>
+          <div className="mt-3 space-y-1 border-2 border-black bg-gray-50 px-3 py-2 text-xs font-semibold">
+            <p>Thanh toán: {order.paymentMethod} · {PAYMENT_LABEL[order.paymentStatus]}</p>
+            {order.bankReferenceCode && (
+              <p className="font-mono text-gray-700">Mã giao dịch: {order.bankReferenceCode}</p>
+            )}
+            {order.paidAt && (
+              <p className="text-emerald-700">
+                Xác nhận lúc: {new Date(order.paidAt).toLocaleString("vi-VN")}
+              </p>
+            )}
+          </div>
+        </section>
         {fulfillment.requiresDelivery && <section className="neo-box-no-hover bg-white p-5"><div className="mb-3 flex items-center gap-2 border-b-2 border-black pb-2"><MapPin size={17} /><h2 className="font-black uppercase">Giao hàng</h2></div>{order.delivery && <p className="mb-3 text-sm font-bold">Đơn vị: {order.delivery.provider} · Mã vận đơn: {order.delivery.orderId}<br /><span className="text-text-muted">Trạng thái: {order.delivery.status}</span></p>}<p className="font-bold">{order.address.fullName}</p><p className="text-sm text-text-muted">{order.address.phoneNumber}</p><p className="mt-1 text-sm">{order.address.fullAddress}</p></section>}
       </div>
     </div>

@@ -62,9 +62,16 @@ export function mapBackendOrderStatus(status?: string): OrderStatus {
 }
 
 export function mapBackendPaymentStatus(orderStatus?: string, paymentStatus?: string): PaymentStatus {
-  if (paymentStatus === "SUCCESS") return "Paid";
-  if (paymentStatus === "FAILED" || paymentStatus === "EXPIRED") return "Failed";
-  if (paymentStatus === "REFUNDED") return "Cancelled";
+  const normalizedPaymentStatus = paymentStatus?.toUpperCase();
+  if (normalizedPaymentStatus === "SUCCESS" || normalizedPaymentStatus === "SUCCEEDED") return "Paid";
+  if (normalizedPaymentStatus === "FAILED" || normalizedPaymentStatus === "EXPIRED") return "Failed";
+  if (
+    normalizedPaymentStatus === "REFUNDED" ||
+    normalizedPaymentStatus === "CANCELLED" ||
+    normalizedPaymentStatus === "CANCELED"
+  ) {
+    return "Cancelled";
+  }
   if (
     orderStatus === "PROCESSING" ||
     orderStatus === "PARTIALLY_FULFILLED" ||
@@ -76,6 +83,19 @@ export function mapBackendPaymentStatus(orderStatus?: string, paymentStatus?: st
   }
   if (orderStatus === "CANCELED" || orderStatus === "REFUNDED") return "Cancelled";
   return "Pending";
+}
+
+function resolveEffectiveOrderStatus(
+  rawStatus: OrderStatus,
+  paymentStatus: PaymentStatus,
+  orderType?: string,
+  hasDelivery?: boolean,
+): OrderStatus {
+  if (rawStatus === "PENDING_PAYMENT" && paymentStatus === "Paid") {
+    const isDigitalOnly = orderType === "DIGITAL" || orderType === "SUBSCRIPTION" || !hasDelivery;
+    return isDigitalOnly ? "COMPLETED" : "PROCESSING";
+  }
+  return rawStatus;
 }
 
 export function mapBackendDeliveryStatus(status?: string): DeliveryStatus {
@@ -127,8 +147,14 @@ export function mapOrderSummaryAndDetailToOrder(
         },
       ];
 
-  const status = mapBackendOrderStatus(detail?.status ?? summary.status);
+  const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
   const paymentStatus = mapBackendPaymentStatus(detail?.status ?? summary.status, detail?.payment?.status);
+  const status = resolveEffectiveOrderStatus(
+    rawStatus,
+    paymentStatus,
+    detail?.orderType ?? summary.orderType,
+    Boolean(detail?.delivery),
+  );
 
   return {
     id: String(summary.orderId),
@@ -148,7 +174,13 @@ export function mapOrderSummaryAndDetailToOrder(
     },
     paymentMethod: detail?.payment?.paymentGateway ?? "SEPAY",
     paymentStatus,
-    paidAt: (detail?.payment as any)?.paidAt,
+    paymentCode: detail?.payment?.paymentContent || detail?.payment?.bankReferenceCode || undefined,
+    qrCodeUrl: detail?.payment?.qrCodeUrl ?? undefined,
+    bankAccount: detail?.payment?.bankAccount ?? undefined,
+    bankName: detail?.payment?.bankName ?? undefined,
+    bankReferenceCode: detail?.payment?.bankReferenceCode ?? undefined,
+    expiresAt: detail?.payment?.expiresAt ?? detail?.expiresAt ?? summary.expiresAt ?? undefined,
+    paidAt: detail?.payment?.paidAt ?? undefined,
     status,
     createdAt: detail?.createdAt ?? summary.createdAt,
     service: detail?.delivery?.carrier ?? "AhaMove",
@@ -192,10 +224,16 @@ export function mapStaffOrderSummaryAndDetailToOrder(
         },
       ];
 
-  const status = mapBackendOrderStatus(detail?.status ?? summary.status);
+  const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
   const paymentStatus = mapBackendPaymentStatus(
     detail?.status ?? summary.status,
     detail?.payment?.status ?? summary.paymentStatus,
+  );
+  const status = resolveEffectiveOrderStatus(
+    rawStatus,
+    paymentStatus,
+    detail?.orderType ?? summary.orderType,
+    Boolean(detail?.delivery || summary.deliveryStatus),
   );
 
   return {
@@ -216,6 +254,9 @@ export function mapStaffOrderSummaryAndDetailToOrder(
     },
     paymentMethod: detail?.payment?.gateway ?? "SEPAY",
     paymentStatus,
+    paymentCode: detail?.payment?.transactionCode ?? undefined,
+    bankReferenceCode: detail?.payment?.transactionCode ?? undefined,
+    expiresAt: detail?.expiresAt ?? undefined,
     paidAt: detail?.payment?.paidAt,
     status,
     createdAt: detail?.createdAt ?? summary.createdAt,
@@ -288,7 +329,7 @@ export const orderService = {
     customer: AuthUser;
     items: CartItem[];
     address?: Address;
-  }): Promise<{ orderId: string }> {
+  }): Promise<{ orderId: string; paymentCode?: string }> {
     const cartItemIds = input.items
       .map((item) => item.cartItemId)
       .filter((id): id is number => typeof id === "number" && id > 0);
@@ -303,9 +344,13 @@ export const orderService = {
       deliveryAddressId: Number.isFinite(numericAddressId) && numericAddressId > 0 ? numericAddressId : undefined,
       paymentGateway: CheckoutRequest.paymentGateway.SEPAY,
     });
+    const detail = await fetchOrderDetail(res.orderId).catch(() => null);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
     }
-    return { orderId: String(res.orderId) };
+    return {
+      orderId: String(res.orderId),
+      paymentCode: detail?.payment?.paymentContent ?? undefined,
+    };
   },
 };

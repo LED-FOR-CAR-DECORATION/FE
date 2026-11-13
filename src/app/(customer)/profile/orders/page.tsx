@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, CheckCircle, Circle, Clock, Eye, Package, Truck, X } from "lucide-react";
+import { ArrowLeft, CheckCircle, Circle, Clock, Eye, Package, QrCode, Truck, X } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -61,7 +61,23 @@ export default function OrderHistoryPage() {
               {customerOrders.map((order) => <article key={order.id} className="p-5 transition-colors hover:bg-green-50/60">
                 <div className="mb-3 flex items-start justify-between gap-3 flex-wrap"><div><p className="font-black text-primary-dark">#{order.id}</p><p className="mt-1 flex items-center gap-1 text-xs text-text-muted"><Clock size={11} /> {new Date(order.createdAt).toLocaleDateString("vi-VN")} · {order.paymentMethod}</p></div><StatusBadge status={displayStatus(order)} /></div>
                 <div className="mb-4 flex flex-col gap-1">{order.items.map((item) => <p key={`${order.id}-${item.id}`} className="text-sm font-medium">{item.name} <span className="text-text-muted">× {item.quantity}</span></p>)}</div>
-                <div className="flex items-center justify-between gap-3"><p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">{formatPrice(order.total)}</span></p><Link href={`/profile/orders/${order.id}`} className="inline-flex items-center gap-1.5 rounded-sm border border-black px-3 py-1.5 text-xs font-bold transition-colors hover:bg-primary/20"><Eye size={13} /> Xem chi tiết</Link></div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">{formatPrice(order.total)}</span></p>
+                  <div className="flex items-center gap-2">
+                    {(order.status === "PENDING_PAYMENT" || order.status === "PendingPayment" || order.status === "Pending") &&
+                      order.paymentStatus !== "Paid" && (
+                        <Link
+                          href={`/profile/orders/${order.id}#sepay-payment`}
+                          className="inline-flex items-center gap-1.5 rounded-sm border border-black bg-primary px-3 py-1.5 text-xs font-black text-black transition-opacity hover:opacity-90"
+                        >
+                          <QrCode size={13} /> Thanh toán ngay
+                        </Link>
+                      )}
+                    <Link href={`/profile/orders/${order.id}`} className="inline-flex items-center gap-1.5 rounded-sm border border-black px-3 py-1.5 text-xs font-bold transition-colors hover:bg-primary/20">
+                      <Eye size={13} /> Xem chi tiết
+                    </Link>
+                  </div>
+                </div>
               </article>)}
             </div>}
           </div>

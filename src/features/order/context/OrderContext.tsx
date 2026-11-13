@@ -19,7 +19,7 @@ interface OrderContextValue {
     address: Address;
     shipping: number;
     paymentMethod: string;
-  }) => Promise<{ id: string }>;
+  }) => Promise<{ id: string; paymentCode?: string }>;
   updateOrderStatus: (id: string, status: OrderStatus) => void;
   createDelivery: (id: string) => Promise<void>;
   dispatchOrder: (id: string, payload: DispatchOrderRequest) => Promise<DispatchOrderResponse>;
@@ -74,7 +74,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         address: input.address,
       });
       await refreshOrders();
-      return { id: result.orderId };
+      return { id: result.orderId, paymentCode: result.paymentCode };
     },
     [refreshOrders],
   );

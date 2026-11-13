@@ -58,7 +58,11 @@ export default function CheckoutPage() {
         paymentMethod: "SEPAY",
       });
       await refreshCart();
-      router.push(`/checkout/result?orderId=${order.id}`);
+      router.push(
+        `/checkout/result?orderId=${encodeURIComponent(order.id)}${
+          order.paymentCode ? `&paymentCode=${encodeURIComponent(order.paymentCode)}` : ""
+        }`,
+      );
     } catch (err) {
       setCheckoutError(getApiErrorMessage(err, "Không thể tạo đơn hàng. Vui lòng thử lại."));
     } finally {

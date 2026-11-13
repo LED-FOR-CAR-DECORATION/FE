@@ -39,6 +39,12 @@ export interface MockOrder {
   address: OrderAddressSnapshot;
   paymentMethod: string;
   paymentStatus: PaymentStatus;
+  paymentCode?: string;
+  qrCodeUrl?: string;
+  bankAccount?: string;
+  bankName?: string;
+  bankReferenceCode?: string;
+  expiresAt?: string;
   paidAt?: string;
   status: OrderStatus;
   createdAt: string;

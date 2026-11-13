@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, CheckCircle, Circle, Clock, Eye, Package, QrCode, Truck, X } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, CheckCircle, Circle, Clock, Eye, Loader2, Package, QrCode, Truck, X } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -40,9 +41,24 @@ function StatusBadge({ status }: { status: DisplayStatus }) {
 }
 
 export default function OrderHistoryPage() {
-  const { orders } = useOrders();
+  const { orders, confirmOrderDelivery } = useOrders();
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const customerOrders = orders;
   const displayStatus = (order: (typeof orders)[number]): DisplayStatus => isCharacterOnlyOrder(order) && order.paymentStatus === "Paid" ? "Paid" : order.status;
+
+  const handleConfirmOrder = async (orderId: string) => {
+    if (typeof window !== "undefined" && !window.confirm(`Bạn xác nhận đã nhận được kiện hàng cho đơn #${orderId}?`)) {
+      return;
+    }
+    setConfirmingId(orderId);
+    try {
+      await confirmOrderDelivery(orderId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Xác nhận nhận hàng thất bại.");
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   return (
     <>
@@ -64,6 +80,21 @@ export default function OrderHistoryPage() {
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-black">Tổng cộng: <span className="text-primary-dark">{formatPrice(order.total)}</span></p>
                   <div className="flex items-center gap-2">
+                    {(order.status === "DELIVERED" || order.status === "Delivered") && (
+                      <button
+                        type="button"
+                        disabled={confirmingId === order.id}
+                        onClick={() => void handleConfirmOrder(order.id)}
+                        className="inline-flex items-center gap-1.5 rounded-sm border border-black bg-emerald-500 px-3 py-1.5 text-xs font-black text-black transition-opacity hover:opacity-90 disabled:opacity-60"
+                      >
+                        {confirmingId === order.id ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <CheckCircle size={13} />
+                        )}
+                        Đã nhận hàng
+                      </button>
+                    )}
                     {(order.status === "PENDING_PAYMENT" || order.status === "PendingPayment" || order.status === "Pending") &&
                       order.paymentStatus !== "Paid" && (
                         <Link

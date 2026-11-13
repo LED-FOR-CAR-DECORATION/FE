@@ -1,9 +1,11 @@
 import type {
   ApiResponseCheckoutResponse,
+  ApiResponseConfirmOrderDeliveryResponse,
   ApiResponseListOrderSummaryItem,
   ApiResponseOrderDetailResponse,
   CheckoutRequest,
   CheckoutResponse,
+  ConfirmOrderDeliveryResponse,
   ErrorResponse,
   OrderDetailResponse,
   OrderFilterRequest,
@@ -58,6 +60,46 @@ export async function apiCheckoutOrder(payload: CheckoutRequest): Promise<Checko
     throw new Error("Không nhận được phản hồi tạo đơn hàng từ máy chủ.");
   }
   return res.data;
+}
+
+export function getConfirmDeliveryErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const body = error.body as ErrorResponse | undefined;
+    const code = (body as { code?: string } | undefined)?.code;
+    if (code === "INVALID_ORDER_STATUS_TRANSITION") {
+      return "Chỉ đơn hàng ở trạng thái ĐÃ GIAO mới có thể xác nhận nhận hàng.";
+    }
+    if (code === "ORDER_NOT_FOUND") {
+      return "Đơn hàng không tồn tại hoặc không thuộc quyền sở hữu của bạn.";
+    }
+    const detail = body?.details?.find((d) => d.message)?.message;
+    if (body?.message) return body.message;
+    if (detail) return detail;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Không thể xác nhận đã nhận hàng. Vui lòng thử lại.";
+}
+
+export async function apiConfirmOrderDelivery(
+  orderId: number | string,
+): Promise<ConfirmOrderDeliveryResponse> {
+  const numericId = Number(orderId);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    throw new Error("Mã đơn hàng không hợp lệ.");
+  }
+
+  try {
+    const res: ApiResponseConfirmOrderDeliveryResponse =
+      await OrdersService.confirmDelivery(numericId);
+    if (!res.data) {
+      throw new Error("Không nhận được phản hồi xác nhận nhận hàng từ máy chủ.");
+    }
+    return res.data;
+  } catch (error) {
+    throw new Error(getConfirmDeliveryErrorMessage(error));
+  }
 }
 
 export interface BackendStaffOrderSummary {

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use } from "react";
-import { ArrowLeft, CheckCircle, Circle, Clock, MapPin, Package, Truck } from "lucide-react";
+import { use, useState } from "react";
+import { ArrowLeft, CheckCircle, CheckCircle2, Circle, Clock, Loader2, MapPin, Package, Truck, X } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useGallery } from "@/features/character/context/GalleryContext";
@@ -80,8 +80,13 @@ function DeliveryProgress({ status }: { status: OrderStatus }) {
 
 export default function CustomerOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
-  const { orders, refreshOrders } = useOrders();
+  const { orders, refreshOrders, confirmOrderDelivery } = useOrders();
   const { entitlements } = useGallery();
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
+  const [confirmSuccess, setConfirmSuccess] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
   const order = orders.find((entry) => entry.id === orderId);
 
   if (!order) return <><Header /><main className="flex-1 grid place-items-center py-24"><div className="text-center"><p className="mb-4 text-2xl font-black">Không tìm thấy đơn hàng</p><Link href="/profile/orders" className="btn-primary">← Về lịch sử đơn hàng</Link></div></main><Footer /></>;
@@ -89,6 +94,22 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
   const isPendingPayment =
     (order.status === "PENDING_PAYMENT" || order.status === "PendingPayment" || order.status === "Pending") &&
     order.paymentStatus !== "Paid";
+
+  const isDelivered = order.status === "DELIVERED" || order.status === "Delivered";
+
+  const handleConfirmDelivery = async () => {
+    setIsConfirming(true);
+    setConfirmError("");
+    try {
+      await confirmOrderDelivery(order.id);
+      setConfirmSuccess(true);
+      setIsConfirmModalOpen(false);
+    } catch (err) {
+      setConfirmError(err instanceof Error ? err.message : "Xác nhận nhận hàng thất bại.");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
 
   const fulfillment = getOrderFulfillment(order);
   const grantedCharacterIds = new Set(entitlements.filter((item) => item.sourceReferenceId === order.id).map((item) => item.characterId));
@@ -101,7 +122,35 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
 
   return <><Header /><main className="flex-1 bg-background py-10"><div className="container mx-auto max-w-4xl px-4">
     <Link href="/profile/orders" className="mb-5 inline-flex items-center gap-1.5 text-sm font-bold hover:text-primary-dark"><ArrowLeft size={15} /> Lịch sử đơn hàng</Link>
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-black uppercase">Đơn hàng #{order.id}</h1><p className="mt-1 flex items-center gap-1.5 text-sm text-text-muted"><Clock size={13} /> {new Date(order.createdAt).toLocaleDateString("vi-VN")}</p></div><span className={`rounded-sm border px-3 py-1.5 text-sm font-black ${STATUS_CLASS[order.status]}`}>{STATUS_LABEL[order.status]}</span></div>
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-black uppercase">Đơn hàng #{order.id}</h1>
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-text-muted"><Clock size={13} /> {new Date(order.createdAt).toLocaleDateString("vi-VN")}</p>
+      </div>
+      <div className="flex items-center gap-2.5">
+        {isDelivered && (
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmError("");
+              setIsConfirmModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-sm border-2 border-black bg-emerald-500 px-4 py-1.5 text-sm font-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 hover:bg-emerald-400"
+          >
+            <CheckCircle size={15} /> Đã nhận hàng
+          </button>
+        )}
+        <span className={`rounded-sm border px-3 py-1.5 text-sm font-black ${STATUS_CLASS[order.status]}`}>{STATUS_LABEL[order.status]}</span>
+      </div>
+    </div>
+
+    {confirmSuccess && (
+      <div className="mb-6 flex items-center gap-2 border-2 border-emerald-600 bg-emerald-50 p-4 text-sm font-bold text-emerald-900 rounded-sm">
+        <CheckCircle2 size={20} className="text-emerald-700 shrink-0" />
+        <p>Xác nhận đã nhận hàng thành công! Đơn hàng đã được hoàn tất.</p>
+      </div>
+    )}
+
     {isPendingPayment && (
       <div className="mb-6">
         <SePayOrderPaymentCard
@@ -117,7 +166,32 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
       <div className="flex flex-col gap-5 lg:col-span-3">
         {fulfillment.requiresCharacterEntitlement && <section className="neo-box-no-hover bg-white p-6"><div className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3"><Package size={17} /><h2 className="font-black uppercase">Character kỹ thuật số</h2></div><div className={`flex items-start gap-3 border-2 p-3 text-sm font-bold ${entitlementComplete ? "border-green-600 bg-green-50 text-green-800" : "border-amber-500 bg-amber-50 text-amber-800"}`}>{entitlementComplete ? <CheckCircle size={18} /> : <Clock size={18} />}<p>{entitlementMessage}</p></div>{entitlementComplete && <Link href="/profile/gallery" className="btn-primary mt-4 inline-block">Mở Gallery</Link>}</section>}
-        {fulfillment.requiresDelivery && <DeliveryProgress status={order.status} />}
+        {fulfillment.requiresDelivery && (
+          <>
+            {isDelivered && (
+              <section className="border-2 border-emerald-600 bg-emerald-50 p-4 text-emerald-900 rounded-sm">
+                <div className="flex items-center gap-2 font-black text-sm">
+                  <CheckCircle size={18} className="text-emerald-700 shrink-0" />
+                  <span>Đơn hàng đã được giao đến bạn!</span>
+                </div>
+                <p className="mt-1 text-xs text-emerald-800">
+                  Nếu bạn đã nhận và kiểm tra kiện hàng, hãy bấm nút xác nhận dưới đây để hoàn tất đơn hàng.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmError("");
+                    setIsConfirmModalOpen(true);
+                  }}
+                  className="btn-primary mt-3 inline-flex items-center gap-1.5 text-xs font-bold"
+                >
+                  <CheckCircle size={14} /> Xác nhận đã nhận hàng
+                </button>
+              </section>
+            )}
+            <DeliveryProgress status={order.status} />
+          </>
+        )}
         <section className="neo-box-no-hover bg-white p-6"><div className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3"><Package size={17} /><h2 className="font-black uppercase">Sản phẩm đã đặt</h2></div>{order.items.map((item) => <div key={item.id} className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0"><div><p className="font-bold">{item.name}</p><p className="text-xs text-text-muted">Số lượng: {item.quantity}</p></div><p className="font-black">{formatPrice(item.price * item.quantity)}</p></div>)}</section>
       </div>
       <div className="flex flex-col gap-5 lg:col-span-2">
@@ -143,5 +217,61 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
         {fulfillment.requiresDelivery && <section className="neo-box-no-hover bg-white p-5"><div className="mb-3 flex items-center gap-2 border-b-2 border-black pb-2"><MapPin size={17} /><h2 className="font-black uppercase">Giao hàng</h2></div>{order.delivery && <p className="mb-3 text-sm font-bold">Đơn vị: {order.delivery.provider} · Mã vận đơn: {order.delivery.orderId}<br /><span className="text-text-muted">Trạng thái: {order.delivery.status}</span></p>}<p className="font-bold">{order.address.fullName}</p><p className="text-sm text-text-muted">{order.address.phoneNumber}</p><p className="mt-1 text-sm">{order.address.fullAddress}</p></section>}
       </div>
     </div>
-  </div></main><Footer /></>;
+  </div></main>
+
+  {/* Confirm Delivery Modal */}
+  {isConfirmModalOpen && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="neo-box-no-hover w-full max-w-md bg-white p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between border-b-2 border-black pb-3">
+          <div className="flex items-center gap-2 font-black uppercase text-base">
+            <CheckCircle2 size={20} className="text-emerald-600" />
+            <span>Xác nhận đã nhận hàng</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsConfirmModalOpen(false)}
+            className="text-gray-500 hover:text-black"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-700">
+          Bạn xác nhận đã nhận đầy đủ sản phẩm cho đơn hàng <strong className="font-bold text-black">#{order.id}</strong>?
+        </p>
+        <p className="mt-2 text-xs text-text-muted">
+          Sau khi xác nhận, đơn hàng sẽ được chuyển sang trạng thái <strong>Đã hoàn thành</strong>.
+        </p>
+
+        {confirmError && (
+          <p className="mt-3 border-2 border-red-500 bg-red-50 p-2 text-xs font-bold text-red-700">
+            {confirmError}
+          </p>
+        )}
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={isConfirming}
+            onClick={() => setIsConfirmModalOpen(false)}
+            className="btn-secondary text-xs"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            disabled={isConfirming}
+            onClick={handleConfirmDelivery}
+            className="btn-primary inline-flex items-center gap-1.5 text-xs font-bold"
+          >
+            {isConfirming ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
+            {isConfirming ? "Đang xử lý..." : "Xác nhận nhận hàng"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  <Footer /></>;
 }

@@ -19,6 +19,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { useOrders } from "@/features/order/context/OrderContext";
+import { getOrderKind } from "@/features/order/fulfillment";
+import type { OrderKind } from "@/features/order/types";
 
 const ORDER_STEPS = [
   { key: "PENDING_PAYMENT", label: "Chờ thanh toán" },
@@ -99,6 +101,12 @@ const BADGE_CONFIG: Record<
   Confirmed: { label: "CHỜ ĐÓNG HÀNG", bg: "bg-blue-600", text: "text-white" },
 };
 
+const ORDER_KIND_BADGE: Record<OrderKind, { label: string; className: string }> = {
+  PHYSICAL: { label: "Physical", className: "border border-sky-300 bg-sky-100 text-sky-800" },
+  MIXED: { label: "Mixed", className: "border border-purple-300 bg-purple-100 text-purple-800" },
+  DIGITAL: { label: "Character", className: "border border-emerald-300 bg-emerald-100 text-emerald-800" },
+};
+
 function formatMoney(value: number) {
   return `${value.toLocaleString("vi-VN")} đ`;
 }
@@ -156,6 +164,8 @@ export default function OrderDetailPage({
     );
   }
 
+  const orderKind = getOrderKind(order);
+  const kindBadge = ORDER_KIND_BADGE[orderKind];
   const currentStepIndex = getStepIndex(order.status);
   const badge = BADGE_CONFIG[order.status] || {
     label: order.status,
@@ -171,7 +181,7 @@ export default function OrderDetailPage({
     order.status === "HandedOver" ||
     order.status === "Confirmed";
 
-  const hasPhysicalItem = order.items.some((item) => item.productType !== "CHARACTER" && item.productType !== "SUBSCRIPTION");
+  const hasPhysicalItem = orderKind !== "DIGITAL";
   const rawDeliveryStatus = order.delivery?.rawStatus || "";
   const isDeliveryNotDispatched =
     !rawDeliveryStatus || ["PENDING", "FAILED", "RETURNED"].includes(rawDeliveryStatus.toUpperCase());
@@ -455,6 +465,9 @@ export default function OrderDetailPage({
           <h1 className="text-2xl font-black text-gray-900">Đơn hàng #ORD-{order.id}</h1>
           <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${badge.bg} ${badge.text}`}>
             {badge.label}
+          </span>
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${kindBadge.className}`}>
+            Loại: {kindBadge.label}
           </span>
           <span className="text-xs font-medium text-gray-500">
             Ngày tạo: {formatDate(order.createdAt)}

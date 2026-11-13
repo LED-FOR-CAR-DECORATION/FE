@@ -23,6 +23,7 @@ interface OrderContextValue {
   updateOrderStatus: (id: string, status: OrderStatus) => void;
   createDelivery: (id: string) => Promise<void>;
   dispatchOrder: (id: string, payload: DispatchOrderRequest) => Promise<DispatchOrderResponse>;
+  confirmOrderDelivery: (orderId: string | number) => Promise<void>;
 }
 
 const OrderContext = createContext<OrderContextValue | null>(null);
@@ -138,8 +139,32 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const confirmOrderDelivery = useCallback(
+    async (orderId: string | number) => {
+      await orderService.confirmDelivery(orderId);
+      setOrders((current) =>
+        current.map((order) =>
+          String(order.id) === String(orderId) ? { ...order, status: "COMPLETED" as OrderStatus } : order,
+        ),
+      );
+      await refreshOrders();
+    },
+    [refreshOrders],
+  );
+
   return (
-    <OrderContext.Provider value={{ orders, isLoading, refreshOrders, createOrder, updateOrderStatus, createDelivery, dispatchOrder }}>
+    <OrderContext.Provider
+      value={{
+        orders,
+        isLoading,
+        refreshOrders,
+        createOrder,
+        updateOrderStatus,
+        createDelivery,
+        dispatchOrder,
+        confirmOrderDelivery,
+      }}
+    >
       {children}
     </OrderContext.Provider>
   );

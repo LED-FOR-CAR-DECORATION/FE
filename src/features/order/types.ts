@@ -20,6 +20,8 @@ export type OrderStatus =
   | "Cancelled"
   | "Pending"
   | "Confirmed";
+export type OrderType = "PHYSICAL" | "MIXED" | "DIGITAL" | "BUNDLE" | "SUBSCRIPTION";
+export type OrderKind = "PHYSICAL" | "MIXED" | "DIGITAL";
 export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Cancelled";
 export type DeliveryStatus = "Created" | "Picked up" | "In transit" | "Out for delivery" | "Delivered" | "Exception";
 
@@ -31,6 +33,7 @@ export interface OrderAddressSnapshot {
 
 export interface MockOrder {
   id: string;
+  orderType?: OrderType;
   customer: Pick<AuthUser, "userId" | "email" | "fullName">;
   items: CartItem[];
   subtotal: number;

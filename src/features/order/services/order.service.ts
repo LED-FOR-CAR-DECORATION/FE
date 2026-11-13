@@ -2,9 +2,11 @@ import { CheckoutRequest, type OrderDetailResponse, type OrderSummaryItem } from
 import type { Address } from "@/features/address/types";
 import type { AuthUser } from "@/features/auth/types";
 import type { CartItem } from "@/features/cart/types";
-import type { DeliveryStatus, MockOrder, OrderStatus, PaymentStatus } from "@/features/order/types";
+import { getOrderKind } from "@/features/order/fulfillment";
+import type { DeliveryStatus, MockOrder, OrderKind, OrderStatus, OrderType, PaymentStatus } from "@/features/order/types";
 import {
   apiCheckoutOrder,
+  apiConfirmOrderDelivery,
   apiDispatchOrder,
   apiUpdateStaffOrderStatus,
   fetchMyOrders,
@@ -85,15 +87,34 @@ export function mapBackendPaymentStatus(orderStatus?: string, paymentStatus?: st
   return "Pending";
 }
 
+function mapBackendOrderType(orderType?: string): OrderType | undefined {
+  switch (orderType) {
+    case "PHYSICAL":
+    case "MIXED":
+    case "DIGITAL":
+    case "BUNDLE":
+    case "SUBSCRIPTION":
+      return orderType;
+    default:
+      return undefined;
+  }
+}
+
 function resolveEffectiveOrderStatus(
   rawStatus: OrderStatus,
   paymentStatus: PaymentStatus,
-  orderType?: string,
-  hasDelivery?: boolean,
+  orderKind: OrderKind,
 ): OrderStatus {
-  if (rawStatus === "PENDING_PAYMENT" && paymentStatus === "Paid") {
-    const isDigitalOnly = orderType === "DIGITAL" || orderType === "SUBSCRIPTION" || !hasDelivery;
-    return isDigitalOnly ? "COMPLETED" : "PROCESSING";
+  if (paymentStatus === "Paid") {
+    if (
+      rawStatus === "PENDING_PAYMENT" ||
+      rawStatus === "PROCESSING" ||
+      rawStatus === "PARTIALLY_FULFILLED"
+    ) {
+      if (orderKind === "PHYSICAL") return "PROCESSING";
+      if (orderKind === "MIXED") return "PARTIALLY_FULFILLED";
+      if (rawStatus === "PENDING_PAYMENT") return "COMPLETED";
+    }
   }
   return rawStatus;
 }
@@ -147,17 +168,15 @@ export function mapOrderSummaryAndDetailToOrder(
         },
       ];
 
+  const orderType = mapBackendOrderType(detail?.orderType ?? summary.orderType);
+  const orderKind = getOrderKind({ orderType, items });
   const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
   const paymentStatus = mapBackendPaymentStatus(detail?.status ?? summary.status, detail?.payment?.status);
-  const status = resolveEffectiveOrderStatus(
-    rawStatus,
-    paymentStatus,
-    detail?.orderType ?? summary.orderType,
-    Boolean(detail?.delivery),
-  );
+  const status = resolveEffectiveOrderStatus(rawStatus, paymentStatus, orderKind);
 
   return {
     id: String(summary.orderId),
+    orderType,
     customer: {
       userId: customer?.userId ?? "",
       email: customer?.email ?? "",
@@ -224,20 +243,18 @@ export function mapStaffOrderSummaryAndDetailToOrder(
         },
       ];
 
+  const orderType = mapBackendOrderType(detail?.orderType ?? summary.orderType);
+  const orderKind = getOrderKind({ orderType, items });
   const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
   const paymentStatus = mapBackendPaymentStatus(
     detail?.status ?? summary.status,
     detail?.payment?.status ?? summary.paymentStatus,
   );
-  const status = resolveEffectiveOrderStatus(
-    rawStatus,
-    paymentStatus,
-    detail?.orderType ?? summary.orderType,
-    Boolean(detail?.delivery || summary.deliveryStatus),
-  );
+  const status = resolveEffectiveOrderStatus(rawStatus, paymentStatus, orderKind);
 
   return {
     id: String(summary.orderId),
+    orderType,
     customer: {
       userId: String(summary.customerId),
       email: detail?.customer?.email || summary.customerEmail || "",
@@ -352,5 +369,12 @@ export const orderService = {
       orderId: String(res.orderId),
       paymentCode: detail?.payment?.paymentContent ?? undefined,
     };
+  },
+  async confirmDelivery(orderId: number | string) {
+    const result = await apiConfirmOrderDelivery(orderId);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+    return result;
   },
 };

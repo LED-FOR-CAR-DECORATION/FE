@@ -80,7 +80,7 @@ const menuItems: MenuItem[] = [
     description: "Theo dõi mẫu thiết bị và số lượng tồn kho",
     href: "/staff/inventory",
     icon: Boxes,
-    roles: ["MANAGER"],
+    roles: ["ADMIN", "MANAGER", "STAFF"],
   },
 
   {

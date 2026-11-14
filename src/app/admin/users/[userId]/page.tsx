@@ -1,16 +1,20 @@
+import { Suspense } from "react";
 import ManagementShell from "@/components/layout/ManagementShell";
 import UserDetailPage from "@/features/managed-users/components/UserDetailPage";
 
-export default async function UserDetailRoute({
-  params,
-}: {
-  params: Promise<{ userId: string }>;
-}) {
-  const { userId } = await params;
+type Props = { params: Promise<{ userId: string }> };
+
+export default function UserDetailRoute({ params }: Props) {
   return (
     <ManagementShell>
-      <UserDetailPage userId={userId} />
+      <Suspense fallback={<p role="status">Đang tải chi tiết người dùng…</p>}>
+        <UserDetailContent params={params} />
+      </Suspense>
     </ManagementShell>
   );
 }
 
+async function UserDetailContent({ params }: Props) {
+  const { userId } = await params;
+  return <UserDetailPage userId={userId} />;
+}

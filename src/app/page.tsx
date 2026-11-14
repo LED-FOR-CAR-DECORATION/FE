@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import {
   Check,
   Grid2X2,
@@ -162,7 +162,15 @@ function ProductCard({ product, onAdd, canBuy }: { product: CatalogProduct; onAd
   );
 }
 
-export default function Home() {
+export default function HomeRoute() {
+  return (
+    <Suspense fallback={<p role="status">Đang tải trang chủ…</p>}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const { addItem } = useCart();
   const { isAuthenticated } = useAuth();
   const [products, setProducts] = useState<CatalogProduct[]>([]);

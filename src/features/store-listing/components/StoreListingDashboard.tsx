@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { CheckCircle2, ChevronDown, Clock3, Cpu, EyeOff, Lock, Plus, Sparkles, Store, X } from "lucide-react";
 import { apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
-import type { CatalogProduct } from "@/features/cart/catalog";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
+import {
+  getCreatedStoreProducts,
+  updateCreatedStoreProductStatus,
+} from "../services/store-listing.service";
 import type { PublishMode, StoreCharacterRow } from "../types";
-import CatalogListingTable from "./CatalogListingTable";
+import CatalogListingTable, { type StoreCatalogItem } from "./CatalogListingTable";
 import CharacterListingTable from "./CharacterListingTable";
 import CreateStoreProductModal from "./CreateStoreProductModal";
 import EditStoreProductModal, { type EditableProductData } from "./EditStoreProductModal";
@@ -31,7 +34,7 @@ const NOTICE_DURATION_MS = 6000;
 /** Quản lý Store Listing — Dashboard dành riêng cho Manager với các user stories CRUD sản phẩm. */
 export default function StoreListingDashboard() {
   const { rows, isLoading, error, retry, canManage, publish, unlist } = useStoreCharacters();
-  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<StoreCatalogItem[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("characters");
   const [modal, setModal] = useState<ModalState>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -60,7 +63,43 @@ export default function StoreListingDashboard() {
 
   const refreshCatalog = () => {
     fetchStoreProducts({ size: 100 })
-      .then((res) => setCatalogProducts(res.items))
+      .then((res) => {
+        const publishedItems: StoreCatalogItem[] = res.items.map((item) => ({
+          ...item,
+          status: "PUBLISHED",
+        }));
+        const publishedIdSet = new Set(publishedItems.map((item) => String(item.id)));
+
+        const createdLedItems: StoreCatalogItem[] = [];
+        for (const created of getCreatedStoreProducts()) {
+          if (created.productType !== "LED" || created.productId == null) {
+            continue;
+          }
+          const idStr = String(created.productId);
+          if (publishedIdSet.has(idStr)) {
+            if (created.status !== "PUBLISHED") {
+              updateCreatedStoreProductStatus(idStr, "PUBLISHED");
+            }
+            continue;
+          }
+          if (created.status === "DELETED") {
+            continue;
+          }
+          createdLedItems.push({
+            id: idStr,
+            productId: created.productId,
+            productType: "LED_MODEL",
+            name: created.productName ?? `Sản phẩm LED #${idStr}`,
+            price: Number(created.basePrice ?? 0),
+            description: created.description ?? "",
+            previewUrl: created.thumbnailUrl || undefined,
+            galleryUrls: created.galleryUrls ?? [],
+            status: (created.status as StoreCatalogItem["status"]) ?? "UNPUBLISHED",
+          });
+        }
+
+        setCatalogProducts([...createdLedItems, ...publishedItems]);
+      })
       .catch((err) => console.error("Failed to load catalog products:", err));
     retry();
   };
@@ -206,7 +245,7 @@ export default function StoreListingDashboard() {
           className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
         >
           <Lock size={15} className="shrink-0" />
-          Chế độ chỉ xem: Chỉ tài khoản Manager mới có quyền tạo mới, duyệt publish, đổi version, chỉnh sửa, lưu trữ hoặc xóa mềm các sản phẩm.
+          Chế độ chỉ xem: Chỉ tài khoản Manager hoặc Admin mới có quyền tạo mới, duyệt publish, đổi version, chỉnh sửa, lưu trữ hoặc xóa mềm các sản phẩm.
         </p>
       )}
 
@@ -351,9 +390,20 @@ export default function StoreListingDashboard() {
                   },
                 })
               }
+              onPublish={async (product) => {
+                try {
+                  await apiUpdateProductStatus(Number(product.id), "PUBLISHED");
+                  updateCreatedStoreProductStatus(product.id, "PUBLISHED");
+                  setNotice(`Đã mở bán sản phẩm "${product.name}" lên Store.`);
+                  refreshCatalog();
+                } catch {
+                  setNotice(`Mở bán sản phẩm thất bại.`);
+                }
+              }}
               onUnlist={async (product) => {
                 try {
                   await apiUpdateProductStatus(Number(product.id), "UNPUBLISHED");
+                  updateCreatedStoreProductStatus(product.id, "UNPUBLISHED");
                   setNotice(`Đã ẩn sản phẩm "${product.name}" khỏi Store.`);
                   refreshCatalog();
                 } catch {
@@ -389,8 +439,11 @@ export default function StoreListingDashboard() {
         <CreateStoreProductModal
           initialType={modal.defaultType}
           onClose={() => setModal(null)}
-          onSuccess={(productName) => {
-            setNotice(`Tạo sản phẩm "${productName}" thành công ở trạng thái Chưa mở bán (UNPUBLISHED).`);
+          onSuccess={(created) => {
+            setActiveTab(created.productType === "CHARACTER" ? "characters" : "led-models");
+            setNotice(
+              `Tạo sản phẩm "${created.productName}" (ID #${created.productId}) thành công ở trạng thái ${created.status ?? "UNPUBLISHED"}.`
+            );
             refreshCatalog();
           }}
         />
@@ -431,6 +484,7 @@ export default function StoreListingDashboard() {
           productName={modal.productName}
           onClose={() => setModal(null)}
           onSuccess={(productName) => {
+            updateCreatedStoreProductStatus(modal.productId, "ARCHIVED");
             setNotice(`Đã chuyển sản phẩm "${productName}" sang trạng thái Lưu trữ (ARCHIVED).`);
             refreshCatalog();
           }}
@@ -443,6 +497,7 @@ export default function StoreListingDashboard() {
           productName={modal.productName}
           onClose={() => setModal(null)}
           onSuccess={(productName) => {
+            updateCreatedStoreProductStatus(modal.productId, "DELETED");
             setNotice(`Đã xóa mềm sản phẩm "${productName}" thành công.`);
             refreshCatalog();
           }}

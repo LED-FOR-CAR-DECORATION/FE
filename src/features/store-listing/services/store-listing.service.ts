@@ -1,4 +1,5 @@
 import { apiDeleteStoreProduct, apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
+import type { CreatedStoreProductResponse } from "@/api_client";
 import type {
   CharacterVersion,
   ListingActor,
@@ -53,6 +54,53 @@ export function markProductAsDeleted(id: string | number): void {
     const set = getDeletedProductIds();
     set.add(String(id));
     localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+  updateCreatedStoreProductStatus(id, "DELETED");
+}
+
+const CREATED_PRODUCTS_KEY = "mirage_created_store_products";
+
+export function getCreatedStoreProducts(): CreatedStoreProductResponse[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CREATED_PRODUCTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as CreatedStoreProductResponse[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCreatedStoreProduct(created: CreatedStoreProductResponse): void {
+  if (typeof window === "undefined" || created.productId == null) return;
+  try {
+    const current = getCreatedStoreProducts().filter(
+      (item) => String(item.productId) !== String(created.productId),
+    );
+    current.unshift(created);
+    localStorage.setItem(CREATED_PRODUCTS_KEY, JSON.stringify(current));
+  } catch {}
+}
+
+export function updateCreatedStoreProductStatus(
+  productId: number | string,
+  status: "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED" | "DELETED",
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getCreatedStoreProducts();
+    let changed = false;
+    const next = current.map((item) => {
+      if (String(item.productId) === String(productId)) {
+        changed = true;
+        return { ...item, status: status as CreatedStoreProductResponse.status };
+      }
+      return item;
+    });
+    if (changed) {
+      localStorage.setItem(CREATED_PRODUCTS_KEY, JSON.stringify(next));
+    }
   } catch {}
 }
 
@@ -110,8 +158,11 @@ function delay(ms = LATENCY_MS) {
 }
 
 function assertManager(actor: ListingActor | null) {
-  if (!actor || actor.role !== "MANAGER") {
-    throw new StoreListingError("Chỉ Manager mới có quyền thay đổi nội dung hiển thị trên Store.", "FORBIDDEN");
+  if (!actor || (actor.role !== "MANAGER" && actor.role !== "ADMIN")) {
+    throw new StoreListingError(
+      "Chỉ Manager hoặc Admin mới có quyền thay đổi nội dung hiển thị trên Store.",
+      "FORBIDDEN",
+    );
   }
 }
 
@@ -144,8 +195,12 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
     const charactersFromBackend = items.filter((p) => p.productType === "CHARACTER");
     const publishedIds = new Set(charactersFromBackend.map((p) => String(p.id)));
     const deletedIds = getDeletedProductIds();
+    const createdProducts = getCreatedStoreProducts().filter(
+      (item) => item.productType === "CHARACTER" && item.productId != null,
+    );
+    const createdById = new Map(createdProducts.map((item) => [String(item.productId), item]));
 
-    // Kết hợp KNOWN_CHARACTERS và các characters động trả về từ Backend
+    // Kết hợp KNOWN_CHARACTERS, các characters từ Backend (PUBLISHED) và các character mới tạo (UNPUBLISHED)
     const allCharacters = [...KNOWN_CHARACTERS];
     for (const bChar of charactersFromBackend) {
       if (!allCharacters.some((c) => c.id === String(bChar.id))) {
@@ -158,14 +213,35 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
         });
       }
     }
+    for (const created of createdProducts) {
+      const id = String(created.productId);
+      if (!allCharacters.some((c) => c.id === id)) {
+        allCharacters.unshift({
+          id,
+          name: created.productName ?? `Character #${id}`,
+          price: Number(created.basePrice ?? 0),
+          description: created.description ?? "",
+          thumbnailUrl: created.thumbnailUrl || "/images/products/characters/cyber-fox.png",
+        });
+      }
+    }
 
     for (const charDef of allCharacters) {
-      const isDeleted = deletedIds.has(charDef.id);
+      const createdRecord = createdById.get(charDef.id);
+      const isDeleted = deletedIds.has(charDef.id) || createdRecord?.status === "DELETED";
       const isPublished = !isDeleted && publishedIds.has(charDef.id);
+      if (isPublished && createdRecord && createdRecord.status !== "PUBLISHED") {
+        updateCreatedStoreProductStatus(charDef.id, "PUBLISHED");
+      }
+      const isArchived = !isDeleted && !isPublished && createdRecord?.status === "ARCHIVED";
       const currentStatus: ListingStatus = isDeleted
         ? "Deleted"
         : isPublished
         ? "Published"
+        : isArchived
+        ? "Archived"
+        : createdRecord?.status === "UNPUBLISHED"
+        ? "Pending Review"
         : "Hidden";
 
       const listingId = `lst-${charDef.id}`;
@@ -187,7 +263,7 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
         };
         const listing: StoreListing = {
           listingId,
-          publisherUserId: "usr-manager-1",
+          publisherUserId: isPublished ? "usr-manager-1" : null,
           price: charDef.price,
           isFree: charDef.price === 0,
           status: currentStatus,
@@ -195,44 +271,68 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
           updatedAt: "2026-11-11T10:00:00Z",
         };
 
-        const v1: CharacterVersion = {
-          versionId: `ver-${charDef.id}-1`,
-          characterId: charDef.id,
-          storeListingId: listingId,
-          versionNumber: 1,
-          fileUrl: charDef.thumbnailUrl,
-          ledBinaryUrl: "",
-          format: "LED_BINARY",
-          width: 64,
-          height: 64,
-          frameCount: 16,
-          frameDelayMs: 60,
-          byteSize: 1024,
-          changelog: "Phiên bản khởi tạo chính thức",
-          isCurrent: false,
-          createdAt: "2026-11-10T08:00:00Z",
-        };
-        const v2: CharacterVersion = {
-          versionId: `ver-${charDef.id}-2`,
-          characterId: charDef.id,
-          storeListingId: listingId,
-          versionNumber: 2,
-          fileUrl: charDef.thumbnailUrl,
-          ledBinaryUrl: "",
-          format: "LED_BINARY",
-          width: 64,
-          height: 64,
-          frameCount: 24,
-          frameDelayMs: 50,
-          byteSize: 2048,
-          changelog: "Tối ưu hóa khung hình mượt mà 60 FPS",
-          isCurrent: true,
-          createdAt: "2026-11-11T10:00:00Z",
-        };
+        if (createdRecord?.characterVersionId) {
+          db.versions.push({
+            versionId: `ver-${charDef.id}-${createdRecord.characterVersionId}`,
+            characterId: charDef.id,
+            storeListingId: isPublished ? listingId : null,
+            versionNumber: createdRecord.characterVersionId,
+            fileUrl: charDef.thumbnailUrl,
+            ledBinaryUrl: "",
+            format: "LED_BINARY",
+            width: 64,
+            height: 64,
+            frameCount: 16,
+            frameDelayMs: 60,
+            byteSize: 1024,
+            changelog: `Phiên bản liên kết #${createdRecord.characterVersionId} từ Store Product`,
+            isCurrent: true,
+            createdAt: new Date().toISOString(),
+          });
+        } else {
+          const v1: CharacterVersion = {
+            versionId: `ver-${charDef.id}-1`,
+            characterId: charDef.id,
+            storeListingId: currentStatus === "Pending Review" ? null : listingId,
+            versionNumber: 1,
+            fileUrl: charDef.thumbnailUrl,
+            ledBinaryUrl: "",
+            format: "LED_BINARY",
+            width: 64,
+            height: 64,
+            frameCount: 16,
+            frameDelayMs: 60,
+            byteSize: 1024,
+            changelog: "Phiên bản khởi tạo chính thức",
+            isCurrent: false,
+            createdAt: "2026-11-10T08:00:00Z",
+          };
+          const v2: CharacterVersion = {
+            versionId: `ver-${charDef.id}-2`,
+            characterId: charDef.id,
+            storeListingId: currentStatus === "Pending Review" ? null : listingId,
+            versionNumber: 2,
+            fileUrl: charDef.thumbnailUrl,
+            ledBinaryUrl: "",
+            format: "LED_BINARY",
+            width: 64,
+            height: 64,
+            frameCount: 24,
+            frameDelayMs: 50,
+            byteSize: 2048,
+            changelog: "Tối ưu hóa khung hình mượt mà 60 FPS",
+            isCurrent: true,
+            createdAt: "2026-11-11T10:00:00Z",
+          };
+          db.versions.push(v1, v2);
+        }
 
-        db.characters.push(character);
+        if (createdRecord) {
+          db.characters.unshift(character);
+        } else {
+          db.characters.push(character);
+        }
         db.listings.push(listing);
-        db.versions.push(v1, v2);
       } else {
         // Đồng bộ trạng thái thực tế từ Backend PostgreSQL
         existing.status = currentStatus;
@@ -289,6 +389,7 @@ export async function publishCharacterVersion({ characterId, versionId, actor }:
   if (Number.isFinite(numericId) && numericId > 0) {
     await apiUpdateProductStatus(numericId, "PUBLISHED");
   }
+  updateCreatedStoreProductStatus(characterId, "PUBLISHED");
 
   const now = new Date().toISOString();
   const wasPublished = character.status === "Published";
@@ -333,6 +434,7 @@ export async function unlistCharacter({ characterId, actor }: UnlistCharacterInp
   if (Number.isFinite(numericId) && numericId > 0) {
     await apiUpdateProductStatus(numericId, "UNPUBLISHED");
   }
+  updateCreatedStoreProductStatus(characterId, "UNPUBLISHED");
 
   const listing = findListing(character.listingId);
   const now = new Date().toISOString();
@@ -356,6 +458,7 @@ export async function archiveCharacter({ characterId, actor }: UnlistCharacterIn
   if (Number.isFinite(numericId) && numericId > 0) {
     await apiUpdateProductStatus(numericId, "ARCHIVED");
   }
+  updateCreatedStoreProductStatus(characterId, "ARCHIVED");
 
   const character = findCharacter(characterId);
   const listing = findListing(character.listingId);

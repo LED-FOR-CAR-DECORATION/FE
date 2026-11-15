@@ -41,6 +41,7 @@ export type { ApiResponseResetPasswordResponse } from './models/ApiResponseReset
 export type { ApiResponseStaffOrderDetailResponse } from './models/ApiResponseStaffOrderDetailResponse';
 export type { ApiResponseStaffOrderStatusResponse } from './models/ApiResponseStaffOrderStatusResponse';
 export type { ApiResponseStoreTagResponse } from './models/ApiResponseStoreTagResponse';
+export type { ApiResponseStoreTagResponse } from './models/ApiResponseStoreTagResponse';
 export type { ApiResponseUpdatedStoreProductResponse } from './models/ApiResponseUpdatedStoreProductResponse';
 export type { ApiResponseUpdatedStoreProductStatusResponse } from './models/ApiResponseUpdatedStoreProductStatusResponse';
 export type { BundleDetail } from './models/BundleDetail';

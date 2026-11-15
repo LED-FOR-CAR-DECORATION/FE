@@ -27,7 +27,7 @@ export function useStoreCharacters() {
     () => (user ? { userId: user.userId, role: user.role } : null),
     [user],
   );
-  const canManage = actor?.role === "MANAGER";
+  const canManage = actor?.role === "MANAGER" || actor?.role === "ADMIN";
 
   const load = useCallback(async () => {
     try {

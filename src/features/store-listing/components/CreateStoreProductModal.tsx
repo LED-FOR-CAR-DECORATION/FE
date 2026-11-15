@@ -4,13 +4,103 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Check, Cpu, Loader2, Sparkles, Tag } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import { apiCreateStoreProduct, fetchStoreTags } from "@/lib/api/products";
-import type { TagItem } from "@/api_client";
+import type { CreatedStoreProductResponse, TagItem } from "@/api_client";
 import { CreateStoreProductRequest } from "@/api_client/models/CreateStoreProductRequest";
+import { saveCreatedStoreProduct } from "../services/store-listing.service";
 
 interface CreateStoreProductModalProps {
   onClose: () => void;
-  onSuccess: (productName: string) => void;
+  onSuccess: (created: CreatedStoreProductResponse) => void;
   initialType?: "LED" | "CHARACTER";
+}
+
+function normalizeAndValidateHttpUrl(
+  raw: string,
+  fieldLabel: string,
+): { value?: string; error?: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+
+  const resolved =
+    trimmed.startsWith("/") && typeof window !== "undefined"
+      ? `${window.location.origin}${trimmed}`
+      : trimmed;
+
+  if (resolved.length > 500) {
+    return { error: `${fieldLabel} không được vượt quá 500 ký tự.` };
+  }
+
+  if (!/^https?:\/\/\S+$/i.test(resolved)) {
+    return {
+      error: `${fieldLabel} phải là đường dẫn HTTP/HTTPS hợp lệ và không chứa khoảng trắng (ví dụ: https://... hoặc /images/...).`,
+    };
+  }
+
+  try {
+    const parsed = new URL(resolved);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return {
+        error: `${fieldLabel} chỉ hỗ trợ giao thức http:// hoặc https://.`,
+      };
+    }
+  } catch {
+    return { error: `${fieldLabel} không đúng định dạng URL.` };
+  }
+
+  return { value: resolved };
+}
+
+function formatCreateProductError(err: any): string {
+  const status: number | undefined = err?.response?.status ?? err?.status;
+  const data = err?.response?.data ?? err?.body;
+  const serverMessage =
+    data && typeof data === "object" && typeof data.message === "string"
+      ? data.message
+      : null;
+  const details: Array<{ field?: string; message?: string }> = Array.isArray(
+    data?.details,
+  )
+    ? data.details
+    : [];
+
+  if (status === 401) {
+    return "Phiên đăng nhập đã hết hạn hoặc thiếu xác thực (401). Vui lòng đăng nhập lại.";
+  }
+  if (status === 403) {
+    return "Bạn không có quyền tạo sản phẩm Store. Chức năng này chỉ dành cho MANAGER hoặc ADMIN (403).";
+  }
+  if (status === 404) {
+    return serverMessage
+      ? `Không tìm thấy dữ liệu liên kết (404): ${serverMessage}`
+      : "Không tìm thấy Tag hoặc Character Version được chọn trên hệ thống (404).";
+  }
+  if (status === 409) {
+    return serverMessage
+      ? `Xung đột liên kết (409): ${serverMessage}`
+      : "Character Version này đã được liên kết với một sản phẩm khác trên Store (409).";
+  }
+  if (status === 400) {
+    if (details.length > 0) {
+      const detailText = details
+        .map((item) =>
+          item.field
+            ? `${item.field}: ${item.message ?? "không hợp lệ"}`
+            : item.message,
+        )
+        .filter(Boolean)
+        .join("; ");
+      return `Dữ liệu không hợp lệ (400): ${detailText || serverMessage || "Vui lòng kiểm tra lại các trường nhập."}`;
+    }
+    if (serverMessage) {
+      return `Dữ liệu không hợp lệ (400): ${serverMessage}`;
+    }
+  }
+
+  return (
+    serverMessage ||
+    err?.message ||
+    "Tạo sản phẩm thất bại. Vui lòng kiểm tra lại thông tin."
+  );
 }
 
 export default function CreateStoreProductModal({
@@ -18,31 +108,47 @@ export default function CreateStoreProductModal({
   onSuccess,
   initialType = "LED",
 }: CreateStoreProductModalProps) {
-  const [productType, setProductType] = useState<"CHARACTER" | "LED">(initialType);
+  const [productType, setProductType] = useState<"CHARACTER" | "LED">(
+    initialType,
+  );
   const [productName, setProductName] = useState("");
-  const [basePrice, setBasePrice] = useState<string>(initialType === "LED" ? "1490000" : "199000");
+  const [basePrice, setBasePrice] = useState<string>(
+    initialType === "LED" ? "1490000" : "199000",
+  );
   const [description, setDescription] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [galleryUrlsText, setGalleryUrlsText] = useState("");
-  const [characterVersionId, setCharacterVersionId] = useState<string>("1");
+  const [characterVersionId, setCharacterVersionId] = useState<string>("");
 
-  // LED Details
+  // Optional 1-1 LED_MODEL initialization (AC02)
+  const [includeLedDetails, setIncludeLedDetails] = useState(true);
   const [modelName, setModelName] = useState("");
-  const [spec, setSpec] = useState("64x64 RGB HUB75 ESP32-S3");
+  const [widthPx, setWidthPx] = useState<string>("64");
+  const [heightPx, setHeightPx] = useState<string>("64");
+  const [connectivity, setConnectivity] = useState("Wi-Fi + BLE");
+  const [voltage, setVoltage] = useState("5V USB-C");
+  const [specNote, setSpecNote] = useState("RGB HUB75 ESP32-S3");
   const [stockQuantity, setStockQuantity] = useState<string>("50");
 
-  // Tags
+  // Tags (AC03)
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
+  const [isLoadingTags, setIsLoadingTags] = useState(true);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [manualTagIdsText, setManualTagIdsText] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetchStoreTags().then((tags) => {
-      if (!cancelled) setAvailableTags(tags);
-    });
+    setIsLoadingTags(true);
+    fetchStoreTags()
+      .then((tags) => {
+        if (!cancelled) setAvailableTags(tags);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingTags(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -51,7 +157,9 @@ export default function CreateStoreProductModal({
   const toggleTag = (tagId?: number) => {
     if (!tagId) return;
     setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
+      prev.includes(tagId)
+        ? prev.filter((id) => id !== tagId)
+        : [...prev, tagId],
     );
   };
 
@@ -64,17 +172,62 @@ export default function CreateStoreProductModal({
       setError("Vui lòng nhập tên sản phẩm.");
       return;
     }
-
-    const priceNum = Number(basePrice);
-    if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Giá bán cơ bản phải lớn hơn hoặc bằng 0 đ.");
+    if (trimmedName.length > 255) {
+      setError("Tên sản phẩm không được vượt quá 255 ký tự.");
       return;
     }
 
-    const galleryUrls = galleryUrlsText
+    const priceNum = Number(basePrice);
+    if (basePrice.trim() === "" || !Number.isFinite(priceNum) || priceNum < 0) {
+      setError("Giá bán cơ bản phải là số lớn hơn hoặc bằng 0 đ.");
+      return;
+    }
+
+    // Validate Thumbnail URL
+    const thumbCheck = normalizeAndValidateHttpUrl(
+      thumbnailUrl,
+      "Thumbnail URL",
+    );
+    if (thumbCheck.error) {
+      setError(thumbCheck.error);
+      return;
+    }
+
+    // Validate Gallery URLs
+    const rawGalleryUrls = galleryUrlsText
       .split(/[\n,]/)
       .map((url) => url.trim())
       .filter((url) => url.length > 0);
+    const galleryUrls: string[] = [];
+    for (let i = 0; i < rawGalleryUrls.length; i += 1) {
+      const check = normalizeAndValidateHttpUrl(
+        rawGalleryUrls[i],
+        `Gallery URL #${i + 1}`,
+      );
+      if (check.error) {
+        setError(check.error);
+        return;
+      }
+      if (check.value) galleryUrls.push(check.value);
+    }
+
+    // Parse manual + selected tag IDs (AC03)
+    const manualTagTokens = manualTagIdsText
+      .split(/[\s,]+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0);
+    const parsedManualTagIds: number[] = [];
+    for (const token of manualTagTokens) {
+      const parsed = Number(token);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        setError(`Tag ID "${token}" không hợp lệ (phải là số nguyên dương).`);
+        return;
+      }
+      parsedManualTagIds.push(parsed);
+    }
+    const combinedTagIds = Array.from(
+      new Set([...selectedTagIds, ...parsedManualTagIds]),
+    );
 
     const payload: CreateStoreProductRequest = {
       productName: trimmedName,
@@ -84,38 +237,77 @@ export default function CreateStoreProductModal({
           : CreateStoreProductRequest.productType.CHARACTER,
       basePrice: priceNum,
       description: description.trim() || undefined,
-      thumbnailUrl: thumbnailUrl.trim() || undefined,
+      thumbnailUrl: thumbCheck.value,
       galleryUrls: galleryUrls.length > 0 ? galleryUrls : undefined,
-      tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+      tagIds: combinedTagIds.length > 0 ? combinedTagIds : undefined,
     };
 
     if (productType === "CHARACTER") {
       const verId = Number(characterVersionId);
-      if (!Number.isFinite(verId) || verId <= 0) {
-        setError("Vui lòng nhập ID Version hợp lệ (> 0) cho Character.");
+      if (
+        characterVersionId.trim() === "" ||
+        !Number.isInteger(verId) ||
+        verId <= 0
+      ) {
+        setError(
+          "Vui lòng nhập ID Character Version hợp lệ (số nguyên dương > 0).",
+        );
         return;
       }
       payload.characterVersionId = verId;
-    } else {
+    } else if (includeLedDetails) {
+      const resolvedModelName = modelName.trim() || trimmedName;
+      if (resolvedModelName.length > 255) {
+        setError("Tên Model LED không được vượt quá 255 ký tự.");
+        return;
+      }
+
+      const parsedWidth = Number(widthPx);
+      const parsedHeight = Number(heightPx);
+      if (
+        !Number.isInteger(parsedWidth) ||
+        parsedWidth <= 0 ||
+        !Number.isInteger(parsedHeight) ||
+        parsedHeight <= 0
+      ) {
+        setError("Kích thước ma trận (widthPx, heightPx) phải là số nguyên > 0.");
+        return;
+      }
+
       const stockNum = Number(stockQuantity);
+      if (
+        stockQuantity.trim() === "" ||
+        !Number.isInteger(stockNum) ||
+        stockNum < 0
+      ) {
+        setError("Tồn kho ban đầu phải là số nguyên >= 0.");
+        return;
+      }
+
+      const specPayload: Record<string, unknown> = {
+        widthPx: parsedWidth,
+        heightPx: parsedHeight,
+        resolution: `${parsedWidth}x${parsedHeight}`,
+      };
+      if (connectivity.trim()) specPayload.connectivity = connectivity.trim();
+      if (voltage.trim()) specPayload.voltage = voltage.trim();
+      if (specNote.trim()) specPayload.note = specNote.trim();
+
       payload.ledDetails = {
-        modelName: modelName.trim() || trimmedName,
-        spec: { specText: spec.trim() },
-        stockQuantity: Number.isFinite(stockNum) && stockNum >= 0 ? stockNum : 0,
+        modelName: resolvedModelName,
+        spec: specPayload,
+        stockQuantity: stockNum,
       };
     }
 
     setIsSubmitting(true);
     try {
-      await apiCreateStoreProduct(payload);
-      onSuccess(trimmedName);
+      const created = await apiCreateStoreProduct(payload);
+      saveCreatedStoreProduct(created);
+      onSuccess(created);
       onClose();
-    } catch (err: any) {
-      const message =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Tạo sản phẩm thất bại. Vui lòng kiểm tra lại thông tin.";
-      setError(message);
+    } catch (err) {
+      setError(formatCreateProductError(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -124,7 +316,7 @@ export default function CreateStoreProductModal({
   return (
     <Modal
       title="Tạo sản phẩm bày bán (Store Product)"
-      description="Chỉ dành cho Manager: Khởi tạo sản phẩm phần cứng LED hoặc nhân vật Pixel Art theo user story POST /api/management/admin/store/products."
+      description="Dành cho Manager & Admin: Khởi tạo sản phẩm phần cứng LED hoặc Character Pixel Art qua API POST /api/management/admin/store/products."
       onClose={onClose}
       busy={isSubmitting}
       size="lg"
@@ -145,27 +337,39 @@ export default function CreateStoreProductModal({
             className="inline-flex items-center gap-2 rounded-lg border border-[#3b8555] bg-[#439660] px-5 py-2 text-sm font-black text-white shadow-xs hover:bg-[#387e51] disabled:opacity-60"
           >
             {isSubmitting && <Loader2 size={15} className="animate-spin" />}
-            {productType === "LED" ? "Tạo sản phẩm LED" : "Tạo nhân vật"}
+            {productType === "LED"
+              ? "Tạo sản phẩm LED"
+              : "Tạo sản phẩm Character"}
           </button>
         </>
       }
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm">
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800">
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800"
+          >
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         <div className="rounded-lg border border-[#d2e4d7] bg-[#f7fbf8] p-3 text-xs text-[#2e573c]">
-          <span className="font-bold">Quy tắc AC04:</span> Trạng thái khởi tạo mặc định luôn là{" "}
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-900">UNPUBLISHED</span>. Sau khi tạo xong, bạn có thể kiểm tra và bấm Publish bất cứ lúc nào.
+          <span className="font-bold">Quy tắc AC04:</span> Trạng thái khởi tạo
+          mặc định luôn là{" "}
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-900">
+            UNPUBLISHED
+          </span>
+          . Sau khi tạo xong, sản phẩm sẽ hiển thị trong danh sách quản lý để
+          bạn kiểm tra và bấm Publish.
         </div>
 
-        {/* 2 Chức năng chính: Tạo sản phẩm LED và Tạo nhân vật */}
+        {/* AC02: Product type */}
         <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">Chọn chức năng tạo sản phẩm (AC02)</label>
+          <label className="mb-1 block font-bold text-[#1f432b]">
+            Chọn loại sản phẩm (AC02)
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
@@ -180,7 +384,7 @@ export default function CreateStoreProductModal({
               }`}
             >
               <Cpu size={16} />
-              Tạo sản phẩm LED
+              Sản phẩm LED (Vật lý)
             </button>
             <button
               type="button"
@@ -195,7 +399,7 @@ export default function CreateStoreProductModal({
               }`}
             >
               <Sparkles size={16} />
-              Tạo nhân vật
+              Nhân vật Character (Digital)
             </button>
           </div>
         </div>
@@ -209,9 +413,14 @@ export default function CreateStoreProductModal({
             <input
               type="text"
               required
+              maxLength={255}
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
-              placeholder={productType === "CHARACTER" ? "Ví dụ: Cyber Samurai 64x64" : "Ví dụ: Lumintra Matrix Pro 64x64"}
+              placeholder={
+                productType === "CHARACTER"
+                  ? "Ví dụ: Cyber Samurai 64x64"
+                  : "Ví dụ: Lumintra Matrix Pro 64x64"
+              }
               className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
             />
           </div>
@@ -222,6 +431,7 @@ export default function CreateStoreProductModal({
             <input
               type="number"
               min={0}
+              step="1"
               required
               value={basePrice}
               onChange={(e) => setBasePrice(e.target.value)}
@@ -235,62 +445,151 @@ export default function CreateStoreProductModal({
         {productType === "CHARACTER" ? (
           <div className="rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
             <label className="mb-1 block font-bold text-[#1f432b]">
-              ID Version Character liên kết (characterVersionId) <span className="text-red-500">*</span>
+              ID Version Character liên kết (characterVersionId){" "}
+              <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
               min={1}
+              step="1"
               required
               value={characterVersionId}
               onChange={(e) => setCharacterVersionId(e.target.value)}
-              placeholder="1"
+              placeholder="Nhập ID Character Version (ví dụ: 12)"
               className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
             />
             <p className="mt-1 text-xs text-text-muted">
-              Hệ thống sẽ liên kết version này với sản phẩm mới (báo lỗi nếu version không tồn tại hoặc đã được liên kết).
+              Hệ thống sẽ gán{" "}
+              <code>character_version.product_id</code> với sản phẩm mới (trả
+              về 404 nếu version không tồn tại hoặc 409 nếu đã liên kết).
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2 rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
-            <span className="font-bold text-[#1f432b]">Thông tin mẫu LED Model 1-1 (ledDetails)</span>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="flex flex-col gap-3 rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
+            <label className="flex cursor-pointer items-center justify-between gap-3">
               <div>
-                <label className="text-xs font-semibold text-text-muted">Tên Model LED</label>
-                <input
-                  type="text"
-                  value={modelName}
-                  onChange={(e) => setModelName(e.target.value)}
-                  placeholder="Để trống sẽ dùng tên sản phẩm"
-                  className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                />
+                <span className="block font-bold text-[#1f432b]">
+                  Khởi tạo ngay mẫu phần cứng LED_MODEL 1–1 (ledDetails)
+                </span>
+                <span className="text-xs text-text-muted">
+                  Tắt tùy chọn này nếu chỉ muốn tạo bản ghi PRODUCT và gắn
+                  LED_MODEL sau.
+                </span>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-text-muted">Tồn kho ban đầu</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={stockQuantity}
-                  onChange={(e) => setStockQuantity(e.target.value)}
-                  className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-text-muted">Thông số kỹ thuật (spec)</label>
               <input
-                type="text"
-                value={spec}
-                onChange={(e) => setSpec(e.target.value)}
-                placeholder="Ví dụ: 64x64 RGB HUB75 ESP32-S3"
-                className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                type="checkbox"
+                checked={includeLedDetails}
+                onChange={(e) => setIncludeLedDetails(e.target.checked)}
+                className="h-4 w-4 accent-[#439660]"
               />
-            </div>
+            </label>
+
+            {includeLedDetails && (
+              <div className="flex flex-col gap-2 border-t border-[#e3efe6] pt-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-semibold text-text-muted">
+                      Tên Model LED
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={255}
+                      value={modelName}
+                      onChange={(e) => setModelName(e.target.value)}
+                      placeholder="Để trống sẽ dùng tên sản phẩm"
+                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-text-muted">
+                      Tồn kho ban đầu *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={stockQuantity}
+                      onChange={(e) => setStockQuantity(e.target.value)}
+                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div>
+                    <label className="text-xs font-semibold text-text-muted">
+                      Rộng (widthPx) *
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      step="1"
+                      value={widthPx}
+                      onChange={(e) => setWidthPx(e.target.value)}
+                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-text-muted">
+                      Cao (heightPx) *
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      step="1"
+                      value={heightPx}
+                      onChange={(e) => setHeightPx(e.target.value)}
+                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-text-muted">
+                      Kết nối
+                    </label>
+                    <input
+                      type="text"
+                      value={connectivity}
+                      onChange={(e) => setConnectivity(e.target.value)}
+                      placeholder="Wi-Fi + BLE"
+                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-text-muted">
+                      Nguồn điện
+                    </label>
+                    <input
+                      type="text"
+                      value={voltage}
+                      onChange={(e) => setVoltage(e.target.value)}
+                      placeholder="5V USB-C"
+                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-text-muted">
+                    Ghi chú thông số bổ sung
+                  </label>
+                  <input
+                    type="text"
+                    value={specNote}
+                    onChange={(e) => setSpecNote(e.target.value)}
+                    placeholder="Ví dụ: RGB HUB75 ESP32-S3"
+                    className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Mô tả */}
         <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">Mô tả chi tiết</label>
+          <label className="mb-1 block font-bold text-[#1f432b]">
+            Mô tả chi tiết
+          </label>
           <textarea
             rows={2}
             value={description}
@@ -303,17 +602,21 @@ export default function CreateStoreProductModal({
         {/* Ảnh thumbnail & Gallery */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">Thumbnail URL</label>
+            <label className="mb-1 block font-bold text-[#1f432b]">
+              Thumbnail URL (HTTP/HTTPS)
+            </label>
             <input
               type="text"
               value={thumbnailUrl}
               onChange={(e) => setThumbnailUrl(e.target.value)}
-              placeholder="/images/products/characters/cyber-fox.png"
+              placeholder="https://cdn.lumintra.com/products/matrix.png"
               className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
             />
           </div>
           <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">Gallery URLs (cách nhau dấu phẩy hoặc dòng)</label>
+            <label className="mb-1 block font-bold text-[#1f432b]">
+              Gallery URLs (cách nhau dấu phẩy hoặc dòng)
+            </label>
             <input
               type="text"
               value={galleryUrlsText}
@@ -324,12 +627,14 @@ export default function CreateStoreProductModal({
           </div>
         </div>
 
-        {/* Tags */}
-        {availableTags.length > 0 && (
-          <div>
-            <label className="mb-1.5 flex items-center gap-1 font-bold text-[#1f432b]">
-              <Tag size={14} /> Thẻ phân loại (Category Tags - AC03)
-            </label>
+        {/* AC03: Category Tags */}
+        <div className="rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
+          <label className="mb-1.5 flex items-center gap-1 font-bold text-[#1f432b]">
+            <Tag size={14} /> Thẻ phân loại (Category Tags - AC03)
+          </label>
+          {isLoadingTags ? (
+            <p className="text-xs text-text-muted">Đang tải danh sách thẻ...</p>
+          ) : availableTags.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {availableTags.map((tag) => {
                 const isSelected = selectedTagIds.includes(tag.tagId ?? -1);
@@ -345,15 +650,32 @@ export default function CreateStoreProductModal({
                     }`}
                   >
                     {isSelected && <Check size={12} />}
-                    {tag.name}
+                    {tag.name} (#{tag.tagId})
                   </button>
                 );
               })}
             </div>
+          ) : (
+            <p className="text-xs text-text-muted">
+              Chưa tải được thẻ có sẵn từ hệ thống. Bạn có thể nhập thủ công ID
+              thẻ bên dưới.
+            </p>
+          )}
+
+          <div className="mt-2.5">
+            <label className="text-xs font-semibold text-text-muted">
+              Nhập thêm Tag ID thủ công (nếu cần, cách nhau dấu phẩy)
+            </label>
+            <input
+              type="text"
+              value={manualTagIdsText}
+              onChange={(e) => setManualTagIdsText(e.target.value)}
+              placeholder="Ví dụ: 1, 2"
+              className="mt-1 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+            />
           </div>
-        )}
+        </div>
       </form>
     </Modal>
   );
 }
-

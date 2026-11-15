@@ -10,7 +10,7 @@ export type MediaType = {
     charset?: string;
     concrete?: boolean;
     subtypeSuffix?: string;
-    wildcardSubtype?: boolean;
     wildcardType?: boolean;
+    wildcardSubtype?: boolean;
 };
 

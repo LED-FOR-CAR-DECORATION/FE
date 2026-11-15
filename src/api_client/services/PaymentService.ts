@@ -38,6 +38,29 @@ export class PaymentService {
         });
     }
     /**
+     * Simulate mock payment success (development/testing)
+     * Simulates successful SePay payment for a given payment code without requiring actual bank transfer. Atomically marks transaction as SUCCEEDED and triggers PaymentSucceededEvent.
+     * @param paymentCode Unique SePay transfer payment code
+     * @returns ApiResponsePaymentSessionResponse Mock payment succeeded
+     * @throws ApiError
+     */
+    public static mockPaymentSuccess(
+        paymentCode: string,
+    ): CancelablePromise<ApiResponsePaymentSessionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/payments/mock-success/{paymentCode}',
+            path: {
+                'paymentCode': paymentCode,
+            },
+            errors: {
+                400: `Bad request: blank or invalid paymentCode parameter`,
+                404: `Payment session not found`,
+                500: `Internal server error`,
+            },
+        });
+    }
+    /**
      * Get SePay payment session and poll status
      * Retrieves the SePay VietQR payment session details (QR URL, bank details, amount, expiration) and current status for 3-second frontend polling. Restricted to the owning CUSTOMER account.
      * @param paymentCode Unique SePay transfer payment code

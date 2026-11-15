@@ -17,7 +17,7 @@ import {
 import type { PaymentSessionResponse } from "@/api_client";
 import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import { fetchOrderDetail } from "@/lib/api/orders";
-import { fetchPaymentSession } from "@/lib/api/payments";
+import { fetchPaymentSession, mockPaymentSuccess } from "@/lib/api/payments";
 import { formatPrice } from "@/lib/currency";
 
 interface SePayOrderPaymentCardProps {
@@ -51,6 +51,7 @@ export default function SePayOrderPaymentCard({
   const [session, setSession] = useState<PaymentSessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isMocking, setIsMocking] = useState(false);
   const [error, setError] = useState("");
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -221,6 +222,19 @@ export default function SePayOrderPaymentCard({
       }, 1800);
     } catch {
       // Ignore clipboard failures
+    }
+  };
+
+  const handleMockSuccess = async () => {
+    if (!session?.paymentCode || isMocking) return;
+    setIsMocking(true);
+    try {
+      const updated = await mockPaymentSuccess(session.paymentCode);
+      handlePaymentSucceeded(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Giả lập thanh toán thất bại.");
+    } finally {
+      setIsMocking(false);
     }
   };
 
@@ -408,16 +422,40 @@ export default function SePayOrderPaymentCard({
                 <ShieldCheck size={14} className="text-emerald-700" />
                 Mở app ngân hàng quét mã QR, hệ thống tự xác nhận sau vài giây.
               </p>
-              <button
-                type="button"
-                disabled={refreshing}
-                onClick={() => void loadSession(true)}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-black px-3 py-1.5 text-xs font-bold hover:bg-primary/20 disabled:opacity-60"
-              >
-                <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
-                Kiểm tra ngay
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Nút Test / Dev Mode */}
+                {session.status === "PENDING" && (
+                  <button
+                    type="button"
+                    disabled={isMocking || refreshing}
+                    onClick={() => void handleMockSuccess()}
+                    className="inline-flex items-center gap-1.5 rounded-sm border-2 border-emerald-600 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 shadow-sm"
+                    title="Dành cho Dev/Test: Bấm để xác nhận đơn hàng thành công ngay lập tức"
+                  >
+                    {isMocking ? (
+                      <Loader2 size={12} className="animate-spin text-emerald-700" />
+                    ) : (
+                      <span className="text-emerald-600 font-bold">⚡</span>
+                    )}
+                    Giả lập thanh toán
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={refreshing || isMocking}
+                  onClick={() => void loadSession(true)}
+                  className="inline-flex items-center gap-1.5 rounded-sm border border-black px-3 py-1.5 text-xs font-bold hover:bg-primary/20 disabled:opacity-60"
+                >
+                  <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+                  Kiểm tra ngay
+                </button>
+              </div>
             </div>
+            {error && (
+              <p className="rounded-sm border border-red-400 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                {error}
+              </p>
+            )}
           </div>
         </div>
       ) : null}

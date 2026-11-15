@@ -1,12 +1,13 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { CheckCircle, Clock } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import SePayOrderPaymentCard from "@/features/order/components/SePayOrderPaymentCard";
+import { useCart } from "@/features/cart/context/CartContext";
 import { useOrders } from "@/features/order/context/OrderContext";
 
 function ResultContent() {
@@ -14,7 +15,12 @@ function ResultContent() {
   const orderId = searchParams.get("orderId") ?? "";
   const paymentCode = searchParams.get("paymentCode") ?? undefined;
   const isPaidParam = searchParams.get("paid") === "1";
+  const { refreshCart } = useCart();
   const { orders, refreshOrders } = useOrders();
+
+  useEffect(() => {
+    void refreshCart();
+  }, [refreshCart]);
 
   const order = orders.find((entry) => entry.id === orderId);
   const isPaid = isPaidParam || order?.paymentStatus === "Paid";

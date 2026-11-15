@@ -157,7 +157,7 @@ export class AuthenticationService {
     }
     /**
      * Authenticate user credentials
-     * Authenticates user credentials using email and password. Upon success, returns access and refresh tokens. Failed attempts are tracked (lockout occurs after 5 failed attempts).
+     * Authenticates user credentials using normalized email and password. Rejects deleted, suspended, and pending-verification accounts (dispatching a verification OTP email for pending customer accounts). Upon success, returns access and refresh tokens. Failed attempts are tracked (lockout occurs after 5 failed attempts).
      * @param requestBody
      * @returns ApiResponseLoginResponse User authenticated successfully
      * @throws ApiError
@@ -172,7 +172,8 @@ export class AuthenticationService {
             mediaType: 'application/json',
             errors: {
                 400: `Validation failed: request payload contains missing or invalid fields`,
-                401: `Unauthorized: Invalid email or password`,
+                401: `Unauthorized: Invalid email or password, or account suspended/deleted`,
+                403: `Forbidden: Account email is not verified. A verification OTP email has been sent if eligible`,
                 423: `Locked: Account is locked for 15 minutes due to consecutive failed attempts`,
                 500: `Internal server error: Unexpected system failure`,
             },

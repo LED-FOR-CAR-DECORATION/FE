@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Check,
   ChevronRight,
@@ -28,8 +28,9 @@ import { fetchStoreProductDetail, fetchStoreProducts } from "@/lib/api/products"
 const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} đ`;
 
 export default function ProductDetailPage() {
+  const router = useRouter();
   const params = useParams<{ productId: string }>();
-  const { addItem } = useCart();
+  const { items, addItem } = useCart();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const canBuy = isAuthenticated && !authLoading;
   const [item, setItem] = useState<CatalogProduct | null>(null);
@@ -39,6 +40,7 @@ export default function ProductDetailPage() {
   const [added, setAdded] = useState(false);
   const [actionError, setActionError] = useState("");
   const [activeMedia, setActiveMedia] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +101,14 @@ export default function ProductDetailPage() {
   const isBundle = item.productType === "BUNDLE";
   const isSubscription = item.productType === "SUBSCRIPTION";
   const isDigital = isCharacter || isSubscription;
+  const isAlreadyInCart = items.some(
+    (cartItem) => cartItem.productId === Number(params.productId) || cartItem.id === params.productId
+  );
+  const isOwned = Boolean(
+    actionError &&
+      (actionError.toLowerCase().includes("sở hữu") || actionError.toLowerCase().includes("owned"))
+  );
+
   const productTypeLabel = isSubscription
     ? "Gói thành viên"
     : isBundle
@@ -157,14 +167,39 @@ export default function ProductDetailPage() {
     ]);
   }
 
-  const add = async () => {
-    if (!canBuy) return;
+  const add = async (): Promise<boolean> => {
+    if (!isAuthenticated) {
+      router.push("/login");
+      return false;
+    }
+    if (isOwned) return false;
     setActionError("");
+    setIsSubmitting(true);
     try {
       await addItem(item, isDigital ? 1 : quantity);
       setAdded(true);
+      return true;
     } catch (err) {
       setActionError(getApiErrorMessage(err, "Không thể thêm sản phẩm vào giỏ hàng."));
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (!isAuthenticated) {
+      router.push("/login");
+      return;
+    }
+    if (isOwned) return;
+    if (added || isAlreadyInCart) {
+      router.push("/cart");
+      return;
+    }
+    const success = await add();
+    if (success) {
+      router.push("/cart");
     }
   };
 
@@ -269,27 +304,49 @@ export default function ProductDetailPage() {
                   </div>
                 </>
               )}
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={add}
-                  disabled={!canBuy}
-                  className="flex flex-1 items-center justify-center gap-2 rounded bg-[#126356] px-4 py-3 text-sm font-bold text-white hover:bg-[#0d4c42] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#126356]"
-                >
-                  <ShoppingBag size={16} />
-                  {added ? "Đã thêm vào giỏ" : "Thêm vào giỏ hàng"}
-                </button>
-                <Link
-                  href={canBuy ? "/cart" : "/login"}
-                  onClick={() => {
-                    if (canBuy && !added) void add();
-                  }}
-                  className="rounded border border-[#126356] px-4 py-3 text-sm font-bold text-[#126356] hover:bg-[#e3f2e9]"
-                >
-                  <Zap size={16} className="mr-1 inline" />
-                  Mua ngay
-                </Link>
+              <div className="mt-4 flex flex-col gap-2">
+                {isOwned ? (
+                  <div className="rounded border-2 border-amber-500 bg-amber-50 p-4 text-center">
+                    <p className="font-bold text-amber-900">
+                      Bạn đã sở hữu nhân vật này rồi!
+                    </p>
+                    <p className="mt-1 text-xs text-amber-700">
+                      Bạn có thể quản lý và hiển thị nhân vật trong bộ sưu tập của bạn.
+                    </p>
+                    <Link
+                      href="/profile/gallery"
+                      className="btn-primary mt-3 inline-block w-full py-2.5 text-center text-sm font-bold"
+                    >
+                      Đi đến Thư viện nhân vật
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={add}
+                      disabled={!canBuy || isSubmitting}
+                      className="flex flex-1 items-center justify-center gap-2 rounded bg-[#126356] px-4 py-3 text-sm font-bold text-white hover:bg-[#0d4c42] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#126356]"
+                    >
+                      <ShoppingBag size={16} />
+                      {isSubmitting
+                        ? "Đang xử lý..."
+                        : added || isAlreadyInCart
+                          ? "Đã có trong giỏ"
+                          : "Thêm vào giỏ hàng"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBuyNow}
+                      disabled={!canBuy || isSubmitting}
+                      className="rounded border border-[#126356] px-4 py-3 text-sm font-bold text-[#126356] hover:bg-[#e3f2e9] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Zap size={16} className="mr-1 inline" />
+                      Mua ngay
+                    </button>
+                  </div>
+                )}
               </div>
-              {actionError && (
+              {actionError && !isOwned && (
                 <p role="alert" className="mt-2 text-xs font-bold text-red-600">
                   {actionError}
                 </p>
@@ -303,7 +360,7 @@ export default function ProductDetailPage() {
                   để thêm vào giỏ hàng hoặc mua ngay.
                 </p>
               )}
-              {added && (
+              {(added || isAlreadyInCart) && !isOwned && (
                 <Link href="/cart" className="mt-2 text-center text-sm font-bold text-[#126356] underline">
                   Xem giỏ hàng
                 </Link>

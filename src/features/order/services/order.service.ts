@@ -5,6 +5,7 @@ import type { CartItem } from "@/features/cart/types";
 import { getOrderKind } from "@/features/order/fulfillment";
 import type { DeliveryStatus, MockOrder, OrderKind, OrderStatus, OrderType, PaymentStatus } from "@/features/order/types";
 import {
+  apiCancelOrder,
   apiCheckoutOrder,
   apiConfirmOrderDelivery,
   apiDispatchOrder,
@@ -372,6 +373,13 @@ export const orderService = {
   },
   async confirmDelivery(orderId: number | string) {
     const result = await apiConfirmOrderDelivery(orderId);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+    return result;
+  },
+  async cancelCustomerOrder(orderId: number | string, reason?: string) {
+    const result = await apiCancelOrder(orderId, reason);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
     }

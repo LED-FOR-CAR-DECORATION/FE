@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import type { CancelOrderResponse } from "@/api_client";
 import type { Address } from "@/features/address/types";
 import type { AuthUser } from "@/features/auth/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -24,6 +25,7 @@ interface OrderContextValue {
   createDelivery: (id: string) => Promise<void>;
   dispatchOrder: (id: string, payload: DispatchOrderRequest) => Promise<DispatchOrderResponse>;
   confirmOrderDelivery: (orderId: string | number) => Promise<void>;
+  cancelCustomerOrder: (orderId: string | number, reason?: string) => Promise<CancelOrderResponse>;
 }
 
 const OrderContext = createContext<OrderContextValue | null>(null);
@@ -152,6 +154,27 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     [refreshOrders],
   );
 
+  const cancelCustomerOrder = useCallback(
+    async (orderId: string | number, reason?: string): Promise<CancelOrderResponse> => {
+      const res = await orderService.cancelCustomerOrder(orderId, reason);
+      const nextStatus = (res.status as OrderStatus) || "CANCELED";
+      setOrders((current) =>
+        current.map((order) =>
+          String(order.id) === String(orderId)
+            ? {
+                ...order,
+                status: nextStatus,
+                paymentStatus: nextStatus === "CANCELED" || nextStatus === "REFUNDED" ? "Cancelled" : order.paymentStatus,
+              }
+            : order,
+        ),
+      );
+      await refreshOrders();
+      return res;
+    },
+    [refreshOrders],
+  );
+
   return (
     <OrderContext.Provider
       value={{
@@ -163,6 +186,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         createDelivery,
         dispatchOrder,
         confirmOrderDelivery,
+        cancelCustomerOrder,
       }}
     >
       {children}

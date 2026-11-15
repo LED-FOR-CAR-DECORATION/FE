@@ -102,6 +102,7 @@ export namespace StaffOrderSummaryItem {
     export enum paymentStatus {
         PENDING = 'PENDING',
         SUCCESS = 'SUCCESS',
+        EXPIRED = 'EXPIRED',
         FAILED = 'FAILED',
         REFUNDED = 'REFUNDED',
     }

@@ -1,8 +1,11 @@
 import type {
+  ApiResponseCancelOrderResponse,
   ApiResponseCheckoutResponse,
   ApiResponseConfirmOrderDeliveryResponse,
   ApiResponseListOrderSummaryItem,
   ApiResponseOrderDetailResponse,
+  CancelOrderRequest,
+  CancelOrderResponse,
   CheckoutRequest,
   CheckoutResponse,
   ConfirmOrderDeliveryResponse,
@@ -99,6 +102,52 @@ export async function apiConfirmOrderDelivery(
     return res.data;
   } catch (error) {
     throw new Error(getConfirmDeliveryErrorMessage(error));
+  }
+}
+
+export function getCancelOrderErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const body = error.body as ErrorResponse | undefined;
+    const code = (body as { code?: string } | undefined)?.code;
+    if (code === "INVALID_ORDER_STATUS_TRANSITION") {
+      return "Đơn hàng không thể hủy (chỉ hủy được đơn chờ thanh toán hoặc chờ đóng hàng chưa bàn giao vận chuyển).";
+    }
+    if (code === "ORDER_NOT_FOUND") {
+      return "Đơn hàng không tồn tại hoặc không thuộc quyền sở hữu của bạn.";
+    }
+    const detail = body?.details?.find((d) => d.message)?.message;
+    if (body?.message) return body.message;
+    if (detail) return detail;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Không thể hủy đơn hàng. Vui lòng thử lại.";
+}
+
+export async function apiCancelOrder(
+  orderId: number | string,
+  reason?: string,
+): Promise<CancelOrderResponse> {
+  const numericId = Number(orderId);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    throw new Error("Mã đơn hàng không hợp lệ.");
+  }
+
+  const payload: CancelOrderRequest =
+    reason && reason.trim() ? { reason: reason.trim() } : {};
+
+  try {
+    const res: ApiResponseCancelOrderResponse = await OrdersService.cancelOrder(
+      numericId,
+      payload,
+    );
+    if (!res.data) {
+      throw new Error("Không nhận được phản hồi hủy đơn hàng từ máy chủ.");
+    }
+    return res.data;
+  } catch (error) {
+    throw new Error(getCancelOrderErrorMessage(error));
   }
 }
 

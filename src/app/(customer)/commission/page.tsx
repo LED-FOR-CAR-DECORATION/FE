@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, ImagePlus, Send, Sparkles, X } from "lucide-react";
+import CustomerSidebar from "@/components/layout/CustomerSidebar";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -75,31 +76,36 @@ export default function CommissionPage() {
     return (
       <>
         <Header />
-        <main className="flex-1 bg-[#f8f7ef] px-4 py-16">
-          <section className="mx-auto max-w-xl rounded-xl border border-[#cfe3d0] bg-white p-10 text-center shadow-sm">
-            <CheckCircle2 className="mx-auto text-[#198653]" size={48} />
-            <h1 className="mt-4 text-2xl font-black text-[#155e59]">
-              Đã gửi yêu cầu thiết kế Commission
-            </h1>
-            <p className="mt-3 text-sm text-[#66736b]">
-              Nhân viên sẽ xem xét yêu cầu và phản hồi báo giá chi tiết cho bạn trong
-              Không gian Chat.
-            </p>
-            <div className="mt-7 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/chat"
-                className="inline-flex rounded-xl bg-[#155e59] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#0e4b47]"
-              >
-                Mở Không gian Chat
-              </Link>
-              <Link
-                href="/"
-                className="inline-flex rounded-xl border border-[#155e59] bg-white px-5 py-2.5 text-sm font-bold text-[#155e59] hover:bg-[#eaf5e8]"
-              >
-                Về trang cửa hàng
-              </Link>
+        <main className="flex-1 bg-[#f5f5f5] py-6 md:py-8">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 lg:flex-row lg:items-start">
+            <CustomerSidebar />
+            <div className="min-w-0 flex-1">
+              <section className="mx-auto max-w-xl rounded-xl border border-[#cfe3d0] bg-white p-10 text-center shadow-sm">
+                <CheckCircle2 className="mx-auto text-[#198653]" size={48} />
+                <h1 className="mt-4 text-2xl font-black text-[#155e59]">
+                  Đã gửi yêu cầu thiết kế Commission
+                </h1>
+                <p className="mt-3 text-sm text-[#66736b]">
+                  Nhân viên sẽ xem xét yêu cầu và phản hồi báo giá chi tiết cho bạn trong
+                  Không gian Chat.
+                </p>
+                <div className="mt-7 flex flex-wrap justify-center gap-3">
+                  <Link
+                    href="/chat"
+                    className="inline-flex rounded-xl bg-[#155e59] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#0e4b47]"
+                  >
+                    Mở Không gian Chat
+                  </Link>
+                  <Link
+                    href="/"
+                    className="inline-flex rounded-xl border border-[#155e59] bg-white px-5 py-2.5 text-sm font-bold text-[#155e59] hover:bg-[#eaf5e8]"
+                  >
+                    Về trang cửa hàng
+                  </Link>
+                </div>
+              </section>
             </div>
-          </section>
+          </div>
         </main>
         <Footer />
       </>
@@ -130,8 +136,10 @@ export default function CommissionPage() {
   return (
     <>
       <Header />
-      <main className="flex-1 bg-[#f8f7ef] px-4 py-8 text-[#26352f]">
-        <div className="mx-auto max-w-5xl">
+      <main className="flex-1 bg-[#f5f5f5] py-6 md:py-8 text-[#26352f]">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 lg:flex-row lg:items-start">
+          <CustomerSidebar />
+          <div className="min-w-0 flex-1">
           <Link
             href="/"
             className="inline-flex items-center gap-1 text-sm font-bold text-[#155e59]"
@@ -303,6 +311,7 @@ export default function CommissionPage() {
               </p>
             </aside>
           </form>
+          </div>
         </div>
       </main>
       <Footer />

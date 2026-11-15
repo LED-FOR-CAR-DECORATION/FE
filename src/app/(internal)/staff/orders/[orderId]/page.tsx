@@ -22,14 +22,29 @@ import { useOrders } from "@/features/order/context/OrderContext";
 import { getOrderKind } from "@/features/order/fulfillment";
 import type { OrderKind } from "@/features/order/types";
 
-const ORDER_STEPS = [
-  { key: "PENDING_PAYMENT", label: "Chờ thanh toán" },
-  { key: "PROCESSING", label: "Chờ đóng hàng" },
-  { key: "PARTIALLY_FULFILLED", label: "Đã cấp nhân vật &\nchờ đóng hàng" },
-  { key: "SHIPPING", label: "Đang vận chuyển" },
-  { key: "DELIVERED", label: "Đã giao" },
-  { key: "COMPLETED", label: "Đã hoàn thành" },
-];
+function getOrderSteps(orderKind: OrderKind, status: string) {
+  if (orderKind === "DIGITAL") {
+    return [
+      { key: "PENDING_PAYMENT", label: "Chờ thanh toán" },
+      { key: "COMPLETED", label: "Đã cấp nhân vật &\nHoàn thành" },
+    ];
+  }
+
+  const packingStep =
+    orderKind === "MIXED" ||
+    status === "PARTIALLY_FULFILLED" ||
+    status === "HandedOver"
+      ? { key: "PARTIALLY_FULFILLED", label: "Đã cấp nhân vật &\nchờ đóng hàng" }
+      : { key: "PROCESSING", label: "Chờ đóng hàng" };
+
+  return [
+    { key: "PENDING_PAYMENT", label: "Chờ thanh toán" },
+    packingStep,
+    { key: "SHIPPING", label: "Đang vận chuyển" },
+    { key: "DELIVERED", label: "Đã giao" },
+    { key: "COMPLETED", label: "Đã hoàn thành" },
+  ];
+}
 
 const AHAMOVE_SERVICES = [
   {
@@ -50,28 +65,37 @@ const AHAMOVE_SERVICES = [
   },
 ];
 
-function getStepIndex(status: string): number {
+function getStepIndex(status: string, orderKind: OrderKind): number {
+  if (orderKind === "DIGITAL") {
+    switch (status) {
+      case "COMPLETED":
+      case "Completed":
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
   switch (status) {
     case "PENDING_PAYMENT":
     case "PendingPayment":
     case "Pending":
       return 0;
     case "PROCESSING":
+    case "PARTIALLY_FULFILLED":
     case "Preparing":
     case "Confirmed":
-      return 1;
-    case "PARTIALLY_FULFILLED":
     case "HandedOver":
-      return 2;
+      return 1;
     case "SHIPPING":
     case "Shipping":
-      return 3;
+      return 2;
     case "DELIVERED":
     case "Delivered":
-      return 4;
+      return 3;
     case "COMPLETED":
     case "Completed":
-      return 5;
+      return 4;
     default:
       return 1;
   }
@@ -166,7 +190,8 @@ export default function OrderDetailPage({
 
   const orderKind = getOrderKind(order);
   const kindBadge = ORDER_KIND_BADGE[orderKind];
-  const currentStepIndex = getStepIndex(order.status);
+  const orderSteps = getOrderSteps(orderKind, order.status);
+  const currentStepIndex = getStepIndex(order.status, orderKind);
   const badge = BADGE_CONFIG[order.status] || {
     label: order.status,
     bg: "bg-gray-700",
@@ -373,9 +398,9 @@ export default function OrderDetailPage({
           <div className="hidden w-12 md:block" />
         </div>
 
-        {/* Stepper (6 steps) */}
+        {/* Stepper */}
         <div className="relative mt-4 flex items-center justify-between overflow-x-auto py-2">
-          {ORDER_STEPS.map((step, idx) => {
+          {orderSteps.map((step, idx) => {
             const isDone = idx < currentStepIndex;
             const isCurrent = idx === currentStepIndex;
 
@@ -408,7 +433,7 @@ export default function OrderDetailPage({
                   )}
                 </div>
 
-                {idx < ORDER_STEPS.length - 1 && (
+                {idx < orderSteps.length - 1 && (
                   <div className="mx-2 flex-1">
                     {idx < currentStepIndex ? (
                       <div className="h-1 w-full bg-[#0F5B38]" />

@@ -4,6 +4,7 @@ import {
   type ErrorResponse,
   type PaymentSessionResponse,
 } from "@/api_client";
+import { OpenAPI } from "./client";
 
 export type { PaymentSessionResponse };
 
@@ -53,5 +54,27 @@ export async function fetchPaymentSession(paymentCode: string): Promise<PaymentS
   } catch (error) {
     throw new Error(getPaymentErrorMessage(error));
   }
+}
+
+/**
+ * Giả lập thanh toán thành công (Môi trường Dev / Testing)
+ */
+export async function mockPaymentSuccess(paymentCode: string): Promise<PaymentSessionResponse> {
+  const normalizedCode = paymentCode.trim();
+  if (!normalizedCode) {
+    throw new Error("Mã thanh toán không hợp lệ.");
+  }
+  const baseUrl = OpenAPI.BASE || "";
+  const res = await fetch(`${baseUrl}/api/payments/mock-success/${encodeURIComponent(normalizedCode)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body?.data) {
+    throw new Error(body?.message || "Không thể giả lập thanh toán.");
+  }
+  return body.data as PaymentSessionResponse;
 }
 

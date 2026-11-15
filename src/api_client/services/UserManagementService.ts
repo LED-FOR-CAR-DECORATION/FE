@@ -7,10 +7,94 @@ import type { ApiResponseManagedUserListResponse } from '../models/ApiResponseMa
 import type { CreateInternalUserRequest } from '../models/CreateInternalUserRequest';
 import type { ManagedUserFilterRequest } from '../models/ManagedUserFilterRequest';
 import type { SoftDeleteUserRequest } from '../models/SoftDeleteUserRequest';
+import type { UpdateManagedUserRequest } from '../models/UpdateManagedUserRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class UserManagementService {
+    /**
+     * View an internal user's detail
+     * Active Admin/Manager only. Returns profile, assigned role, account status and password-login lockout state. CUSTOMER accounts/roles are forbidden. Successful views of other users publish an audit event, logged after transaction commit; self views do not.
+     * @param id Target account ID, greater than zero
+     * @returns ApiResponseManagedUserDetailResponse ApiResponse<ManagedUserDetailResponse>
+     * @throws ApiError
+     */
+    public static detail(
+        id: number,
+    ): CancelablePromise<ApiResponseManagedUserDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/management/admin/users/{id}',
+            path: {
+                'id': id,
+            },
+            errors: {
+                400: `Malformed, nonpositive or overflowing account ID`,
+                401: `Authentication required or caller account missing`,
+                403: `Forbidden caller or CUSTOMER target`,
+                404: `Target account or employee profile missing`,
+                500: `Unexpected infrastructure or profile integrity failure`,
+            },
+        });
+    }
+    /**
+     * Update an internal user
+     * Update profile fields, one assigned role or manual lock status. Changes revoke the user's sessions and are audited after commit.
+     * @param id
+     * @param requestBody
+     * @returns void
+     * @throws ApiError
+     */
+    public static update1(
+        id: number,
+        requestBody: UpdateManagedUserRequest,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/management/admin/users/{id}',
+            path: {
+                'id': id,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Invalid ID, fields or role`,
+                401: `Authentication required`,
+                403: `Caller or target is restricted`,
+                404: `Target account or profile not found`,
+                500: `Unexpected application failure`,
+            },
+        });
+    }
+    /**
+     * Soft delete an account
+     * Sets the account to DELETED and audits the supplied reason code after commit. The caller and default administrator are protected. Repeating a completed deletion returns 204.
+     * @param id
+     * @param requestBody
+     * @returns void
+     * @throws ApiError
+     */
+    public static delete(
+        id: number,
+        requestBody: SoftDeleteUserRequest,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/management/admin/users/{id}',
+            path: {
+                'id': id,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Invalid account ID or reason`,
+                401: `Authentication required`,
+                403: `Caller not authorized or account protected`,
+                404: `Account not found`,
+                500: `Unexpected error`,
+            },
+        });
+    }
     /**
      * List internal users
      * Admin/manager only. Combines role, active status and email/name search filters. Excludes customer accounts and CUSTOMER roles in the database query before pagination. Results use stable accountId descending order.
@@ -56,60 +140,6 @@ export class UserManagementService {
                 403: `Current active ADMIN access required`,
                 409: `Email already registered`,
                 500: `Unexpected infrastructure or missing configured role`,
-            },
-        });
-    }
-    /**
-     * View an internal user's detail
-     * Active Admin/Manager only. Returns profile, assigned role, account status and password-login lockout state. CUSTOMER accounts/roles are forbidden. Successful views of other users publish an audit event, logged after transaction commit; self views do not.
-     * @param id Target account ID, greater than zero
-     * @returns ApiResponseManagedUserDetailResponse ApiResponse<ManagedUserDetailResponse>
-     * @throws ApiError
-     */
-    public static detail(
-        id: number,
-    ): CancelablePromise<ApiResponseManagedUserDetailResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/management/admin/users/{id}',
-            path: {
-                'id': id,
-            },
-            errors: {
-                400: `Malformed, nonpositive or overflowing account ID`,
-                401: `Authentication required or caller account missing`,
-                403: `Forbidden caller or CUSTOMER target`,
-                404: `Target account or employee profile missing`,
-                500: `Unexpected infrastructure or profile integrity failure`,
-            },
-        });
-    }
-    /**
-     * Soft delete an account
-     * Sets the account to DELETED and audits the supplied reason code after commit. The caller and default administrator are protected. Repeating a completed deletion returns 204.
-     * @param id
-     * @param requestBody
-     * @returns void
-     * @throws ApiError
-     */
-    public static delete1(
-        id: number,
-        requestBody: SoftDeleteUserRequest,
-    ): CancelablePromise<void> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/management/admin/users/{id}',
-            path: {
-                'id': id,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                400: `Invalid account ID or reason`,
-                401: `Authentication required`,
-                403: `Caller not authorized or account protected`,
-                404: `Account not found`,
-                500: `Unexpected error`,
             },
         });
     }

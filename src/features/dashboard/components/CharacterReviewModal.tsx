@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, CheckCircle2, AlertCircle, Sparkles, Layers, Tag, DollarSign, Calendar } from "lucide-react";
+import { X } from "lucide-react";
 import type { PendingCharacterItem } from "../types";
 
 export interface CharacterReviewModalProps {
@@ -27,6 +27,10 @@ export default function CharacterReviewModal({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    setFeedbackNote("");
+  }, [character?.id, isOpen]);
 
   // Lock background page scrolling and listen to Escape key when modal is open
   useEffect(() => {
@@ -56,7 +60,7 @@ export default function CharacterReviewModal({
       onApprove(character);
       setIsSubmitting(false);
       onClose();
-    }, 400);
+    }, 300);
   };
 
   const handleReject = () => {
@@ -65,38 +69,38 @@ export default function CharacterReviewModal({
       onReject(character);
       setIsSubmitting(false);
       onClose();
-    }, 400);
+    }, 300);
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] w-screen h-screen">
-      {/* 1. Full-viewport backdrop covering 100vw & 100vh including sidebar & header */}
+    <div className="fixed inset-0 z-[100] h-screen w-screen font-sans">
+      {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[100] h-screen w-screen bg-black/60 backdrop-blur-xs transition-opacity"
-        onClick={onClose}
+        className="fixed inset-0 z-[100] h-screen w-screen bg-slate-900/50 backdrop-blur-xs transition-opacity"
+        onClick={isSubmitting ? undefined : onClose}
         aria-hidden="true"
       />
 
-      {/* 2. Modal card centered with fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[110] */}
+      {/* Modal Dialog */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="review-modal-title"
-        className="fixed left-1/2 top-1/2 z-[110] max-h-[90vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto border-4 border-black bg-white p-6 shadow-[8px_8px_0_0_#000] sm:p-7"
+        className="fixed left-1/2 top-1/2 z-[110] max-h-[90vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
       >
-        {/* Top Header */}
-        <div className="flex items-start justify-between border-b-3 border-black pb-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center border-2 border-black bg-[#fef08a] text-xl shadow-[2px_2px_0_0_#000]">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-xl">
               {character.thumbnailUrl}
             </span>
             <div>
-              <span className="border border-black bg-[#a7f3d0] px-2 py-0.5 font-mono text-[10px] font-black uppercase">
-                STORE REVIEW QUEUE
+              <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                Xét duyệt Character
               </span>
               <h2
                 id="review-modal-title"
-                className="mt-1 font-mono text-xl font-black text-black"
+                className="mt-1 text-lg font-semibold text-slate-900"
               >
                 {character.name}
               </h2>
@@ -106,97 +110,98 @@ export default function CharacterReviewModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isSubmitting}
             aria-label="Đóng"
-            className="border-2 border-black bg-neutral-100 p-1.5 shadow-[2px_2px_0_0_#000] transition-transform hover:bg-[#fda4af] active:translate-x-0.5 active:translate-y-0.5"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
           >
-            <X size={18} className="stroke-[3]" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {/* Character Preview Box */}
-          <div className="flex flex-col items-center justify-center border-3 border-black bg-[#fdfaf0] p-6 text-center shadow-[4px_4px_0_0_#000]">
-            <div className="relative mb-3 flex h-36 w-36 items-center justify-center border-3 border-black bg-neutral-900 text-6xl shadow-[4px_4px_0_0_#000]">
-              {/* Retro scanlines effect */}
-              <div
-                className="pointer-events-none absolute inset-0 opacity-15"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%)",
-                  backgroundSize: "100% 4px",
-                }}
-              />
-              <span className="animate-pulse">{character.thumbnailUrl}</span>
+        {/* Body */}
+        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+          {/* Preview Box */}
+          <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
+            <div className="mb-3 flex h-36 w-36 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-6xl shadow-sm">
+              <span>{character.thumbnailUrl}</span>
             </div>
-            <div className="font-mono text-xs font-black text-black">
-              {character.resolution} Matrix Panel • {character.frames} Frames
-            </div>
-            <div className="mt-1 font-mono text-[11px] text-neutral-600">
+            <p className="text-xs font-semibold text-slate-800">
+              Ma trận {character.resolution} • {character.frames} khung hình
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
               Định dạng: {character.format} (Tương thích LED-32 / LED-64)
-            </div>
+            </p>
           </div>
 
           {/* Metadata Specs */}
-          <div className="space-y-3 font-mono text-xs">
-            <div className="border-2 border-black bg-[#e9d5ff] p-3 shadow-[2px_2px_0_0_#000]">
-              <span className="block font-bold uppercase text-neutral-700">
-                Tác giả (Designer):
+          <div className="space-y-3 text-sm">
+            <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+              <span className="block text-xs font-medium text-slate-500">
+                Nhà thiết kế
               </span>
-              <span className="text-sm font-black text-black">
+              <span className="mt-0.5 block font-semibold text-slate-900">
                 {character.designer.name} ({character.designer.handle})
               </span>
             </div>
 
-            <div className="border-2 border-black bg-[#fef08a] p-3 shadow-[2px_2px_0_0_#000]">
-              <span className="block font-bold uppercase text-neutral-700">
-                Giá bán dự kiến:
+            <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+              <span className="block text-xs font-medium text-slate-500">
+                Giá bán dự kiến
               </span>
-              <span className="text-base font-black text-black">
+              <span className="mt-0.5 block text-base font-semibold text-slate-900 tabular-nums">
                 {character.isFree
-                  ? "MIỄN PHÍ (0 đ)"
+                  ? "Miễn phí (0 đ)"
                   : `${character.price.toLocaleString("vi-VN")} đ`}
               </span>
             </div>
 
-            <div className="border-2 border-black bg-neutral-50 p-3 shadow-[2px_2px_0_0_#000]">
-              <span className="block font-bold uppercase text-neutral-700">
-                Thẻ chủ đề (Tags):
+            <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+              <span className="block text-xs font-medium text-slate-500">
+                Thẻ phân loại
               </span>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {character.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="border border-black bg-white px-1.5 py-0.5 text-[10px] font-black"
-                  >
-                    #{tag}
-                  </span>
-                ))}
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {character.tags.length > 0 ? (
+                  character.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                    >
+                      #{tag}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-slate-400">Không có thẻ</span>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Manager Review Notes */}
+        {/* Review Notes */}
         <div className="mt-5">
-          <label className="mb-1 block font-mono text-xs font-black uppercase text-black">
-            Ghi chú phản hồi cho Designer:
+          <label
+            htmlFor="character-review-note"
+            className="mb-1.5 block text-xs font-medium text-slate-700"
+          >
+            Ghi chú phản hồi cho nhà thiết kế
           </label>
           <textarea
+            id="character-review-note"
             rows={2}
             value={feedbackNote}
             onChange={(e) => setFeedbackNote(e.target.value)}
-            placeholder="Ví dụ: Thiết kế pixel rất mượt, màu sắc hiển thị tốt trên kính chắn gió ban đêm..."
-            className="w-full border-2 border-black bg-neutral-50 p-2.5 font-mono text-xs shadow-[2px_2px_0_0_#000] focus:bg-white focus:outline-none"
+            placeholder="Ví dụ: Thiết kế pixel mượt, màu sắc hiển thị rõ trên kính chắn gió ban đêm..."
+            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
 
-        {/* Action Buttons */}
-        <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t-3 border-black pt-4">
+        {/* Footer Actions */}
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-2.5 border-t border-slate-100 pt-4">
           <button
             type="button"
             onClick={onClose}
-            className="border-2 border-black bg-white px-4 py-2 font-mono text-xs font-black uppercase shadow-[3px_3px_0_0_#000] transition-transform hover:bg-neutral-100 active:translate-x-0.5 active:translate-y-0.5"
+            disabled={isSubmitting}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
           >
             Đóng
           </button>
@@ -204,7 +209,7 @@ export default function CharacterReviewModal({
             type="button"
             onClick={handleReject}
             disabled={isSubmitting}
-            className="border-2 border-black bg-[#fda4af] px-4 py-2 font-mono text-xs font-black uppercase shadow-[3px_3px_0_0_#000] transition-transform hover:bg-[#f43f5e] hover:text-white active:translate-x-0.5 active:translate-y-0.5"
+            className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
           >
             Từ chối / Yêu cầu sửa
           </button>
@@ -212,9 +217,9 @@ export default function CharacterReviewModal({
             type="button"
             onClick={handleApprove}
             disabled={isSubmitting}
-            className="border-2 border-black bg-[#6ee7b7] px-5 py-2 font-mono text-xs font-black uppercase shadow-[4px_4px_0_0_#000] transition-transform hover:bg-[#10b981] hover:text-white active:translate-x-1 active:translate-y-1 active:shadow-none"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
-            {isSubmitting ? "Đang xử lý..." : "✓ Duyệt & Publish lên Store"}
+            {isSubmitting ? "Đang xử lý..." : "Duyệt & Mở bán"}
           </button>
         </div>
       </div>

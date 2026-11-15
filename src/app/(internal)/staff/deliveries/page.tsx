@@ -59,10 +59,16 @@ function formatMoney(value: number) {
 }
 
 function ActivityTimeline({ delivery }: { delivery: Delivery }) {
+  const isPartiallyFulfilled =
+    delivery.status === "PARTIALLY_FULFILLED" || delivery.status === "HandedOver";
   const steps = [
     { label: "Chờ thanh toán", done: true },
-    { label: "Chờ đóng hàng", done: delivery.status !== "PENDING_PAYMENT" },
-    { label: "Đã cấp nhân vật và chờ đóng hàng", done: ["PARTIALLY_FULFILLED", "SHIPPING", "DELIVERED", "COMPLETED"].includes(delivery.status) },
+    {
+      label: isPartiallyFulfilled
+        ? "Đã cấp nhân vật và chờ đóng hàng"
+        : "Chờ đóng hàng",
+      done: delivery.status !== "PENDING_PAYMENT",
+    },
     { label: "Đang vận chuyển (AhaMove)", done: ["SHIPPING", "DELIVERED", "COMPLETED"].includes(delivery.status) },
     { label: "Đã giao", done: ["DELIVERED", "COMPLETED"].includes(delivery.status) },
     { label: "Đã hoàn thành", done: delivery.status === "COMPLETED" },

@@ -8,7 +8,7 @@ export type ContentDisposition = {
     filename?: string;
     charset?: string;
     inline?: boolean;
-    attachment?: boolean;
     formData?: boolean;
+    attachment?: boolean;
 };
 

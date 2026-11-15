@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, ChevronDown, LogOut, Search } from "lucide-react";
+import { Bell, ChevronDown, LogOut } from "lucide-react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { UserRole } from "@/features/auth/types";
 
@@ -33,16 +33,6 @@ export default function ManagerTopBar() {
 
   return (
     <header className="manager-topbar h-16 bg-white border-b flex items-center px-6 gap-4 flex-shrink-0">
-      {/* Search */}
-      <div className="flex-1 flex items-center bg-gray-50 border-2 border-black px-3 py-1.5 gap-2 max-w-md">
-        <Search size={15} className="text-primary-dark flex-shrink-0" />
-        <input
-          type="text"
-          placeholder="Tìm đơn hàng, bảng LED, nhân vật..."
-          className="bg-transparent outline-none text-sm w-full"
-        />
-      </div>
-
       <div className="flex items-center gap-3 ml-auto">
         {/* Notifications */}
         <button className="relative p-2 border border-transparent hover:border-primary-dark rounded-lg transition-colors" aria-label="Thông báo">

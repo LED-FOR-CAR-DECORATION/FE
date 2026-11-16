@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { authService, USE_MOCK_AUTH } from "@/features/auth/services/auth.service";
+import { authService, normalizeUserRole, USE_MOCK_AUTH } from "@/features/auth/services/auth.service";
 import type { AuthUser } from "@/features/auth/types";
 import { apiGetMyProfile, apiUpdateMyProfile } from "@/lib/api/addresses";
 import { clearSession, getRefreshToken, getSessionToken, loadSession, saveSession } from "@/lib/auth/session";
@@ -16,6 +16,20 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function mergeRemoteProfile(
+  base: AuthUser,
+  remoteProfile: NonNullable<Awaited<ReturnType<typeof apiGetMyProfile>>>,
+): AuthUser {
+  return {
+    ...base,
+    userId: remoteProfile.accountId ? String(remoteProfile.accountId) : base.userId,
+    email: remoteProfile.email ?? base.email,
+    fullName: remoteProfile.name ?? base.fullName,
+    phoneNumber: remoteProfile.phone ?? base.phoneNumber,
+    role: remoteProfile.roles?.length ? normalizeUserRole(remoteProfile.roles, base.role) : base.role,
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -34,16 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (saved && !USE_MOCK_AUTH) {
+        if (!cancelled) {
+          setUser(saved);
+        }
         try {
           const remoteProfile = await apiGetMyProfile();
           if (remoteProfile && !cancelled) {
-            const hydrated: AuthUser = {
-              ...saved,
-              userId: remoteProfile.accountId ? String(remoteProfile.accountId) : saved.userId,
-              email: remoteProfile.email ?? saved.email,
-              fullName: remoteProfile.name ?? saved.fullName,
-              phoneNumber: remoteProfile.phone ?? saved.phoneNumber,
-            };
+            const hydrated = mergeRemoteProfile(saved, remoteProfile);
             saveSession(hydrated);
             setUser(hydrated);
             setIsLoading(false);
@@ -70,13 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void apiGetMyProfile()
         .then((remoteProfile) => {
           if (!remoteProfile) return;
-          const hydrated: AuthUser = {
-            ...nextUser,
-            userId: remoteProfile.accountId ? String(remoteProfile.accountId) : nextUser.userId,
-            email: remoteProfile.email ?? nextUser.email,
-            fullName: remoteProfile.name ?? nextUser.fullName,
-            phoneNumber: remoteProfile.phone ?? nextUser.phoneNumber,
-          };
+          const hydrated = mergeRemoteProfile(nextUser, remoteProfile);
           saveSession(hydrated);
           setUser(hydrated);
         })

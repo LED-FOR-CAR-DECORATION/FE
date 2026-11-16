@@ -229,7 +229,7 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
     for (const charDef of allCharacters) {
       const createdRecord = createdById.get(charDef.id);
       const isDeleted = deletedIds.has(charDef.id) || createdRecord?.status === "DELETED";
-      const isPublished = !isDeleted && publishedIds.has(charDef.id);
+      const isPublished = !isDeleted && (publishedIds.has(charDef.id) || createdRecord?.status === "PUBLISHED");
       if (isPublished && createdRecord && createdRecord.status !== "PUBLISHED") {
         updateCreatedStoreProductStatus(charDef.id, "PUBLISHED");
       }
@@ -272,11 +272,12 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
         };
 
         if (createdRecord?.characterVersionId) {
+          const vNum = (createdRecord as any)?.characterVersionNumber ?? createdRecord.characterVersionId;
           db.versions.push({
             versionId: `ver-${charDef.id}-${createdRecord.characterVersionId}`,
             characterId: charDef.id,
             storeListingId: isPublished ? listingId : null,
-            versionNumber: createdRecord.characterVersionId,
+            versionNumber: vNum,
             fileUrl: charDef.thumbnailUrl,
             ledBinaryUrl: "",
             format: "LED_BINARY",
@@ -285,7 +286,7 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
             frameCount: 16,
             frameDelayMs: 60,
             byteSize: 1024,
-            changelog: `Phiên bản liên kết #${createdRecord.characterVersionId} từ Store Product`,
+            changelog: `Phiên bản #${vNum} được liên kết từ Store Product`,
             isCurrent: true,
             createdAt: new Date().toISOString(),
           });
@@ -340,6 +341,32 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
         const listing = db.listings.find((l) => l.listingId === existing.listingId);
         if (listing) {
           listing.status = currentStatus;
+        }
+        if (createdRecord?.characterVersionId && !db.versions.some((v) => v.characterId === charDef.id)) {
+          const vNum = (createdRecord as any)?.characterVersionNumber ?? createdRecord.characterVersionId;
+          db.versions.push({
+            versionId: `ver-${charDef.id}-${createdRecord.characterVersionId}`,
+            characterId: charDef.id,
+            storeListingId: isPublished ? listingId : null,
+            versionNumber: vNum,
+            fileUrl: charDef.thumbnailUrl,
+            ledBinaryUrl: "",
+            format: "LED_BINARY",
+            width: 64,
+            height: 64,
+            frameCount: 16,
+            frameDelayMs: 60,
+            byteSize: 1024,
+            changelog: `Phiên bản #${vNum} được liên kết từ Store Product`,
+            isCurrent: true,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        if (isPublished) {
+          const v = db.versions.find((ver) => ver.characterId === existing.characterId);
+          if (v && !v.storeListingId) {
+            v.storeListingId = listingId;
+          }
         }
       }
     }

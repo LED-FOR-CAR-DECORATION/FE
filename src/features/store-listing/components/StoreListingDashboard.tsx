@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CheckCircle2, Clock3, EyeOff, Lock, Plus, Store, X } from "lucide-react";
+import { CheckCircle2, Clock3, Cpu, EyeOff, Lock, Plus, Sparkles, Store, X } from "lucide-react";
 import { apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
 import {
@@ -12,21 +12,31 @@ import type { PublishMode, StoreCharacterRow } from "../types";
 import CatalogListingTable, { type StoreCatalogItem } from "./CatalogListingTable";
 import CharacterListingTable from "./CharacterListingTable";
 import CreateStoreProductModal from "./CreateStoreProductModal";
+import CreateCharacterProductModal from "./CreateCharacterProductModal";
 import EditStoreProductModal, { type EditableProductData } from "./EditStoreProductModal";
 import PublishVersionModal from "./PublishVersionModal";
 import UnlistConfirmModal from "./UnlistConfirmModal";
 import ArchiveProductConfirmModal from "./ArchiveProductConfirmModal";
 import DeleteProductConfirmModal from "./DeleteProductConfirmModal";
+import BundleListingTable from "./BundleListingTable";
+import CreateBundleModal from "./CreateBundleModal";
+import EditBundleModal from "./EditBundleModal";
+import DeleteBundleConfirmModal from "./DeleteBundleConfirmModal";
+import { fetchManagedBundles, type ManagedBundleItem } from "@/lib/api/bundles";
 
 type TabId = "characters" | "led-models" | "bundles";
 
 type ModalState =
   | { kind: "create" }
+  | { kind: "create-character" }
   | { kind: "edit"; product: EditableProductData }
   | { kind: "publish"; character: StoreCharacterRow; mode: PublishMode }
   | { kind: "unlist"; character: StoreCharacterRow }
   | { kind: "archive"; productId: string | number; productName: string }
   | { kind: "delete"; productId: string | number; productName: string }
+  | { kind: "create-bundle" }
+  | { kind: "edit-bundle"; bundle: ManagedBundleItem }
+  | { kind: "delete-bundle"; bundle: ManagedBundleItem }
   | null;
 
 const NOTICE_DURATION_MS = 6000;
@@ -38,11 +48,19 @@ export default function StoreListingDashboard() {
   const [activeTab, setActiveTab] = useState<TabId>("characters");
   const [modal, setModal] = useState<ModalState>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [bundleRefreshTrigger, setBundleRefreshTrigger] = useState(0);
+  const [bundleCount, setBundleCount] = useState<number | null>(null);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
     characters: null,
     "led-models": null,
     bundles: null,
   });
+
+  useEffect(() => {
+    fetchManagedBundles({ size: 1 })
+      .then((res) => setBundleCount(res.totalElements))
+      .catch(() => { });
+  }, [bundleRefreshTrigger]);
 
   const refreshCatalog = () => {
     fetchStoreProducts({ size: 100 })
@@ -115,8 +133,8 @@ export default function StoreListingDashboard() {
     },
     {
       id: "bundles",
-      label: "Bundles",
-      count: catalogProducts.filter((product) => product.productType === "BUNDLE").length,
+      label: "Gói Combo (Bundles)",
+      count: bundleCount,
     },
   ];
 
@@ -167,14 +185,24 @@ export default function StoreListingDashboard() {
         </div>
 
         {canManage && (
-          <button
-            type="button"
-            onClick={() => setModal({ kind: "create" })}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2.5 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]"
-          >
-            <Plus size={16} />
-            Tạo sản phẩm LED
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "create-character" })}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2.5 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]"
+            >
+              <Sparkles size={16} />
+              Tạo sản phẩm Character
+            </button>
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "create" })}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <Cpu size={16} />
+              Tạo sản phẩm LED
+            </button>
+          </div>
         )}
       </header>
 
@@ -251,18 +279,16 @@ export default function StoreListingDashboard() {
                 tabIndex={selected ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={(event) => onTabKeyDown(event, index)}
-                className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${
-                  selected
+                className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${selected
                     ? "border-primary-dark text-primary-dark"
                     : "border-transparent text-text-muted hover:text-[#173b28]"
-                }`}
+                  }`}
               >
                 {tab.label}
                 {tab.count !== null && (
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
-                      selected ? "bg-primary/30 text-[#165d3a]" : "bg-gray-100 text-gray-600"
-                    }`}
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-black ${selected ? "bg-primary/30 text-[#165d3a]" : "bg-gray-100 text-gray-600"
+                      }`}
                   >
                     {tab.count}
                   </span>
@@ -308,6 +334,7 @@ export default function StoreListingDashboard() {
                   productName: character.name,
                 })
               }
+              onCreateCharacter={() => setModal({ kind: "create-character" })}
             />
           )}
           {activeTab === "led-models" && (
@@ -366,13 +393,49 @@ export default function StoreListingDashboard() {
             />
           )}
           {activeTab === "bundles" && (
-            <CatalogListingTable
-              kind="BUNDLE"
-              items={catalogProducts.filter((product) => product.productType === "BUNDLE")}
+            <BundleListingTable
+              canManage={canManage}
+              refreshTrigger={bundleRefreshTrigger}
+              onCreate={() => setModal({ kind: "create-bundle" })}
+              onEdit={(bundle) => setModal({ kind: "edit-bundle", bundle })}
+              onDelete={(bundle) => setModal({ kind: "delete-bundle", bundle })}
+              onPublish={async (bundle) => {
+                try {
+                  await apiUpdateProductStatus(bundle.productId, "PUBLISHED");
+                  setNotice(`Đã mở bán gói combo "${bundle.bundleName}" lên Store.`);
+                  setBundleRefreshTrigger((prev) => prev + 1);
+                } catch {
+                  setNotice(`Mở bán gói combo thất bại.`);
+                }
+              }}
+              onUnlist={async (bundle) => {
+                try {
+                  await apiUpdateProductStatus(bundle.productId, "UNPUBLISHED");
+                  setNotice(`Đã ẩn gói combo "${bundle.bundleName}" khỏi Store.`);
+                  setBundleRefreshTrigger((prev) => prev + 1);
+                } catch {
+                  setNotice(`Ẩn gói combo thất bại.`);
+                }
+              }}
             />
           )}
         </div>
       </section>
+
+      {modal?.kind === "create-character" && (
+        <CreateCharacterProductModal
+          onClose={() => setModal(null)}
+          onSuccess={(created) => {
+            setActiveTab("characters");
+            setNotice(
+              `Tạo sản phẩm Character "${created.productName}" (ID #${created.productId}) thành công${
+                created.status === "PUBLISHED" ? " và đã Publish lên Store" : " ở trạng thái Chờ duyệt"
+              }.`
+            );
+            refreshCatalog();
+          }}
+        />
+      )}
 
       {modal?.kind === "create" && (
         <CreateStoreProductModal
@@ -438,6 +501,44 @@ export default function StoreListingDashboard() {
             updateCreatedStoreProductStatus(modal.productId, "DELETED");
             setNotice(`Đã xóa mềm sản phẩm "${productName}" thành công.`);
             refreshCatalog();
+          }}
+        />
+      )}
+
+      {modal?.kind === "create-bundle" && (
+        <CreateBundleModal
+          onClose={() => setModal(null)}
+          onSuccess={(created) => {
+            setModal(null);
+            setBundleRefreshTrigger((prev) => prev + 1);
+            setActiveTab("bundles");
+            setNotice(
+              `Tạo gói combo "${created.bundleName}" (#${created.bundleId}) thành công ở trạng thái CHỜ MỞ BÁN.`,
+            );
+          }}
+        />
+      )}
+
+      {modal?.kind === "edit-bundle" && (
+        <EditBundleModal
+          bundle={modal.bundle}
+          onClose={() => setModal(null)}
+          onSuccess={(updated) => {
+            setModal(null);
+            setBundleRefreshTrigger((prev) => prev + 1);
+            setNotice(`Cập nhật gói combo "${updated.bundleName}" thành công.`);
+          }}
+        />
+      )}
+
+      {modal?.kind === "delete-bundle" && (
+        <DeleteBundleConfirmModal
+          bundle={modal.bundle}
+          onClose={() => setModal(null)}
+          onSuccess={() => {
+            setModal(null);
+            setBundleRefreshTrigger((prev) => prev + 1);
+            setNotice(`Đã xóa/lưu trữ gói combo thành công.`);
           }}
         />
       )}

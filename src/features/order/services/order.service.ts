@@ -151,6 +151,7 @@ export function mapOrderSummaryAndDetailToOrder(
   const items: CartItem[] = detail?.items?.length
     ? detail.items.map((item) => ({
         id: String(item.productId),
+        orderItemId: item.orderItemId,
         productId: item.productId,
         productType: mapBackendProductType(item.productType),
         name: item.productName,
@@ -226,6 +227,7 @@ export function mapStaffOrderSummaryAndDetailToOrder(
   const items: CartItem[] = detail?.items?.length
     ? detail.items.map((item) => ({
         id: String(item.productId),
+        orderItemId: item.orderItemId,
         productId: item.productId,
         productType: mapBackendProductType(item.productType),
         name: item.productName,

@@ -1,18 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
   Check,
   CheckCircle2,
   Circle,
+  Cpu,
   ExternalLink,
+  Loader2,
   MapPin,
   Package,
   Phone,
   Printer,
+  QrCode,
+  RefreshCw,
+  Trash2,
   Truck,
   User,
   X,
@@ -21,6 +26,14 @@ import {
 import { useOrders } from "@/features/order/context/OrderContext";
 import { getOrderKind } from "@/features/order/fulfillment";
 import type { OrderKind } from "@/features/order/types";
+import { fetchLedInstances, LedInstanceItem } from "@/lib/api/ledInstances";
+import {
+  apiLinkOrderFulfillmentDevice,
+  apiUnlinkOrderFulfillmentDevice,
+  fetchStaffOrderDetail,
+  type BackendStaffOrderDetail,
+  type LinkOrderFulfillmentDeviceResponse,
+} from "@/lib/api/orders";
 
 function getOrderSteps(orderKind: OrderKind, status: string) {
   if (orderKind === "DIGITAL") {
@@ -157,7 +170,7 @@ export default function OrderDetailPage({
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = use(params);
-  const { orders, updateOrderStatus, dispatchOrder } = useOrders();
+  const { orders, refreshOrders, updateOrderStatus, dispatchOrder } = useOrders();
 
   const [isPrepareModalOpen, setIsPrepareModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -170,6 +183,43 @@ export default function OrderDetailPage({
     trackingNumber: string;
     trackingUrl?: string | null;
   } | null>(null);
+
+  // Fulfillment LED device scanning/linking state
+  const [staffDetail, setStaffDetail] = useState<BackendStaffOrderDetail | null>(null);
+  const [warehouseInstances, setWarehouseInstances] = useState<LedInstanceItem[]>([]);
+  const [loadingFulfillment, setLoadingFulfillment] = useState(false);
+  const [serialByItem, setSerialByItem] = useState<Record<number, string>>({});
+  const [linkingItemId, setLinkingItemId] = useState<number | null>(null);
+  const [unlinkingInstanceId, setUnlinkingInstanceId] = useState<number | null>(null);
+  const [fulfillmentError, setFulfillmentError] = useState("");
+  const [fulfillmentSuccess, setFulfillmentSuccess] = useState("");
+  const [lastLinkResult, setLastLinkResult] =
+    useState<LinkOrderFulfillmentDeviceResponse | null>(null);
+
+  const loadFulfillmentData = useCallback(async () => {
+    const numericOrderId = Number(orderId);
+    if (!Number.isFinite(numericOrderId) || numericOrderId <= 0) return;
+
+    setLoadingFulfillment(true);
+    try {
+      const [detailRes, instancesRes] = await Promise.allSettled([
+        fetchStaffOrderDetail(numericOrderId),
+        fetchLedInstances({ page: 0, size: 100 }),
+      ]);
+      if (detailRes.status === "fulfilled" && detailRes.value) {
+        setStaffDetail(detailRes.value);
+      }
+      if (instancesRes.status === "fulfilled") {
+        setWarehouseInstances(instancesRes.value.items);
+      }
+    } finally {
+      setLoadingFulfillment(false);
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    void loadFulfillmentData();
+  }, [loadFulfillmentData]);
 
   const order = orders.find((entry) => String(entry.id) === String(orderId));
 
@@ -212,6 +262,112 @@ export default function OrderDetailPage({
     !rawDeliveryStatus || ["PENDING", "FAILED", "RETURNED"].includes(rawDeliveryStatus.toUpperCase());
 
   const canPrepareOrder = isReadyStatus && hasPhysicalItem && isDeliveryNotDispatched;
+
+  const canLinkDevices =
+    hasPhysicalItem &&
+    (order.status === "PROCESSING" ||
+      order.status === "PARTIALLY_FULFILLED" ||
+      order.status === "Preparing" ||
+      order.status === "HandedOver");
+
+  const physicalLineItems = (
+    staffDetail?.items?.length
+      ? staffDetail.items.map((item) => ({
+          orderItemId: item.orderItemId,
+          productName: item.productName,
+          productType: item.productType ?? "LED",
+          quantity: item.quantity,
+        }))
+      : order.items
+          .filter((item) => typeof item.orderItemId === "number")
+          .map((item) => ({
+            orderItemId: item.orderItemId as number,
+            productName: item.name,
+            productType: item.productType,
+            quantity: item.quantity,
+          }))
+  ).filter(
+    (item) =>
+      item.productType !== "CHARACTER" && item.productType !== "SUBSCRIPTION",
+  );
+
+  const numericOrderId = Number(order.id);
+  const linkedInstancesForOrder = warehouseInstances.filter(
+    (inst) => inst.fulfillment?.orderId === numericOrderId,
+  );
+  const inStockInstances = warehouseInstances.filter(
+    (inst) => inst.status === LedInstanceItem.status.IN_STOCK,
+  );
+  const linkedByItemMap = new Map<number, LedInstanceItem[]>();
+  for (const inst of linkedInstancesForOrder) {
+    const itemId = inst.fulfillment?.orderItemId;
+    if (!itemId) continue;
+    const list = linkedByItemMap.get(itemId) ?? [];
+    list.push(inst);
+    linkedByItemMap.set(itemId, list);
+  }
+
+  const totalRequiredLedUnits =
+    lastLinkResult?.progress?.orderRequiredCount ??
+    physicalLineItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalLinkedLedUnits = Math.max(
+    linkedInstancesForOrder.length,
+    lastLinkResult?.progress?.orderFulfilledCount ?? 0,
+  );
+
+  const handleLinkDevice = async (orderItemId: number) => {
+    if (linkingItemId !== null || unlinkingInstanceId !== null) return;
+    const rawSerial = serialByItem[orderItemId] ?? "";
+    const trimmedSerial = rawSerial.trim();
+    if (!trimmedSerial) {
+      setFulfillmentError("Vui lòng nhập hoặc chọn Serial Number thiết bị LED.");
+      setFulfillmentSuccess("");
+      return;
+    }
+
+    setLinkingItemId(orderItemId);
+    setFulfillmentError("");
+    setFulfillmentSuccess("");
+    try {
+      const res = await apiLinkOrderFulfillmentDevice(order.id, {
+        orderItemId,
+        serialNumber: trimmedSerial,
+      });
+      setLastLinkResult(res);
+      setSerialByItem((prev) => ({ ...prev, [orderItemId]: "" }));
+      setFulfillmentSuccess(
+        `Đã gán thiết bị ${res.serialNumber} (${res.modelName}) vào mục #${res.orderItemId}. Tiến độ đơn: ${res.progress.orderFulfilledCount}/${res.progress.orderRequiredCount}.`,
+      );
+      await Promise.allSettled([loadFulfillmentData(), refreshOrders()]);
+    } catch (err) {
+      setFulfillmentError(
+        err instanceof Error ? err.message : "Gán thiết bị LED thất bại.",
+      );
+    } finally {
+      setLinkingItemId(null);
+    }
+  };
+
+  const handleUnlinkDevice = async (instance: LedInstanceItem) => {
+    if (linkingItemId !== null || unlinkingInstanceId !== null) return;
+    setUnlinkingInstanceId(instance.instanceId);
+    setFulfillmentError("");
+    setFulfillmentSuccess("");
+    try {
+      await apiUnlinkOrderFulfillmentDevice(order.id, instance.instanceId);
+      setLastLinkResult(null);
+      setFulfillmentSuccess(
+        `Đã gỡ thiết bị ${instance.serialNumber} khỏi đơn hàng (trả về trạng thái Trong kho).`,
+      );
+      await Promise.allSettled([loadFulfillmentData(), refreshOrders()]);
+    } catch (err) {
+      setFulfillmentError(
+        err instanceof Error ? err.message : "Gỡ thiết bị LED thất bại.",
+      );
+    } finally {
+      setUnlinkingInstanceId(null);
+    }
+  };
 
   // Hành trình vận chuyển chỉ bắt đầu hoạt động khi đơn đã được đóng gói & bàn giao AhaMove
   const isJourneyActive =
@@ -539,7 +695,8 @@ export default function OrderDetailPage({
 
       {/* Main Content Layout: 2 Columns */}
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,1fr)]">
-        {/* Left Column: Danh sách sản phẩm */}
+        {/* Left Column: Danh sách sản phẩm & Quét/Gán thiết bị LED */}
+        <div className="flex flex-col gap-6">
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-base font-black text-gray-900">Danh sách sản phẩm</h2>
           <div className="overflow-x-auto">
@@ -643,6 +800,31 @@ export default function OrderDetailPage({
               </span>
             </div>
           </div>
+        </div>
+
+        {hasPhysicalItem && (
+          <FulfillmentDevicesPanel
+            orderId={order.id}
+            physicalLineItems={physicalLineItems}
+            linkedByItemMap={linkedByItemMap}
+            inStockInstances={inStockInstances}
+            totalLinked={totalLinkedLedUnits}
+            totalRequired={totalRequiredLedUnits}
+            canLink={canLinkDevices}
+            isLoading={loadingFulfillment}
+            serialByItem={serialByItem}
+            onSerialChange={(itemId, value) =>
+              setSerialByItem((prev) => ({ ...prev, [itemId]: value }))
+            }
+            linkingItemId={linkingItemId}
+            unlinkingInstanceId={unlinkingInstanceId}
+            errorMessage={fulfillmentError}
+            successMessage={fulfillmentSuccess}
+            onRefresh={() => void loadFulfillmentData()}
+            onLink={(itemId) => void handleLinkDevice(itemId)}
+            onUnlink={(instance) => void handleUnlinkDevice(instance)}
+          />
+        )}
         </div>
 
         {/* Right Column: 2 Cards */}
@@ -911,6 +1093,32 @@ export default function OrderDetailPage({
                 </div>
               </section>
 
+              {/* 2b. Quét QR / Gán Serial Number thiết bị LED thực tế */}
+              {hasPhysicalItem && (
+                <FulfillmentDevicesPanel
+                  compact
+                  orderId={order.id}
+                  physicalLineItems={physicalLineItems}
+                  linkedByItemMap={linkedByItemMap}
+                  inStockInstances={inStockInstances}
+                  totalLinked={totalLinkedLedUnits}
+                  totalRequired={totalRequiredLedUnits}
+                  canLink={canLinkDevices}
+                  isLoading={loadingFulfillment}
+                  serialByItem={serialByItem}
+                  onSerialChange={(itemId, value) =>
+                    setSerialByItem((prev) => ({ ...prev, [itemId]: value }))
+                  }
+                  linkingItemId={linkingItemId}
+                  unlinkingInstanceId={unlinkingInstanceId}
+                  errorMessage={fulfillmentError}
+                  successMessage={fulfillmentSuccess}
+                  onRefresh={() => void loadFulfillmentData()}
+                  onLink={(itemId) => void handleLinkDevice(itemId)}
+                  onUnlink={(instance) => void handleUnlinkDevice(instance)}
+                />
+              )}
+
               {/* 3. Thông số bàn giao AhaMove */}
               <section className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
                 <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
@@ -1051,5 +1259,260 @@ export default function OrderDetailPage({
         </div>
       )}
     </div>
+  );
+}
+
+interface FulfillmentDevicesPanelProps {
+  compact?: boolean;
+  orderId: string;
+  physicalLineItems: Array<{
+    orderItemId: number;
+    productName: string;
+    productType: string;
+    quantity: number;
+  }>;
+  linkedByItemMap: Map<number, LedInstanceItem[]>;
+  inStockInstances: LedInstanceItem[];
+  totalLinked: number;
+  totalRequired: number;
+  canLink: boolean;
+  isLoading: boolean;
+  serialByItem: Record<number, string>;
+  onSerialChange: (orderItemId: number, value: string) => void;
+  linkingItemId: number | null;
+  unlinkingInstanceId: number | null;
+  errorMessage: string;
+  successMessage: string;
+  onRefresh: () => void;
+  onLink: (orderItemId: number) => void;
+  onUnlink: (instance: LedInstanceItem) => void;
+}
+
+function FulfillmentDevicesPanel({
+  compact = false,
+  physicalLineItems,
+  linkedByItemMap,
+  inStockInstances,
+  totalLinked,
+  totalRequired,
+  canLink,
+  isLoading,
+  serialByItem,
+  onSerialChange,
+  linkingItemId,
+  unlinkingInstanceId,
+  errorMessage,
+  successMessage,
+  onRefresh,
+  onLink,
+  onUnlink,
+}: FulfillmentDevicesPanelProps) {
+  const isComplete = totalRequired > 0 && totalLinked >= totalRequired;
+
+  return (
+    <section
+      className={
+        compact
+          ? "rounded-xl border border-blue-200 bg-blue-50/40 p-4"
+          : "rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+      }
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+            <QrCode size={16} />
+          </div>
+          <div>
+            <h2 className="text-sm font-black text-gray-900">
+              Quét QR &amp; Gán thiết bị LED đóng hàng
+            </h2>
+            <p className="text-[11px] text-gray-500">
+              Gán Serial Number thiết bị trong kho cho từng sản phẩm trước khi bàn giao vận chuyển
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
+              isComplete
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            Đã gán {totalLinked} / {totalRequired} thiết bị LED
+          </span>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isLoading}
+            title="Làm mới danh sách thiết bị"
+            className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />
+          </button>
+        </div>
+      </div>
+
+      {errorMessage && (
+        <div
+          role="alert"
+          className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
+        >
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {successMessage && (
+        <div
+          role="status"
+          className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800"
+        >
+          <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+          <span>{successMessage}</span>
+        </div>
+      )}
+
+      {physicalLineItems.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-center text-xs text-gray-500">
+          {isLoading
+            ? "Đang tải chi tiết Order Item từ hệ thống..."
+            : "Không có mục LED / Bundle cần gán thiết bị hoặc thiếu orderItemId."}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {physicalLineItems.map((line) => {
+            const linkedList = linkedByItemMap.get(line.orderItemId) ?? [];
+            const currentSerial = serialByItem[line.orderItemId] ?? "";
+            const isLinkingThis = linkingItemId === line.orderItemId;
+
+            return (
+              <div
+                key={line.orderItemId}
+                className="rounded-xl border border-gray-200 bg-gray-50/70 p-3.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-[11px] font-bold text-slate-800">
+                        Item #{line.orderItemId}
+                      </span>
+                      <span className="text-xs font-black text-gray-900">
+                        {line.productName}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-gray-500">
+                      Số lượng đặt: {line.quantity} · Đã gán: {linkedList.length} thiết bị
+                    </p>
+                  </div>
+                </div>
+
+                {/* Linked Devices */}
+                {linkedList.length > 0 && (
+                  <div className="mt-2.5 flex flex-col gap-1.5">
+                    {linkedList.map((inst) => (
+                      <div
+                        key={inst.instanceId}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Cpu size={14} className="text-emerald-600" />
+                          <span className="font-mono font-bold text-gray-900">
+                            {inst.serialNumber}
+                          </span>
+                          <span className="text-[11px] text-gray-500">
+                            MAC: {inst.macAddress}
+                          </span>
+                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                            {inst.status}
+                          </span>
+                        </div>
+                        {canLink && (
+                          <button
+                            type="button"
+                            disabled={unlinkingInstanceId === inst.instanceId}
+                            onClick={() => onUnlink(inst)}
+                            className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                          >
+                            {unlinkingInstanceId === inst.instanceId ? (
+                              <Loader2 size={11} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={11} />
+                            )}
+                            Gỡ
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Scan / Quick-pick IN_STOCK LED Form */}
+                {canLink ? (
+                  <div className="mt-3 flex flex-col gap-2">
+                    {inStockInstances.length > 0 && (
+                      <select
+                        aria-label={`Chọn nhanh thiết bị trong kho cho mục ${line.orderItemId}`}
+                        value={
+                          inStockInstances.some(
+                            (inst) => inst.serialNumber === currentSerial,
+                          )
+                            ? currentSerial
+                            : ""
+                        }
+                        onChange={(e) =>
+                          onSerialChange(line.orderItemId, e.target.value)
+                        }
+                        className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-800 outline-none focus:border-blue-600"
+                      >
+                        <option value="">
+                          -- Chọn nhanh thiết bị IN_STOCK trong kho ({inStockInstances.length}) --
+                        </option>
+                        {inStockInstances.map((inst) => (
+                          <option key={inst.instanceId} value={inst.serialNumber}>
+                            {inst.serialNumber} — {inst.modelName || `Model #${inst.modelId}`} (MAC: {inst.macAddress})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="text"
+                        value={currentSerial}
+                        onChange={(e) =>
+                          onSerialChange(line.orderItemId, e.target.value)
+                        }
+                        placeholder="Nhập hoặc quét Serial Number (VD: LMT-64X64-SEED-0001)"
+                        aria-label={`Serial Number cho mục ${line.orderItemId}`}
+                        className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-mono text-xs text-gray-900 outline-none focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        disabled={isLinkingThis}
+                        onClick={() => onLink(line.orderItemId)}
+                        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#0F5B38] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-[#0c4a2d] disabled:opacity-50"
+                      >
+                        {isLinkingThis ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <QrCode size={13} />
+                        )}
+                        {isLinkingThis ? "Đang gán..." : "Gán thiết bị LED"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[11px] italic text-gray-500">
+                    Đơn hàng không ở trạng thái Chờ đóng hàng (PROCESSING / PARTIALLY_FULFILLED) nên không thể chỉnh sửa gán thiết bị.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { getRoleHomePath } from "@/features/auth/services/auth.service";
 
 const protectedRoutes = ["/cart", "/checkout", "/commission", "/profile"];
 
@@ -12,12 +13,13 @@ export default function CustomerRouteGuard({ children }: { children: ReactNode }
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuth();
   const protectedPage = protectedRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const isInternalUser = isAuthenticated && Boolean(user?.role) && user?.role !== "CUSTOMER";
 
   useEffect(() => {
-    if (!isLoading && protectedPage && isAuthenticated && user?.role !== "CUSTOMER") {
-      router.replace(user?.role === "MANAGER" ? "/manager" : "/login");
+    if (!isLoading && isInternalUser) {
+      router.replace(getRoleHomePath(user?.role));
     }
-  }, [isAuthenticated, isLoading, protectedPage, router, user?.role]);
+  }, [isInternalUser, isLoading, router, user?.role]);
 
   if (protectedPage && isLoading) {
     return <main className="min-h-screen bg-background flex items-center justify-center text-sm font-semibold text-text-muted">Đang kiểm tra phiên đăng nhập...</main>;
@@ -35,8 +37,8 @@ export default function CustomerRouteGuard({ children }: { children: ReactNode }
       </main>
     );
   }
-  if (protectedPage && user?.role !== "CUSTOMER") {
-    return <main className="min-h-screen bg-background flex items-center justify-center text-sm font-semibold text-text-muted">Đang chuyển đến khu vực phù hợp...</main>;
+  if (isInternalUser) {
+    return <main className="min-h-screen bg-background flex items-center justify-center text-sm font-semibold text-text-muted">Đang chuyển đến khu vực làm việc...</main>;
   }
   return <>{children}</>;
 }

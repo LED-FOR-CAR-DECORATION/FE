@@ -30,6 +30,7 @@ export interface ProductDefinition {
 
 export interface CartItem extends ProductDefinition {
   cartItemId?: number;
+  orderItemId?: number;
   quantity: number;
   isAvailable?: boolean;
   unavailableReason?: string | null;

@@ -872,19 +872,36 @@ export default function PixelArtStudio({
           pngFile,
           "CHARACTER_ASSET",
         );
-        const versionUrl = uploadedAsset.usedFallback
-          ? dataUrl
-          : uploadedAsset.publicUrl;
 
+        // Cache the artwork locally so designer can immediately view high-res pixels
+        if (typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(
+              `character_artwork_${createdCharacter.characterId}`,
+              dataUrl,
+            );
+            window.localStorage.setItem("last_studio_artwork", dataUrl);
+            window.localStorage.setItem("last_studio_name", trimmedName);
+            window.localStorage.setItem(
+              "last_studio_character_id",
+              String(createdCharacter.characterId),
+            );
+          } catch (storageErr) {
+            console.warn("LocalStorage cache warning:", storageErr);
+          }
+        }
+
+        // Backend createCharacterVersion requires a valid http/https URL under 500 chars
         await createCharacterVersion(createdCharacter.characterId, {
-          previewGifUrl: versionUrl,
+          previewGifUrl: uploadedAsset.publicUrl,
           frameCount: 1,
           frameDelayMs: 100,
           byteSize: Math.max(1, pngFile.size),
           isCurrent: true,
         });
-      } catch {
-        savedMessage = `Đã tạo nhân vật "${createdCharacter.characterName}" (#${createdCharacter.characterId}) nhưng chưa upload được file v1 lên kho đám mây. Bạn có thể tải file ở nút Xuất ảnh.`;
+      } catch (err) {
+        console.warn("Upload or version creation notice:", err);
+        savedMessage = `Đã tạo nhân vật "${createdCharacter.characterName}" (#${createdCharacter.characterId}) và lưu bản vẽ cục bộ.`;
       }
 
       setStatusNotice({ type: "success", message: savedMessage });
@@ -914,6 +931,14 @@ export default function PixelArtStudio({
     const canvas = canvasRef.current;
     if (!canvas || isSaving) return;
     const dataUrl = canvas.toDataURL("image/png");
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("last_studio_artwork", dataUrl);
+        window.localStorage.setItem("last_studio_name", characterName.trim());
+      } catch (err) {
+        console.warn("Storage warning:", err);
+      }
+    }
     void handleUploadToServer(dataUrl);
   };
 

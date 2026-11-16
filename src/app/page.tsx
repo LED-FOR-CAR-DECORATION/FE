@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Check,
@@ -26,6 +27,7 @@ import type { CatalogProduct } from "@/features/cart/catalog";
 import type { ProductType } from "@/features/cart/types";
 import { useCart } from "@/features/cart/context/CartContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { getRoleHomePath } from "@/features/auth/services/auth.service";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchStoreProducts } from "@/lib/api/products";
 
@@ -163,8 +165,10 @@ function ProductCard({ product, onAdd, canBuy }: { product: CatalogProduct; onAd
 }
 
 export default function Home() {
+  const router = useRouter();
   const { addItem } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const isInternalUser = isAuthenticated && Boolean(user?.role) && user?.role !== "CUSTOMER";
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [activeCategory, setActiveCategory] = useState<"all" | ProductType>("all");
@@ -180,6 +184,13 @@ export default function Home() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
+    if (!isLoading && isInternalUser) {
+      router.replace(getRoleHomePath(user?.role));
+    }
+  }, [isInternalUser, isLoading, router, user?.role]);
+
+  useEffect(() => {
+    if (isLoading || isInternalUser) return;
     let cancelled = false;
     setLoadingProducts(true);
     fetchStoreProducts({ page: 0, size: 100 })
@@ -195,7 +206,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isInternalUser, isLoading]);
 
   const toggleType = (type: ProductType) => {
     setSelectedTypes((current) => current.includes(type) ? current.filter((value) => value !== type) : [...current, type]);
@@ -253,6 +264,14 @@ export default function Home() {
     }
     window.setTimeout(() => setNotice(""), 2500);
   };
+
+  if (isInternalUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f8f7ef] text-sm font-semibold text-[#66736b]">
+        Đang chuyển đến khu vực làm việc...
+      </main>
+    );
+  }
 
   return (
     <>

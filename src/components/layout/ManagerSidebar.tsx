@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Store,
+  Tag,
   Truck,
   User,
   Users,
@@ -96,6 +97,13 @@ const menuItems: MenuItem[] = [
     href: "/staff/pricing",
     icon: Store,
     roles: ["MANAGER"],
+  },
+  {
+    label: "Quản lý tag sản phẩm",
+    description: "Tạo, sửa và xóa thẻ danh mục phân loại",
+    href: "/staff/tags",
+    icon: Tag,
+    roles: ["MANAGER", "ADMIN"],
   },
   {
     label: "Quản lý bảo hành",

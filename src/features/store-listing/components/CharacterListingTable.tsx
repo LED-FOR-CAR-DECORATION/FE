@@ -8,9 +8,11 @@ import {
   ArrowLeftRight,
   Edit,
   EyeOff,
+  Plus,
   Rocket,
   RotateCcw,
   Search,
+  Sparkles,
   Trash2,
   Undo2,
 } from "lucide-react";
@@ -32,6 +34,7 @@ interface CharacterListingTableProps {
   onEdit?: (character: StoreCharacterRow) => void;
   onArchive?: (character: StoreCharacterRow) => void;
   onDelete?: (character: StoreCharacterRow) => void;
+  onCreateCharacter?: () => void;
 }
 
 const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
@@ -66,6 +69,7 @@ export default function CharacterListingTable({
   onEdit,
   onArchive,
   onDelete,
+  onCreateCharacter,
 }: CharacterListingTableProps) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("All");
@@ -123,6 +127,15 @@ export default function CharacterListingTable({
         >
           <RotateCcw size={14} /> Đặt lại
         </button>
+        {canManage && onCreateCharacter && (
+          <button
+            type="button"
+            onClick={onCreateCharacter}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#eefaf1] px-3 py-2 text-xs font-black text-[#10351f] shadow-sm transition hover:bg-[#d8f5df]"
+          >
+            <Sparkles size={14} /> Bày bán Character
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -165,9 +178,22 @@ export default function CharacterListingTable({
             {!isLoading && !error && filtered.length === 0 && (
               <tr>
                 <td colSpan={HEADINGS.length} className="px-4 py-14 text-center text-sm font-semibold text-text-muted">
-                  {rows.length === 0
-                    ? "Chưa có Character nào được gửi duyệt."
-                    : "Không tìm thấy Character phù hợp với bộ lọc."}
+                  {rows.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <p>Chưa có Character nào được niêm yết trên Store.</p>
+                      {canManage && onCreateCharacter && (
+                        <button
+                          type="button"
+                          onClick={onCreateCharacter}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#eefaf1] px-3.5 py-2 text-xs font-black text-[#10351f] shadow-sm transition hover:bg-[#d8f5df]"
+                        >
+                          <Sparkles size={14} /> Bày bán Character mới từ Designer
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    "Không tìm thấy Character phù hợp với bộ lọc."
+                  )}
                 </td>
               </tr>
             )}

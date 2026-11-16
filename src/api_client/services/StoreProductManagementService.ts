@@ -64,6 +64,29 @@ export class StoreProductManagementService {
         });
     }
     /**
+     * Archive or soft-delete a bundle
+     * @param id
+     * @returns void
+     * @throws ApiError
+     */
+    public static delete3(
+        id: number,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/management/admin/store/bundles/{id}',
+            path: {
+                'id': id,
+            },
+            errors: {
+                400: `Invalid bundle ID`,
+                401: `Authentication required`,
+                403: `MANAGER required`,
+                404: `BUNDLE_NOT_FOUND`,
+            },
+        });
+    }
+    /**
      * Create an unpublished store product
      * @param requestBody
      * @returns ApiResponseCreatedStoreProductResponse Product created
@@ -94,7 +117,7 @@ export class StoreProductManagementService {
      * @returns ApiResponseUpdatedStoreProductStatusResponse Updated product
      * @throws ApiError
      */
-    public static update4(
+    public static update5(
         id: number,
         requestBody: UpdateStoreProductStatusRequest,
     ): CancelablePromise<ApiResponseUpdatedStoreProductStatusResponse> {

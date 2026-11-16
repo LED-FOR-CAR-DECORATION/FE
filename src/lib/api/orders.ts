@@ -406,3 +406,123 @@ export async function apiDispatchOrder(
     throw new Error(getDispatchErrorMessage(error));
   }
 }
+
+export interface LinkOrderFulfillmentDeviceRequest {
+  orderItemId: number;
+  serialNumber: string;
+}
+
+export interface FulfillmentProgressInfo {
+  itemFulfilledCount: number;
+  itemRequiredCount: number;
+  orderFulfilledCount: number;
+  orderRequiredCount: number;
+  isFullyFulfilled: boolean;
+}
+
+export interface LinkOrderFulfillmentDeviceResponse {
+  orderId: number;
+  orderStatus: string;
+  fulfillmentId: number;
+  orderItemId: number;
+  instanceId: number;
+  serialNumber: string;
+  macAddress: string;
+  modelId: number;
+  modelName: string;
+  instanceStatus: string;
+  progress: FulfillmentProgressInfo;
+  linkedAt: string;
+}
+
+const FULFILLMENT_DEVICE_ERROR_MESSAGES: Record<string, string> = {
+  INVALID_ORDER_ITEM: "Mục sản phẩm trong đơn hàng không hợp lệ hoặc không thuộc đơn này.",
+  PHYSICAL_HARDWARE_NOT_REQUIRED: "Đơn hàng chỉ chứa sản phẩm số, không cần gán thiết bị LED vật lý.",
+  ORDER_ITEM_ALREADY_FULFILLED: "Mục sản phẩm này đã được gán đủ số lượng thiết bị LED.",
+  DEVICE_ALREADY_ASSIGNED: "Thiết bị LED này đã được gán cho một đơn hàng khác.",
+  DEVICE_NOT_FOUND: "Không tìm thấy thiết bị LED với Serial Number vừa nhập.",
+  DEVICE_NOT_IN_STOCK: "Thiết bị LED này hiện không ở trạng thái Trong kho (IN_STOCK).",
+  DEVICE_MODEL_MISMATCH: "Mẫu thiết bị LED không khớp với sản phẩm mà khách hàng đã đặt.",
+  INVALID_ORDER_STATUS_TRANSITION:
+    "Chỉ có thể gán hoặc gỡ thiết bị khi đơn hàng ở trạng thái Chờ đóng hàng (PROCESSING / PARTIALLY_FULFILLED).",
+};
+
+export function getFulfillmentDeviceErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    }
+    if (error.status === 403) {
+      return "Bạn không có quyền thực hiện gán/gỡ thiết bị đóng hàng.";
+    }
+    const body = error.body as ErrorResponse | undefined;
+    const code = (body as { code?: string } | undefined)?.code;
+    if (code && FULFILLMENT_DEVICE_ERROR_MESSAGES[code]) {
+      return FULFILLMENT_DEVICE_ERROR_MESSAGES[code];
+    }
+    const detail = body?.details?.find((d) => d.message)?.message;
+    if (body?.message) return body.message;
+    if (detail) return detail;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Không thể gán thiết bị LED vào đơn hàng. Vui lòng thử lại.";
+}
+
+export async function apiLinkOrderFulfillmentDevice(
+  orderId: number | string,
+  payload: LinkOrderFulfillmentDeviceRequest,
+): Promise<LinkOrderFulfillmentDeviceResponse> {
+  const numericOrderId = Number(orderId);
+  if (!Number.isFinite(numericOrderId) || numericOrderId <= 0) {
+    throw new Error("Mã đơn hàng không hợp lệ.");
+  }
+  const cleanSerial = payload.serialNumber.trim();
+  if (!cleanSerial) {
+    throw new Error("Vui lòng nhập hoặc chọn Serial Number thiết bị LED.");
+  }
+
+  try {
+    const res = await request<{ data: LinkOrderFulfillmentDeviceResponse }>(OpenAPI, {
+      method: "POST",
+      url: "/api/management/staff/orders/{id}/fulfillment-devices",
+      path: { id: numericOrderId },
+      body: {
+        orderItemId: Number(payload.orderItemId),
+        serialNumber: cleanSerial,
+      },
+      mediaType: "application/json",
+    });
+
+    if (!res.data) {
+      throw new Error("Không nhận được phản hồi gán thiết bị từ máy chủ.");
+    }
+    return res.data;
+  } catch (error) {
+    throw new Error(getFulfillmentDeviceErrorMessage(error));
+  }
+}
+
+export async function apiUnlinkOrderFulfillmentDevice(
+  orderId: number | string,
+  instanceId: number,
+): Promise<void> {
+  const numericOrderId = Number(orderId);
+  if (!Number.isFinite(numericOrderId) || numericOrderId <= 0) {
+    throw new Error("Mã đơn hàng không hợp lệ.");
+  }
+
+  try {
+    await request<void>(OpenAPI, {
+      method: "DELETE",
+      url: "/api/management/staff/orders/{id}/fulfillment-devices/{instanceId}",
+      path: {
+        id: numericOrderId,
+        instanceId,
+      },
+    });
+  } catch (error) {
+    throw new Error(getFulfillmentDeviceErrorMessage(error));
+  }
+}

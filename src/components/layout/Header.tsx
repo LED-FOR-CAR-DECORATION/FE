@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, MessageSquare } from "lucide-react";
+import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, MessageSquare, LayoutDashboard } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { getRoleHomePath } from "@/features/auth/services/auth.service";
 import { useCart } from "@/features/cart/context/CartContext";
 
 /* ── User dropdown (shown when logged in) ── */
@@ -11,6 +12,7 @@ function UserDropdown() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const isInternalRole = Boolean(user?.role) && user?.role !== "CUSTOMER";
 
   /* Close when clicking outside */
   useEffect(() => {
@@ -35,38 +37,48 @@ function UserDropdown() {
 
       {open && (
         <div className="absolute right-0 top-full mt-1 w-48 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-50">
-          <Link
-            href="/profile"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 border-b-2 border-black"
-          >
-            <User size={15} /> Hồ sơ của tôi
-          </Link>
-          <Link
-            href="/profile/orders"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 border-b-2 border-black"
-          >
-            <ShoppingBag size={15} /> Lịch sử đơn hàng
-          </Link>
-          <Link
-            href="/profile/gallery"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-gray-50"
-          >
-            <ShoppingBag size={15} /> Thư viện nhân vật
-          </Link>
-          {user?.role === "CUSTOMER" && (
+          {isInternalRole ? (
             <Link
-              href="/commission"
+              href={getRoleHomePath(user?.role)}
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-[#eaf5e8]"
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 border-b-2 border-black"
             >
-              Yêu cầu thiết kế
+              <LayoutDashboard size={15} /> Khu vực làm việc
             </Link>
+          ) : (
+            <>
+              <Link
+                href="/profile"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 border-b-2 border-black"
+              >
+                <User size={15} /> Hồ sơ của tôi
+              </Link>
+              <Link
+                href="/profile/orders"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 border-b-2 border-black"
+              >
+                <ShoppingBag size={15} /> Lịch sử đơn hàng
+              </Link>
+              <Link
+                href="/profile/gallery"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-gray-50"
+              >
+                <ShoppingBag size={15} /> Thư viện nhân vật
+              </Link>
+              <Link
+                href="/commission"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-[#eaf5e8]"
+              >
+                Yêu cầu thiết kế
+              </Link>
+            </>
           )}
           <button
-            onClick={async () => { await logout(); setOpen(false); window.location.assign("/"); }}
+            onClick={async () => { await logout(); setOpen(false); window.location.assign(isInternalRole ? "/login" : "/"); }}
             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold hover:bg-red-50 text-red-600"
           >
             <LogOut size={15} /> Đăng xuất
@@ -99,9 +111,10 @@ function GuestButtons() {
 
 /* ── Header ── */
 export default function Header() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const { itemCount } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isCustomer = !user?.role || user.role === "CUSTOMER";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[#d7e2d8] bg-[#8fc7a0]">
@@ -143,17 +156,18 @@ export default function Header() {
             <div className="h-9 w-24 animate-pulse bg-white/60 border-2 border-black" aria-label="Đang tải phiên đăng nhập" />
           ) : isAuthenticated ? (
             <>
-              {/* Cart (only for logged-in users) */}
-              <Link
-                href="/cart"
-                className="relative rounded-lg p-2 text-[#155e59] transition-colors hover:bg-white/50 focus:outline-none focus:ring-2 focus:ring-white"
-                aria-label="Giỏ hàng"
-              >
-                <ShoppingBag size={24} />
-                <span className="absolute right-0 top-0 flex h-5 w-5 -translate-y-1 translate-x-1 items-center justify-center rounded-full border border-[#155e59] bg-[#f2a65a] text-xs font-bold text-[#26352f]">
-                  {itemCount}
-                </span>
-              </Link>
+              {isCustomer && (
+                <Link
+                  href="/cart"
+                  className="relative rounded-lg p-2 text-[#155e59] transition-colors hover:bg-white/50 focus:outline-none focus:ring-2 focus:ring-white"
+                  aria-label="Giỏ hàng"
+                >
+                  <ShoppingBag size={24} />
+                  <span className="absolute right-0 top-0 flex h-5 w-5 -translate-y-1 translate-x-1 items-center justify-center rounded-full border border-[#155e59] bg-[#f2a65a] text-xs font-bold text-[#26352f]">
+                    {itemCount}
+                  </span>
+                </Link>
+              )}
               <UserDropdown />
             </>
           ) : (

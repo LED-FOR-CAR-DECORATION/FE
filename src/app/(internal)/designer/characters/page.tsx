@@ -6,6 +6,8 @@ import {
   AlertCircle,
   CheckCircle2,
   Edit3,
+  ExternalLink,
+  Image as ImageIcon,
   Loader2,
   Palette,
   Plus,
@@ -14,22 +16,52 @@ import {
   Sparkles,
   Store,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import PixelArtStudio, {
   type PixelArtExportPayload,
 } from "@/features/designer/components/PixelArtStudio";
 import {
+  createCharacterVersion,
   createDesignerCharacter,
   deleteDesignerCharacter,
   fetchMyCharacters,
   formatDesignerApiError,
+  readFileAsDataUrl,
   updateDesignerCharacter,
+  uploadDesignerAssetFile,
   type DesignerCharacterItem,
   type PaginationMeta,
 } from "@/lib/api/designerCharacters";
 
 const PAGE_SIZE = 8;
+
+function getCharacterArtwork(character: DesignerCharacterItem): string | null {
+  if (character.currentVersion?.previewGifUrl) {
+    return character.currentVersion.previewGifUrl;
+  }
+  if (typeof window !== "undefined") {
+    // 1. Direct character ID artwork
+    const cached = window.localStorage.getItem(`character_artwork_${character.characterId}`);
+    if (cached) return cached;
+
+    // 2. Fallback to last studio drawing if name matches or if it's the latest created character
+    const lastArtwork = window.localStorage.getItem("last_studio_artwork");
+    const lastName = window.localStorage.getItem("last_studio_name");
+    const lastId = window.localStorage.getItem("last_studio_character_id");
+
+    if (lastArtwork) {
+      if (lastId && Number(lastId) === character.characterId) {
+        return lastArtwork;
+      }
+      if (lastName && lastName.toLowerCase() === character.characterName.toLowerCase()) {
+        return lastArtwork;
+      }
+    }
+  }
+  return null;
+}
 
 export default function DesignerCharactersPage() {
   const [characters, setCharacters] = useState<DesignerCharacterItem[]>([]);
@@ -63,6 +95,8 @@ export default function DesignerCharactersPage() {
   const [editDescription, setEditDescription] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
+  const [isUploadingVersion, setIsUploadingVersion] = useState(false);
+  const [versionNotice, setVersionNotice] = useState<string | null>(null);
 
   // Delete state
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -139,6 +173,65 @@ export default function DesignerCharactersPage() {
     setEditName(item.characterName);
     setEditDescription(item.description ?? "");
     setEditError("");
+    setVersionNotice(null);
+  };
+
+  const handleUploadFileToCharacter = async (file: File) => {
+    if (!editingItem) return;
+    setIsUploadingVersion(true);
+    setEditError("");
+    setVersionNotice(null);
+    try {
+      const uploaded = await uploadDesignerAssetFile(file, "CHARACTER_ASSET");
+      const dataUrl = await readFileAsDataUrl(file);
+      if (dataUrl && typeof window !== "undefined") {
+        window.localStorage.setItem(`character_artwork_${editingItem.characterId}`, dataUrl);
+      }
+      await createCharacterVersion(editingItem.characterId, {
+        previewGifUrl: uploaded.publicUrl,
+        frameCount: 1,
+        frameDelayMs: 100,
+        byteSize: Math.max(1, file.size),
+        isCurrent: true,
+      });
+      setVersionNotice(`Đã tải ảnh lên cho nhân vật "${editingItem.characterName}" (#${editingItem.characterId}) thành công.`);
+      await loadCharacters(page, activeQuery);
+    } catch (err) {
+      setEditError(formatDesignerApiError(err, "Không thể tải ảnh cho nhân vật."));
+    } finally {
+      setIsUploadingVersion(false);
+    }
+  };
+
+  const handleSyncArtworkToVersion = async () => {
+    if (!editingItem) return;
+    const artwork = getCharacterArtwork(editingItem);
+    if (!artwork) return;
+    setIsUploadingVersion(true);
+    setEditError("");
+    setVersionNotice(null);
+    try {
+      const res = await fetch(artwork);
+      const blob = await res.blob();
+      const file = new File([blob], `${editingItem.characterName}.png`, { type: "image/png" });
+      const uploaded = await uploadDesignerAssetFile(file, "CHARACTER_ASSET");
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(`character_artwork_${editingItem.characterId}`, artwork);
+      }
+      await createCharacterVersion(editingItem.characterId, {
+        previewGifUrl: uploaded.publicUrl,
+        frameCount: 1,
+        frameDelayMs: 100,
+        byteSize: Math.max(1, file.size),
+        isCurrent: true,
+      });
+      setVersionNotice("Đã lưu bản vẽ thành phiên bản v1 cho nhân vật!");
+      await loadCharacters(page, activeQuery);
+    } catch (err) {
+      setEditError(formatDesignerApiError(err, "Không thể lưu bản vẽ thành phiên bản."));
+    } finally {
+      setIsUploadingVersion(false);
+    }
   };
 
   const handleSaveEdit = async (event: React.FormEvent) => {
@@ -416,9 +509,10 @@ export default function DesignerCharactersPage() {
                 >
                   <div className="flex min-w-0 items-start gap-4">
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#dce8df] bg-[#0f1713]">
-                      {item.currentVersion?.previewGifUrl ? (
+                      {getCharacterArtwork(item) ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img
-                          src={item.currentVersion.previewGifUrl}
+                          src={getCharacterArtwork(item)!}
                           alt={item.characterName}
                           className="h-full w-full object-contain"
                           style={{ imageRendering: "pixelated" }}
@@ -532,79 +626,183 @@ export default function DesignerCharactersPage() {
       {/* Edit Character Modal */}
       {editingItem && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-5 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-character-title"
         >
-          <div className="w-full max-w-md rounded-2xl border border-[#dce8df] bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between border-b border-[#e5eee6] pb-3">
-              <h2 id="edit-character-title" className="text-lg font-black text-[#173b28]">
-                Chỉnh sửa nhân vật #{editingItem.characterId}
-              </h2>
+          <div className="relative flex flex-col w-full max-w-lg max-h-[90vh] rounded-2xl border border-[#dce8df] bg-white shadow-2xl overflow-hidden my-auto">
+            {/* Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-[#e5eee6] bg-[#f8fcf8] px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#edf7ef] text-[#198653]">
+                  <Edit3 size={16} />
+                </span>
+                <div>
+                  <h2 id="edit-character-title" className="text-base font-black text-[#173b28]">
+                    Chỉnh sửa nhân vật #{editingItem.characterId}
+                  </h2>
+                  <p className="text-[11px] text-[#66736b]">
+                    Xem ảnh minh họa, cập nhật thông tin và quản lý phiên bản
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
                 aria-label="Đóng"
-                className="rounded-lg p-1 text-[#66736b] hover:bg-[#f6fbf7]"
+                className="rounded-lg p-1 text-[#66736b] hover:bg-black/5"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="mt-4 flex flex-col gap-4">
-              <label className="block">
-                <span className="text-xs font-black uppercase tracking-wide text-[#26352f]">
-                  Tên nhân vật <span className="text-red-500">*</span>
-                </span>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  maxLength={255}
-                  className="mt-1.5 w-full rounded-xl border border-[#dce8df] px-3.5 py-2.5 text-sm outline-none focus:border-[#198653]"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-black uppercase tracking-wide text-[#26352f]">
-                  Mô tả nhân vật
-                </span>
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  rows={4}
-                  className="mt-1.5 w-full resize-y rounded-xl border border-[#dce8df] px-3.5 py-2.5 text-sm outline-none focus:border-[#198653]"
-                />
-              </label>
-
-              {editError && (
-                <p
-                  role="alert"
-                  className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700"
-                >
-                  {editError}
+            {/* Scrollable Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+              {/* Artwork Preview Display */}
+              <div className="rounded-xl border border-[#dce8df] bg-[#0f1713] p-4 text-center">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#89c89b] flex items-center justify-center gap-1.5">
+                  <Palette size={13} /> Hình ảnh hiển thị Pixel Art
                 </p>
+
+                {getCharacterArtwork(editingItem) ? (
+                  <div className="flex flex-col items-center gap-2.5">
+                    <div className="relative flex h-44 w-44 items-center justify-center overflow-hidden rounded-xl border border-[#198653]/40 bg-black/60 p-2 shadow-inner">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={getCharacterArtwork(editingItem)!}
+                        alt={editingItem.characterName}
+                        className="max-h-full max-w-full object-contain"
+                        style={{ imageRendering: "pixelated" }}
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {editingItem.currentVersion ? (
+                        <span className="rounded-full bg-[#198653]/20 border border-[#198653]/50 px-2.5 py-0.5 text-[11px] font-bold text-[#89c89b]">
+                          Phiên bản v{editingItem.currentVersion.versionNumber}
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-900/40 border border-amber-500/40 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
+                          Bản vẽ từ Pixel Art Studio
+                        </span>
+                      )}
+                      <Link
+                        href={`/designer/store-uploads?characterId=${editingItem.characterId}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                      >
+                        <Store size={11} /> Đăng tải lên Store
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center py-6 text-gray-400">
+                    <Palette size={32} className="text-[#89c89b] mb-2" />
+                    <p className="text-xs font-bold text-gray-300">Nhân vật này chưa có bản vẽ GIF/ảnh</p>
+                    <p className="text-[11px] text-gray-400 mt-1 max-w-xs">
+                      Bạn có thể vẽ trực tiếp trên bảng vẽ Studio ở trên hoặc chọn file ảnh từ máy tính bên dưới.
+                    </p>
+                  </div>
+                )}
+
+                {/* Upload or Sync Action inside modal */}
+                <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 border-t border-white/10 pt-3">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#198653] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-[#12633f] transition">
+                    {isUploadingVersion ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Upload size={13} />
+                    )}
+                    {isUploadingVersion ? "Đang xử lý..." : "Tải ảnh từ máy tính lên"}
+                    <input
+                      type="file"
+                      accept="image/png,image/gif,image/jpeg,image/webp"
+                      disabled={isUploadingVersion}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleUploadFileToCharacter(file);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {getCharacterArtwork(editingItem) && !editingItem.currentVersion && (
+                    <button
+                      type="button"
+                      disabled={isUploadingVersion}
+                      onClick={handleSyncArtworkToVersion}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-500/20 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-500/30 transition"
+                    >
+                      <Sparkles size={13} />
+                      Đăng ký bản vẽ thành phiên bản v1
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {versionNotice && (
+                <div className="rounded-xl border border-[#b7d9be] bg-[#edf7ef] p-3 text-xs font-semibold text-[#155e59] flex items-center gap-2">
+                  <CheckCircle2 size={15} className="shrink-0 text-[#198653]" />
+                  {versionNotice}
+                </div>
               )}
 
-              <div className="flex justify-end gap-2 border-t border-[#e5eee6] pt-4">
-                <button
-                  type="button"
-                  onClick={() => setEditingItem(null)}
-                  className="rounded-xl border border-[#dce8df] px-4 py-2 text-xs font-bold text-[#26352f] hover:bg-[#f6fbf7]"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingEdit}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#198653] px-4 py-2 text-xs font-bold text-white hover:bg-[#12633f] disabled:opacity-60"
-                >
-                  {savingEdit && <Loader2 size={14} className="animate-spin" />}
-                  Lưu thay đổi
-                </button>
-              </div>
-            </form>
+              {/* Form Metadata */}
+              <form onSubmit={handleSaveEdit} id="edit-character-form" className="flex flex-col gap-3.5">
+                <label className="block">
+                  <span className="text-xs font-black uppercase tracking-wide text-[#26352f]">
+                    Tên nhân vật <span className="text-red-500">*</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    maxLength={255}
+                    className="mt-1 w-full rounded-xl border border-[#dce8df] px-3.5 py-2.5 text-sm outline-none focus:border-[#198653]"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-black uppercase tracking-wide text-[#26352f]">
+                    Mô tả nhân vật
+                  </span>
+                  <textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    rows={3}
+                    className="mt-1 w-full resize-y rounded-xl border border-[#dce8df] px-3.5 py-2 text-sm outline-none focus:border-[#198653]"
+                  />
+                </label>
+
+                {editError && (
+                  <p
+                    role="alert"
+                    className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700"
+                  >
+                    {editError}
+                  </p>
+                )}
+              </form>
+            </div>
+
+            {/* Footer */}
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#e5eee6] bg-[#f8fcf8] px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="rounded-xl border border-[#dce8df] bg-white px-4 py-2 text-xs font-bold text-[#26352f] hover:bg-[#f6fbf7]"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                form="edit-character-form"
+                disabled={savingEdit || isUploadingVersion}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#198653] px-4 py-2 text-xs font-bold text-white hover:bg-[#12633f] disabled:opacity-60"
+              >
+                {savingEdit && <Loader2 size={14} className="animate-spin" />}
+                Lưu thay đổi
+              </button>
+            </div>
           </div>
         </div>
       )}

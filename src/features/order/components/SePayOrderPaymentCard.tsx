@@ -340,11 +340,10 @@ export default function SePayOrderPaymentCard({
 
             {countdown && session.status === "PENDING" && (
               <div
-                className={`mt-3 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-xs font-black ${
-                  isExpired
+                className={`mt-3 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-xs font-black ${isExpired
                     ? "border-red-400 bg-red-100 text-red-800"
                     : "border-amber-400 bg-amber-100 text-amber-900"
-                }`}
+                  }`}
               >
                 <Clock size={13} />
                 {isExpired ? "Đã hết hạn thanh toán" : `Hết hạn sau: ${countdown}`}

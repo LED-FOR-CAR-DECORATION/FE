@@ -143,6 +143,46 @@ export async function fetchStoreTags(): Promise<TagItem[]> {
   }
 }
 
+export async function apiCreateStoreTag(payload: { name: string; description?: string }): Promise<TagItem> {
+  const token = await getSessionToken();
+  const { data } = await axios.post<{ data: TagItem }>(
+    "/api/management/admin/store/tags",
+    payload,
+    {
+      baseURL: getApiBaseUrl(),
+      withCredentials: OpenAPI.WITH_CREDENTIALS,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    },
+  );
+  return data.data;
+}
+
+export async function apiUpdateStoreTag(
+  id: number,
+  payload: { name: string; description?: string },
+): Promise<TagItem> {
+  const token = await getSessionToken();
+  const { data } = await axios.put<{ data: TagItem }>(
+    `/api/management/admin/store/tags/${id}`,
+    payload,
+    {
+      baseURL: getApiBaseUrl(),
+      withCredentials: OpenAPI.WITH_CREDENTIALS,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    },
+  );
+  return data.data;
+}
+
+export async function apiDeleteStoreTag(id: number): Promise<void> {
+  const token = await getSessionToken();
+  await axios.delete(`/api/management/admin/store/tags/${id}`, {
+    baseURL: getApiBaseUrl(),
+    withCredentials: OpenAPI.WITH_CREDENTIALS,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+}
+
 export async function apiUpdateProductStatus(
   productId: number,
   status: "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED",
@@ -206,5 +246,47 @@ export async function apiDeleteStoreProduct(productId: number): Promise<void> {
       return;
     }
     throw err;
+  }
+}
+
+export interface AdminCharacterSummary {
+  characterId: number;
+  characterName: string;
+  description: string | null;
+  author?: {
+    employeeId: number;
+    fullName: string;
+    email: string;
+  } | null;
+  totalVersions: number;
+  createdAt: string;
+}
+
+export async function fetchAdminCharacters(params?: {
+  query?: string;
+  creatorEmployeeId?: number;
+  page?: number;
+  size?: number;
+}): Promise<AdminCharacterSummary[]> {
+  const token = await getSessionToken();
+  try {
+    const res = await axios.get<{ data: AdminCharacterSummary[] }>(
+      "/api/management/admin/characters",
+      {
+        baseURL: getApiBaseUrl(),
+        withCredentials: OpenAPI.WITH_CREDENTIALS,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        params: {
+          query: params?.query || undefined,
+          creatorEmployeeId: params?.creatorEmployeeId || undefined,
+          page: params?.page ?? 0,
+          size: params?.size ?? 100,
+        },
+      },
+    );
+    return res.data?.data ?? [];
+  } catch (err) {
+    console.warn("fetchAdminCharacters backend call failed:", err);
+    return [];
   }
 }

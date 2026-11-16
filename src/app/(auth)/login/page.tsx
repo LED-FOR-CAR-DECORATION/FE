@@ -103,10 +103,6 @@ export default function LoginPage() {
 
         {/* Bottom Status */}
         <div className="relative z-10 flex items-center justify-between border-t border-white/15 pt-4 text-[11px] font-semibold text-gray-400">
-          <span className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#27c93f] animate-pulse" />
-            Hệ thống vận hành bình thường
-          </span>
           <span>PIXEL HUB OS v2.4</span>
         </div>
       </section>
@@ -142,8 +138,6 @@ export default function LoginPage() {
 
           {/* Guarantee / Security badge */}
           <div className="mt-4 flex items-center justify-center gap-2 text-[11px] font-semibold text-text-muted">
-            <ShieldCheck size={14} className="text-[#198653]" />
-            <span>Hệ thống phân quyền an toàn &amp; phân định vai trò tự động</span>
           </div>
         </div>
       </section>

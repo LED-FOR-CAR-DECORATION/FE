@@ -18,7 +18,7 @@ export default function ManagerRouteGuard({ children }: { children: ReactNode })
     (user?.role === "STAFF" && ["/staff/orders", "/staff/deliveries", "/staff/chat", "/staff/commission"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
     (user?.role === "MANAGER" && ["/staff/inventory", "/staff/pricing", "/staff/warranty", "/staff/returns", "/staff/commission/pricing"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
     (user?.role === "MANAGER" && (pathname === "/manager/character-orders" || pathname.startsWith("/manager/character-orders/"))) ||
-    (user?.role === "DESIGNER" && (pathname === "/designer/dashboard" || pathname === "/designer/commissions" || pathname.startsWith("/designer/commissions/")));
+    (user?.role === "DESIGNER" && (pathname === "/designer" || pathname.startsWith("/designer/")));
 
   const isInternalRole =
     user?.role === "ADMIN" ||
@@ -36,7 +36,7 @@ export default function ManagerRouteGuard({ children }: { children: ReactNode })
             : user?.role === "MANAGER"
               ? "/manager"
               : user?.role === "DESIGNER"
-                ? "/designer/dashboard"
+                ? "/designer/characters"
                 : "/staff"
       );
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Check, Cpu, Loader2, Sparkles, Tag } from "lucide-react";
+import { AlertCircle, Check, Cpu, Loader2, Tag } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import { apiCreateStoreProduct, fetchStoreTags } from "@/lib/api/products";
 import type { CreatedStoreProductResponse, TagItem } from "@/api_client";
@@ -11,7 +11,6 @@ import { saveCreatedStoreProduct } from "../services/store-listing.service";
 interface CreateStoreProductModalProps {
   onClose: () => void;
   onSuccess: (created: CreatedStoreProductResponse) => void;
-  initialType?: "LED" | "CHARACTER";
 }
 
 function normalizeAndValidateHttpUrl(
@@ -106,19 +105,12 @@ function formatCreateProductError(err: any): string {
 export default function CreateStoreProductModal({
   onClose,
   onSuccess,
-  initialType = "LED",
 }: CreateStoreProductModalProps) {
-  const [productType, setProductType] = useState<"CHARACTER" | "LED">(
-    initialType,
-  );
   const [productName, setProductName] = useState("");
-  const [basePrice, setBasePrice] = useState<string>(
-    initialType === "LED" ? "1490000" : "199000",
-  );
+  const [basePrice, setBasePrice] = useState<string>("1490000");
   const [description, setDescription] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [galleryUrlsText, setGalleryUrlsText] = useState("");
-  const [characterVersionId, setCharacterVersionId] = useState<string>("");
 
   // Optional 1-1 LED_MODEL initialization (AC02)
   const [includeLedDetails, setIncludeLedDetails] = useState(true);
@@ -231,10 +223,7 @@ export default function CreateStoreProductModal({
 
     const payload: CreateStoreProductRequest = {
       productName: trimmedName,
-      productType:
-        productType === "LED"
-          ? CreateStoreProductRequest.productType.LED
-          : CreateStoreProductRequest.productType.CHARACTER,
+      productType: CreateStoreProductRequest.productType.LED,
       basePrice: priceNum,
       description: description.trim() || undefined,
       thumbnailUrl: thumbCheck.value,
@@ -242,20 +231,7 @@ export default function CreateStoreProductModal({
       tagIds: combinedTagIds.length > 0 ? combinedTagIds : undefined,
     };
 
-    if (productType === "CHARACTER") {
-      const verId = Number(characterVersionId);
-      if (
-        characterVersionId.trim() === "" ||
-        !Number.isInteger(verId) ||
-        verId <= 0
-      ) {
-        setError(
-          "Vui lòng nhập ID Character Version hợp lệ (số nguyên dương > 0).",
-        );
-        return;
-      }
-      payload.characterVersionId = verId;
-    } else if (includeLedDetails) {
+    if (includeLedDetails) {
       const resolvedModelName = modelName.trim() || trimmedName;
       if (resolvedModelName.length > 255) {
         setError("Tên Model LED không được vượt quá 255 ký tự.");
@@ -315,8 +291,8 @@ export default function CreateStoreProductModal({
 
   return (
     <Modal
-      title="Tạo sản phẩm bày bán (Store Product)"
-      description="Dành cho Manager & Admin: Khởi tạo sản phẩm phần cứng LED hoặc Character Pixel Art qua API POST /api/management/admin/store/products."
+      title="Tạo sản phẩm LED bày bán (Store Product)"
+      description="Dành cho Manager: Điều chỉnh trạng thái của Character trên Store"
       onClose={onClose}
       busy={isSubmitting}
       size="lg"
@@ -337,9 +313,7 @@ export default function CreateStoreProductModal({
             className="inline-flex items-center gap-2 rounded-lg border border-[#3b8555] bg-[#439660] px-5 py-2 text-sm font-black text-white shadow-xs hover:bg-[#387e51] disabled:opacity-60"
           >
             {isSubmitting && <Loader2 size={15} className="animate-spin" />}
-            {productType === "LED"
-              ? "Tạo sản phẩm LED"
-              : "Tạo sản phẩm Character"}
+            Tạo sản phẩm LED
           </button>
         </>
       }
@@ -355,53 +329,19 @@ export default function CreateStoreProductModal({
           </div>
         )}
 
-        <div className="rounded-lg border border-[#d2e4d7] bg-[#f7fbf8] p-3 text-xs text-[#2e573c]">
-          <span className="font-bold">Quy tắc AC04:</span> Trạng thái khởi tạo
-          mặc định luôn là{" "}
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-900">
-            UNPUBLISHED
-          </span>
-          . Sau khi tạo xong, sản phẩm sẽ hiển thị trong danh sách quản lý để
-          bạn kiểm tra và bấm Publish.
-        </div>
-
-        {/* AC02: Product type */}
-        <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">
-            Chọn loại sản phẩm (AC02)
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setProductType("LED");
-                if (basePrice === "199000") setBasePrice("1490000");
-              }}
-              className={`flex items-center justify-center gap-2 rounded-lg border p-3 font-bold transition ${
-                productType === "LED"
-                  ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b] shadow-xs"
-                  : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
-              }`}
-            >
-              <Cpu size={16} />
-              Sản phẩm LED (Vật lý)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setProductType("CHARACTER");
-                if (basePrice === "1490000") setBasePrice("199000");
-              }}
-              className={`flex items-center justify-center gap-2 rounded-lg border p-3 font-bold transition ${
-                productType === "CHARACTER"
-                  ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b] shadow-xs"
-                  : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
-              }`}
-            >
-              <Sparkles size={16} />
-              Nhân vật Character (Digital)
-            </button>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-[#d2e4d7] bg-[#f7fbf8] p-3 text-xs text-[#2e573c]">
+          <div>
+            <span className="font-bold">Quy tắc AC04:</span> Trạng thái khởi tạo
+            mặc định luôn là{" "}
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-900">
+              UNPUBLISHED
+            </span>
+            . Sau khi tạo xong, sản phẩm sẽ hiển thị trong danh sách để kiểm tra và bấm Publish.
           </div>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#439660] bg-[#eaf7ee] px-2.5 py-1.5 font-bold text-[#1c4b2b]">
+            <Cpu size={14} />
+            LED (Vật lý)
+          </span>
         </div>
 
         {/* Tên & Giá */}
@@ -416,11 +356,7 @@ export default function CreateStoreProductModal({
               maxLength={255}
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
-              placeholder={
-                productType === "CHARACTER"
-                  ? "Ví dụ: Cyber Samurai 64x64"
-                  : "Ví dụ: Lumintra Matrix Pro 64x64"
-              }
+              placeholder="Ví dụ: Lumintra Matrix Pro 64x64"
               className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
             />
           </div>
@@ -435,155 +371,131 @@ export default function CreateStoreProductModal({
               required
               value={basePrice}
               onChange={(e) => setBasePrice(e.target.value)}
-              placeholder="199000"
+              placeholder="1490000"
               className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
             />
           </div>
         </div>
 
-        {/* Trường riêng theo loại */}
-        {productType === "CHARACTER" ? (
-          <div className="rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
-            <label className="mb-1 block font-bold text-[#1f432b]">
-              ID Version Character liên kết (characterVersionId){" "}
-              <span className="text-red-500">*</span>
-            </label>
+        {/* Trường riêng LED_MODEL */}
+        <div className="flex flex-col gap-3 rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
+          <label className="flex cursor-pointer items-center justify-between gap-3">
+            <div>
+              <span className="block font-bold text-[#1f432b]">
+                Khởi tạo ngay mẫu phần cứng LED_MODEL 1–1 (ledDetails)
+              </span>
+              <span className="text-xs text-text-muted">
+                Tắt tùy chọn này nếu chỉ muốn tạo bản ghi PRODUCT và gắn
+                LED_MODEL sau.
+              </span>
+            </div>
             <input
-              type="number"
-              min={1}
-              step="1"
-              required
-              value={characterVersionId}
-              onChange={(e) => setCharacterVersionId(e.target.value)}
-              placeholder="Nhập ID Character Version (ví dụ: 12)"
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+              type="checkbox"
+              checked={includeLedDetails}
+              onChange={(e) => setIncludeLedDetails(e.target.checked)}
+              className="h-4 w-4 accent-[#439660]"
             />
-            <p className="mt-1 text-xs text-text-muted">
-              Hệ thống sẽ gán{" "}
-              <code>character_version.product_id</code> với sản phẩm mới (trả
-              về 404 nếu version không tồn tại hoặc 409 nếu đã liên kết).
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3 rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
-            <label className="flex cursor-pointer items-center justify-between gap-3">
-              <div>
-                <span className="block font-bold text-[#1f432b]">
-                  Khởi tạo ngay mẫu phần cứng LED_MODEL 1–1 (ledDetails)
-                </span>
-                <span className="text-xs text-text-muted">
-                  Tắt tùy chọn này nếu chỉ muốn tạo bản ghi PRODUCT và gắn
-                  LED_MODEL sau.
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                checked={includeLedDetails}
-                onChange={(e) => setIncludeLedDetails(e.target.checked)}
-                className="h-4 w-4 accent-[#439660]"
-              />
-            </label>
+          </label>
 
-            {includeLedDetails && (
-              <div className="flex flex-col gap-2 border-t border-[#e3efe6] pt-3">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted">
-                      Tên Model LED
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={255}
-                      value={modelName}
-                      onChange={(e) => setModelName(e.target.value)}
-                      placeholder="Để trống sẽ dùng tên sản phẩm"
-                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted">
-                      Tồn kho ban đầu *
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="1"
-                      value={stockQuantity}
-                      onChange={(e) => setStockQuantity(e.target.value)}
-                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted">
-                      Rộng (widthPx) *
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      step="1"
-                      value={widthPx}
-                      onChange={(e) => setWidthPx(e.target.value)}
-                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted">
-                      Cao (heightPx) *
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      step="1"
-                      value={heightPx}
-                      onChange={(e) => setHeightPx(e.target.value)}
-                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted">
-                      Kết nối
-                    </label>
-                    <input
-                      type="text"
-                      value={connectivity}
-                      onChange={(e) => setConnectivity(e.target.value)}
-                      placeholder="Wi-Fi + BLE"
-                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted">
-                      Nguồn điện
-                    </label>
-                    <input
-                      type="text"
-                      value={voltage}
-                      onChange={(e) => setVoltage(e.target.value)}
-                      placeholder="5V USB-C"
-                      className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                    />
-                  </div>
-                </div>
-
+          {includeLedDetails && (
+            <div className="flex flex-col gap-2 border-t border-[#e3efe6] pt-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div>
                   <label className="text-xs font-semibold text-text-muted">
-                    Ghi chú thông số bổ sung
+                    Tên Model LED
                   </label>
                   <input
                     type="text"
-                    value={specNote}
-                    onChange={(e) => setSpecNote(e.target.value)}
-                    placeholder="Ví dụ: RGB HUB75 ESP32-S3"
+                    maxLength={255}
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    placeholder="Để trống sẽ dùng tên sản phẩm"
+                    className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-muted">
+                    Tồn kho ban đầu *
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={stockQuantity}
+                    onChange={(e) => setStockQuantity(e.target.value)}
                     className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
                   />
                 </div>
               </div>
-            )}
-          </div>
-        )}
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div>
+                  <label className="text-xs font-semibold text-text-muted">
+                    Rộng (widthPx) *
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step="1"
+                    value={widthPx}
+                    onChange={(e) => setWidthPx(e.target.value)}
+                    className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-muted">
+                    Cao (heightPx) *
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step="1"
+                    value={heightPx}
+                    onChange={(e) => setHeightPx(e.target.value)}
+                    className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-muted">
+                    Kết nối
+                  </label>
+                  <input
+                    type="text"
+                    value={connectivity}
+                    onChange={(e) => setConnectivity(e.target.value)}
+                    placeholder="Wi-Fi + BLE"
+                    className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-muted">
+                    Nguồn điện
+                  </label>
+                  <input
+                    type="text"
+                    value={voltage}
+                    onChange={(e) => setVoltage(e.target.value)}
+                    placeholder="5V USB-C"
+                    className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-text-muted">
+                  Ghi chú thông số bổ sung
+                </label>
+                <input
+                  type="text"
+                  value={specNote}
+                  onChange={(e) => setSpecNote(e.target.value)}
+                  placeholder="Ví dụ: RGB HUB75 ESP32-S3"
+                  className="w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Mô tả */}
         <div>
@@ -643,11 +555,10 @@ export default function CreateStoreProductModal({
                     key={tag.tagId}
                     type="button"
                     onClick={() => toggleTag(tag.tagId)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
-                      isSelected
-                        ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b]"
-                        : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
-                    }`}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${isSelected
+                      ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b]"
+                      : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
+                      }`}
                   >
                     {isSelected && <Check size={12} />}
                     {tag.name} (#{tag.tagId})

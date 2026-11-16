@@ -3,16 +3,41 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponseDispatchOrderResponse } from '../models/ApiResponseDispatchOrderResponse';
+import type { ApiResponseLinkOrderFulfillmentDeviceResponse } from '../models/ApiResponseLinkOrderFulfillmentDeviceResponse';
 import type { ApiResponseListStaffOrderSummaryItem } from '../models/ApiResponseListStaffOrderSummaryItem';
 import type { ApiResponseStaffOrderDetailResponse } from '../models/ApiResponseStaffOrderDetailResponse';
 import type { ApiResponseStaffOrderStatusResponse } from '../models/ApiResponseStaffOrderStatusResponse';
+import type { ApiResponseVoid } from '../models/ApiResponseVoid';
 import type { DispatchOrderRequest } from '../models/DispatchOrderRequest';
+import type { LinkOrderFulfillmentDeviceRequest } from '../models/LinkOrderFulfillmentDeviceRequest';
 import type { StaffOrderFilterRequest } from '../models/StaffOrderFilterRequest';
 import type { UpdateStaffOrderStatusRequest } from '../models/UpdateStaffOrderStatusRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class StaffOrderFulfillmentService {
+    /**
+     * Scan & Link LED Instance to Order Item
+     * Links a physical LED hardware unit (by Serial Number) to a specific order line item and marks it IN_TRANSIT without binding or activating warranty.
+     * @param id Order ID
+     * @param requestBody
+     * @returns ApiResponseLinkOrderFulfillmentDeviceResponse OK
+     * @throws ApiError
+     */
+    public static linkDevice(
+        id: number,
+        requestBody: LinkOrderFulfillmentDeviceRequest,
+    ): CancelablePromise<ApiResponseLinkOrderFulfillmentDeviceResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/management/staff/orders/{id}/fulfillment-devices',
+            path: {
+                'id': id,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+        });
+    }
     /**
      * Dispatch physical order to AhaMove
      * Dispatches an eligible PROCESSING or PARTIALLY_FULFILLED physical order to AhaMove, saves tracking metadata on order_delivery (ASSIGNED), and transitions order status to SHIPPING.
@@ -121,6 +146,27 @@ export class StaffOrderFulfillmentService {
                 403: `Forbidden: caller is not an active internal STAFF, MANAGER, or ADMIN account`,
                 404: `Not Found: order does not exist`,
                 500: `Internal server error`,
+            },
+        });
+    }
+    /**
+     * Unlink LED Instance from Order
+     * Unlinks a previously scanned LED hardware unit from an order and returns its status back to IN_STOCK.
+     * @param id Order ID
+     * @param instanceId LED instance ID
+     * @returns ApiResponseVoid OK
+     * @throws ApiError
+     */
+    public static unlinkDevice(
+        id: number,
+        instanceId: number,
+    ): CancelablePromise<ApiResponseVoid> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/management/staff/orders/{id}/fulfillment-devices/{instanceId}',
+            path: {
+                'id': id,
+                'instanceId': instanceId,
             },
         });
     }

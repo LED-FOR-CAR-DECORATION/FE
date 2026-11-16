@@ -34,17 +34,24 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   {
-    label: "Bảng điều khiển nhà thiết kế",
-    description: "Commission được phân công cho bạn",
-    href: "/designer/dashboard",
-    icon: LayoutDashboard,
+    label: "Tạo nhân vật",
+    description: "Khởi tạo và quản lý hồ sơ nhân vật gốc",
+    href: "/designer/characters",
+    icon: Palette,
     roles: ["DESIGNER"],
   },
   {
-    label: "Các thiết kế được giao",
-    description: "Xem yêu cầu và gửi thiết kế",
+    label: "Đăng tải cho cửa hàng",
+    description: "Tải phiên bản nhân vật lên hệ thống",
+    href: "/designer/store-uploads",
+    icon: Store,
+    roles: ["DESIGNER"],
+  },
+  {
+    label: "Đăng tải yêu cầu thiết kế",
+    description: "Tải bản thiết kế cho yêu cầu được giao",
     href: "/designer/commissions",
-    icon: Palette,
+    icon: ClipboardList,
     roles: ["DESIGNER"],
   },
   {
@@ -160,7 +167,7 @@ function getRoleHome(role: UserRole | undefined): string {
   if (role === "STAFF") return "/staff";
   if (role === "MANAGER") return "/manager";
   if (role === "ADMIN") return "/admin";
-  if (role === "DESIGNER") return "/designer/dashboard";
+  if (role === "DESIGNER") return "/designer/characters";
   return "/";
 }
 

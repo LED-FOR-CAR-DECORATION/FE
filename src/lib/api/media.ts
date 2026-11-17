@@ -17,7 +17,7 @@ export interface SignedUploadUrlResult {
  */
 export async function uploadMediaFile(
   file: File,
-  purpose: "STORE_PRODUCT" | "CHARACTER_BINARY" | "COMMISSION_ATTACHMENT" = "STORE_PRODUCT",
+  purpose: "STORE_PRODUCT" | "CHARACTER_BINARY" | "COMMISSION_ATTACHMENT" | "WARRANTY_EVIDENCE" = "STORE_PRODUCT",
   targetId?: number,
 ): Promise<SignedUploadUrlResult> {
   const token = await getSessionToken();

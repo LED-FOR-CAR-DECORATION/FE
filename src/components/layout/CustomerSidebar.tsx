@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Edit2,
   Image as ImageIcon,
+  ShieldCheck,
   Sparkles,
   User,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export default function CustomerSidebar() {
     pathname.startsWith("/profile/addresses");
   const isOrdersActive = pathname.startsWith("/profile/orders");
   const isGalleryActive = pathname.startsWith("/profile/gallery");
+  const isWarrantyActive = pathname.startsWith("/profile/warranty");
   const isCommissionActive = pathname.startsWith("/commission");
 
   const navItems = [
@@ -57,6 +59,17 @@ export default function CustomerSidebar() {
         <ImageIcon
           size={17}
           className={isGalleryActive ? "text-[#155e59]" : "text-emerald-600"}
+        />
+      ),
+    },
+    {
+      href: "/profile/warranty",
+      label: "Bảo Hành Thiết Bị",
+      active: isWarrantyActive,
+      icon: (
+        <ShieldCheck
+          size={17}
+          className={isWarrantyActive ? "text-[#155e59]" : "text-emerald-600"}
         />
       ),
     },

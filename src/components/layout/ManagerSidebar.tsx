@@ -110,7 +110,7 @@ const menuItems: MenuItem[] = [
     description: "Tra cứu và cập nhật thông tin bảo hành",
     href: "/staff/warranty",
     icon: ShieldCheck,
-    roles: ["MANAGER"],
+    roles: ["MANAGER", "STAFF", "ADMIN"],
   },
   {
     label: "Quản lý trả thiết bị",

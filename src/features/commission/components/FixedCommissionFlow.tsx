@@ -1,9 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { loadConversations, saveConversations } from "@/features/commission-chat/services/commission-chat.service";
 import { useState, type FormEvent } from "react";
 import { commissionTotal, formatCommissionMoney, type CommissionDesign } from "../config/fixedPricing";
 import {
-  CommissionActions, CommissionBrief, CommissionChatBox, CommissionDesignPicker, CommissionPayment,
+  CommissionActions, CommissionBrief, CommissionDesignPicker, CommissionPayment,
   commissionButton,
 } from "./FixedCommissionSteps";
 
@@ -19,7 +21,7 @@ export default function FixedCommissionFlow() {
   const [references, setReferences] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [checkout, setCheckout] = useState<{ code: string; amount: number }>();
-  const [messages, setMessages] = useState<string[]>([]);
+  const router = useRouter();
   const amount = commissionTotal(design);
 
   function addReferences(files: File[]) {
@@ -40,6 +42,37 @@ export default function FixedCommissionFlow() {
     if (!note.trim() || amount === null) return;
     setCheckout({ code: `CM${crypto.randomUUID().slice(0, 8).toUpperCase()}`, amount });
     setStage(2);
+  }
+
+  function openConversation() {
+    if (!checkout) return;
+    const previous = loadConversations();
+    const text = "Đã xác nhận thanh toán SePay mô phỏng.";
+    const time = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+    if (!previous.some((item) => item.id === checkout.code)) {
+      saveConversations([{
+        id: checkout.code,
+        customerName: "Bạn",
+        customerAvatar: "",
+        staffName: "Hỗ trợ Commission",
+        staffAvatar: "",
+        online: false,
+        lastMessage: text,
+        lastTime: time,
+        orderState: "IN_PROGRESS",
+        progressStep: "DRAWING",
+        commission: {
+          characterName: "Commission " + checkout.code,
+          description: note.trim(),
+          price: checkout.amount,
+          deliveryDate: "Chưa xác định",
+          isPaid: true,
+          selections: { size: design.size, format: design.format, detail: design.detail, background: design.background },
+        },
+        messages: [{ id: checkout.code + "-paid", sender: "SYSTEM", text, time }],
+      }, ...previous]);
+    }
+    router.push("/chat#" + checkout.code);
   }
 
   return (
@@ -84,11 +117,7 @@ export default function FixedCommissionFlow() {
           </form>
         )}
         {stage === 2 && checkout && (
-          <CommissionPayment {...checkout} onBack={() => setStage(1)} onPay={() => setStage(3)} />
-        )}
-        {stage === 3 && checkout && (
-          <CommissionChatBox code={checkout.code} messages={messages}
-            onSend={(message) => setMessages((current) => [...current, message])} />
+          <CommissionPayment {...checkout} onBack={() => setStage(1)} onPay={openConversation} />
         )}
       </section>
     </div>

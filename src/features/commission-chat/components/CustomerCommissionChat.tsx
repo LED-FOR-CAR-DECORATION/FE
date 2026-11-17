@@ -37,7 +37,7 @@ export default function CustomerCommissionChat() {
     activeConversation,
     setActiveConvId,
     updateActiveConversation,
-  } = useCommissionChat();
+  } = useCommissionChat(true);
 
   // Lấy mảng cấu hình động `commissionConfigs` (Data-Driven)
   const { configs: commissionConfigs } = useCommissionConfigs();

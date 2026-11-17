@@ -1,4 +1,4 @@
-export const COMMISSION_SIZES = { "32x32": 50_000, "64x32": 100_000 };
+export const COMMISSION_SIZES = { "32x32": 50_000, "32x64": 100_000, "64x64": 200_000 };
 export const MIN_COMMISSION_FRAMES = 2;
 export const MAX_COMMISSION_FRAMES = 8;
 export const COMMISSION_FRAME_PRICE = 50_000;
@@ -7,6 +7,8 @@ export type CommissionDesign = {
   size: keyof typeof COMMISSION_SIZES;
   format: "image" | "gif";
   frames: string;
+  detail: string;
+  background: string;
 };
 
 export function commissionTotal(design: CommissionDesign): number | null {

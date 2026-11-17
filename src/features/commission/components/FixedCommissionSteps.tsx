@@ -32,6 +32,15 @@ export function CommissionDesignPicker({ design, onChange }: {
           <option value="gif">GIF động · {formatCommissionMoney(COMMISSION_FRAME_PRICE)}/frame</option>
         </select>
       </label>
+      <label>
+        Độ chi tiết
+        <select className={field} value={design.detail}
+          onChange={(event) => onChange({ ...design, detail: event.target.value })}>
+          <option>Cơ bản</option>
+          <option>Vừa</option>
+          <option>Cao</option>
+        </select>
+      </label>
       {design.format === "gif" && (
         <label>
           Số frame ({MIN_COMMISSION_FRAMES}–{MAX_COMMISSION_FRAMES})
@@ -39,6 +48,15 @@ export function CommissionDesignPicker({ design, onChange }: {
             step={1} value={design.frames} onChange={(event) => onChange({ ...design, frames: event.target.value })} />
         </label>
       )}
+      <label>
+        Phông nền
+        <select className={field} value={design.background}
+          onChange={(event) => onChange({ ...design, background: event.target.value })}>
+          <option>Trong suốt</option>
+          <option>Đơn sắc</option>
+          <option>Bối cảnh tùy chỉnh</option>
+        </select>
+      </label>
     </div>
   );
 }
@@ -58,7 +76,7 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
   return (
     <div className="space-y-4">
       <label className="block">
-        Mô tả thiết kế
+        Brief thiết kế
         <textarea className={field} rows={5} maxLength={1000} required value={note}
           onChange={(event) => onNote(event.target.value)}
           placeholder="Mô tả nhân vật, màu sắc và hiệu ứng LED bạn muốn." />

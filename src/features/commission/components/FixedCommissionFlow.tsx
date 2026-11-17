@@ -12,7 +12,9 @@ const imageTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export default function FixedCommissionFlow() {
   const [stage, setStage] = useState(0);
-  const [design, setDesign] = useState<CommissionDesign>({ size: "32x32", format: "image", frames: "8" });
+  const [design, setDesign] = useState<CommissionDesign>({
+    size: "32x32", format: "image", frames: "8", detail: "Cơ bản", background: "Trong suốt",
+  });
   const [note, setNote] = useState("");
   const [references, setReferences] = useState<File[]>([]);
   const [error, setError] = useState("");
@@ -69,6 +71,7 @@ export default function FixedCommissionFlow() {
         {stage === 1 && (
           <form onSubmit={openCheckout} className="space-y-5">
             <p className="font-semibold">{design.size.replace("x", " × ")} · {design.format === "gif" ? `GIF · ${design.frames} frame` : "Ảnh tĩnh"} · {amount !== null && formatCommissionMoney(amount)}</p>
+            <p className="text-sm">Độ chi tiết: {design.detail} · Phông nền: {design.background}</p>
             <CommissionBrief note={note} onNote={setNote} references={references} onFiles={addReferences}
               onRemove={(index) => {
                 setReferences((current) => current.filter((_, position) => position !== index));

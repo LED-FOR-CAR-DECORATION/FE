@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Search,
   Send,
@@ -18,14 +18,8 @@ import {
   Palette,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
-import DynamicCommissionFormFields from "@/features/commission/components/DynamicCommissionFormFields";
-import {
-  COMMISSION_BASE_PRICE,
-  buildSpecsSummaryFromConfigs,
-  calculateDynamicCommissionQuote,
-} from "@/features/commission/config/commissionConfigs";
-import { useCommissionConfigs } from "@/features/commission/hooks/useCommissionConfigs";
-import { validateCommissionSelections } from "@/features/commission/schemas";
+import commissionMotion from "@/features/commission/components/CommissionMotion.module.css";
+import ApiCommissionForm from "@/features/commission/components/ApiCommissionForm";
 import { useCommissionChat } from "../hooks/useCommissionChat";
 import { formatVND, formatVNDFull } from "../services/commission-chat.service";
 import type { ChatMessage, ProgressStep } from "../types";
@@ -37,22 +31,12 @@ export default function CustomerCommissionChat() {
     activeConversation,
     setActiveConvId,
     updateActiveConversation,
-  } = useCommissionChat();
-
-  // Lấy mảng cấu hình động `commissionConfigs` (Data-Driven)
-  const { configs: commissionConfigs } = useCommissionConfigs();
+  } = useCommissionChat(true);
 
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [messageInput, setMessageInput] = useState<string>("");
 
-  // Modal Form Yêu cầu Commission của Customer (Data-Driven từ commissionConfigs)
-  const [isCustomerRequestOpen, setIsCustomerRequestOpen] = useState<boolean>(false);
-  const [reqCharacterName, setReqCharacterName] = useState<string>("Hiệp Sĩ Ánh Sáng");
-  const [reqNote, setReqNote] = useState<string>("");
-  const [reqSelections, setReqSelections] = useState<Record<string, string | undefined>>(
-    {}
-  );
-  const [reqError, setReqError] = useState<string>("");
+  const [isCustomerRequestOpen, setIsCustomerRequestOpen] = useState(false);
 
   // Modal Yêu cầu sửa (+10% phí) - Revision Paywall Modal
   const [isRevisionModalOpen, setIsRevisionModalOpen] = useState<boolean>(false);
@@ -73,17 +57,6 @@ export default function CustomerCommissionChat() {
     if (!activeConversation) return;
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeConversation?.messages?.length, activeConversation?.id]);
-
-  // Tính toán chi phí dự kiến tự động từ `commissionConfigs` cho Form Yêu cầu của Customer
-  const customerEstimate = useMemo(
-    () =>
-      calculateDynamicCommissionQuote(
-        reqSelections,
-        commissionConfigs,
-        COMMISSION_BASE_PRICE
-      ),
-    [reqSelections, commissionConfigs]
-  );
 
   const filteredConversations = conversations.filter(
     (conv) =>
@@ -132,48 +105,6 @@ export default function CustomerCommissionChat() {
     showToast("Đã gửi hình ảnh tham khảo vào cuộc trò chuyện!");
   };
 
-  // Khách hàng gửi Form Yêu cầu Commission (Data-Driven từ commissionConfigs)
-  const handleSubmitCustomerRequestForm = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateCommissionSelections(reqSelections, commissionConfigs)) {
-      setReqError("Vui lòng chọn đầy đủ các tiêu chí bắt buộc.");
-      return;
-    }
-
-    const specsSummary = buildSpecsSummaryFromConfigs(reqSelections, commissionConfigs);
-    const cleanedSelections: Record<string, string> = {};
-    Object.entries(reqSelections).forEach(([k, v]) => {
-      if (v) cleanedSelections[k] = v;
-    });
-
-    const requestMsg: ChatMessage = {
-      id: `msg-req-${Date.now()}`,
-      sender: "CUSTOMER",
-      text: `[Đã gửi Form Yêu cầu Commission - Nhân vật: ${reqCharacterName.trim()}] • Tùy chọn: ${specsSummary}${
-        reqNote.trim() ? ` • Ghi chú: ${reqNote.trim()}` : ""
-      } (Dự kiến: ${formatVND(customerEstimate.total)})`,
-      time: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    updateActiveConversation((conv) => ({
-      ...conv,
-      commission: {
-        ...conv.commission,
-        characterName: reqCharacterName.trim() || conv.commission.characterName,
-        description: reqNote.trim() || specsSummary,
-        price: customerEstimate.total,
-        selections: cleanedSelections,
-        specsBreakdown: customerEstimate.breakdown,
-      },
-      lastMessage: requestMsg.text!,
-      lastTime: "Vừa xong",
-      messages: [...conv.messages, requestMsg],
-    }));
-
-    setIsCustomerRequestOpen(false);
-    setReqError("");
-    showToast("Đã gửi Form Yêu cầu Commission cho nhân viên tư vấn!");
-  };
 
   // Khách hàng bấm [Thanh toán ngay] trên Thẻ báo giá (System Action Card)
   const handlePayCommission = (quotePrice?: number) => {
@@ -762,140 +693,18 @@ export default function CustomerCommissionChat() {
           Sử dụng `commissionConfigs.map()` thông qua <DynamicCommissionFormFields />
       ===================================================================== */}
       {isCustomerRequestOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="customer-request-modal-title"
+        <dialog
+          ref={(element) => { if (element && !element.open) element.showModal(); }}
+          aria-label="Yêu cầu thiết kế Pixel Art"
+          onCancel={() => setIsCustomerRequestOpen(false)}
+          className={`${commissionMotion.dialog} fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto rounded-xl bg-[#f5f5f5] p-5 backdrop:bg-black/55 sm:p-8`}
         >
-          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[#cfe3d0] bg-[#f8f7ef] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#cfe3d0] bg-[#eaf5e8] px-6 py-4">
-              <div>
-                <p className="flex items-center gap-1.5 text-[11px] font-black tracking-wider text-[#155e59] uppercase">
-                  <Sparkles size={13} /> DATA-DRIVEN CUSTOMER REQUEST FORM
-                </p>
-                <h3
-                  id="customer-request-modal-title"
-                  className="text-lg font-black text-[#155e59]"
-                >
-                  Form Yêu cầu Thiết kế Commission Pixel Art
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCustomerRequestOpen(false)}
-                className="rounded-xl p-2 text-[#66736b] hover:bg-white hover:text-[#155e59]"
-                aria-label="Đóng form yêu cầu"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleSubmitCustomerRequestForm}
-              className="flex min-h-0 flex-1 flex-col overflow-hidden"
-            >
-              <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6 lg:grid-cols-[1fr_290px]">
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-[#dce8df] bg-white p-4 shadow-sm">
-                    <label className="block text-xs font-black text-[#155e59]">
-                      Tên nhân vật / Chủ đề mong muốn <span className="text-red-600">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={reqCharacterName}
-                      onChange={(e) => setReqCharacterName(e.target.value)}
-                      placeholder="VD: Rồng Lửa, Hiệp Sĩ Ánh Sáng..."
-                      className="mt-1.5 w-full rounded-xl border border-[#cfe3d0] bg-[#fbfaf5] px-3 py-2 text-xs font-bold outline-none focus:border-[#155e59] focus:bg-white"
-                    />
-                  </div>
-
-                  {/* DATA-DRIVEN RENDERING: Tự động render <RadioGroup> & <select> từ mảng commissionConfigs */}
-                  <DynamicCommissionFormFields
-                    configs={commissionConfigs}
-                    selections={reqSelections}
-                    onSelectChange={(fieldKey, optionValue) => {
-                      setReqSelections((prev) => ({
-                        ...prev,
-                        [fieldKey]: optionValue,
-                      }));
-                      setReqError("");
-                    }}
-                  />
-
-                  <div className="rounded-xl border border-[#dce8df] bg-white p-4 shadow-sm">
-                    <label className="block text-xs font-black text-[#155e59]">
-                      Ghi chú thêm cho Artist
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={reqNote}
-                      onChange={(e) => setReqNote(e.target.value)}
-                      placeholder="Mô tả màu sắc, phong cách hoặc hiệu ứng đặc biệt..."
-                      className="mt-1.5 w-full rounded-xl border border-[#cfe3d0] bg-[#fbfaf5] px-3 py-2 text-xs outline-none focus:border-[#155e59] focus:bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Bảng tạm tính chi phí theo commissionConfigs */}
-                <aside className="h-fit space-y-3 rounded-xl border border-[#cfe3d0] bg-[#eaf5e8] p-4 shadow-sm lg:sticky lg:top-0">
-                  <h4 className="text-sm font-black text-[#155e59]">
-                    Tạm tính theo tùy chọn
-                  </h4>
-
-                  <div className="flex items-center justify-between border-b border-[#cfe3d0] pb-2 text-xs">
-                    <span>Giá cơ bản:</span>
-                    <strong>{formatVND(customerEstimate.basePrice)}</strong>
-                  </div>
-
-                  {customerEstimate.breakdown.length > 0 && (
-                    <div className="max-h-56 space-y-1.5 overflow-y-auto border-b border-[#cfe3d0] pb-2.5 text-xs">
-                      {customerEstimate.breakdown.map((item) => (
-                        <div
-                          key={item.fieldKey}
-                          className="flex items-start justify-between gap-2 text-[#486355]"
-                        >
-                          <span className="min-w-0 flex-1">
-                            <strong className="text-[#155e59]">{item.fieldName}:</strong>{" "}
-                            {item.optionLabel}
-                          </span>
-                          <span className="shrink-0 font-bold text-[#155e59]">
-                            {item.price === null
-                              ? "Báo giá sau"
-                              : item.price > 0
-                              ? `+${formatVND(item.price)}`
-                              : "+0đ"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="rounded-xl bg-[#155e59] p-3 text-white">
-                    <p className="text-[11px] text-[#b8dfc2]">Chi phí dự kiến</p>
-                    <p className="mt-0.5 text-xl font-black">
-                      {formatVND(customerEstimate.total)}
-                    </p>
-                  </div>
-
-                  {reqError && (
-                    <p className="rounded-xl bg-red-50 p-2.5 text-xs font-bold text-red-700">
-                      {reqError}
-                    </p>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="w-full rounded-xl bg-[#198653] py-3 text-xs font-black text-white shadow-sm transition hover:bg-[#126b40] cursor-pointer"
-                  >
-                    Gửi Form Yêu Cầu Vào Chat
-                  </button>
-                </aside>
-              </div>
-            </form>
-          </div>
-        </div>
+          <button type="button" aria-label="Đóng form yêu cầu" className="mb-3 ml-auto block p-2"
+            onClick={() => setIsCustomerRequestOpen(false)}>
+            <X size={20} />
+          </button>
+          <ApiCommissionForm />
+        </dialog>
       )}
 
       {/* =====================================================================

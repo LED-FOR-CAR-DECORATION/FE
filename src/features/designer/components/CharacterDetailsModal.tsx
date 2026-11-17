@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
+import { ApiError } from "@/api_client/core/ApiError";
 import {
   formatDesignerApiError,
   type CharacterVersionItem,
@@ -55,7 +56,12 @@ export default function CharacterDetailsModal({
   useEffect(() => {
     let active = true;
     loadVersions(character.characterId).catch((error) => {
-      if (active) setHistoryError(formatDesignerApiError(error, "Không thể tải lịch sử phiên bản."));
+      if (!active) return;
+      if (error instanceof ApiError && error.status >= 500) {
+        setHistoryError("Máy chủ chưa tải được lịch sử phiên bản. Vui lòng thử lại.");
+      } else {
+        setHistoryError(formatDesignerApiError(error, "Không thể tải lịch sử phiên bản."));
+      }
     });
     return () => { active = false; };
   }, [character.characterId, historyAttempt, loadVersions]);
@@ -104,7 +110,7 @@ export default function CharacterDetailsModal({
             {/* Button B: Publish to Store */}
             <button
               type="button"
-              disabled={versions.length === 0}
+              disabled={isLoading || Boolean(historyError) || !versions.some((version) => !version.isListedOnStore)}
               onClick={() => onOpenPublish(character, versions)}
               title={
                 versions.length === 0

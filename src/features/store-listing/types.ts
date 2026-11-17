@@ -70,6 +70,11 @@ export interface ActiveVersionSummary {
 /** A row of the Characters table: CHARACTER joined with its active CHARACTER_VERSION. */
 export interface StoreCharacterRow extends StoreCharacter {
   activeVersion: ActiveVersionSummary | null;
+  draft?: {
+    basePrice: number;
+    thumbnailUrl?: string | null;
+    galleryUrls: string[];
+  };
 }
 
 /** Who is performing a store-visibility action. */

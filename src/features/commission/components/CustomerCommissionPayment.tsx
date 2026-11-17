@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { CustomerCommissionsService } from "@/api_client/services/CustomerCommissionsService";
 import type { CustomerCommissionDetailResponse } from "@/api_client/models/CustomerCommissionDetailResponse";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -9,6 +10,7 @@ import SePayOrderPaymentCard from "@/features/order/components/SePayOrderPayment
 import { formatPrice } from "@/lib/currency";
 
 const pendingPaymentMessage = "Hệ thống đang chuẩn bị mã thanh toán. Vui lòng chờ.";
+const CHAT_REDIRECT_DELAY_MS = 1600;
 
 export default function CustomerCommissionPayment({ commissionId }: { commissionId: number }) {
   const { user, isLoading } = useAuth();
@@ -21,6 +23,19 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
   const [detail, setDetail] = useState<CustomerCommissionDetailResponse>();
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [redirecting, setRedirecting] = useState(false);
+  const router = useRouter();
+  const redirectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const chatHref = `/commission/${commissionId}/chat`;
+
+  useEffect(() => () => clearTimeout(redirectTimer.current), []);
+
+  /** Thanh toán thành công → chuyển vào phòng chat; phòng chat tự chờ nếu webhook cập nhật trạng thái chậm. */
+  function goToChat() {
+    if (redirecting) return;
+    setRedirecting(true);
+    redirectTimer.current = setTimeout(() => router.replace(chatHref), CHAT_REDIRECT_DELAY_MS);
+  }
 
   useEffect(() => {
     let active = true;
@@ -81,9 +96,16 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
           {(detail.status === "PENDING_PAYMENT" || detail.status === "AWAITING_EXTRA_PAYMENT") && !detail.activePaymentCode && pendingPaymentMessage}
           {detail.status === "PAID" && (detail.totalPrice === 0 ? "Yêu cầu này không cần thanh toán." : "Đã thanh toán. Staff sẽ phân công designer.")}
         </div>
+        {(detail.chatActive || detail.status === "COMPLETED") && !redirecting && (
+          <Link href={chatHref} className="inline-flex min-h-11 items-center rounded-lg bg-[#155e59] px-4 font-semibold text-white hover:bg-[#0e4b47]">
+            {detail.status === "COMPLETED" ? "Xem lại cuộc trò chuyện" : "Vào phòng chat với nhân viên"}
+          </Link>
+        )}
+        {redirecting && <p role="status" className="font-semibold text-[#155e59]">Thanh toán thành công! Đang chuyển vào phòng chat…</p>}
       </section>
       {detail.activePaymentCode && (
-        <SePayOrderPaymentCard key={detail.activePaymentCode} commissionId={commissionId} initialPaymentCode={detail.activePaymentCode} />
+        <SePayOrderPaymentCard key={detail.activePaymentCode} commissionId={commissionId} initialPaymentCode={detail.activePaymentCode}
+          onPaymentSuccess={goToChat} />
       )}
     </div>
   );

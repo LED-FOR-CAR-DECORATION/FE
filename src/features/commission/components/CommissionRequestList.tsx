@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadConversations } from "@/features/commission-chat/services/commission-chat.service";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import { belongsToCustomer, loadConversations } from "@/features/commission-chat/services/commission-chat.service";
 import type { Conversation } from "@/features/commission-chat/types";
 import { formatCommissionMoney } from "../config/fixedPricing";
 
 export default function CommissionRequestList() {
   const [requests, setRequests] = useState<Conversation[] | null>(null);
+
+  const { user, isLoading } = useAuth();
+  const userId = user?.role === "CUSTOMER" ? user.userId : undefined;
+  const visibleRequests = requests?.filter((request) => belongsToCustomer(request, userId));
 
   useEffect(() => {
     function refresh() {
@@ -30,13 +35,13 @@ export default function CommissionRequestList() {
           Tạo yêu cầu mới
         </Link>
       </div>
-      {requests === null ? (
+      {isLoading || !visibleRequests ? (
         <p role="status">Đang tải yêu cầu…</p>
-      ) : requests.length === 0 ? (
+      ) : visibleRequests.length === 0 ? (
         <p className="rounded-xl border border-[#cfe3d0] bg-white p-5">Bạn chưa có yêu cầu Commission nào.</p>
       ) : (
         <ul className="space-y-3">
-          {requests.map(({ id, commission }) => (
+          {visibleRequests.map(({ id, commission }) => (
             <li key={id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#cfe3d0] bg-white p-5">
               <div className="min-w-0 space-y-1">
                 <h2 className="font-bold text-[#155e59]">{commission.characterName}</h2>

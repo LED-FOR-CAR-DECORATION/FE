@@ -169,6 +169,10 @@ export function loadConversations(): Conversation[] {
   }
 }
 
+export function belongsToCustomer(conversation: Conversation, userId?: string): boolean {
+  return Boolean(userId && conversation.customerUserId === userId);
+}
+
 export function saveConversations(conversations: Conversation[]) {
   if (typeof window === "undefined") return;
   try {

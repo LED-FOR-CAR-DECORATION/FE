@@ -8,12 +8,14 @@ import {
   saveConversations,
 } from "../services/commission-chat.service";
 
-export function useCommissionChat() {
+export function useCommissionChat(selectFromHash = false) {
   const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS);
   const [activeConvId, setActiveConvId] = useState<string>("conv-1");
 
   useEffect(() => {
     setConversations(loadConversations());
+
+    if (selectFromHash) setActiveConvId(window.location.hash.slice(1) || "conv-1");
 
     const syncHandler = () => {
       setConversations(loadConversations());
@@ -24,7 +26,7 @@ export function useCommissionChat() {
       window.removeEventListener("mirage-commission-chat-updated", syncHandler);
       window.removeEventListener("storage", syncHandler);
     };
-  }, []);
+  }, [selectFromHash]);
 
   const activeConversation =
     conversations.find((c) => c.id === activeConvId) ?? conversations[0] ?? null;
@@ -51,4 +53,3 @@ export function useCommissionChat() {
     updateActiveConversation,
   };
 }
-

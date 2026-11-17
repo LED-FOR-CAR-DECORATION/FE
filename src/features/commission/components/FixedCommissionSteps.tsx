@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent, ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import {
   COMMISSION_FRAME_PRICE, COMMISSION_SIZES, MAX_COMMISSION_FRAMES, MIN_COMMISSION_FRAMES,
   formatCommissionMoney, type CommissionDesign,
@@ -32,6 +32,15 @@ export function CommissionDesignPicker({ design, onChange }: {
           <option value="gif">GIF động · {formatCommissionMoney(COMMISSION_FRAME_PRICE)}/frame</option>
         </select>
       </label>
+      <label>
+        Độ chi tiết
+        <select className={field} value={design.detail}
+          onChange={(event) => onChange({ ...design, detail: event.target.value })}>
+          <option>Cơ bản</option>
+          <option>Vừa</option>
+          <option>Cao</option>
+        </select>
+      </label>
       {design.format === "gif" && (
         <label>
           Số frame ({MIN_COMMISSION_FRAMES}–{MAX_COMMISSION_FRAMES})
@@ -39,6 +48,15 @@ export function CommissionDesignPicker({ design, onChange }: {
             step={1} value={design.frames} onChange={(event) => onChange({ ...design, frames: event.target.value })} />
         </label>
       )}
+      <label>
+        Phông nền
+        <select className={field} value={design.background}
+          onChange={(event) => onChange({ ...design, background: event.target.value })}>
+          <option>Trong suốt</option>
+          <option>Đơn sắc</option>
+          <option>Bối cảnh tùy chỉnh</option>
+        </select>
+      </label>
     </div>
   );
 }
@@ -58,7 +76,7 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
   return (
     <div className="space-y-4">
       <label className="block">
-        Mô tả thiết kế
+        Brief thiết kế
         <textarea className={field} rows={5} maxLength={1000} required value={note}
           onChange={(event) => onNote(event.target.value)}
           placeholder="Mô tả nhân vật, màu sắc và hiệu ứng LED bạn muốn." />
@@ -98,38 +116,6 @@ export function CommissionPayment({ code, amount, onPay, onBack }: {
         <button type="button" onClick={onBack}>Quay lại brief</button>
         <button type="button" className={commissionButton} onClick={onPay}>Mô phỏng thanh toán thành công</button>
       </CommissionActions>
-    </div>
-  );
-}
-
-export function CommissionChatBox({ code, messages, onSend }: {
-  code: string; messages: string[]; onSend: (message: string) => void;
-}) {
-  function send(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const input = event.currentTarget;
-    const message = String(new FormData(input).get("message") ?? "").trim();
-    if (!message) return;
-    onSend(message);
-    input.reset();
-  }
-  return (
-    <div className="space-y-4">
-      <p role="status">Đã xác nhận thanh toán mô phỏng cho {code}.</p>
-      <p className="text-sm">Tin nhắn được lưu trong phiên demo trên trang này.</p>
-      <ul role="log" aria-label="Tin nhắn Commission" className="max-h-72 space-y-3 overflow-y-auto rounded-lg bg-white p-4">
-        <li>Đã tạo cuộc trò chuyện cho yêu cầu {code}.</li>
-        {messages.map((message, index) => (
-          <li key={index} className="break-words rounded-lg bg-[#eaf5e8] p-3"><strong>Bạn</strong> · {message}</li>
-        ))}
-      </ul>
-      <form onSubmit={send} className="flex flex-wrap items-end gap-3">
-        <label className="min-w-40 flex-1">
-          Tin nhắn
-          <input className={field} name="message" maxLength={1000} required />
-        </label>
-        <button className={commissionButton}>Gửi</button>
-      </form>
     </div>
   );
 }

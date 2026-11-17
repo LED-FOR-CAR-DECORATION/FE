@@ -9,6 +9,9 @@ export type CommissionDesign = {
   frames: string;
   detail: string;
   background: string;
+  artStyle: string;
+  framing: string;
+  characterCount: string;
 };
 
 export function commissionTotal(design: CommissionDesign): number | null {

@@ -18,6 +18,7 @@ import {
   Palette,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
+import commissionMotion from "@/features/commission/components/CommissionMotion.module.css";
 import FixedCommissionFlow from "@/features/commission/components/FixedCommissionFlow";
 import { useCommissionChat } from "../hooks/useCommissionChat";
 import { formatVND, formatVNDFull } from "../services/commission-chat.service";
@@ -696,7 +697,7 @@ export default function CustomerCommissionChat() {
           ref={(element) => { if (element && !element.open) element.showModal(); }}
           aria-label="Yêu cầu thiết kế Pixel Art"
           onCancel={() => setIsCustomerRequestOpen(false)}
-          className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto rounded-xl bg-[#f5f5f5] p-5 backdrop:bg-black/55 sm:p-8"
+          className={`${commissionMotion.dialog} fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto rounded-xl bg-[#f5f5f5] p-5 backdrop:bg-black/55 sm:p-8`}
         >
           <button type="button" aria-label="Đóng form yêu cầu" className="mb-3 ml-auto block p-2"
             onClick={() => setIsCustomerRequestOpen(false)}>

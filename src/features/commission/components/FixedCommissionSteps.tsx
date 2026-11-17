@@ -11,6 +11,10 @@ export function CommissionDesignPicker({ design, onChange }: {
   design: CommissionDesign;
   onChange: (design: CommissionDesign) => void;
 }) {
+  const compositionOptions = [
+    { key: "artStyle", label: "Phong cách", options: ["Pixel art thường", "Chibi"] },
+    { key: "framing", label: "Khung hình nhân vật", options: ["Chân dung", "Từ ngực trở lên", "Nửa người", "Toàn thân"] },
+  ] as const;
   return (
     <div className="grid gap-5 sm:grid-cols-2">
       <label>
@@ -54,7 +58,27 @@ export function CommissionDesignPicker({ design, onChange }: {
           onChange={(event) => onChange({ ...design, background: event.target.value })}>
           <option>Trong suốt</option>
           <option>Đơn sắc</option>
+          <option>Nền đơn giản</option>
           <option>Bối cảnh tùy chỉnh</option>
+        </select>
+      </label>
+      {compositionOptions.map(({ key, label, options }) => (
+        <label key={key}>
+          {label} (tùy chọn)
+          <select className={field} value={design[key]} onChange={(event) =>
+            onChange({ ...design, [key]: event.target.value })}>
+            <option value="">Chưa chọn</option>
+            {options.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+      ))}
+      <label>
+        Số nhân vật
+        <select className={field} value={design.characterCount}
+          onChange={(event) => onChange({ ...design, characterCount: event.target.value })}>
+          <option value="1">1 nhân vật</option>
+          <option value="2">2 nhân vật</option>
+          <option value="3+">3 nhân vật trở lên (ghi rõ trong brief)</option>
         </select>
       </label>
     </div>
@@ -76,10 +100,10 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
   return (
     <div className="space-y-4">
       <label className="block">
-        Brief thiết kế
+        Brief thiết kế (bắt buộc)
         <textarea className={field} rows={5} maxLength={1000} required value={note}
           onChange={(event) => onNote(event.target.value)}
-          placeholder="Mô tả nhân vật, màu sắc và hiệu ứng LED bạn muốn." />
+          placeholder="Mô tả chủ đề, tư thế, màu sắc, bố cục và chuyển động nếu chọn GIF." />
       </label>
       <label className="block">
         Ảnh tham khảo (không bắt buộc, tối đa 5 ảnh, 5 MB mỗi ảnh)

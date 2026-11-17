@@ -26,6 +26,7 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
   }
   const [design, setDesign] = useState<CommissionDesign>({
     size: "32x32", format: "image", frames: "8", detail: "Cơ bản", background: "Trong suốt",
+    artStyle: "", framing: "", characterCount: "1",
   });
   const [note, setNote] = useState("");
   const [references, setReferences] = useState<File[]>([]);
@@ -77,7 +78,11 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
           price: checkout.amount,
           deliveryDate: "Chưa xác định",
           isPaid: true,
-          selections: { size: design.size, format: design.format, detail: design.detail, background: design.background },
+          selections: {
+            size: design.size, format: design.format, detail: design.detail, background: design.background,
+            artStyle: design.artStyle, framing: design.framing, characterCount: design.characterCount,
+            ...(design.format === "gif" && { frames: design.frames }),
+          },
         },
         messages: [{ id: checkout.code + "-paid", sender: "SYSTEM", text, time }],
       }, ...previous]);
@@ -110,6 +115,9 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
           <form onSubmit={openCheckout} className="space-y-5">
             <p className="font-semibold">{design.size.replace("x", " × ")} · {design.format === "gif" ? `GIF · ${design.frames} frame` : "Ảnh tĩnh"} · {amount !== null && formatCommissionMoney(amount)}</p>
             <p className="text-sm">Độ chi tiết: {design.detail} · Phông nền: {design.background}</p>
+            <p className="text-sm">
+              {[design.artStyle, design.framing, `${design.characterCount} nhân vật`].filter(Boolean).join(" · ")}
+            </p>
             <CommissionBrief note={note} onNote={setNote} references={references} onFiles={addReferences}
               onRemove={(index) => {
                 setReferences((current) => current.filter((_, position) => position !== index));

@@ -62,11 +62,7 @@ export function buildSignedPutHeaders(
  */
 export async function uploadMediaFile(
   file: File,
-<<<<<<< HEAD
-  purpose: "STORE_PRODUCT" | "CHARACTER_BINARY" | "COMMISSION_ATTACHMENT" | "WARRANTY_EVIDENCE" = "STORE_PRODUCT",
-=======
   purpose: MediaPurposeType = "STORE_PRODUCT",
->>>>>>> 8e4e8f5d3aefe3a62eb8508b826e1948a788e365
   targetId?: number,
 ): Promise<SignedUploadUrlResult> {
   const contentType = (file.type || "").trim().toLowerCase();

@@ -179,18 +179,19 @@ export default function CustomerWarrantyPage() {
           continue;
         }
 
-        const res = await uploadMediaFile(
-          file,
-          "WARRANTY_EVIDENCE",
-          selectedDeviceId ?? undefined
-        );
-
-        if (res.usedFallback) {
-          setFormError(
-            "Máy chủ backend chưa cấu hình khóa Cloud Storage (Google Cloud/Firebase credentials). Phần ảnh đính kèm hiện không thể tải lên, nhưng bạn vẫn có thể gửi yêu cầu bảo hành bình thường với phần mô tả lỗi (không bắt buộc có ảnh)."
+        try {
+          const res = await uploadMediaFile(
+            file,
+            "WARRANTY_EVIDENCE",
+            selectedDeviceId ?? undefined
           );
-        } else if (res.publicUrl) {
-          newUrls.push(res.publicUrl);
+          if (res.publicUrl) {
+            newUrls.push(res.publicUrl);
+          }
+        } catch (uploadErr: any) {
+          setFormError(
+            `Không thể tải ảnh lên (${uploadErr.message || "Lỗi máy chủ lưu trữ"}). Bạn vẫn có thể gửi yêu cầu bảo hành bình thường với phần mô tả lỗi mà không cần đính kèm ảnh.`
+          );
         }
       }
       setUploadedUrls((prev) => [...prev, ...newUrls].slice(0, 5));

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { getApiBaseUrl, OpenAPI } from "@/lib/api/client";
 import { getSessionToken } from "@/lib/auth/session";
@@ -69,7 +69,7 @@ interface DesignerCharactersContextValue {
     description?: string;
     matrixSize: MatrixSize;
   }) => Promise<DesignerCharacterItem>;
-  loadVersions: (characterId: number, force?: boolean) => Promise<CharacterVersionItem[]>;
+  loadVersions: (characterId: number) => Promise<void>;
   deleteVersion: (characterId: number, versionId: number) => Promise<void>;
   getMatrixSize: (characterId: number) => MatrixSize;
   publishVersionToStore: (input: PublishToStoreInput) => Promise<CreatedStoreProductResponse>;
@@ -95,6 +95,7 @@ export function DesignerCharactersProvider({ children }: { children: React.React
     Record<number, CharacterVersionItem[]>
   >({});
   const [loadingVersions, setLoadingVersions] = useState<Record<number, boolean>>({});
+  const latestVersionRequests = useRef(new Map<number, symbol>());
   const [matrixSizes, setMatrixSizes] = useState<Record<number, MatrixSize>>({});
 
   const refreshCharacters = useCallback(async () => {
@@ -167,27 +168,31 @@ export function DesignerCharactersProvider({ children }: { children: React.React
   );
 
   const loadVersions = useCallback(
-    async (characterId: number, force = false): Promise<CharacterVersionItem[]> => {
-      if (!force && versionsByCharacter[characterId]) {
-        return versionsByCharacter[characterId];
-      }
+    async (characterId: number) => {
+      const requestId = Symbol();
+      latestVersionRequests.current.set(characterId, requestId);
       setLoadingVersions((prev) => ({ ...prev, [characterId]: true }));
       try {
         const list = await fetchCharacterVersions(characterId);
-        const sorted = sortVersionsNewestFirst(list);
-        setVersionsByCharacter((prev) => ({ ...prev, [characterId]: sorted }));
-        return sorted;
+        if (latestVersionRequests.current.get(characterId) === requestId) {
+          setVersionsByCharacter((prev) => ({ ...prev, [characterId]: sortVersionsNewestFirst(list) }));
+        }
+      } catch (error) {
+        if (latestVersionRequests.current.get(characterId) === requestId) throw error;
       } finally {
-        setLoadingVersions((prev) => ({ ...prev, [characterId]: false }));
+        if (latestVersionRequests.current.get(characterId) === requestId) {
+          latestVersionRequests.current.delete(characterId);
+          setLoadingVersions((prev) => ({ ...prev, [characterId]: false }));
+        }
       }
     },
-    [versionsByCharacter],
+    [],
   );
 
   const deleteVersion = useCallback(
     async (characterId: number, versionId: number) => {
       await deleteCharacterVersion(characterId, versionId);
-      await loadVersions(characterId, true);
+      await loadVersions(characterId);
       await refreshCharacters();
     },
     [loadVersions, refreshCharacters],
@@ -238,7 +243,7 @@ export function DesignerCharactersProvider({ children }: { children: React.React
       if (created) {
         saveCreatedStoreProduct(created);
       }
-      await loadVersions(character.characterId, true);
+      await loadVersions(character.characterId);
       await refreshCharacters();
       return created;
     },

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { loadConversations, saveConversations } from "@/features/commission-chat/services/commission-chat.service";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { commissionTotal, formatCommissionMoney, type CommissionDesign } from "../config/fixedPricing";
+import { COMMISSION_FRAME_PRICE, commissionTotal, formatCommissionMoney, type CommissionDesign } from "../config/fixedPricing";
 import {
   CommissionActions, CommissionBrief, CommissionDesignPicker, CommissionPayment,
   commissionButton,
@@ -26,7 +26,7 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
   }
   const [design, setDesign] = useState<CommissionDesign>({
     size: "32x32", format: "image", frames: "8", detail: "Cơ bản", background: "Trong suốt",
-    artStyle: "", framing: "", characterCount: "1",
+    artStyle: "", framing: "", characterCount: "1", palette: "", pose: "",
   });
   const [note, setNote] = useState("");
   const [references, setReferences] = useState<File[]>([]);
@@ -81,6 +81,7 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
           selections: {
             size: design.size, format: design.format, detail: design.detail, background: design.background,
             artStyle: design.artStyle, framing: design.framing, characterCount: design.characterCount,
+            palette: design.palette, pose: design.pose,
             ...(design.format === "gif" && { frames: design.frames }),
           },
         },
@@ -101,9 +102,17 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
         {stage === 0 && (
           <>
             <CommissionDesignPicker design={design} onChange={setDesign} />
-            <p aria-live="polite" className="text-lg font-bold">
+            <aside aria-label="Tóm tắt giá" className="rounded-lg border border-[#cfe3d0] bg-white p-4">
+              <h3 className="font-semibold">Tóm tắt giá</h3>
+              <p className="mt-1 text-sm">
+                {design.format === "gif"
+                  ? `${formatCommissionMoney(COMMISSION_FRAME_PRICE)} / frame${amount !== null ? ` × ${design.frames} frame` : ""}`
+                  : `Ảnh tĩnh · ${design.size.replace("x", " × ")}`}
+              </p>
+              <p aria-live="polite" className="mt-2 text-lg font-bold">
               {amount === null ? "Nhập số frame hợp lệ để tính giá." : <span key={amount} className={motion.price}>Tổng tiền {formatCommissionMoney(amount)}</span>}
-            </p>
+              </p>
+            </aside>
             <CommissionActions>
               <button className={commissionButton} disabled={amount === null} onClick={() => goToStage(1)}>
                 Tiếp tục nhập brief
@@ -116,7 +125,7 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
             <p className="font-semibold">{design.size.replace("x", " × ")} · {design.format === "gif" ? `GIF · ${design.frames} frame` : "Ảnh tĩnh"} · {amount !== null && formatCommissionMoney(amount)}</p>
             <p className="text-sm">Độ chi tiết: {design.detail} · Phông nền: {design.background}</p>
             <p className="text-sm">
-              {[design.artStyle, design.framing, `${design.characterCount} nhân vật`].filter(Boolean).join(" · ")}
+              {[design.artStyle, design.framing, design.palette, design.pose, `${design.characterCount} nhân vật`].filter(Boolean).join(" · ")}
             </p>
             <CommissionBrief note={note} onNote={setNote} references={references} onFiles={addReferences}
               onRemove={(index) => {

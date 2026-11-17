@@ -1,50 +1,28 @@
 import type { ChangeEvent, ReactNode } from "react";
 import {
-  COMMISSION_FRAME_PRICE, COMMISSION_SIZES, MAX_COMMISSION_FRAMES, MIN_COMMISSION_FRAMES,
-  formatCommissionMoney, type CommissionDesign,
+  COMMISSION_DESIGN_FIELDS, MAX_COMMISSION_FRAMES, MIN_COMMISSION_FRAMES,
+  formatCommissionMoney, type CommissionDesign, type CommissionDesignField,
 } from "../config/fixedPricing";
 
 export const commissionButton = "rounded-lg bg-[#155e59] px-4 py-2.5 font-semibold text-white hover:bg-[#0e4b47] disabled:opacity-50";
 const field = "mt-1 block w-full rounded-lg border border-[#819e8c] bg-white p-2.5 text-[#26352f]";
 
-export function CommissionDesignPicker({ design, onChange }: {
+export function CommissionDesignPicker({ design, onChange, fields = COMMISSION_DESIGN_FIELDS }: {
   design: CommissionDesign;
   onChange: (design: CommissionDesign) => void;
+  fields?: readonly CommissionDesignField[];
 }) {
-  const compositionOptions = [
-    { key: "artStyle", label: "Phong cách", options: ["Pixel art thường", "Chibi"] },
-    { key: "framing", label: "Khung hình nhân vật", options: ["Chân dung", "Từ ngực trở lên", "Nửa người", "Toàn thân"] },
-  ] as const;
   return (
     <div className="grid gap-5 sm:grid-cols-2">
-      <label>
-        Kích thước ma trận LED
-        <select className={field} value={design.size} onChange={(event) =>
-          onChange({ ...design, size: event.target.value as CommissionDesign["size"] })}>
-          {(Object.keys(COMMISSION_SIZES) as CommissionDesign["size"][]).map((size) => (
-            <option key={size} value={size}>
-              {size.replace("x", " × ")}{design.format === "image" ? ` · ${formatCommissionMoney(COMMISSION_SIZES[size])}` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Định dạng
-        <select className={field} value={design.format} onChange={(event) =>
-          onChange({ ...design, format: event.target.value as CommissionDesign["format"] })}>
-          <option value="image">Ảnh tĩnh</option>
-          <option value="gif">GIF động · {formatCommissionMoney(COMMISSION_FRAME_PRICE)}/frame</option>
-        </select>
-      </label>
-      <label>
-        Độ chi tiết
-        <select className={field} value={design.detail}
-          onChange={(event) => onChange({ ...design, detail: event.target.value })}>
-          <option>Cơ bản</option>
-          <option>Vừa</option>
-          <option>Cao</option>
-        </select>
-      </label>
+      {fields.map(({ key, label, options }) => (
+        <label key={key}>
+          {label}
+          <select className={field} value={design[key]}
+            onChange={(event) => onChange({ ...design, [key]: event.target.value })}>
+            {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+      ))}
       {design.format === "gif" && (
         <label>
           Số frame ({MIN_COMMISSION_FRAMES}–{MAX_COMMISSION_FRAMES})
@@ -52,35 +30,6 @@ export function CommissionDesignPicker({ design, onChange }: {
             step={1} value={design.frames} onChange={(event) => onChange({ ...design, frames: event.target.value })} />
         </label>
       )}
-      <label>
-        Phông nền
-        <select className={field} value={design.background}
-          onChange={(event) => onChange({ ...design, background: event.target.value })}>
-          <option>Trong suốt</option>
-          <option>Đơn sắc</option>
-          <option>Nền đơn giản</option>
-          <option>Bối cảnh tùy chỉnh</option>
-        </select>
-      </label>
-      {compositionOptions.map(({ key, label, options }) => (
-        <label key={key}>
-          {label} (tùy chọn)
-          <select className={field} value={design[key]} onChange={(event) =>
-            onChange({ ...design, [key]: event.target.value })}>
-            <option value="">Chưa chọn</option>
-            {options.map((option) => <option key={option}>{option}</option>)}
-          </select>
-        </label>
-      ))}
-      <label>
-        Số nhân vật
-        <select className={field} value={design.characterCount}
-          onChange={(event) => onChange({ ...design, characterCount: event.target.value })}>
-          <option value="1">1 nhân vật</option>
-          <option value="2">2 nhân vật</option>
-          <option value="3+">3 nhân vật trở lên (ghi rõ trong brief)</option>
-        </select>
-      </label>
     </div>
   );
 }

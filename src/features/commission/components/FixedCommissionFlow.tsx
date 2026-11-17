@@ -2,18 +2,28 @@
 
 import { useRouter } from "next/navigation";
 import { loadConversations, saveConversations } from "@/features/commission-chat/services/commission-chat.service";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { commissionTotal, formatCommissionMoney, type CommissionDesign } from "../config/fixedPricing";
 import {
   CommissionActions, CommissionBrief, CommissionDesignPicker, CommissionPayment,
   commissionButton,
 } from "./FixedCommissionSteps";
 
-const stages = ["Thiết kế", "Brief", "Thanh toán", "Chat"];
+import { CommissionProgress, commissionStages } from "./CommissionProgress";
+import motion from "./CommissionMotion.module.css";
 const imageTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export default function FixedCommissionFlow({ onConversationCreated }: { onConversationCreated?: (code: string) => void }) {
-  const [stage, setStage] = useState(0);
+  const [{ stage, direction }, setProgress] = useState({ stage: 0, direction: "forward" });
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (stage !== 0 || direction === "back") heading.current?.focus();
+  }, [stage, direction]);
+
+  function goToStage(next: number) {
+    setProgress({ stage: next, direction: next < stage ? "back" : "forward" });
+  }
   const [design, setDesign] = useState<CommissionDesign>({
     size: "32x32", format: "image", frames: "8", detail: "Cơ bản", background: "Trong suốt",
   });
@@ -41,7 +51,7 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
     event.preventDefault();
     if (!note.trim() || amount === null) return;
     setCheckout({ code: `CM${crypto.randomUUID().slice(0, 8).toUpperCase()}`, amount });
-    setStage(2);
+    goToStage(2);
   }
 
   function openConversation() {
@@ -79,24 +89,18 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
   return (
     <div className="min-w-0 flex-1 space-y-5">
       <h1 className="text-3xl font-black text-[#155e59]">Yêu cầu thiết kế Pixel Art</h1>
-      <ol aria-label="Các bước đặt thiết kế" className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-        {stages.map((label, index) => (
-          <li key={label} aria-current={stage === index ? "step" : undefined}
-            className={`rounded-lg px-3 py-2 ${stage === index ? "bg-[#155e59] font-semibold text-white" : "bg-white"}`}>
-            {label}
-          </li>
-        ))}
-      </ol>
-      <section aria-label={stages[stage]} className="space-y-5 rounded-xl border border-[#cfe3d0] bg-[#eaf5e8] p-5 shadow-sm sm:p-7">
-        <h2 className="text-xl font-bold text-[#155e59]">{stages[stage]}</h2>
+      <CommissionProgress stage={stage} />
+      <section key={stage} aria-labelledby="commission-step-heading" data-direction={direction}
+        className={`${motion.step} space-y-5 rounded-xl border border-[#cfe3d0] bg-[#eaf5e8] p-5 shadow-sm sm:p-7`}>
+        <h2 id="commission-step-heading" ref={heading} tabIndex={-1} className="text-xl font-bold text-[#155e59]">{commissionStages[stage]}</h2>
         {stage === 0 && (
           <>
             <CommissionDesignPicker design={design} onChange={setDesign} />
             <p aria-live="polite" className="text-lg font-bold">
-              {amount === null ? "Nhập số frame hợp lệ để tính giá." : `Tổng tiền ${formatCommissionMoney(amount)}`}
+              {amount === null ? "Nhập số frame hợp lệ để tính giá." : <span key={amount} className={motion.price}>Tổng tiền {formatCommissionMoney(amount)}</span>}
             </p>
             <CommissionActions>
-              <button className={commissionButton} disabled={amount === null} onClick={() => setStage(1)}>
+              <button className={commissionButton} disabled={amount === null} onClick={() => goToStage(1)}>
                 Tiếp tục nhập brief
               </button>
             </CommissionActions>
@@ -112,13 +116,13 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
                 setError("");
               }} error={error} />
             <CommissionActions>
-              <button type="button" onClick={() => setStage(0)}>Quay lại thiết kế</button>
+              <button type="button" onClick={() => goToStage(0)}>Quay lại thiết kế</button>
               <button className={commissionButton} disabled={!note.trim()}>Tiếp tục thanh toán</button>
             </CommissionActions>
           </form>
         )}
         {stage === 2 && checkout && (
-          <CommissionPayment {...checkout} onBack={() => setStage(1)} onPay={openConversation} />
+          <CommissionPayment {...checkout} onBack={() => goToStage(1)} onPay={openConversation} />
         )}
       </section>
     </div>

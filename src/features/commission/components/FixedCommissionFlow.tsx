@@ -12,7 +12,7 @@ import {
 const stages = ["Thiết kế", "Brief", "Thanh toán", "Chat"];
 const imageTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-export default function FixedCommissionFlow() {
+export default function FixedCommissionFlow({ onConversationCreated }: { onConversationCreated?: (code: string) => void }) {
   const [stage, setStage] = useState(0);
   const [design, setDesign] = useState<CommissionDesign>({
     size: "32x32", format: "image", frames: "8", detail: "Cơ bản", background: "Trong suốt",
@@ -72,7 +72,8 @@ export default function FixedCommissionFlow() {
         messages: [{ id: checkout.code + "-paid", sender: "SYSTEM", text, time }],
       }, ...previous]);
     }
-    router.push("/chat#" + checkout.code);
+    if (onConversationCreated) onConversationCreated(checkout.code);
+    else router.push("/chat#" + checkout.code);
   }
 
   return (

@@ -7,7 +7,7 @@
  */
 
 /** CHARACTER.status / STORE_LISTING.status as shown to the Manager. */
-export type ListingStatus = "Pending Review" | "Published" | "Hidden";
+export type ListingStatus = "Pending Review" | "Published" | "Hidden" | "Archived" | "Deleted";
 
 /** CHARACTER.visibility. Only a Manager may set this to "Visible" (BR-14). */
 export type CharacterVisibility = "Visible" | "Hidden";

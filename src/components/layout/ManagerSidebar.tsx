@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Store,
+  Tag,
   Truck,
   User,
   Users,
@@ -34,17 +35,24 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   {
-    label: "Bảng điều khiển nhà thiết kế",
-    description: "Commission được phân công cho bạn",
-    href: "/designer/dashboard",
-    icon: LayoutDashboard,
+    label: "Tạo nhân vật",
+    description: "Khởi tạo và quản lý hồ sơ nhân vật gốc",
+    href: "/designer/characters",
+    icon: Palette,
     roles: ["DESIGNER"],
   },
   {
-    label: "Commission được giao",
-    description: "Xem yêu cầu và gửi thiết kế",
+    label: "Đăng tải cho cửa hàng",
+    description: "Tải phiên bản nhân vật lên hệ thống",
+    href: "/designer/store-uploads",
+    icon: Store,
+    roles: ["DESIGNER"],
+  },
+  {
+    label: "Đăng tải yêu cầu thiết kế",
+    description: "Tải bản thiết kế cho yêu cầu được giao",
     href: "/designer/commissions",
-    icon: Palette,
+    icon: ClipboardList,
     roles: ["DESIGNER"],
   },
   {
@@ -62,13 +70,6 @@ const menuItems: MenuItem[] = [
     roles: ["STAFF"],
   },
   {
-    label: "Quản lý giao hàng",
-    description: "Tạo yêu cầu và theo dõi vận chuyển",
-    href: "/staff/deliveries",
-    icon: Truck,
-    roles: ["STAFF"],
-  },
-  {
     label: "Quản lý Chat",
     description: "Trả lời khách hàng và hỗ trợ sau bán hàng",
     href: "/staff/chat",
@@ -76,7 +77,7 @@ const menuItems: MenuItem[] = [
     roles: ["STAFF"],
   },
   {
-    label: "Quản lý Commission",
+    label: "Quản lý Yêu cầu thiết kế nhân vật",
     description: "Duyệt yêu cầu, báo giá và phân công nhà thiết kế",
     href: "/staff/commission",
     icon: ClipboardList,
@@ -89,19 +90,20 @@ const menuItems: MenuItem[] = [
     icon: Boxes,
     roles: ["MANAGER"],
   },
+
   {
-    label: "Quản lý đơn Character",
-    description: "Theo dõi doanh thu và cấp quyền Character",
-    href: "/manager/character-orders",
-    icon: Image,
-    roles: ["MANAGER"],
-  },
-  {
-    label: "Quản lý Store Listing",
+    label: "Quản lý cửa hàng sản phẩm",
     description: "Quản lý sản phẩm, giá bán và hiển thị",
     href: "/staff/pricing",
     icon: Store,
     roles: ["MANAGER"],
+  },
+  {
+    label: "Quản lý tag sản phẩm",
+    description: "Tạo, sửa và xóa thẻ danh mục phân loại",
+    href: "/staff/tags",
+    icon: Tag,
+    roles: ["MANAGER", "ADMIN"],
   },
   {
     label: "Quản lý bảo hành",
@@ -118,7 +120,7 @@ const menuItems: MenuItem[] = [
     roles: ["MANAGER"],
   },
   {
-    label: "Cấu hình giá Commission",
+    label: "Cấu hình giá Yêu cầu thiết kế",
     description: "Thiết lập tiêu chí, tùy chọn và phụ thu",
     href: "/staff/commission/pricing",
     icon: Settings2,
@@ -173,7 +175,7 @@ function getRoleHome(role: UserRole | undefined): string {
   if (role === "STAFF") return "/staff";
   if (role === "MANAGER") return "/manager";
   if (role === "ADMIN") return "/admin";
-  if (role === "DESIGNER") return "/designer/dashboard";
+  if (role === "DESIGNER") return "/designer/characters";
   return "/";
 }
 
@@ -184,11 +186,10 @@ function MenuLink({ item, activeHref }: { item: MenuItem; activeHref?: string })
   return (
     <Link
       href={item.href}
-      className={`manager-nav-link flex items-start gap-3 rounded-lg border-2 px-3 py-2.5 text-sm transition-colors ${
-        active
+      className={`manager-nav-link flex items-start gap-3 rounded-lg border-2 px-3 py-2.5 text-sm transition-colors ${active
           ? "bg-primary border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
           : "border-transparent hover:bg-primary/30"
-      }`}
+        }`}
     >
       <Icon size={17} className="mt-0.5 flex-shrink-0" />
       <span className="min-w-0">
@@ -238,12 +239,12 @@ export default function ManagerSidebar() {
   const roleItems = visibleItems.filter((item) => item !== overviewItem);
   const profileItem: MenuItem | undefined = role === "ADMIN"
     ? {
-        label: "Hồ sơ cá nhân",
-        description: "Thông tin tài khoản của bạn",
-        href: `${getRoleHome(role)}/profile`,
-        icon: User,
-        roles: [role],
-      }
+      label: "Hồ sơ cá nhân",
+      description: "Thông tin tài khoản của bạn",
+      href: `${getRoleHome(role)}/profile`,
+      icon: User,
+      roles: [role],
+    }
     : undefined;
   const activeHref = [...(roleOverviewItem ? [roleOverviewItem] : []), ...roleItems, ...(profileItem ? [profileItem] : [])]
     .sort((first, second) => second.href.length - first.href.length)

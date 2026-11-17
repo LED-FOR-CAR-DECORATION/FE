@@ -1,128 +1,390 @@
-import type { CartItem } from "@/features/cart/types";
-import type { AuthUser } from "@/features/auth/types";
+import { CheckoutRequest, type OrderDetailResponse, type OrderSummaryItem } from "@/api_client";
 import type { Address } from "@/features/address/types";
-import type { MockOrder, OrderStatus } from "@/features/order/types";
-import type { DeliveryStatus } from "@/features/order/types";
-import { ahamoveService } from "./ahamove.service";
-import { entitlementService } from "@/features/character/services/entitlement.service";
-import { getOrderFulfillment } from "@/features/order/fulfillment";
+import type { AuthUser } from "@/features/auth/types";
+import type { CartItem } from "@/features/cart/types";
+import { getOrderKind } from "@/features/order/fulfillment";
+import type { DeliveryStatus, MockOrder, OrderKind, OrderStatus, OrderType, PaymentStatus } from "@/features/order/types";
+import {
+  apiCancelOrder,
+  apiCheckoutOrder,
+  apiConfirmOrderDelivery,
+  apiDispatchOrder,
+  apiUpdateStaffOrderStatus,
+  fetchMyOrders,
+  fetchOrderDetail,
+  fetchStaffOrderDetail,
+  fetchStaffOrders,
+  type BackendStaffOrderDetail,
+  type BackendStaffOrderSummary,
+  type DispatchOrderRequest,
+  type DispatchOrderResponse,
+} from "@/lib/api/orders";
+import { mapBackendProductType } from "@/lib/api/products";
 
-export const ORDER_STORAGE_KEY = "led_controller_mock_orders";
 export const ORDERS_CHANGED_EVENT = "led-controller-orders-changed";
-const ORDER_DATA_RESET_KEY = "led_controller_mock_orders_reset_v1";
-const VNPAY_MIGRATION_KEY = "led_controller_vnpay_migration_v1";
-const VND_SHIPPING_MIGRATION_KEY = "led_controller_vnd_shipping_v1";
 
-function readOrders(): MockOrder[] {
-  if (typeof window === "undefined") return [];
-  if (!localStorage.getItem(ORDER_DATA_RESET_KEY)) {
-    localStorage.removeItem(ORDER_STORAGE_KEY);
-    localStorage.setItem(ORDER_DATA_RESET_KEY, "true");
-    return [];
+export function mapBackendOrderStatus(status?: string): OrderStatus {
+  switch (status) {
+    case "PENDING_PAYMENT":
+      return "PENDING_PAYMENT";
+    case "PROCESSING":
+      return "PROCESSING";
+    case "PARTIALLY_FULFILLED":
+      return "PARTIALLY_FULFILLED";
+    case "SHIPPING":
+      return "SHIPPING";
+    case "DELIVERED":
+      return "DELIVERED";
+    case "COMPLETED":
+      return "COMPLETED";
+    case "DELIVERY_FAILED":
+      return "DELIVERY_FAILED";
+    case "REFUNDED":
+      return "REFUNDED";
+    case "CANCELED":
+      return "CANCELED";
+    case "PendingPayment":
+    case "Pending":
+      return "PENDING_PAYMENT";
+    case "Preparing":
+    case "Confirmed":
+      return "PROCESSING";
+    case "HandedOver":
+      return "PARTIALLY_FULFILLED";
+    case "Shipping":
+      return "SHIPPING";
+    case "Delivered":
+      return "DELIVERED";
+    case "Completed":
+      return "COMPLETED";
+    case "Cancelled":
+      return "CANCELED";
+    default:
+      return "PENDING_PAYMENT";
   }
-  try {
-    const saved = localStorage.getItem(ORDER_STORAGE_KEY);
-    if (saved) {
-      let orders = JSON.parse(saved) as MockOrder[];
-      let updated = false;
-
-      if (!localStorage.getItem(VNPAY_MIGRATION_KEY)) {
-        orders = orders.map((order) => ({ ...order, paymentMethod: "VNPAY", paymentStatus: "Paid" as const }));
-        localStorage.setItem(VNPAY_MIGRATION_KEY, "true");
-        updated = true;
-      }
-
-      if (!localStorage.getItem(VND_SHIPPING_MIGRATION_KEY)) {
-        orders = orders.map((order) => {
-          if (order.shipping === 5) {
-            const newShipping = order.subtotal >= 500000 ? 0 : 30000;
-            return {
-              ...order,
-              shipping: newShipping,
-              total: order.subtotal + newShipping,
-            };
-          }
-          return order;
-        });
-        localStorage.setItem(VND_SHIPPING_MIGRATION_KEY, "true");
-        updated = true;
-      }
-
-      if (updated) {
-        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(orders));
-      }
-
-      return orders;
-    }
-  } catch {
-    // The provider will recover with an empty order list when browser storage is unavailable.
-  }
-  return [];
 }
 
-function writeOrders(orders: MockOrder[]): MockOrder[] {
-  localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(orders));
-  window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
-  return orders;
+export function mapBackendPaymentStatus(orderStatus?: string, paymentStatus?: string): PaymentStatus {
+  const normalizedPaymentStatus = paymentStatus?.toUpperCase();
+  if (normalizedPaymentStatus === "SUCCESS" || normalizedPaymentStatus === "SUCCEEDED") return "Paid";
+  if (normalizedPaymentStatus === "FAILED" || normalizedPaymentStatus === "EXPIRED") return "Failed";
+  if (
+    normalizedPaymentStatus === "REFUNDED" ||
+    normalizedPaymentStatus === "CANCELLED" ||
+    normalizedPaymentStatus === "CANCELED"
+  ) {
+    return "Cancelled";
+  }
+  if (
+    orderStatus === "PROCESSING" ||
+    orderStatus === "PARTIALLY_FULFILLED" ||
+    orderStatus === "SHIPPING" ||
+    orderStatus === "DELIVERED" ||
+    orderStatus === "COMPLETED"
+  ) {
+    return "Paid";
+  }
+  if (orderStatus === "CANCELED" || orderStatus === "REFUNDED") return "Cancelled";
+  return "Pending";
+}
+
+function mapBackendOrderType(orderType?: string): OrderType | undefined {
+  switch (orderType) {
+    case "PHYSICAL":
+    case "MIXED":
+    case "DIGITAL":
+    case "BUNDLE":
+    case "SUBSCRIPTION":
+      return orderType;
+    default:
+      return undefined;
+  }
+}
+
+function resolveEffectiveOrderStatus(
+  rawStatus: OrderStatus,
+  paymentStatus: PaymentStatus,
+  orderKind: OrderKind,
+): OrderStatus {
+  if (paymentStatus === "Paid") {
+    if (
+      rawStatus === "PENDING_PAYMENT" ||
+      rawStatus === "PROCESSING" ||
+      rawStatus === "PARTIALLY_FULFILLED"
+    ) {
+      if (orderKind === "PHYSICAL") return "PROCESSING";
+      if (orderKind === "MIXED") return "PARTIALLY_FULFILLED";
+      if (rawStatus === "PENDING_PAYMENT") return "COMPLETED";
+    }
+  }
+  return rawStatus;
+}
+
+export function mapBackendDeliveryStatus(status?: string): DeliveryStatus {
+  switch (status) {
+    case "PENDING":
+    case "ASSIGNED":
+    case "ASSIGNING_DRIVER":
+      return "Created";
+    case "PICKED_UP":
+    case "PICKING_UP":
+      return "Picked up";
+    case "SHIPPING":
+    case "IN_TRANSIT":
+      return "In transit";
+    case "DELIVERED":
+      return "Delivered";
+    case "FAILED":
+    case "RETURNED":
+    case "CANCELED":
+      return "Exception";
+    default:
+      return "Created";
+  }
+}
+
+export function mapOrderSummaryAndDetailToOrder(
+  summary: OrderSummaryItem,
+  detail: OrderDetailResponse | null,
+  customer: AuthUser | null,
+): MockOrder {
+  const items: CartItem[] = detail?.items?.length
+    ? detail.items.map((item) => ({
+        id: String(item.productId),
+        orderItemId: item.orderItemId,
+        productId: item.productId,
+        productType: mapBackendProductType(item.productType),
+        name: item.productName,
+        price: Number(item.unitPrice ?? 0),
+        quantity: item.quantity,
+        previewUrl: item.previewGifUrl || item.thumbnailUrl || undefined,
+      }))
+    : [
+        {
+          id: String(summary.orderId),
+          productType: summary.orderType === "DIGITAL" ? "CHARACTER" : "LED_MODEL",
+          name: summary.primaryProductName,
+          price: Number(summary.totalAmount ?? 0),
+          quantity: summary.totalItems || 1,
+          previewUrl: summary.primaryProductThumbnail ?? undefined,
+        },
+      ];
+
+  const orderType = mapBackendOrderType(detail?.orderType ?? summary.orderType);
+  const orderKind = getOrderKind({ orderType, items });
+  const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
+  const paymentStatus = mapBackendPaymentStatus(detail?.status ?? summary.status, detail?.payment?.status);
+  const status = resolveEffectiveOrderStatus(rawStatus, paymentStatus, orderKind);
+
+  return {
+    id: String(summary.orderId),
+    orderType,
+    customer: {
+      userId: customer?.userId ?? "",
+      email: customer?.email ?? "",
+      fullName: detail?.delivery?.recipientName || customer?.fullName || "Khách hàng",
+    },
+    items,
+    subtotal: Number(detail?.subtotal ?? summary.totalAmount ?? 0),
+    shipping: Number(detail?.shippingFee ?? 0),
+    total: Number(detail?.totalAmount ?? summary.totalAmount ?? 0),
+    address: {
+      fullName: detail?.delivery?.recipientName || customer?.fullName || "",
+      phoneNumber: detail?.delivery?.recipientPhone || customer?.phoneNumber || "",
+      fullAddress: detail?.delivery?.fullAddress || "Giao sản phẩm số qua hệ thống",
+    },
+    paymentMethod: detail?.payment?.paymentGateway ?? "SEPAY",
+    paymentStatus,
+    paymentCode: detail?.payment?.paymentContent || detail?.payment?.bankReferenceCode || undefined,
+    qrCodeUrl: detail?.payment?.qrCodeUrl ?? undefined,
+    bankAccount: detail?.payment?.bankAccount ?? undefined,
+    bankName: detail?.payment?.bankName ?? undefined,
+    bankReferenceCode: detail?.payment?.bankReferenceCode ?? undefined,
+    expiresAt: detail?.payment?.expiresAt ?? detail?.expiresAt ?? summary.expiresAt ?? undefined,
+    paidAt: detail?.payment?.paidAt ?? undefined,
+    status,
+    createdAt: detail?.createdAt ?? summary.createdAt,
+    service: detail?.delivery?.carrier ?? "AhaMove",
+    delivery: detail?.delivery
+      ? {
+          provider: detail.delivery.carrier || "AHAMOVE",
+          orderId: detail.delivery.trackingNumber || `DEL-${summary.orderId}`,
+          status: mapBackendDeliveryStatus(detail.delivery.deliveryStatus),
+          rawStatus: detail.delivery.deliveryStatus,
+          trackingUrl: detail.delivery.trackingUrl || undefined,
+          carrierFee: (detail.delivery as any)?.carrierFee,
+          createdAt: detail.createdAt,
+          expectedAt: detail.delivery.estimatedDeliveryAt || detail.createdAt,
+        }
+      : undefined,
+  };
+}
+
+export function mapStaffOrderSummaryAndDetailToOrder(
+  summary: BackendStaffOrderSummary,
+  detail: BackendStaffOrderDetail | null,
+): MockOrder {
+  const items: CartItem[] = detail?.items?.length
+    ? detail.items.map((item) => ({
+        id: String(item.productId),
+        orderItemId: item.orderItemId,
+        productId: item.productId,
+        productType: mapBackendProductType(item.productType),
+        name: item.productName,
+        price: Number(item.unitPrice ?? 0),
+        quantity: item.quantity,
+        previewUrl: item.previewGifUrl || item.thumbnailUrl || undefined,
+      }))
+    : [
+        {
+          id: String(summary.orderId),
+          productType: summary.orderType === "DIGITAL" ? "CHARACTER" : "LED_MODEL",
+          name: summary.primaryProductName,
+          price: Number(summary.totalAmount ?? 0),
+          quantity: summary.totalItems || 1,
+          previewUrl: summary.primaryProductThumbnail ?? undefined,
+        },
+      ];
+
+  const orderType = mapBackendOrderType(detail?.orderType ?? summary.orderType);
+  const orderKind = getOrderKind({ orderType, items });
+  const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
+  const paymentStatus = mapBackendPaymentStatus(
+    detail?.status ?? summary.status,
+    detail?.payment?.status ?? summary.paymentStatus,
+  );
+  const status = resolveEffectiveOrderStatus(rawStatus, paymentStatus, orderKind);
+
+  return {
+    id: String(summary.orderId),
+    orderType,
+    customer: {
+      userId: String(summary.customerId),
+      email: detail?.customer?.email || summary.customerEmail || "",
+      fullName: detail?.customer?.fullName || summary.customerFullName || summary.recipientName || "Khách hàng",
+    },
+    items,
+    subtotal: Number(detail?.subtotal ?? summary.totalAmount ?? 0),
+    shipping: Number(detail?.shippingFee ?? 0),
+    total: Number(detail?.totalAmount ?? summary.totalAmount ?? 0),
+    address: {
+      fullName: detail?.delivery?.recipientName || summary.recipientName || "",
+      phoneNumber: detail?.delivery?.recipientPhone || summary.recipientPhone || "",
+      fullAddress: detail?.delivery?.fullAddress || "Giao hàng qua GHN",
+    },
+    paymentMethod: detail?.payment?.gateway ?? "SEPAY",
+    paymentStatus,
+    paymentCode: detail?.payment?.transactionCode ?? undefined,
+    bankReferenceCode: detail?.payment?.transactionCode ?? undefined,
+    expiresAt: detail?.expiresAt ?? undefined,
+    paidAt: detail?.payment?.paidAt,
+    status,
+    createdAt: detail?.createdAt ?? summary.createdAt,
+    service: detail?.delivery?.carrier ?? "AhaMove",
+    delivery: (detail?.delivery || summary.deliveryStatus)
+      ? {
+          provider: (detail?.delivery?.carrier || "AHAMOVE"),
+          orderId: detail?.delivery?.trackingNumber || `DEL-${summary.orderId}`,
+          status: mapBackendDeliveryStatus(detail?.delivery?.deliveryStatus ?? summary.deliveryStatus),
+          rawStatus: detail?.delivery?.deliveryStatus ?? summary.deliveryStatus,
+          trackingUrl: detail?.delivery?.trackingUrl || undefined,
+          carrierFee: detail?.delivery?.carrierFee,
+          createdAt: detail?.createdAt ?? summary.createdAt,
+          expectedAt: detail?.delivery?.estimatedDeliveryAt || summary.createdAt,
+        }
+      : undefined,
+  };
 }
 
 export const orderService = {
-  list(): MockOrder[] {
-    return readOrders();
+  async fetchCustomerOrders(customer: AuthUser | null): Promise<MockOrder[]> {
+    if (!customer || customer.role !== "CUSTOMER") return [];
+    try {
+      const { items: summaries } = await fetchMyOrders({ page: 0, size: 50 });
+      const details = await Promise.all(
+        summaries.map((s) => fetchOrderDetail(s.orderId).catch(() => null)),
+      );
+      return summaries.map((summary, idx) =>
+        mapOrderSummaryAndDetailToOrder(summary, details[idx] ?? null, customer),
+      );
+    } catch {
+      return [];
+    }
   },
-  create(input: {
+  async fetchStaffOrders(): Promise<MockOrder[]> {
+    try {
+      const { items: summaries } = await fetchStaffOrders({ allStatuses: true, page: 0, size: 50 });
+      const details = await Promise.all(
+        summaries.map((s) => fetchStaffOrderDetail(s.orderId).catch(() => null)),
+      );
+      return summaries.map((summary, idx) =>
+        mapStaffOrderSummaryAndDetailToOrder(summary, details[idx] ?? null),
+      );
+    } catch (err) {
+      console.error("fetchStaffOrders failed:", err);
+      return [];
+    }
+  },
+  async updateStaffStatus(orderId: number | string, status: string): Promise<void> {
+    let backendStatus = status;
+    if (status === "Completed" || status === "COMPLETED" || status === "Confirmed") backendStatus = "COMPLETED";
+    else if (status === "Preparing" || status === "PROCESSING") backendStatus = "PROCESSING";
+    else if (status === "Cancelled" || status === "CANCELED") backendStatus = "CANCELED";
+    await apiUpdateStaffOrderStatus(orderId, backendStatus);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+  },
+  async dispatchOrderToAhamove(
+    orderId: number | string,
+    payload: DispatchOrderRequest,
+  ): Promise<DispatchOrderResponse> {
+    const result = await apiDispatchOrder(orderId, payload);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+    return result;
+  },
+  async checkout(input: {
     customer: AuthUser;
     items: CartItem[];
-    address: Address;
-    shipping: number;
-    paymentMethod: string;
-  }): MockOrder {
-    const subtotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const order: MockOrder = {
-      id: `ORD-${Date.now().toString().slice(-6)}`,
-      customer: { userId: input.customer.userId, email: input.customer.email, fullName: input.customer.fullName },
-      items: input.items,
-      subtotal,
-      shipping: input.shipping,
-      total: subtotal + input.shipping,
-      address: { fullName: input.address.fullName, phoneNumber: input.address.phoneNumber, fullAddress: input.address.fullAddress },
-      paymentMethod: "VNPAY",
-      paymentStatus: "Paid",
-      status: "Pending",
-      createdAt: new Date().toISOString(),
-      service: "ViettelPost Fast",
-    };
-    writeOrders([order, ...readOrders()]);
-    if (order.paymentStatus === "Paid") {
-      entitlementService.grantFromOrder(input.customer.userId, order.id, getOrderFulfillment(order).characterIds);
+    address?: Address;
+  }): Promise<{ orderId: string; paymentCode?: string }> {
+    const cartItemIds = input.items
+      .map((item) => item.cartItemId)
+      .filter((id): id is number => typeof id === "number" && id > 0);
+
+    if (cartItemIds.length === 0) {
+      throw new Error("Không tìm thấy mã sản phẩm trong giỏ hàng để thanh toán.");
     }
-    return order;
-  },
-  updateStatus(id: string, status: OrderStatus): MockOrder | null {
-    const orders = readOrders();
-    const target = orders.find((order) => order.id === id);
-    if (!target) return null;
-    const updated = { ...target, status };
-    writeOrders(orders.map((order) => order.id === id ? updated : order));
-    return updated;
-  },
-  async createDelivery(id: string): Promise<MockOrder | null> {
-    const orders = readOrders();
-    const target = orders.find((order) => order.id === id);
-    if (!target || target.status !== "Confirmed" || target.delivery || !getOrderFulfillment(target).requiresDelivery) return target ?? null;
-    const result = await ahamoveService.createOrder(target);
-    const updated: MockOrder = {
-      ...target,
-      status: "Shipping",
-      delivery: {
-        provider: "AHAMOVE",
-        orderId: result.orderId,
-        status: "Created" satisfies DeliveryStatus,
-        createdAt: new Date().toISOString(),
-        expectedAt: result.expectedAt,
-      },
+
+    const numericAddressId = input.address ? Number(input.address.id) : NaN;
+    const res = await apiCheckoutOrder({
+      cartItemIds,
+      deliveryAddressId: Number.isFinite(numericAddressId) && numericAddressId > 0 ? numericAddressId : undefined,
+      paymentGateway: CheckoutRequest.paymentGateway.SEPAY,
+    });
+    const detail = await fetchOrderDetail(res.orderId).catch(() => null);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+    return {
+      orderId: String(res.orderId),
+      paymentCode: detail?.payment?.paymentContent ?? undefined,
     };
-    writeOrders(orders.map((order) => order.id === id ? updated : order));
-    return updated;
+  },
+  async confirmDelivery(orderId: number | string) {
+    const result = await apiConfirmOrderDelivery(orderId);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+    return result;
+  },
+  async cancelCustomerOrder(orderId: number | string, reason?: string) {
+    const result = await apiCancelOrder(orderId, reason);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+    return result;
   },
 };

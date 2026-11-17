@@ -79,6 +79,11 @@ export default function CartPage() {
 
                 {items.map((item) => {
                   const checked = isSelected(item.id);
+                  const isCharacterOrDigital =
+                    item.productType === "CHARACTER" ||
+                    item.productType === "SUBSCRIPTION" ||
+                    (item.productType as string)?.toUpperCase() === "CHARACTER";
+
                   return (
                     <div key={item.id} className={`flex flex-wrap items-center gap-4 border-b-2 border-gray-100 p-4 last:border-0 transition-colors ${checked ? "bg-[#f3faf5]" : ""}`}>
                       <input
@@ -96,7 +101,20 @@ export default function CartPage() {
                         )}
                       </div>
                       <div className="min-w-40 flex-1"><h2 className="font-black">{item.name}</h2><p className="text-sm text-text-muted">{formatPrice(item.price)} / sản phẩm</p></div>
-                      <div className="flex h-9 border-2 border-black"><button onClick={() => updateQuantity(item.id, item.quantity - 1)} disabled={item.quantity <= 1} className="w-9 border-r-2 border-black disabled:opacity-40" aria-label="Giảm số lượng"><Minus size={14} className="mx-auto" /></button><span className="grid w-10 place-items-center font-bold">{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-9 border-l-2 border-black" aria-label="Tăng số lượng"><Plus size={14} className="mx-auto" /></button></div>
+                      {isCharacterOrDigital ? (
+                        <div
+                          className="flex h-9 min-w-14 items-center justify-center border-2 border-black bg-gray-100 px-3 text-xs font-black text-gray-800"
+                          title="Sản phẩm kỹ thuật số (cố định số lượng 1)"
+                        >
+                          SL: 1
+                        </div>
+                      ) : (
+                        <div className="flex h-9 border-2 border-black">
+                          <button onClick={() => updateQuantity(item.id, item.quantity - 1)} disabled={item.quantity <= 1} className="w-9 border-r-2 border-black disabled:opacity-40" aria-label="Giảm số lượng"><Minus size={14} className="mx-auto" /></button>
+                          <span className="grid w-10 place-items-center font-bold">{item.quantity}</span>
+                          <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-9 border-l-2 border-black" aria-label="Tăng số lượng"><Plus size={14} className="mx-auto" /></button>
+                        </div>
+                      )}
                       <strong className="w-20 text-right text-primary-dark">{formatPrice(item.price * item.quantity)}</strong>
                       <button onClick={() => removeItem(item.id)} className="p-2 text-red-600" aria-label={`Xóa ${item.name}`}><Trash2 size={17} /></button>
                     </div>

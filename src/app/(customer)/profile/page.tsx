@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import CustomerSidebar from "@/components/layout/CustomerSidebar";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import AddAddressModal from "@/components/ui/AddAddressModal";
@@ -333,9 +334,8 @@ function AccountInfoTab() {
 
 /* ── Order History Tab ── */
 function OrderHistoryTab() {
-  const { user } = useAuth();
   const { orders } = useOrders();
-  const customerOrders = orders.filter((order) => order.customer.userId === user?.userId);
+  const customerOrders = orders;
   return (
     <div className="profile-card profile-enter profile-enter-delay-1">
       <div className="flex items-center gap-2 p-5 border-b-2 border-black">
@@ -382,44 +382,26 @@ function OrderHistoryTab() {
 
 /* ── Profile Page ── */
 export default function ProfilePage() {
-  const [tab, setTab] = useState<Tab>("account");
   const { user } = useAuth();
   const displayName = user?.fullName ?? "Người dùng";
-  const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <>
       <Header />
-      <main className="profile-page flex-1 bg-background py-7 md:py-10">
-        <div className="profile-pixels profile-pixels-left" aria-hidden="true" />
-        <div className="profile-pixels profile-pixels-right" aria-hidden="true" />
-        <div className="container relative z-10 mx-auto px-4 max-w-3xl">
-
-          {/* Header */}
-          <div className="profile-enter flex items-center gap-4 mb-5">
-            <div className="profile-avatar">
-              <span className="profile-avatar-face">{avatarInitial}</span>
+      <main className="flex-1 bg-[#f5f5f5] py-6 md:py-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 lg:flex-row lg:items-start">
+          <CustomerSidebar />
+          <div className="min-w-0 flex-1 space-y-5">
+            <div className="rounded-xs bg-white px-6 py-4 shadow-xs">
+              <h1 className="text-xl font-black tracking-tight text-gray-900">
+                Hồ sơ của tôi — {displayName}
+              </h1>
+              <p className="mt-0.5 text-xs text-text-muted">
+                Quản lý thông tin hồ sơ, mật khẩu và địa chỉ nhận hàng ({user?.email ?? ""})
+              </p>
             </div>
-            <div>
-              <h1 className="text-3xl font-black tracking-tight">{displayName}</h1>
-              <p className="text-text-muted text-sm">{user?.email ?? ""}</p>
-            </div>
+            <AccountInfoTab />
           </div>
-
-          {/* Tab switcher */}
-          <div className="profile-tabs profile-enter profile-enter-delay-1 mb-4">
-            {(["account", "orders"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`profile-tab ${tab === t ? "profile-tab-active" : ""}`}
-              >
-                {t === "account" ? <><User size={16} /> Thông tin tài khoản</> : <><Package size={16} /> Lịch sử đơn hàng</>}
-              </button>
-            ))}
-          </div>
-
-          {tab === "account" ? <AccountInfoTab /> : <OrderHistoryTab />}
         </div>
       </main>
       <Footer />

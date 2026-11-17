@@ -60,6 +60,7 @@ export namespace PaymentDetail {
     export enum status {
         PENDING = 'PENDING',
         SUCCESS = 'SUCCESS',
+        EXPIRED = 'EXPIRED',
         FAILED = 'FAILED',
         REFUNDED = 'REFUNDED',
     }

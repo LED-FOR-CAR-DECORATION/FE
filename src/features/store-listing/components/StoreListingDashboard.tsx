@@ -1,35 +1,113 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CheckCircle2, Clock3, EyeOff, Lock, Store, X } from "lucide-react";
-import { PRODUCTS } from "@/features/cart/catalog";
+import { CheckCircle2, Clock3, Cpu, EyeOff, Lock, Plus, Sparkles, Store, X } from "lucide-react";
+import { apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
+import {
+  getCreatedStoreProducts,
+  updateCreatedStoreProductStatus,
+} from "../services/store-listing.service";
 import type { PublishMode, StoreCharacterRow } from "../types";
-import CatalogListingTable from "./CatalogListingTable";
+import CatalogListingTable, { type StoreCatalogItem } from "./CatalogListingTable";
 import CharacterListingTable from "./CharacterListingTable";
+import CreateStoreProductModal from "./CreateStoreProductModal";
+import CreateCharacterProductModal from "./CreateCharacterProductModal";
+import EditStoreProductModal, { type EditableProductData } from "./EditStoreProductModal";
 import PublishVersionModal from "./PublishVersionModal";
 import UnlistConfirmModal from "./UnlistConfirmModal";
+import ArchiveProductConfirmModal from "./ArchiveProductConfirmModal";
+import DeleteProductConfirmModal from "./DeleteProductConfirmModal";
+import BundleListingTable from "./BundleListingTable";
+import CreateBundleModal from "./CreateBundleModal";
+import EditBundleModal from "./EditBundleModal";
+import DeleteBundleConfirmModal from "./DeleteBundleConfirmModal";
+import { fetchManagedBundles, type ManagedBundleItem } from "@/lib/api/bundles";
 
 type TabId = "characters" | "led-models" | "bundles";
 
 type ModalState =
+  | { kind: "create" }
+  | { kind: "create-character" }
+  | { kind: "edit"; product: EditableProductData }
   | { kind: "publish"; character: StoreCharacterRow; mode: PublishMode }
   | { kind: "unlist"; character: StoreCharacterRow }
+  | { kind: "archive"; productId: string | number; productName: string }
+  | { kind: "delete"; productId: string | number; productName: string }
+  | { kind: "create-bundle" }
+  | { kind: "edit-bundle"; bundle: ManagedBundleItem }
+  | { kind: "delete-bundle"; bundle: ManagedBundleItem }
   | null;
 
-const NOTICE_DURATION_MS = 5000;
+const NOTICE_DURATION_MS = 6000;
 
-/** Quản lý Store Listing — Dashboard dành cho Manager với các tab Characters / LED Models / Bundles. */
+/** Quản lý Store Listing — Dashboard dành riêng cho Manager với các user stories CRUD sản phẩm. */
 export default function StoreListingDashboard() {
   const { rows, isLoading, error, retry, canManage, publish, unlist } = useStoreCharacters();
+  const [catalogProducts, setCatalogProducts] = useState<StoreCatalogItem[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("characters");
   const [modal, setModal] = useState<ModalState>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [bundleRefreshTrigger, setBundleRefreshTrigger] = useState(0);
+  const [bundleCount, setBundleCount] = useState<number | null>(null);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
     characters: null,
     "led-models": null,
     bundles: null,
   });
+
+  useEffect(() => {
+    fetchManagedBundles({ size: 1 })
+      .then((res) => setBundleCount(res.totalElements))
+      .catch(() => { });
+  }, [bundleRefreshTrigger]);
+
+  const refreshCatalog = () => {
+    fetchStoreProducts({ size: 100 })
+      .then((res) => {
+        const publishedItems: StoreCatalogItem[] = res.items.map((item) => ({
+          ...item,
+          status: "PUBLISHED",
+        }));
+        const publishedIdSet = new Set(publishedItems.map((item) => String(item.id)));
+
+        const createdLedItems: StoreCatalogItem[] = [];
+        for (const created of getCreatedStoreProducts()) {
+          if (created.productType !== "LED" || created.productId == null) {
+            continue;
+          }
+          const idStr = String(created.productId);
+          if (publishedIdSet.has(idStr)) {
+            if (created.status !== "PUBLISHED") {
+              updateCreatedStoreProductStatus(idStr, "PUBLISHED");
+            }
+            continue;
+          }
+          if (created.status === "DELETED") {
+            continue;
+          }
+          createdLedItems.push({
+            id: idStr,
+            productId: created.productId,
+            productType: "LED_MODEL",
+            name: created.productName ?? `Sản phẩm LED #${idStr}`,
+            price: Number(created.basePrice ?? 0),
+            description: created.description ?? "",
+            previewUrl: created.thumbnailUrl || undefined,
+            galleryUrls: created.galleryUrls ?? [],
+            status: (created.status as StoreCatalogItem["status"]) ?? "UNPUBLISHED",
+          });
+        }
+
+        setCatalogProducts([...createdLedItems, ...publishedItems]);
+      })
+      .catch((err) => console.error("Failed to load catalog products:", err));
+    retry();
+  };
+
+  useEffect(() => {
+    refreshCatalog();
+  }, []);
 
   useEffect(() => {
     if (!notice) return;
@@ -51,12 +129,12 @@ export default function StoreListingDashboard() {
     {
       id: "led-models",
       label: "LED Models",
-      count: PRODUCTS.filter((product) => product.productType === "LED_MODEL").length,
+      count: catalogProducts.filter((product) => product.productType === "LED_MODEL").length,
     },
     {
       id: "bundles",
-      label: "Bundles",
-      count: PRODUCTS.filter((product) => product.productType === "BUNDLE").length,
+      label: "Gói Combo (Bundles)",
+      count: bundleCount,
     },
   ];
 
@@ -79,6 +157,7 @@ export default function StoreListingDashboard() {
         ? `${character.name} đã được chuyển sang version ${updated.activeVersion?.versionNumber} trên Store.`
         : `${character.name} đã được publish lên Store với version ${updated.activeVersion?.versionNumber}.`,
     );
+    refreshCatalog();
   };
 
   const handleUnlist = async () => {
@@ -87,11 +166,12 @@ export default function StoreListingDashboard() {
     await unlist(character.characterId);
     setModal(null);
     setNotice(`${character.name} đã được ẩn khỏi Store thành công.`);
+    refreshCatalog();
   };
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-black">
             <span className="grid h-9 w-9 place-items-center rounded-lg border border-[#55a96f] bg-gradient-to-br from-[#bceac8] to-[#8bd49f] shadow-[2px_2px_0_#c6e8cd]">
@@ -100,9 +180,30 @@ export default function StoreListingDashboard() {
             Quản lý Store Listing
           </h1>
           <p className="mt-1 text-sm font-medium text-text-muted">
-
+            Quản lý danh mục sản phẩm, duyệt phiên bản, chỉnh sửa và điều chỉnh trạng thái hiển thị trên Store.
           </p>
         </div>
+
+        {canManage && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "create-character" })}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2.5 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]"
+            >
+              <Sparkles size={16} />
+              Tạo sản phẩm Character
+            </button>
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "create" })}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <Cpu size={16} />
+              Tạo sản phẩm LED
+            </button>
+          </div>
+        )}
       </header>
 
       {!canManage && (
@@ -111,7 +212,7 @@ export default function StoreListingDashboard() {
           className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
         >
           <Lock size={15} className="shrink-0" />
-          Chế độ chỉ xem: Chỉ tài khoản Manager mới có quyền duyệt publish, đổi version, ẩn hoặc republish các sản phẩm.
+          Chế độ chỉ xem: Chỉ tài khoản Manager hoặc Admin mới có quyền tạo mới, duyệt publish, đổi version, chỉnh sửa, lưu trữ hoặc xóa mềm các sản phẩm.
         </p>
       )}
 
@@ -171,7 +272,6 @@ export default function StoreListingDashboard() {
                 ref={(element) => {
                   tabRefs.current[tab.id] = element;
                 }}
-                type="button"
                 role="tab"
                 id={`tab-${tab.id}`}
                 aria-selected={selected}
@@ -180,8 +280,8 @@ export default function StoreListingDashboard() {
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={(event) => onTabKeyDown(event, index)}
                 className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${selected
-                  ? "border-primary-dark text-primary-dark"
-                  : "border-transparent text-text-muted hover:text-[#173b28]"
+                    ? "border-primary-dark text-primary-dark"
+                    : "border-transparent text-text-muted hover:text-[#173b28]"
                   }`}
               >
                 {tab.label}
@@ -208,12 +308,158 @@ export default function StoreListingDashboard() {
               canManage={canManage}
               onPublish={(character, mode) => setModal({ kind: "publish", character, mode })}
               onUnlist={(character) => setModal({ kind: "unlist", character })}
+              onEdit={(character) =>
+                setModal({
+                  kind: "edit",
+                  product: {
+                    id: character.characterId,
+                    productName: character.name,
+                    basePrice: 199000,
+                    description: character.description,
+                    thumbnailUrl: character.thumbnailUrl,
+                  },
+                })
+              }
+              onArchive={(character) =>
+                setModal({
+                  kind: "archive",
+                  productId: character.characterId,
+                  productName: character.name,
+                })
+              }
+              onDelete={(character) =>
+                setModal({
+                  kind: "delete",
+                  productId: character.characterId,
+                  productName: character.name,
+                })
+              }
+              onCreateCharacter={() => setModal({ kind: "create-character" })}
             />
           )}
-          {activeTab === "led-models" && <CatalogListingTable kind="LED_MODEL" />}
-          {activeTab === "bundles" && <CatalogListingTable kind="BUNDLE" />}
+          {activeTab === "led-models" && (
+            <CatalogListingTable
+              kind="LED_MODEL"
+              items={catalogProducts.filter((product) => product.productType === "LED_MODEL")}
+              canManage={canManage}
+              onEdit={(product) =>
+                setModal({
+                  kind: "edit",
+                  product: {
+                    id: product.id,
+                    productName: product.name,
+                    basePrice: product.price,
+                    description: product.description,
+                    thumbnailUrl: product.previewUrl,
+                    galleryUrls: product.galleryUrls,
+                    tags: product.tags,
+                  },
+                })
+              }
+              onPublish={async (product) => {
+                try {
+                  await apiUpdateProductStatus(Number(product.id), "PUBLISHED");
+                  updateCreatedStoreProductStatus(product.id, "PUBLISHED");
+                  setNotice(`Đã mở bán sản phẩm "${product.name}" lên Store.`);
+                  refreshCatalog();
+                } catch {
+                  setNotice(`Mở bán sản phẩm thất bại.`);
+                }
+              }}
+              onUnlist={async (product) => {
+                try {
+                  await apiUpdateProductStatus(Number(product.id), "UNPUBLISHED");
+                  updateCreatedStoreProductStatus(product.id, "UNPUBLISHED");
+                  setNotice(`Đã ẩn sản phẩm "${product.name}" khỏi Store.`);
+                  refreshCatalog();
+                } catch {
+                  setNotice(`Ẩn sản phẩm thất bại.`);
+                }
+              }}
+              onArchive={(product) =>
+                setModal({
+                  kind: "archive",
+                  productId: product.id,
+                  productName: product.name,
+                })
+              }
+              onDelete={(product) =>
+                setModal({
+                  kind: "delete",
+                  productId: product.id,
+                  productName: product.name,
+                })
+              }
+            />
+          )}
+          {activeTab === "bundles" && (
+            <BundleListingTable
+              canManage={canManage}
+              refreshTrigger={bundleRefreshTrigger}
+              onCreate={() => setModal({ kind: "create-bundle" })}
+              onEdit={(bundle) => setModal({ kind: "edit-bundle", bundle })}
+              onDelete={(bundle) => setModal({ kind: "delete-bundle", bundle })}
+              onPublish={async (bundle) => {
+                try {
+                  await apiUpdateProductStatus(bundle.productId, "PUBLISHED");
+                  setNotice(`Đã mở bán gói combo "${bundle.bundleName}" lên Store.`);
+                  setBundleRefreshTrigger((prev) => prev + 1);
+                } catch {
+                  setNotice(`Mở bán gói combo thất bại.`);
+                }
+              }}
+              onUnlist={async (bundle) => {
+                try {
+                  await apiUpdateProductStatus(bundle.productId, "UNPUBLISHED");
+                  setNotice(`Đã ẩn gói combo "${bundle.bundleName}" khỏi Store.`);
+                  setBundleRefreshTrigger((prev) => prev + 1);
+                } catch {
+                  setNotice(`Ẩn gói combo thất bại.`);
+                }
+              }}
+            />
+          )}
         </div>
       </section>
+
+      {modal?.kind === "create-character" && (
+        <CreateCharacterProductModal
+          onClose={() => setModal(null)}
+          onSuccess={(created) => {
+            setActiveTab("characters");
+            setNotice(
+              `Tạo sản phẩm Character "${created.productName}" (ID #${created.productId}) thành công${
+                created.status === "PUBLISHED" ? " và đã Publish lên Store" : " ở trạng thái Chờ duyệt"
+              }.`
+            );
+            refreshCatalog();
+          }}
+        />
+      )}
+
+      {modal?.kind === "create" && (
+        <CreateStoreProductModal
+          onClose={() => setModal(null)}
+          onSuccess={(created) => {
+            setActiveTab("led-models");
+            setNotice(
+              `Tạo sản phẩm "${created.productName}" (ID #${created.productId}) thành công ở trạng thái ${created.status ?? "UNPUBLISHED"}.`
+            );
+            refreshCatalog();
+          }}
+        />
+      )}
+
+      {modal?.kind === "edit" && (
+        <EditStoreProductModal
+          product={modal.product}
+          onClose={() => setModal(null)}
+          onSuccess={(productName) => {
+            setNotice(`Cập nhật thông tin sản phẩm "${productName}" thành công.`);
+            refreshCatalog();
+          }}
+        />
+      )}
 
       {modal?.kind === "publish" && (
         <PublishVersionModal
@@ -224,11 +470,76 @@ export default function StoreListingDashboard() {
           onConfirm={handlePublish}
         />
       )}
+
       {modal?.kind === "unlist" && (
         <UnlistConfirmModal
           character={modal.character}
           onClose={() => setModal(null)}
           onConfirm={handleUnlist}
+        />
+      )}
+
+      {modal?.kind === "archive" && (
+        <ArchiveProductConfirmModal
+          productId={modal.productId}
+          productName={modal.productName}
+          onClose={() => setModal(null)}
+          onSuccess={(productName) => {
+            updateCreatedStoreProductStatus(modal.productId, "ARCHIVED");
+            setNotice(`Đã chuyển sản phẩm "${productName}" sang trạng thái Lưu trữ (ARCHIVED).`);
+            refreshCatalog();
+          }}
+        />
+      )}
+
+      {modal?.kind === "delete" && (
+        <DeleteProductConfirmModal
+          productId={modal.productId}
+          productName={modal.productName}
+          onClose={() => setModal(null)}
+          onSuccess={(productName) => {
+            updateCreatedStoreProductStatus(modal.productId, "DELETED");
+            setNotice(`Đã xóa mềm sản phẩm "${productName}" thành công.`);
+            refreshCatalog();
+          }}
+        />
+      )}
+
+      {modal?.kind === "create-bundle" && (
+        <CreateBundleModal
+          onClose={() => setModal(null)}
+          onSuccess={(created) => {
+            setModal(null);
+            setBundleRefreshTrigger((prev) => prev + 1);
+            setActiveTab("bundles");
+            setNotice(
+              `Tạo gói combo "${created.bundleName}" (#${created.bundleId}) thành công ở trạng thái CHỜ MỞ BÁN.`,
+            );
+          }}
+        />
+      )}
+
+      {modal?.kind === "edit-bundle" && (
+        <EditBundleModal
+          bundle={modal.bundle}
+          onClose={() => setModal(null)}
+          onSuccess={(updated) => {
+            setModal(null);
+            setBundleRefreshTrigger((prev) => prev + 1);
+            setNotice(`Cập nhật gói combo "${updated.bundleName}" thành công.`);
+          }}
+        />
+      )}
+
+      {modal?.kind === "delete-bundle" && (
+        <DeleteBundleConfirmModal
+          bundle={modal.bundle}
+          onClose={() => setModal(null)}
+          onSuccess={() => {
+            setModal(null);
+            setBundleRefreshTrigger((prev) => prev + 1);
+            setNotice(`Đã xóa/lưu trữ gói combo thành công.`);
+          }}
         />
       )}
     </div>

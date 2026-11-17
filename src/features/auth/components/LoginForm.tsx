@@ -122,7 +122,7 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
             : user.role === "STAFF"
               ? "/staff"
               : user.role === "DESIGNER"
-                ? "/designer/dashboard"
+                ? "/designer/characters"
                 : "/";
 
       let targetRedirect = roleHome;

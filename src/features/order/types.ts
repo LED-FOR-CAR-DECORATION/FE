@@ -1,7 +1,27 @@
 import type { CartItem } from "@/features/cart/types";
 import type { AuthUser } from "@/features/auth/types";
 
-export type OrderStatus = "Pending" | "Confirmed" | "Shipping" | "Delivered" | "Cancelled";
+export type OrderStatus =
+  | "PENDING_PAYMENT"
+  | "PROCESSING"
+  | "PARTIALLY_FULFILLED"
+  | "SHIPPING"
+  | "DELIVERED"
+  | "COMPLETED"
+  | "DELIVERY_FAILED"
+  | "REFUNDED"
+  | "CANCELED"
+  | "PendingPayment"
+  | "Preparing"
+  | "HandedOver"
+  | "Shipping"
+  | "Delivered"
+  | "Completed"
+  | "Cancelled"
+  | "Pending"
+  | "Confirmed";
+export type OrderType = "PHYSICAL" | "MIXED" | "DIGITAL" | "BUNDLE" | "SUBSCRIPTION";
+export type OrderKind = "PHYSICAL" | "MIXED" | "DIGITAL";
 export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Cancelled";
 export type DeliveryStatus = "Created" | "Picked up" | "In transit" | "Out for delivery" | "Delivered" | "Exception";
 
@@ -13,6 +33,7 @@ export interface OrderAddressSnapshot {
 
 export interface MockOrder {
   id: string;
+  orderType?: OrderType;
   customer: Pick<AuthUser, "userId" | "email" | "fullName">;
   items: CartItem[];
   subtotal: number;
@@ -21,13 +42,23 @@ export interface MockOrder {
   address: OrderAddressSnapshot;
   paymentMethod: string;
   paymentStatus: PaymentStatus;
+  paymentCode?: string;
+  qrCodeUrl?: string;
+  bankAccount?: string;
+  bankName?: string;
+  bankReferenceCode?: string;
+  expiresAt?: string;
+  paidAt?: string;
   status: OrderStatus;
   createdAt: string;
   service: string;
   delivery?: {
-    provider: "AHAMOVE";
+    provider: "AHAMOVE" | string;
     orderId: string;
     status: DeliveryStatus;
+    rawStatus?: string;
+    trackingUrl?: string;
+    carrierFee?: number;
     createdAt: string;
     expectedAt: string;
   };

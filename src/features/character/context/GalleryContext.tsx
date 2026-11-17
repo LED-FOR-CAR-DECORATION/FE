@@ -1,31 +1,132 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { ENTITLEMENTS_CHANGED_EVENT, entitlementService } from "@/features/character/services/entitlement.service";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  ENTITLEMENTS_CHANGED_EVENT,
+  entitlementService,
+} from "@/features/character/services/entitlement.service";
 import type { UserEntitlement } from "@/features/character/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import {
+  fetchCustomerOwnedCharacters,
+  formatOwnedCharactersError,
+  type CustomerOwnedCharacterItem,
+} from "@/lib/api/customerCharacters";
 
 interface GalleryContextValue {
+  ownedCharacters: CustomerOwnedCharacterItem[];
   entitlements: UserEntitlement[];
+  isLoading: boolean;
+  error: string | null;
   refresh: () => void;
 }
 
 const GalleryContext = createContext<GalleryContextValue | null>(null);
 
 export function GalleryProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const [ownedCharacters, setOwnedCharacters] = useState<
+    CustomerOwnedCharacterItem[]
+  >([]);
   const [entitlements, setEntitlements] = useState<UserEntitlement[]>([]);
-  const refresh = useCallback(() => setEntitlements(user ? entitlementService.listByUser(user.userId) : []), [user]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
+
+  const refresh = useCallback(() => {
+    if (isAuthLoading) return;
+
+    const currentUser = user;
+    const localEntitlements = currentUser
+      ? entitlementService.listByUser(currentUser.userId)
+      : [];
+
+    if (!isAuthenticated || !currentUser || currentUser.role !== "CUSTOMER") {
+      setOwnedCharacters([]);
+      setEntitlements(localEntitlements);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    setIsLoading(true);
+    setError(null);
+
+    fetchCustomerOwnedCharacters()
+      .then((items) => {
+        if (requestIdRef.current !== requestId) return;
+        setOwnedCharacters(items);
+
+        const apiEntitlements: UserEntitlement[] = items.map((item) => ({
+          entitlementId: `OWNED-${item.orderId}-${item.characterId}`,
+          userId: currentUser.userId,
+          characterId: String(item.characterId),
+          sourceType: "ORDER",
+          sourceReferenceId: String(item.orderId),
+          grantedAt: item.purchasedAt,
+        }));
+
+        const seen = new Set(
+          apiEntitlements.map(
+            (entry) => `${entry.sourceReferenceId}:${entry.characterId}`,
+          ),
+        );
+        const mergedEntitlements = [
+          ...apiEntitlements,
+          ...localEntitlements.filter(
+            (entry) =>
+              !seen.has(`${entry.sourceReferenceId}:${entry.characterId}`),
+          ),
+        ];
+        setEntitlements(mergedEntitlements);
+      })
+      .catch((err) => {
+        if (requestIdRef.current !== requestId) return;
+        setOwnedCharacters([]);
+        setEntitlements(localEntitlements);
+        setError(formatOwnedCharactersError(err));
+      })
+      .finally(() => {
+        if (requestIdRef.current === requestId) {
+          setIsLoading(false);
+        }
+      });
+  }, [isAuthLoading, isAuthenticated, user]);
+
   useEffect(() => {
     refresh();
     window.addEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
   }, [refresh]);
-  return <GalleryContext.Provider value={{ entitlements, refresh }}>{children}</GalleryContext.Provider>;
+
+  return (
+    <GalleryContext.Provider
+      value={{
+        ownedCharacters,
+        entitlements,
+        isLoading,
+        error,
+        refresh,
+      }}
+    >
+      {children}
+    </GalleryContext.Provider>
+  );
 }
 
 export function useGallery() {
   const context = useContext(GalleryContext);
-  if (!context) throw new Error("useGallery must be used inside <GalleryProvider>");
+  if (!context) {
+    throw new Error("useGallery must be used inside <GalleryProvider>");
+  }
   return context;
 }

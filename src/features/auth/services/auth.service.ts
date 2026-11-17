@@ -95,30 +95,42 @@ const notSupported = (feature: string) =>
 
 const VALID_ROLES: readonly UserRole[] = ["ADMIN", "MANAGER", "STAFF", "DESIGNER", "CUSTOMER"] as const;
 
+export function getRoleHomePath(role?: UserRole): string {
+  switch (role) {
+    case "ADMIN":
+      return "/admin";
+    case "MANAGER":
+      return "/manager";
+    case "STAFF":
+      return "/staff";
+    case "DESIGNER":
+      return "/designer/characters";
+    default:
+      return "/";
+  }
+}
+
+export function normalizeUserRole(rawRoles: unknown, fallback: UserRole = "CUSTOMER"): UserRole {
+  const candidates = Array.isArray(rawRoles) ? rawRoles : [rawRoles];
+  for (const item of candidates) {
+    let rawRoleStr = "";
+    if (typeof item === "string") {
+      rawRoleStr = item;
+    } else if (item && typeof item === "object" && "authority" in item) {
+      rawRoleStr = String((item as { authority: unknown }).authority);
+    }
+    const normalized = rawRoleStr.replace(/^ROLE_/i, "").trim().toUpperCase();
+    if (VALID_ROLES.includes(normalized as UserRole)) {
+      return normalized as UserRole;
+    }
+  }
+  return fallback;
+}
+
 function extractRoleFromPayload(payload: Record<string, unknown> | null): UserRole {
   if (!payload) return "CUSTOMER";
-
   // Backend JWT claims: "roles": ["ROLE_MANAGER"] hoặc "role": "MANAGER"
-  const rawRoles = payload.roles ?? payload.role ?? payload.authorities;
-  let rawRoleStr = "";
-
-  if (Array.isArray(rawRoles) && rawRoles.length > 0) {
-    const first = rawRoles[0];
-    if (typeof first === "string") {
-      rawRoleStr = first;
-    } else if (first && typeof first === "object" && "authority" in first) {
-      rawRoleStr = String((first as { authority: unknown }).authority);
-    }
-  } else if (typeof rawRoles === "string") {
-    rawRoleStr = rawRoles;
-  }
-
-  const normalized = rawRoleStr.replace(/^ROLE_/i, "").trim().toUpperCase();
-  if (VALID_ROLES.includes(normalized as UserRole)) {
-    return normalized as UserRole;
-  }
-
-  return "CUSTOMER";
+  return normalizeUserRole(payload.roles ?? payload.role ?? payload.authorities, "CUSTOMER");
 }
 
 /** Gọi backend thật qua api_client (swagger.json). */

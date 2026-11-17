@@ -64,28 +64,30 @@ export default function StaffCommissionChat() {
   };
 
   useEffect(() => {
+    if (!activeConversation) return;
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeConversation.messages.length, activeConversation.id]);
+  }, [activeConversation?.messages?.length, activeConversation?.id]);
 
   // Khởi tạo giá trị mặc định từ `commissionConfigs` khi mở form hoặc đổi hội thoại
   useEffect(() => {
-    setFormCharacterName(activeConversation.commission.characterName || "Rồng Lửa");
+    if (!activeConversation) return;
+    setFormCharacterName(activeConversation.commission?.characterName || "Rồng Lửa");
     setFormDescription(
-      activeConversation.commission.description ||
+      activeConversation.commission?.description ||
         "Thiết kế nhân vật Pixel Art 64x64px tương thích bảng LED MIRAGE."
     );
-    setFormDeliveryDate(activeConversation.commission.deliveryDate || "2026-11-15");
+    setFormDeliveryDate(activeConversation.commission?.deliveryDate || "2026-11-15");
 
     const defaultSelections: Record<string, string | undefined> = {};
     commissionConfigs.forEach((field) => {
       defaultSelections[field.key] =
-        activeConversation.commission.selections?.[field.key] ??
+        activeConversation.commission?.selections?.[field.key] ??
         field.options[0]?.value;
     });
     setFormSelections(defaultSelections);
     setCustomPriceOverride("");
     setIsFormOpen(false);
-  }, [activeConversation.id, commissionConfigs]);
+  }, [activeConversation?.id, commissionConfigs]);
 
   // Tính giá tự động từ các tùy chọn trong `commissionConfigs`
   const dynamicQuoteCalc = useMemo(
@@ -201,10 +203,12 @@ export default function StaffCommissionChat() {
   };
 
   const handleMoveToReview = () => {
+    if (!activeConversation) return;
+    const charName = activeConversation.commission?.characterName || "Rồng Lửa";
     const notifyMsg: ChatMessage = {
       id: `msg-review-${Date.now()}`,
       sender: "STAFF",
-      text: `Bản vẽ Preview có gắn Watermark cho nhân vật "${activeConversation.commission.characterName}" đã sẵn sàng! Mời bạn kiểm tra và nghiệm thu ở cột thông tin bên phải nhé.`,
+      text: `Bản vẽ Preview có gắn Watermark cho nhân vật "${charName}" đã sẵn sàng! Mời bạn kiểm tra và nghiệm thu ở cột thông tin bên phải nhé.`,
       time: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
     };
 
@@ -252,7 +256,7 @@ export default function StaffCommissionChat() {
 
           <div className="flex-1 space-y-1 divide-y divide-[#f0f5f1] overflow-y-auto p-2">
             {filteredConversations.map((conv) => {
-              const isActive = conv.id === activeConversation.id;
+              const isActive = conv.id === activeConversation?.id;
               const stateBadge =
                 conv.orderState === "REVIEW"
                   ? { label: "Đang nghiệm thu", cls: "bg-amber-100 text-amber-800" }
@@ -320,9 +324,25 @@ export default function StaffCommissionChat() {
           </div>
         </section>
 
-        {/* ===================================================================
-            CỘT 2: KHUNG CHAT CHÍNH (50% CHIỀU RỘNG - CỘT GIỮA)
-        =================================================================== */}
+        {!activeConversation ? (
+          <div className="flex flex-1 items-center justify-center rounded-xl border border-[#dce8df] bg-white p-8 text-center text-[#66736b]">
+            <div className="max-w-md">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eaf5e8] text-[#155e59]">
+                <Palette size={28} />
+              </div>
+              <h2 className="text-base font-black text-[#155e59]">
+                Chưa có cuộc trò chuyện nào
+              </h2>
+              <p className="mt-1.5 text-xs text-[#7a8c80]">
+                Hãy chọn một cuộc trò chuyện từ danh sách bên trái hoặc đợi khách hàng gửi yêu cầu thiết kế Commission mới.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* ===================================================================
+                CỘT 2: KHUNG CHAT CHÍNH (50% CHIỀU RỘNG - CỘT GIỮA)
+            =================================================================== */}
         <section className="flex w-2/4 flex-1 flex-col overflow-hidden rounded-xl border border-[#dce8df] bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-[#cfe3d0] bg-[#eaf5e8] px-5 py-3.5">
             <div className="flex items-center gap-3">
@@ -719,6 +739,8 @@ export default function StaffCommissionChat() {
             )}
           </div>
         </aside>
+          </>
+        )}
       </div>
 
       {/* =====================================================================
@@ -743,7 +765,7 @@ export default function StaffCommissionChat() {
                   id="staff-quote-modal-title"
                   className="text-lg font-black text-[#155e59]"
                 >
-                  Tạo Form Báo Giá Commission cho {activeConversation.customerName}
+                  Tạo Form Báo Giá Commission cho {activeConversation?.customerName || "khách hàng"}
                 </h3>
               </div>
               <button

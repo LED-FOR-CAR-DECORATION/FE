@@ -196,17 +196,10 @@ export default function CreateCharacterProductModal({
     try {
       const res = await uploadMediaFile(file, "STORE_PRODUCT");
       setThumbnailUrl(res.publicUrl);
-      if (res.usedFallback) {
-        setUploadNotice("Đã tải ảnh lên và áp dụng URL xem trước thành công.");
-      } else {
-        setUploadNotice("Tải ảnh lên máy chủ Media thành công.");
-      }
+      setUploadNotice("Tải ảnh lên máy chủ Media thành công.");
     } catch (err: any) {
       console.error("Upload thumbnail failed:", err);
-      // Fallback: create local object URL so user is never blocked
-      const localUrl = URL.createObjectURL(file);
-      setThumbnailUrl(localUrl);
-      setUploadNotice("Đã nạp ảnh xem trước từ máy tính.");
+      setError(err?.message || "Không thể tải ảnh lên máy chủ Media.");
     } finally {
       setIsUploadingImage(false);
       if (fileInputRef.current) {

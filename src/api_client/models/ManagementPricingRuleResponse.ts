@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { ManagementPricingOptionResponse } from './ManagementPricingOptionResponse';
 /**
- * Management pricing configuration rule detail including options, active status, and system lock flags
+ * Management pricing configuration rule detail including options, primitive bounds, active status, and system lock flags
  */
 export type ManagementPricingRuleResponse = {
     /**
@@ -24,13 +24,25 @@ export type ManagementPricingRuleResponse = {
      */
     description?: string;
     /**
-     * Selection cardinality type
+     * Selection cardinality or input primitive type
      */
     selectionType?: ManagementPricingRuleResponse.selectionType;
     /**
      * UI component presentation type
      */
     uiType?: ManagementPricingRuleResponse.uiType;
+    /**
+     * Whether this rule contributes to the Base price bucket
+     */
+    isBasePrice?: boolean;
+    /**
+     * Minimum allowed quantity when selectionType is QUANTITY
+     */
+    minQuantity?: number | null;
+    /**
+     * Maximum allowed quantity when selectionType is QUANTITY
+     */
+    maxQuantity?: number | null;
     /**
      * Whether selection is mandatory
      */
@@ -66,11 +78,12 @@ export type ManagementPricingRuleResponse = {
 };
 export namespace ManagementPricingRuleResponse {
     /**
-     * Selection cardinality type
+     * Selection cardinality or input primitive type
      */
     export enum selectionType {
         SINGLE_SELECT = 'SINGLE_SELECT',
         MULTI_SELECT = 'MULTI_SELECT',
+        QUANTITY = 'QUANTITY',
         TEXT_INPUT = 'TEXT_INPUT',
     }
     /**
@@ -80,6 +93,7 @@ export namespace ManagementPricingRuleResponse {
         RADIO = 'RADIO',
         DROPDOWN = 'DROPDOWN',
         CHECKBOX = 'CHECKBOX',
+        NUMBER = 'NUMBER',
         TEXT = 'TEXT',
     }
 }

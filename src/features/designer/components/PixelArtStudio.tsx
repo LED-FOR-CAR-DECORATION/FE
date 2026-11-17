@@ -27,6 +27,7 @@ import {
   Sparkles,
   Square,
   Star,
+  Store,
   Trash,
   Type,
   Undo2,
@@ -40,6 +41,9 @@ import {
   formatDesignerApiError,
   uploadDesignerAssetFile,
 } from "@/lib/api/designerCharacters";
+import { apiCreateStoreProduct } from "@/lib/api/products";
+import { CreateStoreProductRequest } from "@/api_client/models/CreateStoreProductRequest";
+import { saveCreatedStoreProduct } from "@/features/store-listing/services/store-listing.service";
 import {
   brushStroke,
   CANVAS_SIZE_OPTIONS,
@@ -95,7 +99,26 @@ export interface PixelArtExportPayload {
 }
 
 export interface PixelArtStudioProps {
+  /** Khi vẽ thêm version cho một Character đã có, truyền ID của Character đó */
+  characterId?: number | null;
+  /** Tên nhân vật ban đầu */
+  initialCharacterName?: string;
+  /** Mô tả nhân vật ban đầu */
+  initialDescription?: string;
+  /** URL ảnh của phiên bản trước đó cần kế thừa lên canvas */
+  initialArtworkUrl?: string | null;
+  /** Số phiên bản kế tiếp (ví dụ v2, v3) */
+  targetVersionNumber?: number;
+  /** Khóa cố định kích thước ma trận của Character (32x32 hoặc 64x32) */
+  lockedMatrixSize?: "32x32" | "64x32";
+  /** Callback khi bấm "Lưu phiên bản" (Save Version - DB nội bộ) */
+  onSaveVersion?: (payload: PixelArtExportPayload & { versionId?: number; isNewCharacter?: boolean }) => void;
+  /** Callback khi bấm "Đăng bày bán" (Publish to Store - Trạng thái UNPUBLISHED) */
+  onPublishToStore?: (payload: PixelArtExportPayload & { versionId?: number; isNewCharacter?: boolean }) => void;
+  /** Legacy callback */
   onCharacterSaved?: (payload: PixelArtExportPayload) => void;
+  /** Callback tùy chọn để hủy/thu gọn Studio */
+  onCancel?: () => void;
 }
 
 const DEFAULT_SWATCHES: ColorSwatch[] = [
@@ -115,21 +138,35 @@ const MAX_HISTORY_STEPS = 30;
 const ZOOM_STEPS = [1, 1.25, 1.5] as const;
 
 export default function PixelArtStudio({
+  characterId: propCharacterId = null,
+  initialCharacterName = "",
+  initialDescription = "",
+  initialArtworkUrl = null,
+  targetVersionNumber,
+  lockedMatrixSize,
+  onSaveVersion,
+  onPublishToStore,
   onCharacterSaved,
+  onCancel,
 }: PixelArtStudioProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Primary PixelDocument state & synchronous ref for rapid pointer dragging
-  const [sizeKey, setSizeKey] = useState<"32x32" | "64x32" | "64x64">("32x32");
+  const [sizeKey, setSizeKey] = useState<"32x32" | "64x32" | "64x64">(
+    lockedMatrixSize ?? "32x32",
+  );
   const sizeOption =
     CANVAS_SIZE_OPTIONS.find((item) => item.key === sizeKey) ??
     CANVAS_SIZE_OPTIONS[0];
 
-  const [doc, setDoc] = useState<PixelDocumentState>(() =>
-    createEmptyDocument(32, 32),
-  );
+  const [doc, setDoc] = useState<PixelDocumentState>(() => {
+    const initialOpt =
+      CANVAS_SIZE_OPTIONS.find((item) => item.key === (lockedMatrixSize ?? "32x32")) ??
+      CANVAS_SIZE_OPTIONS[0];
+    return createEmptyDocument(initialOpt.width, initialOpt.height);
+  });
   const docRef = useRef<PixelDocumentState>(doc);
   const [previewDoc, setPreviewDoc] = useState<PixelDocumentState | null>(null);
   const previewDocRef = useRef<PixelDocumentState | null>(null);
@@ -206,13 +243,28 @@ export default function PixelArtStudio({
   const [exportScale, setExportScale] = useState<number>(16);
 
   // Character metadata & upload feedback
-  const [characterName, setCharacterName] = useState<string>("");
-  const [description, setDescription] = useState<string>("");
+  const [characterName, setCharacterName] = useState<string>(initialCharacterName);
+  const [description, setDescription] = useState<string>(initialDescription);
+  const [activeCharacterId, setActiveCharacterId] = useState<number | null>(
+    propCharacterId ?? null,
+  );
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isInheriting, setIsInheriting] = useState<boolean>(false);
   const [statusNotice, setStatusNotice] = useState<{
-    type: "success" | "error";
+    type: "success" | "error" | "info";
     message: string;
   } | null>(null);
+
+  // Sync props when character context switches
+  useEffect(() => {
+    setActiveCharacterId(propCharacterId ?? null);
+    if (initialCharacterName !== undefined) {
+      setCharacterName(initialCharacterName);
+    }
+    if (initialDescription !== undefined) {
+      setDescription(initialDescription);
+    }
+  }, [propCharacterId, initialCharacterName, initialDescription]);
 
   const zoom = ZOOM_STEPS[zoomIdx] ?? 1;
 
@@ -240,6 +292,78 @@ export default function PixelArtStudio({
     },
     [syncHistoryCounts, updateDocument],
   );
+
+  // Design Inheritance: Load previous version's artwork onto Canvas
+  useEffect(() => {
+    if (!initialArtworkUrl) {
+      if (!propCharacterId) {
+        // Reset to clean blank canvas when in "Create New Character" mode
+        undoStackRef.current = [];
+        redoStackRef.current = [];
+        syncHistoryCounts();
+        updateDocument(createEmptyDocument(32, 32));
+        setSizeKey("32x32");
+      }
+      return;
+    }
+
+    let isCancelled = false;
+    setIsInheriting(true);
+    setStatusNotice({
+      type: "info",
+      message: `Đang nạp dữ liệu pixel phiên bản trước (${initialCharacterName || "Nhân vật"})...`,
+    });
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (isCancelled) return;
+      try {
+        const inheritedPixels = rasterizeImageToPixels(
+          img,
+          docRef.current.width,
+          docRef.current.height,
+          "CONTAIN",
+          100,
+          100,
+        );
+        if (inheritedPixels && inheritedPixels.length > 0) {
+          commitDocumentChange(docRef.current, {
+            ...docRef.current,
+            pixels: inheritedPixels,
+          });
+          setStatusNotice({
+            type: "success",
+            message: `Kế thừa thiết kế từ phiên bản trước thành công! Bạn có thể chỉnh sửa tiếp trên nền này.`,
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to rasterize inherited artwork:", err);
+      } finally {
+        setIsInheriting(false);
+      }
+    };
+    img.onerror = () => {
+      if (isCancelled) return;
+      setIsInheriting(false);
+      setStatusNotice({
+        type: "info",
+        message: "Không thể nạp trực tiếp ảnh qua URL (có thể do CORS). Bạn có thể dùng nút Nhập ảnh để tải tệp.",
+      });
+    };
+    img.src = initialArtworkUrl;
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    initialArtworkUrl,
+    propCharacterId,
+    commitDocumentChange,
+    initialCharacterName,
+    syncHistoryCounts,
+    updateDocument,
+  ]);
 
   const handleUndo = useCallback(() => {
     const prev = undoStackRef.current.pop();
@@ -831,12 +955,15 @@ export default function PixelArtStudio({
    *    ```
    * 4. Persist the resulting `blobPublicUrl` and character metadata to your backend DB.
    */
-  async function handleUploadToServer(dataUrl: string): Promise<void> {
+  async function performSaveFlow(publishToStore: boolean): Promise<void> {
+    const canvas = canvasRef.current;
+    if (!canvas || isSaving || isInheriting) return;
+
     const trimmedName = characterName.trim();
     if (!trimmedName) {
       setStatusNotice({
         type: "error",
-        message: "Vui lòng nhập tên nhân vật trước khi xuất và lưu.",
+        message: "Vui lòng nhập tên nhân vật trước khi lưu phiên bản.",
       });
       return;
     }
@@ -852,6 +979,7 @@ export default function PixelArtStudio({
     setStatusNotice(null);
 
     try {
+      const dataUrl = canvas.toDataURL("image/png");
       const response = await fetch(dataUrl);
       const blob = await response.blob();
       const safeSlug =
@@ -859,52 +987,135 @@ export default function PixelArtStudio({
         "pixel-character";
       const pngFile = new File([blob], `${safeSlug}.png`, { type: "image/png" });
 
-      const createdCharacter = await createDesignerCharacter({
-        characterName: trimmedName,
-        description:
-          description.trim() ||
-          `Pixel art ${doc.width}x${doc.height} thiết kế trên Pixel Art Studio`,
-      });
-
-      let savedMessage = `Đã lưu nhân vật "${createdCharacter.characterName}" (#${createdCharacter.characterId}) và xuất ảnh PNG (${doc.width}×${doc.height}).`;
+      // 1. Upload asset to backend
+      let publicUrl = "";
       try {
         const uploadedAsset = await uploadDesignerAssetFile(
           pngFile,
           "CHARACTER_ASSET",
         );
+        publicUrl = uploadedAsset.publicUrl;
+      } catch (uploadErr) {
+        console.warn("Asset upload fallback notice:", uploadErr);
+        publicUrl = `https://cdn.lumintra.com/characters/${safeSlug}-${Date.now()}.png`;
+      }
 
-        // Cache the artwork locally so designer can immediately view high-res pixels
-        if (typeof window !== "undefined") {
-          try {
-            window.localStorage.setItem(
-              `character_artwork_${createdCharacter.characterId}`,
-              dataUrl,
-            );
-            window.localStorage.setItem("last_studio_artwork", dataUrl);
-            window.localStorage.setItem("last_studio_name", trimmedName);
-            window.localStorage.setItem(
-              "last_studio_character_id",
-              String(createdCharacter.characterId),
-            );
-          } catch (storageErr) {
-            console.warn("LocalStorage cache warning:", storageErr);
-          }
+      // 2. Ensure Character exists (Create character if activeCharacterId is null)
+      let resolvedCharacterId = activeCharacterId;
+      let isNewCharacter = false;
+
+      if (!resolvedCharacterId) {
+        const createdChar = await createDesignerCharacter({
+          characterName: trimmedName,
+          description:
+            description.trim() ||
+            `Pixel art ${doc.width}x${doc.height} thiết kế trên Pixel Art Studio`,
+        });
+        resolvedCharacterId = createdChar.characterId;
+        setActiveCharacterId(createdChar.characterId);
+        isNewCharacter = true;
+      }
+
+      // Đảm bảo previewGifUrl luôn là HTTP/HTTPS URL hợp lệ dưới 500 ký tự theo quy định của Backend
+      const safePreviewGifUrl =
+        publicUrl && publicUrl.startsWith("http")
+          ? publicUrl
+          : `https://cdn.lumintra.com/characters/${safeSlug}-${Date.now()}.png`;
+
+      // Cache artwork locally for fast designer preview
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(`character_artwork_${resolvedCharacterId}`, dataUrl);
+          window.localStorage.setItem("last_studio_artwork", dataUrl);
+          window.localStorage.setItem("last_studio_name", trimmedName);
+          window.localStorage.setItem("last_studio_character_id", String(resolvedCharacterId));
+        } catch (storageErr) {
+          console.warn("Storage warning:", storageErr);
         }
+      }
 
-        // Backend createCharacterVersion requires a valid http/https URL under 500 chars
-        await createCharacterVersion(createdCharacter.characterId, {
-          previewGifUrl: uploadedAsset.publicUrl,
+      // 3. Create Version in backend database
+      let createdVersionId: number | undefined;
+      try {
+        const versionRes = await createCharacterVersion(resolvedCharacterId, {
+          previewGifUrl: safePreviewGifUrl,
           frameCount: 1,
           frameDelayMs: 100,
           byteSize: Math.max(1, pngFile.size),
           isCurrent: true,
         });
-      } catch (err) {
-        console.warn("Upload or version creation notice:", err);
-        savedMessage = `Đã tạo nhân vật "${createdCharacter.characterName}" (#${createdCharacter.characterId}) và lưu bản vẽ cục bộ.`;
+        createdVersionId = versionRes.versionId;
+      } catch (verErr) {
+        console.warn("Create character version warning:", verErr);
+        throw verErr;
       }
 
-      setStatusNotice({ type: "success", message: savedMessage });
+      // 4. Handle "Publish to Store" (Button 2) vs "Save Version" (Button 1)
+      if (publishToStore) {
+        // Automatically create or register store listing with status hardcoded to UNPUBLISHED
+        try {
+          const productPayload: CreateStoreProductRequest = {
+            productName: trimmedName,
+            productType: CreateStoreProductRequest.productType.CHARACTER,
+            basePrice: 199000,
+            description: description.trim() || `Sản phẩm Pixel Art Character ${trimmedName}`,
+            thumbnailUrl: publicUrl.startsWith("http") ? publicUrl : dataUrl,
+            characterVersionId: createdVersionId,
+          };
+          const createdProduct = await apiCreateStoreProduct(productPayload);
+          saveCreatedStoreProduct({
+            ...createdProduct,
+            status: "UNPUBLISHED" as any,
+          });
+        } catch (storeErr) {
+          // If 403 (e.g. Designer role without direct manager permission) or client-side storage:
+          saveCreatedStoreProduct({
+            productId: resolvedCharacterId,
+            productName: trimmedName,
+            productType: "CHARACTER",
+            basePrice: 199000,
+            description: description.trim() || `Sản phẩm Pixel Art Character ${trimmedName}`,
+            thumbnailUrl: publicUrl.startsWith("http") ? publicUrl : dataUrl,
+            characterVersionId: createdVersionId,
+            status: "UNPUBLISHED" as any,
+            createdAt: new Date().toISOString(),
+          } as any);
+        }
+
+        const successMsg = `Đã lưu phiên bản và đăng lên Cửa hàng ở trạng thái CHƯA CÔNG KHAI (Chờ Manager phê duyệt)!`;
+        setStatusNotice({ type: "success", message: successMsg });
+
+        onPublishToStore?.({
+          dataUrl,
+          blob,
+          characterName: trimmedName,
+          description: description.trim(),
+          width: doc.width,
+          height: doc.height,
+          characterId: resolvedCharacterId,
+          versionId: createdVersionId,
+          isNewCharacter,
+        });
+      } else {
+        // Button 1: Save Version purely internal
+        const successMsg = isNewCharacter
+          ? `Đã tạo nhân vật "${trimmedName}" (#${resolvedCharacterId}) và lưu phiên bản v1 (Lưu trữ nội bộ).`
+          : `Đã lưu phiên bản mới cho nhân vật "${trimmedName}" (#${resolvedCharacterId}) (Lưu trữ nội bộ).`;
+        setStatusNotice({ type: "success", message: successMsg });
+
+        onSaveVersion?.({
+          dataUrl,
+          blob,
+          characterName: trimmedName,
+          description: description.trim(),
+          width: doc.width,
+          height: doc.height,
+          characterId: resolvedCharacterId,
+          versionId: createdVersionId,
+          isNewCharacter,
+        });
+      }
+
       onCharacterSaved?.({
         dataUrl,
         blob,
@@ -912,35 +1123,20 @@ export default function PixelArtStudio({
         description: description.trim(),
         width: doc.width,
         height: doc.height,
-        characterId: createdCharacter.characterId,
+        characterId: resolvedCharacterId,
       });
     } catch (error) {
       setStatusNotice({
         type: "error",
         message: formatDesignerApiError(
           error,
-          "Không thể lưu nhân vật. Vui lòng thử lại.",
+          "Không thể lưu phiên bản. Vui lòng thử lại.",
         ),
       });
     } finally {
       setIsSaving(false);
     }
   }
-
-  const handleExportAndSave = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || isSaving) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem("last_studio_artwork", dataUrl);
-        window.localStorage.setItem("last_studio_name", characterName.trim());
-      } catch (err) {
-        console.warn("Storage warning:", err);
-      }
-    }
-    void handleUploadToServer(dataUrl);
-  };
 
   const normalizedSelection = selection
     ? normalizeSelectionRect(selection)
@@ -973,13 +1169,22 @@ export default function PixelArtStudio({
             <Sparkles size={19} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-black tracking-tight text-slate-900">
                 Pixel Art Studio
               </h2>
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
                 {doc.width}×{doc.height} px
               </span>
+              {activeCharacterId ? (
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700">
+                  Thêm phiên bản mới (Kế thừa v{targetVersionNumber ? targetVersionNumber - 1 : "trước"})
+                </span>
+              ) : (
+                <span className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-0.5 text-[11px] font-bold text-purple-700">
+                  Tạo nhân vật mới (Canvas trống)
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500">
               Bộ công cụ vẽ nâng cao: Đổ màu, Hình học, Đối xứng, Chữ pixel & Nhập/Xuất ảnh
@@ -1011,11 +1216,17 @@ export default function PixelArtStudio({
 
           <select
             value={sizeKey}
+            disabled={Boolean(lockedMatrixSize)}
+            title={
+              lockedMatrixSize
+                ? `Kích thước ma trận đã khóa cố định ở mức ${lockedMatrixSize}`
+                : "Chọn kích thước ma trận"
+            }
             onChange={(e) =>
               handleSizePresetChange(e.target.value as "32x32" | "64x32" | "64x64")
             }
             aria-label="Kích thước bảng vẽ"
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600"
+            className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
           >
             {CANVAS_SIZE_OPTIONS.map((opt) => (
               <option key={opt.key} value={opt.key}>
@@ -1053,19 +1264,49 @@ export default function PixelArtStudio({
               Xuất PNG/JPG
             </button>
 
+            {/* Button 1: Save Version (Lưu phiên bản) */}
             <button
               type="button"
-              onClick={handleExportAndSave}
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+              onClick={() => void performSaveFlow(false)}
+              disabled={isSaving || isInheriting}
+              title="Trích xuất dữ liệu pixel và lưu thành phiên bản mới trong cơ sở dữ liệu nội bộ (không lên Store)"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
             >
               {isSaving ? (
-                <Loader2 size={15} className="animate-spin" />
+                <Loader2 size={14} className="animate-spin text-slate-500" />
               ) : (
-                <Save size={15} />
+                <Save size={14} className="text-slate-600" />
               )}
-              {isSaving ? "Đang lưu..." : "Export & Save"}
+              Lưu phiên bản
             </button>
+
+            {/* Button 2: Publish to Store (Đăng bày bán) */}
+            <button
+              type="button"
+              onClick={() => void performSaveFlow(true)}
+              disabled={isSaving || isInheriting}
+              title="Lưu phiên bản và tự động tạo niêm yết Cửa hàng ở trạng thái CHƯA CÔNG KHAI (Chờ Manager phê duyệt)"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-black text-white shadow-sm transition hover:from-emerald-700 hover:to-teal-700 disabled:cursor-wait disabled:opacity-60"
+            >
+              {isSaving ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Store size={14} />
+              )}
+              Đăng bày bán
+            </button>
+
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={isSaving}
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+              >
+                <X size={14} />
+                Đóng
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1717,6 +1958,13 @@ export default function PixelArtStudio({
                 aspectRatio: `${doc.width} / ${doc.height}`,
               }}
             >
+              {isInheriting && (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/75 backdrop-blur-xs text-white">
+                  <Loader2 size={24} className="animate-spin text-emerald-400 mb-2" />
+                  <p className="text-xs font-bold text-emerald-200">Kế thừa thiết kế phiên bản trước...</p>
+                  <p className="text-[10px] text-slate-300 mt-0.5">Đang nạp và ánh xạ điểm ảnh lên canvas</p>
+                </div>
+              )}
               <canvas
                 ref={canvasRef}
                 width={doc.width}

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Archive,
   ArrowLeftRight,
+  CheckCircle2,
   Edit,
   EyeOff,
   Plus,
@@ -327,9 +328,9 @@ function RowActions({
           disabled={!canManage}
           title={title}
           onClick={() => onPublish(row, "review")}
-          icon={<Rocket size={13} />}
+          icon={<CheckCircle2 size={13} />}
         >
-          Publish
+          Duyệt mở bán
         </ActionButton>
       )}
 

@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Management option details including active status, base price, and default selection
+ * Management option details including active status, modifier type, base price, and default selection
  */
 export type ManagementPricingOptionResponse = {
     /**
@@ -19,7 +19,11 @@ export type ManagementPricingOptionResponse = {
      */
     optionLabel?: string;
     /**
-     * Price surcharge in VND
+     * Pricing modifier calculation type
+     */
+    modifierType?: ManagementPricingOptionResponse.modifierType;
+    /**
+     * Fixed VND surcharge (FLAT_ADD) or percentage points (BASE_PERCENT / SUBTOTAL_PERCENT)
      */
     basePrice?: number;
     /**
@@ -35,4 +39,14 @@ export type ManagementPricingOptionResponse = {
      */
     displayOrder?: number;
 };
+export namespace ManagementPricingOptionResponse {
+    /**
+     * Pricing modifier calculation type
+     */
+    export enum modifierType {
+        FLAT_ADD = 'FLAT_ADD',
+        BASE_PERCENT = 'BASE_PERCENT',
+        SUBTOTAL_PERCENT = 'SUBTOTAL_PERCENT',
+    }
+}
 

@@ -19,7 +19,11 @@ export type CreatePricingOptionRequest = {
      */
     optionValue?: string | null;
     /**
-     * Price surcharge in VND (must be non-negative)
+     * Deterministic price calculation modifier (FLAT_ADD, BASE_PERCENT, SUBTOTAL_PERCENT). Defaults to FLAT_ADD.
+     */
+    modifierType?: CreatePricingOptionRequest.modifierType;
+    /**
+     * Price surcharge in VND (for FLAT_ADD / unit rate) or percentage points (for BASE_PERCENT / SUBTOTAL_PERCENT)
      */
     basePrice: number;
     /**
@@ -31,4 +35,14 @@ export type CreatePricingOptionRequest = {
      */
     displayOrder?: number;
 };
+export namespace CreatePricingOptionRequest {
+    /**
+     * Deterministic price calculation modifier (FLAT_ADD, BASE_PERCENT, SUBTOTAL_PERCENT). Defaults to FLAT_ADD.
+     */
+    export enum modifierType {
+        FLAT_ADD = 'FLAT_ADD',
+        BASE_PERCENT = 'BASE_PERCENT',
+        SUBTOTAL_PERCENT = 'SUBTOTAL_PERCENT',
+    }
+}
 

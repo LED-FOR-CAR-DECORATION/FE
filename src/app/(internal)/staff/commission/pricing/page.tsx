@@ -153,13 +153,23 @@ function EditCriterion({ rule, onSaved, onCancel, onDeleted }: {
       optionLabel: value("option-" + optionId),
       basePrice: Number(value("price-" + optionId)),
     }));
-    const newOptions = newOptionIds.map((id) => ({
-      optionLabel: value("new-option-" + id),
-      basePrice: Number(value("new-price-" + id)),
-      ...(isMatrixSize && { matrixDimensions: value("new-size-" + id) }),
-    }));
+    const newOptions = newOptionIds.map((id) => {
+      const optionLabel = value("new-option-" + id);
+      const size = isMatrixSize
+        ? /^([1-9][0-9]{0,3})\s*[xX×]\s*([1-9][0-9]{0,3})(?=\s|$)/.exec(optionLabel)
+        : null;
+      return {
+        optionLabel,
+        basePrice: Number(value("new-price-" + id)),
+        ...(size && { matrixDimensions: `${size[1]}x${size[2]}` }),
+      };
+    });
     if (!configName || [...updatedOptions, ...newOptions].some(({ optionLabel }) => !optionLabel)) {
       setError("Tên tiêu chí và tên phương án không được để trống.");
+      return;
+    }
+    if (isMatrixSize && newOptions.some(({ matrixDimensions }) => !matrixDimensions)) {
+      setError("Tên phương án kích thước LED phải bắt đầu bằng kích thước, ví dụ 32 × 64.");
       return;
     }
     if (removedOptionIds.length > 0 && updatedOptions.length + newOptions.length === 0) {
@@ -238,16 +248,11 @@ function EditCriterion({ rule, onSaved, onCancel, onDeleted }: {
           <fieldset key={id} className="grid gap-2 rounded-lg bg-[#f4f8f3] p-3 sm:grid-cols-2">
             <legend className="text-sm font-semibold">Phương án mới {index + 1}</legend>
             <label className="text-sm">Tên phương án
-              <input name={"new-option-" + id} required maxLength={255} className={input} />
+              <input name={"new-option-" + id} required maxLength={255} className={input} placeholder={isMatrixSize ? "Ví dụ 32 × 64" : undefined} />
             </label>
             <label className="text-sm">Phụ phí (₫)
               <input name={"new-price-" + id} type="number" required min={0} max={9999999999.99} step={0.01} className={input} defaultValue={0} />
             </label>
-            {isMatrixSize && (
-              <label className="text-sm">Kích thước LED (ví dụ 32x64)
-                <input name={"new-size-" + id} required pattern="[1-9][0-9]{0,3}[xX][1-9][0-9]{0,3}" className={input} />
-              </label>
-            )}
             <button type="button" className="min-h-11 justify-self-start text-sm text-red-700 underline sm:col-span-2"
               onClick={() => setNewOptionIds((ids) => ids.filter((item) => item !== id))}>
               Bỏ phương án mới {index + 1}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { loadConversations, saveConversations } from "@/features/commission-chat/services/commission-chat.service";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { COMMISSION_FRAME_PRICE, commissionTotal, formatCommissionMoney, type CommissionDesign } from "../config/fixedPricing";
@@ -34,8 +35,10 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
   const [essentialDetails, setEssentialDetails] = useState("");
   const [references, setReferences] = useState<File[]>([]);
   const [error, setError] = useState("");
-  const [checkout, setCheckout] = useState<{ code: string; amount: number }>();
+  const [checkout, setCheckout] = useState<{ code: string; amount: number; userId: string }>();
   const router = useRouter();
+  const { user } = useAuth();
+  const userId = user?.role === "CUSTOMER" ? user.userId : undefined;
   const amount = commissionTotal(design);
 
   function addReferences(files: File[]) {
@@ -54,18 +57,23 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
   function openCheckout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!note.trim() || amount === null) return;
-    setCheckout({ code: `CM${crypto.randomUUID().slice(0, 8).toUpperCase()}`, amount });
+    if (!userId) {
+      setError("Bạn cần đăng nhập bằng tài khoản khách hàng.");
+      return;
+    }
+    setCheckout({ userId, code: `CM${crypto.randomUUID().slice(0, 8).toUpperCase()}`, amount });
     goToStage(2);
   }
 
   function openConversation() {
-    if (!checkout) return;
+    if (!checkout || checkout.userId !== userId) return;
     const previous = loadConversations();
     const text = "Đã xác nhận thanh toán SePay mô phỏng.";
     const time = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
     if (!previous.some((item) => item.id === checkout.code)) {
       saveConversations([{
         id: checkout.code,
+        customerUserId: checkout.userId,
         customerName: "Bạn",
         customerAvatar: "",
         staffName: "Hỗ trợ Commission",
@@ -157,7 +165,7 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
             </CommissionActions>
           </form>
         )}
-        {stage === 2 && checkout && (
+        {stage === 2 && checkout && checkout.userId === userId && (
           <CommissionPayment {...checkout} onBack={() => goToStage(1)} onPay={openConversation} />
         )}
       </section>

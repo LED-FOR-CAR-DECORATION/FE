@@ -12,6 +12,7 @@ import {
 
 import { CommissionProgress, commissionStages } from "./CommissionProgress";
 import motion from "./CommissionMotion.module.css";
+import { confirmCommissionPayment, saveCommissionRequest } from "../services/commission.service";
 const imageTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export default function FixedCommissionFlow({ onConversationCreated }: { onConversationCreated?: (code: string) => void }) {
@@ -40,6 +41,13 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
   const { user } = useAuth();
   const userId = user?.role === "CUSTOMER" ? user.userId : undefined;
   const amount = commissionTotal(design);
+  const description = [
+    note.trim(),
+    expression.trim() && `Biểu cảm và tư thế: ${expression.trim()}`,
+    essentialDetails.trim() && `Chi tiết giữ hoặc lược bỏ: ${essentialDetails.trim()}`,
+  ].filter(Boolean).join("\n");
+  const { frames, ...baseSelections } = design;
+  const selections = { ...baseSelections, ...(design.format === "gif" && { frames }) };
 
   function addReferences(files: File[]) {
     setError("");
@@ -57,16 +65,29 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
   function openCheckout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!note.trim() || amount === null) return;
-    if (!userId) {
+    if (!user || !userId) {
       setError("Bạn cần đăng nhập bằng tài khoản khách hàng.");
       return;
     }
-    setCheckout({ userId, code: `CM${crypto.randomUUID().slice(0, 8).toUpperCase()}`, amount });
+    const code = checkout?.userId === userId ? checkout.code : `CM${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    saveCommissionRequest({
+      id: code,
+      customerId: user.userId,
+      customerName: user.fullName,
+      customerEmail: user.email,
+      selections,
+      note: description,
+      estimatedPrice: amount,
+      status: "PENDING",
+      paymentStatus: "PENDING",
+      createdAt: new Date().toISOString(),
+    });
+    setCheckout({ code, amount, userId });
     goToStage(2);
   }
 
   function openConversation() {
-    if (!checkout || checkout.userId !== userId) return;
+    if (!user || !checkout || checkout.userId !== userId) return;
     const previous = loadConversations();
     const text = "Đã xác nhận thanh toán SePay mô phỏng.";
     const time = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
@@ -74,7 +95,7 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
       saveConversations([{
         id: checkout.code,
         customerUserId: checkout.userId,
-        customerName: "Bạn",
+        customerName: user.fullName,
         customerAvatar: "",
         staffName: "Hỗ trợ Commission",
         staffAvatar: "",
@@ -85,24 +106,16 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
         progressStep: "DRAWING",
         commission: {
           characterName: "Commission " + checkout.code,
-          description: [
-            note.trim(),
-            expression.trim() && `Biểu cảm và tư thế: ${expression.trim()}`,
-            essentialDetails.trim() && `Chi tiết giữ hoặc lược bỏ: ${essentialDetails.trim()}`,
-          ].filter(Boolean).join("\n"),
+          description,
           price: checkout.amount,
           deliveryDate: "Chưa xác định",
           isPaid: true,
-          selections: {
-            size: design.size, format: design.format, detail: design.detail, background: design.background,
-            artStyle: design.artStyle, framing: design.framing, characterCount: design.characterCount,
-            palette: design.palette, pose: design.pose, subject: design.subject, outline: design.outline,
-            ...(design.format === "gif" && { frames: design.frames }),
-          },
+          selections,
         },
         messages: [{ id: checkout.code + "-paid", sender: "SYSTEM", text, time }],
       }, ...previous]);
     }
+    confirmCommissionPayment(checkout.code, user.userId);
     if (onConversationCreated) onConversationCreated(checkout.code);
     else router.push("/chat#" + checkout.code);
   }

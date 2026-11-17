@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { Eye, Search, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useCommissionRequests } from "@/features/commission/hooks/useCommissionRequests";
+import { registerDemoDesigner } from "@/features/commission/services/demo-designers";
 import type { DesignerCommissionStatus } from "@/features/commission/types";
 
 const statuses: Array<DesignerCommissionStatus | "ALL"> = [
@@ -31,6 +32,10 @@ export default function DesignerCommissionsPage() {
   const { requests } = useCommissionRequests();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DesignerCommissionStatus | "ALL">("ALL");
+
+  useEffect(() => {
+    if (user?.role === "DESIGNER") registerDemoDesigner({ userId: user.userId, fullName: user.fullName });
+  }, [user]);
 
   const assigned = useMemo(
     () =>

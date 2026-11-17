@@ -24,7 +24,16 @@ export function getCommissionRequests() {
 }
 
 export function saveCommissionRequest(request: CommissionRequest) {
-  writeRequests([request, ...readRequests()]);
+  const requests = readRequests();
+  const existing = requests.find((item) => item.id === request.id);
+  if (existing?.paymentStatus === "PAID") return;
+  writeRequests([{ ...request, createdAt: existing?.createdAt ?? request.createdAt }, ...requests.filter((item) => item.id !== request.id)]);
+}
+
+export function confirmCommissionPayment(id: string, customerId: string) {
+  writeRequests(readRequests().map((request) => request.id === id && request.customerId === customerId
+    ? { ...request, paymentStatus: "PAID" }
+    : request));
 }
 
 export function updateCommissionStatus(id: string, status: CommissionStatus) {
@@ -32,9 +41,13 @@ export function updateCommissionStatus(id: string, status: CommissionStatus) {
 }
 
 export function assignCommission(id: string, designerId: string, designerName: string) {
-  writeRequests(readRequests().map((request) => request.id === id
+  const requests = readRequests();
+  const target = requests.find((request) => request.id === id);
+  if (!target || target.paymentStatus !== "PAID" || target.assignedDesignerId) return false;
+  writeRequests(requests.map((request) => request.id === id
     ? { ...request, assignedDesignerId: designerId, assignedDesignerName: designerName, assignmentDate: new Date().toISOString(), designerStatus: "ASSIGNED" as DesignerCommissionStatus }
     : request));
+  return true;
 }
 
 export function getAssignedCommissions(designerId: string) {

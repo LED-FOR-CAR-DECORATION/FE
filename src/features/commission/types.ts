@@ -87,6 +87,7 @@ export type CommissionRequest = {
   submissions?: CommissionSubmission[];
   revisions?: CommissionRevisionRequest[];
   estimatedPrice: number | null;
+  paymentStatus?: "PENDING" | "PAID";
   status: CommissionStatus;
   createdAt: string;
 };

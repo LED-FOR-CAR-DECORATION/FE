@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { CheckCircle2, Clock3, Cpu, Crown, EyeOff, Lock, Plus, Sparkles, Store, X } from "lucide-react";
-import { apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
+import { apiUpdateProductStatus, apiUpdateStoreProduct, fetchStoreProducts } from "@/lib/api/products";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
 import {
   getCreatedStoreProducts,
@@ -383,14 +383,19 @@ export default function StoreListingDashboard() {
               rows={rows}
               isLoading={isLoading}
               canManage={canManage}
-              onApprove={async (character) => {
+              onApprove={async (character, price) => {
                 const numericId = Number(character.characterId);
-                try {
-                  if (!Number.isNaN(numericId) && numericId > 0) {
-                    await apiUpdateProductStatus(numericId, "PUBLISHED");
+                if (Number.isSafeInteger(numericId) && numericId > 0) {
+                  if (character.draft && price !== undefined) {
+                    await apiUpdateStoreProduct(numericId, {
+                      productName: character.name,
+                      basePrice: price,
+                      description: character.description,
+                      thumbnailUrl: character.draft.thumbnailUrl ?? undefined,
+                      galleryUrls: character.draft.galleryUrls,
+                    });
                   }
-                } catch (err) {
-                  console.warn("apiUpdateProductStatus notice:", err);
+                  await apiUpdateProductStatus(numericId, "PUBLISHED");
                 }
                 updateCreatedStoreProductStatus(character.characterId, "PUBLISHED");
                 setNotice(`Đã duyệt sản phẩm "${character.name}" và công khai mở bán trên Store!`);

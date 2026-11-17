@@ -17,6 +17,19 @@ export type CommissionQueueItem = {
 export type CommissionManagementDetail = CommissionQueueItem & {
   description?: string | null;
   attachments?: { attachmentId: number; imageUrl: string; caption?: string | null }[];
+  customerPhone?: string | null;
+  tierCode?: string | null;
+  initialPrice?: number;
+  extraRevisionFee?: number;
+  revisionsUsed?: number;
+  maxRevisions?: number;
+  chatActive?: boolean;
+  slaDueAt?: string | null;
+  createdAt?: string | null;
+  submissions?: {
+    submissionId: number; versionNumber: number; imageUrl: string; designerNote?: string | null;
+    designerName?: string | null; status: string;
+  }[];
 };
 
 export type DesignerOption = { designerId: number; fullName: string };

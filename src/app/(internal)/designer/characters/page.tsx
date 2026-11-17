@@ -354,7 +354,7 @@ function DesignerDashboardContent() {
             const char = publishTarget.character;
             setPublishTarget(null);
             setNotice(
-              `Đã gửi "${created.productName}" (ID #${created.productId}) lên Store ở trạng thái UNPUBLISHED (chờ Manager duyệt) kèm Watermarked Preview!`,
+              `Đã gửi “${created.productName}” (#${created.productId}) để manager đặt giá và duyệt đăng bán.`,
             );
             setSelectedCharacter(char);
           }}

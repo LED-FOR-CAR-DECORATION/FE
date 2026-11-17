@@ -24,7 +24,7 @@ interface ManagerProductListingTableProps {
   rows: StoreCharacterRow[];
   isLoading: boolean;
   canManage: boolean;
-  onApprove: (character: StoreCharacterRow) => Promise<void>;
+  onApprove: (character: StoreCharacterRow, price?: number) => Promise<void>;
   onRefresh: () => void;
 }
 
@@ -40,6 +40,7 @@ export default function ManagerProductListingTable({
   const [zoomedRow, setZoomedRow] = useState<StoreCharacterRow | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [prices, setPrices] = useState<Record<string, string>>({});
 
   // Filter ONLY UNPUBLISHED ("Pending Review") store listings
   const unpublishedRows = useMemo(() => {
@@ -59,11 +60,17 @@ export default function ManagerProductListingTable({
 
   const handleApproveClick = async (row: StoreCharacterRow) => {
     if (approvingId !== null || !canManage) return;
+    const priceInput = prices[row.characterId] ?? (row.draft?.basePrice ? String(row.draft.basePrice) : "");
+    const price = Number(priceInput);
+    if (row.draft && (!/^\d{1,10}(?:\.\d{1,2})?$/.test(priceInput) || !Number.isFinite(price))) {
+      setActionError("Nhập giá bán hợp lệ cho sản phẩm trước khi duyệt. Nhập 0 nếu muốn phát hành miễn phí.");
+      return;
+    }
     setApprovingId(row.characterId);
     setActionNotice(null);
     setActionError(null);
     try {
-      await onApprove(row);
+      await onApprove(row, row.draft ? price : undefined);
       setActionNotice(
         `Đã phê duyệt sản phẩm "${row.name}" (#${row.characterId}) và mở bán PUBLISHED trên Store!`,
       );
@@ -256,7 +263,15 @@ export default function ManagerProductListingTable({
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3 font-mono font-bold text-[#173b28]">
-                      {formatVnd(199000)}
+                      {row.draft ? (
+                        <input type="number" min={0} max={9999999999.99} step={0.01}
+                          aria-label={`Giá bán của ${row.name}`}
+                          className="w-32 rounded-lg border border-[#cfe5d6] bg-white px-2 py-2"
+                          placeholder="Nhập giá (₫)"
+                          disabled={!canManage || isProcessing}
+                          value={prices[row.characterId] ?? (row.draft.basePrice ? String(row.draft.basePrice) : "")}
+                          onChange={(event) => setPrices((current) => ({ ...current, [row.characterId]: event.target.value }))} />
+                      ) : formatVnd(199000)}
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3">

@@ -48,7 +48,6 @@ export default function PublishToStoreModal({
       ? `${character.characterName} (v${selectedVersion.versionNumber})`
       : character.characterName,
   );
-  const [basePrice, setBasePrice] = useState("49000");
   const [description, setDescription] = useState(character.description ?? "");
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
@@ -99,19 +98,12 @@ export default function PublishToStoreModal({
       return;
     }
 
-    const priceNum = Number(basePrice);
-    if (basePrice.trim() === "" || !Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Giá bán phải là số lớn hơn hoặc bằng 0 đ.");
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const created = await publishVersionToStore({
         character,
         version: selectedVersion,
         productName: trimmedName,
-        basePrice: priceNum,
         description: description.trim() || undefined,
         tagIds: selectedTagIds,
       });
@@ -132,6 +124,7 @@ export default function PublishToStoreModal({
     <Modal
       onClose={onClose}
       title={`Đăng bán lên Store: ${character.characterName}`}
+      busy={isSubmitting}
       size="lg"
       footer={
         <>
@@ -155,7 +148,7 @@ export default function PublishToStoreModal({
               </>
             ) : (
               <>
-                <Store size={15} /> Gửi đăng bán (UNPUBLISHED)
+                <Store size={15} /> Gửi yêu cầu đăng bán
               </>
             )}
           </button>
@@ -174,11 +167,10 @@ export default function PublishToStoreModal({
           <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-700" />
           <div>
             <p className="font-bold">
-              Trạng thái mặc định: UNPUBLISHED (Chờ Manager duyệt) & Bảo vệ Watermark
+              Chờ manager duyệt
             </p>
             <p className="mt-0.5 text-sky-800">
-              Hệ thống sẽ yêu cầu Backend tự động tạo ảnh xem trước có Watermark (GIF/PNG) cho
-              phiên bản được chọn để bảo vệ tài sản trên Store công khai.
+              Yêu cầu được tạo với giá tạm 0 ₫. Manager sẽ đặt giá trước khi đăng bán.
             </p>
           </div>
         </div>
@@ -253,7 +245,7 @@ export default function PublishToStoreModal({
         </div>
 
         {/* Step 2: Store Listing Details */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
           <div>
             <label className="mb-1 block font-bold text-[#1f432b]">
               2. Tên sản phẩm trên Store <span className="text-red-500">*</span>
@@ -264,19 +256,6 @@ export default function PublishToStoreModal({
               maxLength={255}
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">
-              Giá bán (VNĐ) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              min={0}
-              required
-              value={basePrice}
-              onChange={(e) => setBasePrice(e.target.value)}
               className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
             />
           </div>

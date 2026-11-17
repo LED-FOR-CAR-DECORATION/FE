@@ -14,7 +14,6 @@ import {
   type DesignerCharacterItem,
   type PaginationMeta,
 } from "@/lib/api/designerCharacters";
-import { saveCreatedStoreProduct } from "@/features/store-listing/services/store-listing.service";
 import type { CreatedStoreProductResponse } from "@/api_client";
 
 export type MatrixSize = "32x32" | "64x32";
@@ -46,7 +45,6 @@ export interface PublishToStoreInput {
   character: DesignerCharacterItem;
   version: CharacterVersionItem;
   productName: string;
-  basePrice: number;
   description?: string;
   tagIds?: number[];
 }
@@ -203,7 +201,6 @@ export function DesignerCharactersProvider({ children }: { children: React.React
       character,
       version,
       productName,
-      basePrice,
       description,
       tagIds,
     }: PublishToStoreInput): Promise<CreatedStoreProductResponse> => {
@@ -217,33 +214,28 @@ export function DesignerCharactersProvider({ children }: { children: React.React
           ? version.previewGifUrl
           : undefined;
 
-      // Hardcode status = UNPUBLISHED (pending Manager approval) and instruct backend
-      // to auto-generate a Watermarked Preview GIF/PNG for public store protection.
       const payload = {
         productName: productName.trim(),
         productType: "CHARACTER",
-        basePrice,
+        basePrice: 0,
         description: description?.trim() || character.description || undefined,
         thumbnailUrl: safeThumb,
         characterVersionId: version.versionId,
         tagIds: tagIds && tagIds.length > 0 ? tagIds : undefined,
-        status: "UNPUBLISHED",
-        generateWatermarkedPreview: true,
       };
 
       const { data: envelope } = await axios.post<{
         data: CreatedStoreProductResponse;
-      }>("/api/management/admin/store/products", payload, {
+      }>("/api/management/designer/store/drafts", payload, {
         baseURL: getApiBaseUrl(),
         withCredentials: OpenAPI.WITH_CREDENTIALS,
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
       const created = envelope.data;
-      if (created) {
-        saveCreatedStoreProduct(created);
-      }
-      await loadVersions(character.characterId);
+      await loadVersions(character.characterId).catch(() => {
+        // The draft was saved. The details dialog will retry the history request when it opens.
+      });
       await refreshCharacters();
       return created;
     },

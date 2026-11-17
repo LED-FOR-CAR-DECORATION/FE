@@ -11,16 +11,10 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getCommissionPricing, submitCommission, uploadCommissionReference } from "../services/customer-commission.api";
 import { CommissionBrief, commissionButton } from "./FixedCommissionSteps";
 
-type Rule = Omit<PricingRuleResponse, "selectionType" | "options"> & {
+type Rule = PricingRuleResponse & {
   configId: number;
-  selectionType?: "SINGLE_SELECT" | "MULTI_SELECT" | "TEXT_INPUT" | "QUANTITY";
-  minQuantity?: number | null;
-  maxQuantity?: number | null;
-  isBasePrice?: boolean;
-  options?: PricedOption[];
 };
 
-type PricedOption = PricingOptionResponse & { modifierType?: "FLAT_ADD" | "BASE_PERCENT" | "SUBTOTAL_PERCENT" };
 const control = "mt-1 w-full rounded-lg border border-[#86a795] bg-white p-2.5";
 const referenceTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -28,7 +22,7 @@ function optionLabel(option: PricingOptionResponse) {
   return option.optionLabel?.replace(/\s*\(\+\d+(?:[.,]\d+)?%\s+(?:Base|Subtotal)\)\s*$/i, "");
 }
 
-function optionPrice(option: PricedOption) {
+function optionPrice(option: PricingOptionResponse) {
   const rate = option.basePrice ?? 0;
   if (option.modifierType === "BASE_PERCENT") return `${rate}% giá cơ bản`;
   if (option.modifierType === "SUBTOTAL_PERCENT") return `${rate}% tạm tính`;

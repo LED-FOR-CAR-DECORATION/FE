@@ -26,7 +26,7 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
 ]);
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
 
-function buildSignedPutHeaders(
+export function buildSignedPutHeaders(
   signedUploadUrl: string,
   contentType: string,
 ): Record<string, string> {

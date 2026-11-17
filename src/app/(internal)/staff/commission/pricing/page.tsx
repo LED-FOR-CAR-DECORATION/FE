@@ -1,227 +1,204 @@
 "use client";
 
-import React, { useState } from "react";
-import { Plus, RotateCcw, Settings2, Trash2, CheckCircle2 } from "lucide-react";
-import {
-  commissionConfigs as defaultCommissionConfigs,
-  type CommissionFieldConfig,
-  type CommissionFieldRenderType,
-} from "@/features/commission/config/commissionConfigs";
-import { useCommissionConfigs } from "@/features/commission/hooks/useCommissionConfigs";
+import { useEffect, useState, type FormEvent } from "react";
+import { CreatePricingRuleRequest } from "@/api_client/models/CreatePricingRuleRequest";
+import type { ManagementCommissionPricingResponse } from "@/api_client/models/ManagementCommissionPricingResponse";
+import type { ManagementPricingOptionResponse } from "@/api_client/models/ManagementPricingOptionResponse";
+import type { ManagementPricingRuleResponse } from "@/api_client/models/ManagementPricingRuleResponse";
+import { request } from "@/api_client/core/request";
+import { OpenAPI } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/auth";
+import { commissionButton } from "@/features/commission/components/FixedCommissionSteps";
+import { formatCommissionMoney } from "@/features/commission/config/fixedPricing";
 
-const formatVND = (val: number | null) =>
-  val === null ? "Báo giá riêng" : `${val.toLocaleString("vi-VN")}đ`;
+const endpoint = "/api/management/commissions/pricing";
+const panel = "space-y-4 rounded-xl border border-[#cfe3d0] bg-white p-5";
+const input = "mt-1 block min-h-11 w-full rounded-lg border border-[#819e8c] bg-white px-3 py-2";
+type PricingOption = ManagementPricingOptionResponse & { modifierType?: "FLAT_ADD" | "BASE_PERCENT" | "SUBTOTAL_PERCENT" };
+type PricingRule = Omit<ManagementPricingRuleResponse, "selectionType" | "options"> & {
+  selectionType?: ManagementPricingRuleResponse["selectionType"] | "QUANTITY";
+  minQuantity?: number | null;
+  maxQuantity?: number | null;
+  options?: PricingOption[];
+};
+type Pricing = { tiers: NonNullable<ManagementCommissionPricingResponse["tiers"]>; rules: PricingRule[] };
 
-export default function CommissionPricingConfigPage() {
-  const { configs, updateConfigs } = useCommissionConfigs();
-  const [newFieldName, setNewFieldName] = useState("");
-  const [newFieldDesc, setNewFieldDesc] = useState("");
-  const [newRenderType, setNewRenderType] =
-    useState<CommissionFieldRenderType>("select");
-  const [notice, setNotice] = useState<string | null>(null);
+function optionPrice(option: PricingOption, rule: PricingRule) {
+  if (option.basePrice == null) return "—";
+  if (option.modifierType === "BASE_PERCENT") return `${option.basePrice.toLocaleString("vi-VN")}% giá cơ bản`;
+  if (option.modifierType === "SUBTOTAL_PERCENT") return `${option.basePrice.toLocaleString("vi-VN")}% tạm tính`;
+  const price = formatCommissionMoney(option.basePrice);
+  return rule.selectionType === "QUANTITY" ? price + " / đơn vị" : price;
+}
 
-  const showNotice = (msg: string) => {
-    setNotice(msg);
-    setTimeout(() => setNotice(null), 3500);
-  };
+async function loadPricing(): Promise<Pricing> {
+  const { data } = await request<{ data: ManagementCommissionPricingResponse }>(OpenAPI, { method: "GET", url: endpoint });
+  const rules = await Promise.all((data.rules ?? []).flatMap(({ configId }) => configId === undefined ? [] : [
+    request<{ data: PricingRule }>(OpenAPI, { method: "GET", url: endpoint + "/rules/{id}", path: { id: configId } })
+      .then((response) => response.data),
+  ]));
+  return { tiers: data.tiers ?? [], rules };
+}
 
-  const handleAddField = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFieldName.trim()) return;
-    const slug = `custom_${Date.now()}`;
-    const newField: CommissionFieldConfig = {
-      id: `cfg-${slug}`,
-      key: slug,
-      fieldName: newFieldName.trim(),
-      description: newFieldDesc.trim() || "Tiêu chí tùy chỉnh do Manager cấu hình",
-      renderType: newRenderType,
-      required: true,
-      options: [
-        {
-          id: `opt-${slug}-1`,
-          value: "standard",
-          label: "Mức tiêu chuẩn",
-          price: 0,
-        },
-        {
-          id: `opt-${slug}-2`,
-          value: "premium",
-          label: "Mức nâng cao",
-          price: 200000,
-        },
-      ],
+function AddCriterion({ onCreated }: { onCreated: (rule: ManagementPricingRuleResponse) => void }) {
+  const [optionIds, setOptionIds] = useState([1]);
+  const [kind, setKind] = useState<"choice" | "text">("choice");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function addCriterion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const form = event.currentTarget;
+    const fields = new FormData(form);
+    const value = (key: string) => String(fields.get(key) ?? "").trim();
+    const configName = value("name");
+    const options = kind === "text" ? [] : optionIds.map((id, index) => ({
+      optionCode: "OPTION_" + id,
+      optionLabel: value("option-" + id),
+      basePrice: Number(value("price-" + id)),
+      displayOrder: index + 1,
+    }));
+    if (!configName || options.some((option) => !option.optionLabel || !Number.isSafeInteger(option.basePrice) || option.basePrice < 0)) {
+      setError("Nhập tên tiêu chí, tên lựa chọn và phụ phí hợp lệ.");
+      return;
+    }
+
+    const body: CreatePricingRuleRequest = {
+      configCode: "CUSTOM_" + crypto.randomUUID().replaceAll("-", "").toUpperCase(),
+      configName,
+      description: value("description"),
+      isRequired: fields.has("required"),
+      selectionType: kind === "text" ? CreatePricingRuleRequest.selectionType.TEXT_INPUT : CreatePricingRuleRequest.selectionType.SINGLE_SELECT,
+      uiType: kind === "text" ? CreatePricingRuleRequest.uiType.TEXT : CreatePricingRuleRequest.uiType.DROPDOWN,
+      options,
     };
 
-    updateConfigs([...configs, newField]);
-    setNewFieldName("");
-    setNewFieldDesc("");
-    showNotice(
-      `Đã thêm trường "${newField.fieldName}" vào commissionConfigs! Form của Customer và Staff đã tự động cập nhật.`
-    );
-  };
-
-  const handleRemoveField = (id: string, name: string) => {
-    updateConfigs(configs.filter((f) => f.id !== id));
-    showNotice(`Đã xóa trường "${name}" khỏi cấu hình!`);
-  };
-
-  const handleToggleRenderType = (id: string) => {
-    updateConfigs(
-      configs.map((f) =>
-        f.id === id
-          ? { ...f, renderType: f.renderType === "radio" ? "select" : "radio" }
-          : f
-      )
-    );
-    showNotice("Đã chuyển đổi kiểu hiển thị (Select / RadioGroup)!");
-  };
-
-  const handleResetDefaults = () => {
-    updateConfigs(defaultCommissionConfigs);
-    showNotice("Đã khôi phục cấu hình commissionConfigs mặc định!");
-  };
+    setBusy(true);
+    setError("");
+    try {
+      const { data } = await request<{ data: ManagementPricingRuleResponse }>(OpenAPI, {
+        method: "POST", url: endpoint + "/rules", mediaType: "application/json", body,
+      });
+      onCreated(data);
+      form.reset();
+      setKind("choice");
+      setOptionIds([1]);
+    } catch (failure) {
+      setError(getApiErrorMessage(failure, "Không lưu được tiêu chí. Vui lòng thử lại."));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-10 text-[#26352f]">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-[#dce8df] pb-4">
-        <div>
-          <p className="flex items-center gap-1.5 text-xs font-black tracking-widest text-[#198653] uppercase">
-            <Settings2 size={15} /> Quản trị Data-Driven Commission Form
-          </p>
-          <h1 className="mt-1 text-2xl font-black text-[#155e59]">
-            Cấu hình tiêu chí & Bảng giá Commission (commissionConfigs)
-          </h1>
-          <p className="mt-1 text-sm text-[#66736b]">
-            Khi thêm/bớt trường hoặc đổi kiểu hiển thị tại đây, cả{" "}
-            <strong>Form Yêu cầu Commission (Customer)</strong> và{" "}
-            <strong>Form Báo Giá (Staff)</strong> sẽ tự động render thích ứng qua hàm{" "}
-            <code className="rounded bg-[#eaf5e8] px-1.5 py-0.5 font-mono text-xs font-bold text-[#155e59]">
-              commissionConfigs.map()
-            </code>
-            .
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleResetDefaults}
-          className="inline-flex items-center gap-2 rounded-xl border border-[#155e59] bg-white px-4 py-2 text-xs font-bold text-[#155e59] shadow-xs hover:bg-[#eaf5e8]"
-        >
-          <RotateCcw size={14} />
-          Khôi phục mặc định
-        </button>
-      </header>
-
-      {notice && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
-          <CheckCircle2 size={16} />
-          <span>{notice}</span>
-        </div>
-      )}
-
-      {/* Form thêm trường cấu hình mới */}
-      <form
-        onSubmit={handleAddField}
-        className="grid gap-3 rounded-xl border border-[#cfe3d0] bg-[#eaf5e8] p-4 shadow-sm sm:grid-cols-4"
-      >
-        <div>
-          <label className="block text-xs font-black text-[#155e59]">
-            Tên trường mới
-          </label>
-          <input
-            type="text"
-            required
-            value={newFieldName}
-            onChange={(e) => setNewFieldName(e.target.value)}
-            placeholder="VD: Hiệu ứng viền LED..."
-            className="mt-1 w-full rounded-xl border border-[#cfe3d0] bg-white px-3 py-2 text-xs outline-none focus:border-[#155e59]"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-black text-[#155e59]">Mô tả ngắn</label>
-          <input
-            type="text"
-            value={newFieldDesc}
-            onChange={(e) => setNewFieldDesc(e.target.value)}
-            placeholder="Mô tả hướng dẫn cho khách/staff..."
-            className="mt-1 w-full rounded-xl border border-[#cfe3d0] bg-white px-3 py-2 text-xs outline-none focus:border-[#155e59]"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-black text-[#155e59]">
-            Kiểu Render UI
-          </label>
-          <select
-            value={newRenderType}
-            onChange={(e) =>
-              setNewRenderType(e.target.value as CommissionFieldRenderType)
-            }
-            className="mt-1 w-full rounded-xl border border-[#cfe3d0] bg-white px-3 py-2 text-xs font-bold outline-none focus:border-[#155e59]"
-          >
-            <option value="select">Thẻ &lt;select&gt; (Dropdown)</option>
-            <option value="radio">Thẻ &lt;RadioGroup&gt;</option>
+    <form onSubmit={addCriterion} className={panel}>
+      <h2 className="text-lg font-bold text-[#155e59]">Thêm tiêu chí</h2>
+      <fieldset disabled={busy} className="space-y-4">
+        <label className="block">Tên tiêu chí<input name="name" className={input} required maxLength={255} /></label>
+        <label className="block">Hướng dẫn cho khách<textarea name="description" rows={2} className={input} /></label>
+        <label className="block">Cách nhập
+          <select value={kind} onChange={(event) => setKind(event.target.value === "text" ? "text" : "choice")} className={input}>
+            <option value="choice">Chọn một phương án</option>
+            <option value="text">Nhập văn bản</option>
           </select>
-        </div>
-        <div className="flex items-end">
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#155e59] py-2 text-xs font-bold text-white shadow-sm hover:bg-[#0f4743]"
-          >
-            <Plus size={15} />
-            Thêm Trường Vào Config
-          </button>
-        </div>
-      </form>
-
-      {/* Danh sách các trường trong commissionConfigs */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {configs.map((field, idx) => (
-          <div
-            key={field.id}
-            className="rounded-xl border border-[#dce8df] bg-white p-4 shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-2 border-b border-[#eef3ef] pb-3">
-              <div>
-                <span className="text-xs font-black text-[#155e59]">
-                  {String(idx + 1).padStart(2, "0")}. {field.fieldName}
-                </span>
-                <p className="mt-0.5 text-xs text-[#66736b]">{field.description}</p>
+        </label>
+        {kind === "choice" && (
+          <fieldset className="space-y-3">
+            <legend className="font-semibold">Phương án và phụ phí</legend>
+            {optionIds.map((id, index) => (
+              <div key={id} className="grid gap-2 rounded-lg bg-[#f4f8f3] p-3 sm:grid-cols-[1fr_1fr]">
+                <label className="text-sm">Phương án {index + 1}<input name={"option-" + id} required maxLength={255} className={input} /></label>
+                <label className="text-sm">Phụ phí (₫)<input name={"price-" + id} type="number" required min={0} max={999999999} step={1} defaultValue={0} className={input} /></label>
+                {optionIds.length > 1 && <button type="button" className="justify-self-start py-2 text-sm text-red-700 underline" onClick={() => setOptionIds((ids) => ids.filter((item) => item !== id))}>Bỏ phương án {index + 1}</button>}
               </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleToggleRenderType(field.id)}
-                  className="rounded-lg border border-[#8fc7a0] bg-[#eaf5e8] px-2.5 py-1 text-[10px] font-black text-[#155e59] hover:bg-[#dcebd4]"
-                  title="Đổi kiểu Render giữa <select> và <RadioGroup>"
-                >
-                  Kiểu: {field.renderType === "radio" ? "RadioGroup" : "Select"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveField(field.id, field.fieldName)}
-                  className="rounded-lg p-1.5 text-red-600 hover:bg-red-50"
-                  title="Xóa trường này"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-3 space-y-1.5">
-              {field.options.map((opt) => (
-                <div
-                  key={opt.id}
-                  className="flex items-center justify-between rounded-lg bg-[#f8f7ef] px-3 py-1.5 text-xs"
-                >
-                  <span className="font-semibold text-[#26352f]">{opt.label}</span>
-                  <strong className="text-[#155e59]">{formatVND(opt.price)}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+            ))}
+            <button type="button" className="min-h-11 font-semibold text-[#155e59] underline" onClick={() => setOptionIds((ids) => [...ids, Math.max(...ids) + 1])}>Thêm phương án</button>
+          </fieldset>
+        )}
+        <label className="flex min-h-11 items-center gap-2"><input name="required" type="checkbox" /> Khách bắt buộc nhập</label>
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        <button className={commissionButton}>{busy ? "Đang lưu…" : "Lưu tiêu chí"}</button>
+      </fieldset>
+    </form>
   );
 }
 
+export default function CommissionPricingConfigPage() {
+  const [pricing, setPricing] = useState<Pricing>();
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    loadPricing().then((data) => { if (active) setPricing(data); }).catch((failure) => {
+      if (active) setError(getApiErrorMessage(failure, "Không tải được cấu hình giá Commission."));
+    });
+    return () => { active = false; };
+  }, [loadAttempt]);
+
+  return (
+    <main className="mx-auto max-w-6xl space-y-5 pb-10 text-[#26352f]">
+      <header>
+        <h1 className="text-3xl font-black text-[#155e59]">Tiêu chí và bảng giá Commission</h1>
+        <p className="mt-2 text-sm text-[#526159]">Xem cấu hình đang dùng trong form khách hàng và thêm tiêu chí thiết kế.</p>
+      </header>
+      {error ? (
+        <div className={panel}>
+          <p role="alert">{error}</p>
+          <button className={commissionButton} onClick={() => { setError(""); setLoadAttempt((current) => current + 1); }}>Tải lại</button>
+        </div>
+      ) : !pricing ? <p role="status">Đang tải cấu hình Commission…</p> : (
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+          <div className="min-w-0 space-y-5">
+            {pricing.tiers.length > 0 && <section className={panel}>
+              <h2 className="text-lg font-bold text-[#155e59]">Gói thiết kế</h2>
+              <ul className="divide-y divide-[#dce8df]">
+                {pricing.tiers.map((tier) => (
+                  <li key={tier.tierId} className="flex flex-wrap justify-between gap-2 py-2">
+                    <span>{tier.tierName}{tier.isActive === false && <small className="ml-2 text-[#526159]">Đang ẩn</small>}</span>
+                    <strong>{tier.isCustom ? "Tính theo lựa chọn" : tier.basePrice != null ? formatCommissionMoney(tier.basePrice) : "—"}</strong>
+                  </li>
+                ))}
+              </ul>
+            </section>}
+            <section className={panel}>
+              <h2 className="text-lg font-bold text-[#155e59]">Tiêu chí thiết kế</h2>
+              <p className="text-sm text-[#526159]">Giá nằm cạnh từng phương án. Cấu hình hiện có được hiển thị để tra cứu.</p>
+              {!pricing.rules.length && <p>Chưa có tiêu chí thiết kế.</p>}
+              {pricing.rules.map((rule) => (
+                <details key={rule.configId} open={rule.isSystem || undefined} className="rounded-lg border border-[#cfe3d0] bg-[#f4f8f3] px-3">
+                  <summary className="cursor-pointer py-3 font-semibold text-[#155e59]">
+                    {rule.configName}
+                    {rule.isActive === false && <small className="ml-2 text-[#526159]">Đang ẩn</small>}
+                  </summary>
+                  <div className="space-y-2 pb-3 text-sm">
+                    {rule.description && <p>{rule.description}</p>}
+                    <p>{rule.isRequired ? "Bắt buộc" : "Tùy chọn"}{rule.dependsOnOptionCode && ` · Hiện khi chọn ${rule.dependsOnOptionCode}`}</p>
+                    {rule.selectionType === "QUANTITY" && <p>Số lượng từ {rule.minQuantity ?? 0}{rule.maxQuantity != null && ` đến ${rule.maxQuantity}`}</p>}
+                    <ul className="divide-y divide-[#dce8df]">
+                      {(rule.options ?? []).map((option) => (
+                        <li key={option.optionId} className="flex flex-wrap justify-between gap-2 py-2">
+                          <span>{option.optionLabel}{option.isActive === false && <small className="ml-2 text-[#526159]">Đang ẩn</small>}</span>
+                          <strong>{optionPrice(option, rule)}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </details>
+              ))}
+            </section>
+          </div>
+          <div className="space-y-3">
+            {notice && <p role="status" className="rounded-lg bg-[#eaf5e8] p-3 text-[#155e59]">{notice}</p>}
+            <AddCriterion onCreated={(rule) => {
+              setPricing((current) => current && { ...current, rules: [...current.rules, rule] });
+              setNotice(`Đã lưu tiêu chí “${rule.configName}”.`);
+            }} />
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

@@ -96,6 +96,10 @@ function ServerCommissionRequests() {
                 <h2 className="font-bold text-[#155e59]">{item.title}</h2>
                 <p className="text-sm">{item.targetMatrixDimensions} · {item.status === "PENDING_REVIEW" ? "Chờ nhân viên duyệt" : item.status}</p>
                 {item.totalPrice !== undefined && <p className="text-sm">{formatCommissionMoney(item.totalPrice)}</p>}
+                <Link href={`/commission/${item.commissionId}/payment`} className="mt-2 inline-block font-semibold text-[#155e59] underline">
+                  {item.status === "PENDING_PAYMENT" || item.status === "AWAITING_EXTRA_PAYMENT" ? "Thanh toán" : "Xem thanh toán"}
+                  <span className="sr-only"> cho {item.title}</span>
+                </Link>
               </li>
             ))}
           </ul>

@@ -117,10 +117,12 @@ export default function ApiCommissionForm() {
       <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
         {visible.map((rule) => {
           const id = rule.configId;
+          const descriptionId = rule.description ? `commission-rule-description-${id}` : undefined;
           const selected = optionsByRule.get(id) ?? [];
           if (rule.selectionType === "MULTI_SELECT") return (
-            <fieldset key={id}>
+            <fieldset key={id} aria-describedby={descriptionId}>
               <legend>{rule.configName}</legend>
+              {rule.description && <p id={descriptionId} className="text-sm text-[#526159]">{rule.description}</p>}
               {(rule.options ?? []).map((option) => {
                 const optionId = option.optionId;
                 if (optionId === undefined) return null;
@@ -137,12 +139,12 @@ export default function ApiCommissionForm() {
           return (
             <label key={id}>{rule.configName}
               {rule.selectionType === "TEXT_INPUT" || rule.selectionType === "QUANTITY" ? (
-                <input className={control} required={rule.isRequired}
+                <input className={control} required={rule.isRequired} aria-describedby={descriptionId}
                   type={rule.selectionType === "QUANTITY" ? "number" : "text"}
                   min={rule.minQuantity ?? undefined} max={rule.maxQuantity ?? undefined} maxLength={500}
                   value={values[id] ?? ""} onChange={(event) => setValues({ ...values, [id]: event.target.value })} />
               ) : (
-                <select className={control} required={rule.isRequired || rule.ruleKey === "FRAME_RANGE"}
+                <select className={control} required={rule.isRequired || rule.ruleKey === "FRAME_RANGE"} aria-describedby={descriptionId}
                   value={selected[0] ?? ""} onChange={(event) => setChoices({ ...choices, [id]: event.target.value ? [Number(event.target.value)] : [] })}>
                   <option value="">Chọn {rule.configName}</option>
                   {(rule.options ?? []).map((option) => option.optionId !== undefined && (
@@ -150,6 +152,7 @@ export default function ApiCommissionForm() {
                   ))}
                 </select>
               )}
+              {rule.description && <span id={descriptionId} className="mt-1 block text-sm text-[#526159]">{rule.description}</span>}
             </label>
           );
         })}

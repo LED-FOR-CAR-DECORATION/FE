@@ -124,11 +124,88 @@ function AddCriterion({ onCreated }: { onCreated: (rule: ManagementPricingRuleRe
   );
 }
 
+function EditCriterion({ rule, onSaved, onCancel }: {
+  rule: PricingRule;
+  onSaved: (rule: PricingRule) => void;
+  onCancel: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const options = (rule.options ?? []).filter((option) => option.optionId !== undefined);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const fields = new FormData(event.currentTarget);
+    const value = (key: string) => String(fields.get(key) ?? "").trim();
+    const configName = value("name");
+    const updatedOptions = options.map(({ optionId }) => ({
+      optionId,
+      optionLabel: value("option-" + optionId),
+      basePrice: Number(value("price-" + optionId)),
+    }));
+    if (!configName || updatedOptions.some(({ optionLabel }) => !optionLabel)) {
+      setError("Tên tiêu chí và tên phương án không được để trống.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const { data } = await request<{ data: PricingRule }>(OpenAPI, {
+        method: "PATCH",
+        url: endpoint + "/rules/{id}",
+        path: { id: rule.configId },
+        mediaType: "application/json",
+        body: { configName, description: value("description"), isRequired: fields.has("required"), options: updatedOptions },
+      });
+      onSaved(data);
+    } catch (failure) {
+      setError(getApiErrorMessage(failure, "Không lưu được thay đổi. Vui lòng thử lại."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={save} className={panel}>
+      <h2 className="text-lg font-bold text-[#155e59]">Sửa tiêu chí</h2>
+      <fieldset disabled={busy} className="space-y-4">
+        <label className="block">Tên tiêu chí<input name="name" className={input} required maxLength={255} defaultValue={rule.configName} autoFocus /></label>
+        <label className="block">Hướng dẫn cho khách<textarea name="description" rows={2} className={input} defaultValue={rule.description} /></label>
+        {options.map((option, index) => {
+          const isPercent = option.modifierType === "BASE_PERCENT" || option.modifierType === "SUBTOTAL_PERCENT";
+          return (
+            <div key={option.optionId} className="grid gap-2 rounded-lg bg-[#f4f8f3] p-3 sm:grid-cols-2">
+              <label className="text-sm">Phương án {index + 1}
+                <input name={"option-" + option.optionId} required maxLength={255} className={input} defaultValue={option.optionLabel} />
+              </label>
+              <label className="text-sm">
+                {isPercent ? "Phụ phí (%)" : rule.selectionType === "QUANTITY" ? "Đơn giá (₫)" : "Phụ phí (₫)"}
+                <input name={"price-" + option.optionId} type="number" required min={0} max={isPercent ? 1000 : 9999999999.99}
+                  step={0.01} className={input} defaultValue={option.basePrice} />
+              </label>
+            </div>
+          );
+        })}
+        <label className="flex min-h-11 items-center gap-2"><input name="required" type="checkbox" defaultChecked={rule.isRequired} /> Khách bắt buộc nhập</label>
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <button className={commissionButton}>{busy ? "Đang lưu…" : "Lưu thay đổi"}</button>
+          <button type="button" className="min-h-11 px-3 text-[#155e59] underline" onClick={onCancel}>Hủy</button>
+        </div>
+      </fieldset>
+    </form>
+  );
+}
+
 export default function CommissionPricingConfigPage() {
   const [pricing, setPricing] = useState<Pricing>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [editingId, setEditingId] = useState<number>();
+  const editing = pricing?.rules.find((rule) => editingId !== undefined && rule.configId === editingId);
 
   useEffect(() => {
     let active = true;
@@ -142,7 +219,7 @@ export default function CommissionPricingConfigPage() {
     <main className="mx-auto max-w-6xl space-y-5 pb-10 text-[#26352f]">
       <header>
         <h1 className="text-3xl font-black text-[#155e59]">Tiêu chí và bảng giá Commission</h1>
-        <p className="mt-2 text-sm text-[#526159]">Xem cấu hình đang dùng trong form khách hàng và thêm tiêu chí thiết kế.</p>
+        <p className="mt-2 text-sm text-[#526159]">Xem cấu hình của form khách hàng, thêm hoặc sửa tiêu chí tùy chỉnh.</p>
       </header>
       {error ? (
         <div className={panel}>
@@ -165,7 +242,7 @@ export default function CommissionPricingConfigPage() {
             </section>}
             <section className={panel}>
               <h2 className="text-lg font-bold text-[#155e59]">Tiêu chí thiết kế</h2>
-              <p className="text-sm text-[#526159]">Giá nằm cạnh từng phương án. Cấu hình hiện có được hiển thị để tra cứu.</p>
+              <p className="text-sm text-[#526159]">Giá nằm cạnh từng phương án. Tiêu chí hệ thống được khóa.</p>
               {!pricing.rules.length && <p>Chưa có tiêu chí thiết kế.</p>}
               {pricing.rules.map((rule) => (
                 <details key={rule.configId} open={rule.isSystem || undefined} className="rounded-lg border border-[#cfe3d0] bg-[#f4f8f3] px-3">
@@ -185,6 +262,12 @@ export default function CommissionPricingConfigPage() {
                         </li>
                       ))}
                     </ul>
+                    {!rule.isSystem && rule.configId !== undefined && (
+                      <button type="button" aria-label={`Sửa tiêu chí ${rule.configName}`} className="min-h-11 font-semibold text-[#155e59] underline"
+                        onClick={() => { setEditingId(rule.configId); setNotice(""); }}>
+                        Sửa tiêu chí
+                      </button>
+                    )}
                   </div>
                 </details>
               ))}
@@ -192,10 +275,14 @@ export default function CommissionPricingConfigPage() {
           </div>
           <div className="space-y-3">
             {notice && <p role="status" className="rounded-lg bg-[#eaf5e8] p-3 text-[#155e59]">{notice}</p>}
-            <AddCriterion onCreated={(rule) => {
+            {editing ? <EditCriterion key={editingId} rule={editing} onCancel={() => setEditingId(undefined)} onSaved={(rule) => {
+              setPricing((current) => current && { ...current, rules: current.rules.map((item) => item.configId === rule.configId ? rule : item) });
+              setEditingId(undefined);
+              setNotice(`Đã cập nhật tiêu chí “${rule.configName}”.`);
+            }} /> : <AddCriterion onCreated={(rule) => {
               setPricing((current) => current && { ...current, rules: [...current.rules, rule] });
               setNotice(`Đã lưu tiêu chí “${rule.configName}”.`);
-            }} />
+            }} />}
           </div>
         </div>
       )}

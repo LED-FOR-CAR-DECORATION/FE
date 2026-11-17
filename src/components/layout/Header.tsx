@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, MessageSquare, LayoutDashboard } from "lucide-react";
+import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, Sparkles, LayoutDashboard } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getRoleHomePath } from "@/features/auth/services/auth.service";
@@ -130,11 +130,11 @@ export default function Header() {
             <Link href="/" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">CỬA HÀNG</Link>
             <Link href="/about" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">GIỚI THIỆU</Link>
             <Link
-              href="/chat"
+              href="/commission"
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#155e59] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#0e4b47]"
             >
-              <MessageSquare size={15} />
-              Chat ngay
+              <Sparkles size={15} aria-hidden="true" />
+              Thiết kế Commission
             </Link>
           </nav>
         </div>
@@ -190,6 +190,7 @@ export default function Header() {
         <div className="md:hidden bg-white border-t-2 border-black px-4 py-4 flex flex-col gap-4 font-semibold">
           <Link href="/"         onClick={() => setMobileOpen(false)}>CỬA HÀNG</Link>
           <Link href="/about"    onClick={() => setMobileOpen(false)}>GIỚI THIỆU</Link>
+          <Link href="/commission" onClick={() => setMobileOpen(false)}>Thiết kế Commission</Link>
           {!isLoading && !isAuthenticated && (
             <div className="flex gap-2 pt-2 border-t-2 border-black">
               <Link href="/login"    onClick={() => setMobileOpen(false)} className="btn-secondary flex-1 text-center text-sm py-1.5">Đăng nhập</Link>

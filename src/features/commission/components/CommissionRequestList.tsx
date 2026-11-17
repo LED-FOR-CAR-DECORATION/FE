@@ -1,13 +1,21 @@
 "use client";
 
+import "@/lib/api/client";
+import { CustomerCommissionsService } from "@/api_client/services/CustomerCommissionsService";
+import type { CustomerCommissionSummaryItem } from "@/api_client/models/CustomerCommissionSummaryItem";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadConversations } from "@/features/commission-chat/services/commission-chat.service";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import { belongsToCustomer, loadConversations } from "@/features/commission-chat/services/commission-chat.service";
 import type { Conversation } from "@/features/commission-chat/types";
 import { formatCommissionMoney } from "../config/fixedPricing";
 
 export default function CommissionRequestList() {
   const [requests, setRequests] = useState<Conversation[] | null>(null);
+
+  const { user, isLoading } = useAuth();
+  const userId = user?.role === "CUSTOMER" ? user.userId : undefined;
+  const visibleRequests = requests?.filter((request) => belongsToCustomer(request, userId));
 
   useEffect(() => {
     function refresh() {
@@ -30,13 +38,14 @@ export default function CommissionRequestList() {
           Tạo yêu cầu mới
         </Link>
       </div>
-      {requests === null ? (
+      {userId && <ServerCommissionRequests key={userId} />}
+      {isLoading || !visibleRequests ? (
         <p role="status">Đang tải yêu cầu…</p>
-      ) : requests.length === 0 ? (
-        <p className="rounded-xl border border-[#cfe3d0] bg-white p-5">Bạn chưa có yêu cầu Commission nào.</p>
+      ) : visibleRequests.length === 0 ? (
+        <p className="rounded-xl border border-[#cfe3d0] bg-white p-5">Bạn chưa có yêu cầu demo nào.</p>
       ) : (
         <ul className="space-y-3">
-          {requests.map(({ id, commission }) => (
+          {visibleRequests.map(({ id, commission }) => (
             <li key={id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#cfe3d0] bg-white p-5">
               <div className="min-w-0 space-y-1">
                 <h2 className="font-bold text-[#155e59]">{commission.characterName}</h2>
@@ -51,5 +60,52 @@ export default function CommissionRequestList() {
         </ul>
       )}
     </section>
+  );
+}
+
+function ServerCommissionRequests() {
+  const [page, setPage] = useState(0);
+  const [result, setResult] = useState<{ page: number; items: CustomerCommissionSummaryItem[] }>();
+  const [failedPage, setFailedPage] = useState<number>();
+  const size = 20;
+
+  useEffect(() => {
+    setFailedPage(undefined);
+    let active = true;
+    const request = CustomerCommissionsService.listMyCommissions({ page, size });
+    request.then(({ data }) => {
+      if (active) setResult({ page, items: data ?? [] });
+    }).catch(() => {
+      if (active) setFailedPage(page);
+    });
+    return () => {
+      active = false;
+      request.cancel();
+    };
+  }, [page]);
+
+  const items = result?.page === page ? result.items : undefined;
+  return (
+    <div className="space-y-3">
+      {failedPage === page ? <p role="alert">Không tải được yêu cầu Commission.</p> :
+        !items ? <p role="status">Đang tải yêu cầu Commission…</p> :
+        items.length === 0 ? <p>Bạn chưa có yêu cầu Commission trên trang này.</p> : (
+          <ul className="space-y-3">
+            {items.map((item) => (
+              <li key={item.commissionId} className="rounded-xl border border-[#cfe3d0] bg-white p-5">
+                <h2 className="font-bold text-[#155e59]">{item.title}</h2>
+                <p className="text-sm">{item.targetMatrixDimensions} · {item.status === "PENDING_REVIEW" ? "Chờ nhân viên duyệt" : item.status}</p>
+                {item.totalPrice !== undefined && <p className="text-sm">{formatCommissionMoney(item.totalPrice)}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      {(page > 0 || items?.length === size) && (
+        <div className="flex gap-4">
+          <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>Trang trước</button>
+          <button type="button" disabled={items?.length !== size} onClick={() => setPage(page + 1)}>Trang sau</button>
+        </div>
+      )}
+    </div>
   );
 }

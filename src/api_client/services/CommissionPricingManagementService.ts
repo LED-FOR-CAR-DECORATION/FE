@@ -12,7 +12,7 @@ import { request as __request } from '../core/request';
 export class CommissionPricingManagementService {
     /**
      * Create custom commission pricing rule
-     * Creates a new custom commission pricing rule with associated options, validating invariants and uniqueness.
+     * Creates a new custom commission pricing rule using reusable primitives (SINGLE_SELECT, MULTI_SELECT, QUANTITY, TEXT_INPUT), deterministic modifiers (FLAT_ADD, BASE_PERCENT, SUBTOTAL_PERCENT), and optional acyclic multi-level visibility dependencies (depth <= 5).
      * @param requestBody
      * @returns ManagementPricingRuleResponse Custom pricing rule created successfully
      * @throws ApiError

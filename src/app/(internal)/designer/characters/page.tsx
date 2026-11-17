@@ -214,7 +214,6 @@ function DesignerDashboardContent() {
               const artwork = getCharacterArtwork(char);
               const matrixSize = getMatrixSize(char.characterId);
               const hasVersions = char.totalVersions > 0;
-              const isListed = Boolean(char.currentVersion?.isListedOnStore);
 
               return (
                 <article
@@ -250,13 +249,6 @@ function DesignerDashboardContent() {
                     <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/75 px-2.5 py-1 font-mono text-[11px] font-bold text-white backdrop-blur-xs">
                       <Grid size={11} /> {matrixSize}
                     </span>
-
-                    {/* Store Status Badge */}
-                    {isListed && (
-                      <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-500/90 px-2.5 py-1 text-[10px] font-bold text-white">
-                        <Store size={10} /> Listed
-                      </span>
-                    )}
                   </div>
 
                   {/* Card Body */}

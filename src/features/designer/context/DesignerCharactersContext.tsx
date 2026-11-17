@@ -154,11 +154,9 @@ export function DesignerCharactersProvider({ children }: { children: React.React
         characterId: created.characterId,
         characterName: created.characterName,
         description: created.description ?? null,
-        designerName: created.designerName ?? "",
         totalVersions: 0,
         currentVersion: null,
         createdAt: created.createdAt ?? new Date().toISOString(),
-        updatedAt: created.createdAt ?? new Date().toISOString(),
       };
 
       setVersionsByCharacter((prev) => ({ ...prev, [created.characterId]: [] }));

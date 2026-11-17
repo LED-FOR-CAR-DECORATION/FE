@@ -9,7 +9,7 @@ import { request as __request } from '../core/request';
 export class CommissionPricingService {
     /**
      * Get commission pricing tiers and rules
-     * Retrieves all active preset packages (BASIC, ADVANCED) and the dynamic CUSTOM tier alongside active system and manager-created rules with bundle discount calculations.
+     * Retrieves active presets (BASIC, ADVANCED), the dynamic CUSTOM mode, and active ordered pricing rules built with reusable primitives (SINGLE_SELECT, MULTI_SELECT, QUANTITY, TEXT_INPUT) and deterministic modifiers (FLAT_ADD, BASE_PERCENT, SUBTOTAL_PERCENT).
      * @returns PublicCommissionPricingResponse Commission pricing tiers and rules retrieved successfully
      * @throws ApiError
      */

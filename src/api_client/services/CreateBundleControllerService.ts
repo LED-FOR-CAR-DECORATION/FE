@@ -14,7 +14,7 @@ export class CreateBundleControllerService {
      * @returns ApiResponseCreatedBundleResponse Created
      * @throws ApiError
      */
-    public static create3(
+    public static create4(
         requestBody: CreateBundleRequest,
     ): CancelablePromise<ApiResponseCreatedBundleResponse> {
         return __request(OpenAPI, {

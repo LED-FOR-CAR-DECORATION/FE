@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Lightweight management summary of a commission pricing tier
+ * Lightweight management summary of a commission pricing preset or CUSTOM mode
  */
 export type ManagementPricingTierSummaryResponse = {
     /**
@@ -23,11 +23,11 @@ export type ManagementPricingTierSummaryResponse = {
      */
     basePrice?: number;
     /**
-     * Calculated custom builder price for identical options in VND
+     * Informational CUSTOM mode calculated price for identical options in VND
      */
     customCalculatedPrice?: number;
     /**
-     * Savings amount in VND compared to custom configurator
+     * Informational savings amount in VND compared to CUSTOM mode
      */
     savingsAmount?: number;
     /**
@@ -46,6 +46,10 @@ export type ManagementPricingTierSummaryResponse = {
      * Display order sequence
      */
     displayOrder?: number;
+    /**
+     * Optional option IDs that filter/display this preset (empty applies globally)
+     */
+    triggerOptionIds?: Array<number>;
     /**
      * Number of rule options bundled in this tier
      */

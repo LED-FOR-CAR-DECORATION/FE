@@ -131,7 +131,11 @@ function EditCriterion({ rule, onSaved, onCancel }: {
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [newOptionIds, setNewOptionIds] = useState<string[]>([]);
   const options = (rule.options ?? []).filter((option) => option.optionId !== undefined);
+  const isMatrixSize = rule.configCode === "MATRIX_SIZE";
+  const canAddOptions = rule.configCode !== "FORMAT_TYPE" &&
+    (rule.selectionType === "SINGLE_SELECT" || rule.selectionType === "MULTI_SELECT");
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -144,7 +148,12 @@ function EditCriterion({ rule, onSaved, onCancel }: {
       optionLabel: value("option-" + optionId),
       basePrice: Number(value("price-" + optionId)),
     }));
-    if (!configName || updatedOptions.some(({ optionLabel }) => !optionLabel)) {
+    const newOptions = newOptionIds.map((id) => ({
+      optionLabel: value("new-option-" + id),
+      basePrice: Number(value("new-price-" + id)),
+      ...(isMatrixSize && { matrixDimensions: value("new-size-" + id) }),
+    }));
+    if (!configName || [...updatedOptions, ...newOptions].some(({ optionLabel }) => !optionLabel)) {
       setError("Tên tiêu chí và tên phương án không được để trống.");
       return;
     }
@@ -157,7 +166,13 @@ function EditCriterion({ rule, onSaved, onCancel }: {
         url: endpoint + "/rules/{id}",
         path: { id: rule.configId },
         mediaType: "application/json",
-        body: { configName, description: value("description"), isRequired: fields.has("required"), options: updatedOptions },
+        body: {
+          configName,
+          description: value("description"),
+          isRequired: rule.isSystem ? Boolean(rule.isRequired) : fields.has("required"),
+          options: updatedOptions,
+          newOptions,
+        },
       });
       onSaved(data);
     } catch (failure) {
@@ -188,7 +203,37 @@ function EditCriterion({ rule, onSaved, onCancel }: {
             </div>
           );
         })}
-        <label className="flex min-h-11 items-center gap-2"><input name="required" type="checkbox" defaultChecked={rule.isRequired} /> Khách bắt buộc nhập</label>
+        {newOptionIds.map((id, index) => (
+          <fieldset key={id} className="grid gap-2 rounded-lg bg-[#f4f8f3] p-3 sm:grid-cols-2">
+            <legend className="text-sm font-semibold">Phương án mới {index + 1}</legend>
+            <label className="text-sm">Tên phương án
+              <input name={"new-option-" + id} required maxLength={255} className={input} />
+            </label>
+            <label className="text-sm">Phụ phí (₫)
+              <input name={"new-price-" + id} type="number" required min={0} max={9999999999.99} step={0.01} className={input} defaultValue={0} />
+            </label>
+            {isMatrixSize && (
+              <label className="text-sm">Kích thước LED (ví dụ 32x64)
+                <input name={"new-size-" + id} required pattern="[1-9][0-9]{0,3}[xX][1-9][0-9]{0,3}" className={input} />
+              </label>
+            )}
+            <button type="button" className="min-h-11 justify-self-start text-sm text-red-700 underline sm:col-span-2"
+              onClick={() => setNewOptionIds((ids) => ids.filter((item) => item !== id))}>
+              Bỏ phương án mới {index + 1}
+            </button>
+          </fieldset>
+        ))}
+        {canAddOptions && (
+          <button type="button" disabled={newOptionIds.length >= 50} className="min-h-11 font-semibold text-[#155e59] underline disabled:opacity-50"
+            onClick={() => setNewOptionIds((ids) => [...ids, crypto.randomUUID()])}>
+            Thêm phương án
+          </button>
+        )}
+        {rule.isSystem ? (
+          <p className="text-sm text-[#526159]">Thiết lập bắt buộc của tiêu chí mặc định được giữ theo quy tắc hệ thống.</p>
+        ) : (
+          <label className="flex min-h-11 items-center gap-2"><input name="required" type="checkbox" defaultChecked={rule.isRequired} /> Khách bắt buộc nhập</label>
+        )}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         <div className="flex flex-wrap items-center gap-3">
           <button className={commissionButton}>{busy ? "Đang lưu…" : "Lưu thay đổi"}</button>
@@ -219,7 +264,7 @@ export default function CommissionPricingConfigPage() {
     <main className="mx-auto max-w-6xl space-y-5 pb-10 text-[#26352f]">
       <header>
         <h1 className="text-3xl font-black text-[#155e59]">Tiêu chí và bảng giá Commission</h1>
-        <p className="mt-2 text-sm text-[#526159]">Xem cấu hình của form khách hàng, thêm hoặc sửa tiêu chí tùy chỉnh.</p>
+        <p className="mt-2 text-sm text-[#526159]">Thêm và sửa tiêu chí thiết kế trên form khách hàng.</p>
       </header>
       {error ? (
         <div className={panel}>
@@ -242,7 +287,6 @@ export default function CommissionPricingConfigPage() {
             </section>}
             <section className={panel}>
               <h2 className="text-lg font-bold text-[#155e59]">Tiêu chí thiết kế</h2>
-              <p className="text-sm text-[#526159]">Giá nằm cạnh từng phương án. Tiêu chí hệ thống được khóa.</p>
               {!pricing.rules.length && <p>Chưa có tiêu chí thiết kế.</p>}
               {pricing.rules.map((rule) => (
                 <details key={rule.configId} open={rule.isSystem || undefined} className="rounded-lg border border-[#cfe3d0] bg-[#f4f8f3] px-3">
@@ -262,7 +306,7 @@ export default function CommissionPricingConfigPage() {
                         </li>
                       ))}
                     </ul>
-                    {!rule.isSystem && rule.configId !== undefined && (
+                    {rule.configId !== undefined && (
                       <button type="button" aria-label={`Sửa tiêu chí ${rule.configName}`} className="min-h-11 font-semibold text-[#155e59] underline"
                         onClick={() => { setEditingId(rule.configId); setNotice(""); }}>
                         Sửa tiêu chí

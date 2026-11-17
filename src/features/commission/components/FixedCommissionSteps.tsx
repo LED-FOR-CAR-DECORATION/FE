@@ -57,13 +57,14 @@ function ReferenceThumbnail({ file }: { file: File }) {
   );
 }
 
-export function CommissionBrief({ note, onNote, references, onFiles, onRemove, error }: {
+export function CommissionBrief({ note, onNote, references, onFiles, onRemove, error, maxNoteLength = 1000 }: {
   note: string;
   onNote: (note: string) => void;
   references: File[];
   onFiles: (files: File[]) => void;
   onRemove: (index: number) => void;
   error: string;
+  maxNoteLength?: number;
 }) {
   function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     onFiles(Array.from(event.currentTarget.files ?? []));
@@ -73,7 +74,7 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
     <div className="space-y-4">
       <label className="block">
         Brief thiết kế (bắt buộc)
-        <textarea className={field} rows={5} maxLength={1000} required value={note}
+        <textarea className={field} rows={5} maxLength={maxNoteLength} required value={note}
           onChange={(event) => onNote(event.target.value)}
           placeholder="Ghi tên đối tượng, biểu cảm (vui, giận, ngạc nhiên), tư thế (vẫy tay, giơ ngón cái), màu chủ đạo và đặc điểm phải giữ như kính, tóc hoặc mũ. Với ma trận 32×32, ghi rõ chi tiết nhỏ có thể lược bỏ." />
       </label>

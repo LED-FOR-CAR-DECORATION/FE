@@ -79,7 +79,7 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
           {detail.status === "EXPIRED" && "Phiên thanh toán đã hết hạn."}
           {detail.status === "CANCELLED" && "Yêu cầu đã bị hủy."}
           {(detail.status === "PENDING_PAYMENT" || detail.status === "AWAITING_EXTRA_PAYMENT") && !detail.activePaymentCode && pendingPaymentMessage}
-          {detail.status === "PAID" && "Đã thanh toán."}
+          {detail.status === "PAID" && (detail.totalPrice === 0 ? "Yêu cầu này không cần thanh toán." : "Đã thanh toán. Staff sẽ phân công designer.")}
         </div>
       </section>
       {detail.activePaymentCode && (

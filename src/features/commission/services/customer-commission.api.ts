@@ -8,8 +8,8 @@ type CommissionSubmission = {
   title: string;
   description: string;
   tierCode: string;
-  step1Selections: { configId: number; optionId: number }[];
-  selectedOptions: { configId: number; optionIds?: number[]; textValue?: string }[];
+  openPaymentImmediately: boolean;
+  selectedOptions: { configId: number; optionIds?: number[]; quantity?: number; textValue?: string }[];
   attachments: { imageUrl: string }[];
 };
 

@@ -9,21 +9,30 @@ import type { PricingOptionResponse } from "@/api_client/models/PricingOptionRes
 import { loadSession } from "@/lib/auth/session";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getCommissionPricing, submitCommission, uploadCommissionReference } from "../services/customer-commission.api";
-import { commissionButton } from "./FixedCommissionSteps";
+import { CommissionBrief, commissionButton } from "./FixedCommissionSteps";
 
-type Rule = Omit<PricingRuleResponse, "selectionType"> & {
+type Rule = Omit<PricingRuleResponse, "selectionType" | "options"> & {
   configId: number;
   selectionType?: "SINGLE_SELECT" | "MULTI_SELECT" | "TEXT_INPUT" | "QUANTITY";
   minQuantity?: number | null;
   maxQuantity?: number | null;
+  isBasePrice?: boolean;
+  options?: PricedOption[];
 };
 
-const foundationalRules = new Set(["FORMAT_TYPE", "MATRIX_SIZE", "FRAME_RANGE"]);
+type PricedOption = PricingOptionResponse & { modifierType?: "FLAT_ADD" | "BASE_PERCENT" | "SUBTOTAL_PERCENT" };
 const control = "mt-1 w-full rounded-lg border border-[#86a795] bg-white p-2.5";
+const referenceTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 function optionLabel(option: PricingOptionResponse) {
-  // The checkout API adds raw option amounts. Show that amount separately from legacy price hints in labels.
   return option.optionLabel?.replace(/\s*\(\+\d+(?:[.,]\d+)?%\s+(?:Base|Subtotal)\)\s*$/i, "");
+}
+
+function optionPrice(option: PricedOption) {
+  const rate = option.basePrice ?? 0;
+  if (option.modifierType === "BASE_PERCENT") return `${rate}% giá cơ bản`;
+  if (option.modifierType === "SUBTOTAL_PERCENT") return `${rate}% tạm tính`;
+  return formatPrice(rate);
 }
 
 export default function ApiCommissionForm() {
@@ -31,6 +40,9 @@ export default function ApiCommissionForm() {
   const [pricingError, setPricingError] = useState(false);
   const [choices, setChoices] = useState<Record<number, number[]>>({});
   const [values, setValues] = useState<Record<number, string>>({});
+  const [note, setNote] = useState("");
+  const [references, setReferences] = useState<File[]>([]);
+  const [referenceError, setReferenceError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
@@ -70,28 +82,67 @@ export default function ApiCommissionForm() {
   }
   const visible = rules.filter((rule) => isVisible(rule));
   const basePrice = tier?.basePrice ?? 0;
-  const priceLines = visible.map((rule) => {
+  const baseCents = Math.round(basePrice * 100);
+  const selectedLines = visible.flatMap((rule) => {
     const selected = optionsByRule.get(rule.configId) ?? [];
-    const cents = (rule.options ?? []).reduce((sum, option) =>
-      sum + (option.optionId !== undefined && selected.includes(option.optionId)
-        ? Math.round((option.basePrice ?? 0) * 100) : 0), 0);
-    return { id: rule.configId, label: rule.configName, cents };
+    const quantity = rule.selectionType === "QUANTITY" ? Number(values[rule.configId] || 0) : 1;
+    const options = rule.selectionType === "QUANTITY" ? (rule.options ?? []).slice(0, 1)
+      : (rule.options ?? []).filter(({ optionId }) => optionId !== undefined && selected.includes(optionId));
+    return options.map((option) => ({
+      rule,
+      modifier: option.modifierType ?? "FLAT_ADD",
+      rate: option.basePrice ?? 0,
+      quantity,
+    }));
   });
-  const total = (Math.round(basePrice * 100) + priceLines.reduce((sum, line) => sum + line.cents, 0)) / 100;
+  const base = selectedLines.reduce((sum, line) => sum + (line.rule.isBasePrice && line.modifier === "FLAT_ADD"
+    ? Math.round(line.rate * line.quantity * 100) : 0), baseCents);
+  const subtotal = selectedLines.reduce((sum, line) => {
+    if (line.modifier === "BASE_PERCENT") return sum + Math.round(base * line.rate / 100);
+    if (line.modifier === "FLAT_ADD" && !line.rule.isBasePrice) return sum + Math.round(line.rate * line.quantity * 100);
+    return sum;
+  }, base);
+  const amounts = new Map<number, number>();
+  for (const line of selectedLines) {
+    const cents = line.modifier === "FLAT_ADD" ? Math.round(line.rate * line.quantity * 100)
+      : Math.round((line.modifier === "BASE_PERCENT" ? base : subtotal) * line.rate / 100);
+    amounts.set(line.rule.configId, (amounts.get(line.rule.configId) ?? 0) + cents);
+  }
+  const priceLines = visible.map((rule) => {
+    return { id: rule.configId, label: rule.configName, cents: amounts.get(rule.configId) ?? 0 };
+  });
+  const total = (baseCents + priceLines.reduce((sum, line) => sum + line.cents, 0)) / 100;
+
+  const selectedOptions = visible.flatMap((rule): Parameters<typeof submitCommission>[0]["selectedOptions"] => {
+    const configId = rule.configId;
+    const value = values[configId]?.trim();
+    if (rule.selectionType === "TEXT_INPUT") return value ? [{ configId, textValue: value }] : [];
+    if (rule.selectionType === "QUANTITY") return value ? [{ configId, quantity: Number(value) }] : [];
+    const optionIds = optionsByRule.get(configId) ?? [];
+    return optionIds.length ? [{ configId, optionIds }] : [];
+  });
+
+  function addReferences(files: File[]) {
+    if (files.length + references.length > 5 ||
+        files.some((file) => !referenceTypes.includes(file.type) || file.size === 0 || file.size > 5 * 1024 * 1024)) {
+      setReferenceError("Chọn tối đa 5 ảnh JPG, PNG, WEBP hoặc GIF, mỗi ảnh không quá 5 MB.");
+      return;
+    }
+    setReferenceError("");
+    setReferences((current) => [...current, ...files]);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending.current || !tier?.tierCode || user?.role !== "CUSTOMER") return;
     const form = new FormData(event.currentTarget);
     const title = String(form.get("title") ?? "").trim();
-    const description = String(form.get("description") ?? "").trim();
-    const files = form.getAll("references").filter((file): file is File => file instanceof File && file.size > 0);
-    if (!title || !description || files.length > 5 || files.some((file) =>
-      !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) || file.size > 5 * 1024 * 1024)) {
-      setError("Nhập tiêu đề, mô tả và chọn tối đa 5 ảnh JPG, PNG, WEBP hoặc GIF, mỗi ảnh không quá 5 MB.");
+    const description = note.trim();
+    if (!title || !description) {
+      setError("Nhập tiêu đề và mô tả thiết kế.");
       return;
     }
-    if (visible.some((rule) => rule.isRequired && !optionsByRule.get(rule.configId)?.length && !values[rule.configId]?.trim())) {
+    if (visible.some((rule) => rule.isRequired && !selectedOptions.some(({ configId }) => configId === rule.configId))) {
       setError("Hãy điền các lựa chọn bắt buộc.");
       return;
     }
@@ -100,20 +151,15 @@ export default function ApiCommissionForm() {
     setBusy(true);
     setError("");
     try {
-      const attachments = await Promise.all(files.map(uploadCommissionReference));
+      const attachments = await Promise.all(references.map(uploadCommissionReference));
       if (loadSession()?.userId !== user.userId) throw new Error("Session changed");
       const { data } = await submitCommission({
         title,
         description,
         tierCode: tier.tierCode,
         attachments,
-        step1Selections: visible.filter((rule) => foundationalRules.has(rule.ruleKey ?? "")).flatMap(({ configId }) =>
-          (optionsByRule.get(configId) ?? []).map((optionId) => ({ configId, optionId }))),
-        selectedOptions: visible.filter((rule) => !foundationalRules.has(rule.ruleKey ?? "")).flatMap(({ configId }) => {
-          const optionIds = optionsByRule.get(configId);
-          const textValue = values[configId]?.trim();
-          return optionIds?.length || textValue ? [{ configId, optionIds, textValue }] : [];
-        }),
+        openPaymentImmediately: true,
+        selectedOptions,
       });
       router.replace(`/commission/${data.commissionId}/payment`);
     } catch (cause) {
@@ -150,7 +196,7 @@ export default function ApiCommissionForm() {
                       setChoices({ ...choices, [id]: event.target.checked ? [...selected, optionId] : selected.filter((item) => item !== optionId) })} />
                     {optionLabel(option)}
                     </span>
-                    <span className="shrink-0 font-semibold">{formatPrice(option.basePrice ?? 0)}</span>
+                    <span className="shrink-0 font-semibold">{optionPrice(option)}</span>
                   </label>
                 );
               })}
@@ -176,13 +222,17 @@ export default function ApiCommissionForm() {
               {rule.description && <span id={descriptionId} className="mt-1 block text-sm text-[#526159]">{rule.description}</span>}
               </label>
               {rule.selectionType === "QUANTITY" || rule.selectionType === "TEXT_INPUT" ? (
-                <p className="mt-2 text-sm text-[#526159]">{selectedPrice === 0 ? "Không tính thêm phí" : formatPrice(selectedPrice / 100)}</p>
+                <p className="mt-2 text-sm text-[#526159]">
+                  {rule.selectionType === "QUANTITY" && rule.options?.[0]
+                    ? `${optionPrice(rule.options[0])} / đơn vị · ${formatPrice(selectedPrice / 100)}`
+                    : "Không tính thêm phí"}
+                </p>
               ) : (
                 <ul className="mt-2 divide-y divide-[#cfe3d0] text-sm">
                   {(rule.options ?? []).filter((option) => option.optionId !== undefined).map((option) => (
                     <li key={option.optionId} className="flex justify-between gap-3 py-1">
                       <span>{optionLabel(option)}</span>
-                      <span className="shrink-0 font-semibold">{formatPrice(option.basePrice ?? 0)}</span>
+                      <span className="shrink-0 font-semibold">{optionPrice(option)}</span>
                     </li>
                   ))}
                 </ul>
@@ -191,8 +241,13 @@ export default function ApiCommissionForm() {
           );
         })}
         <label className="sm:col-span-2">Tiêu đề<input name="title" className={control} required maxLength={255} /></label>
-        <label className="sm:col-span-2">Mô tả thiết kế<textarea name="description" className={control} required maxLength={2000} rows={4} /></label>
-        <label className="sm:col-span-2">Ảnh tham khảo<input name="references" className={control} type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" /></label>
+        <div className="sm:col-span-2">
+          <CommissionBrief note={note} onNote={setNote} references={references} onFiles={addReferences}
+            onRemove={(index) => {
+              setReferences((current) => current.filter((_, position) => position !== index));
+              setReferenceError("");
+            }} error={referenceError} maxNoteLength={2000} />
+        </div>
       </fieldset>
       <section aria-labelledby="commission-price-heading" className="space-y-3 rounded-xl border border-[#cfe3d0] bg-white p-4">
         <h2 id="commission-price-heading" className="font-bold text-[#155e59]">Chi tiết giá</h2>
@@ -206,7 +261,6 @@ export default function ApiCommissionForm() {
           <span>Tổng thanh toán dự kiến</span><span>{formatPrice(total)}</span>
         </p>
       </section>
-      <p className="text-sm">Mã thanh toán được cấp sau khi nhân viên duyệt yêu cầu.</p>
       {error && <p role="alert">{error}</p>}
       {user?.role !== "CUSTOMER" && <p>Đăng nhập bằng tài khoản khách hàng để gửi yêu cầu.</p>}
       <button className={commissionButton} disabled={busy || user?.role !== "CUSTOMER"}>

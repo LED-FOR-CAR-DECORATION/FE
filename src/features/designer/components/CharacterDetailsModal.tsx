@@ -44,14 +44,21 @@ export default function CharacterDetailsModal({
 
   const [deletingVersionId, setDeletingVersionId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState("");
+  const [historyAttempt, setHistoryAttempt] = useState(0);
 
   const matrixSize = getMatrixSize(character.characterId);
-  const versions = versionsByCharacter[character.characterId] ?? [];
+  const loadedVersions = versionsByCharacter[character.characterId];
+  const versions = loadedVersions ?? [];
   const isLoading = Boolean(loadingVersions[character.characterId]);
 
   useEffect(() => {
-    void loadVersions(character.characterId, true);
-  }, [character.characterId, loadVersions]);
+    let active = true;
+    loadVersions(character.characterId).catch((error) => {
+      if (active) setHistoryError(formatDesignerApiError(error, "Không thể tải lịch sử phiên bản."));
+    });
+    return () => { active = false; };
+  }, [character.characterId, historyAttempt, loadVersions]);
 
   const handleDrawNewVersion = () => {
     onClose();
@@ -115,7 +122,7 @@ export default function CharacterDetailsModal({
               onClick={handleDrawNewVersion}
               className="inline-flex items-center gap-2 rounded-lg bg-[#2d6a4f] px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-[#1f432b]"
             >
-              <Palette size={15} /> Draw New Version
+              <Palette size={15} /> Vẽ phiên bản mới
             </button>
           </div>
         </div>
@@ -137,7 +144,7 @@ export default function CharacterDetailsModal({
           </div>
           <div className="text-right text-xs text-slate-500">
             <p className="font-bold text-[#1f432b]">
-              Tổng phiên bản: {versions.length || character.totalVersions}
+              Tổng phiên bản: {loadedVersions?.length ?? character.totalVersions}
             </p>
             <p>ID: #{character.characterId}</p>
           </div>
@@ -152,7 +159,7 @@ export default function CharacterDetailsModal({
 
         {/* Versions List (Chronologically Newest First) */}
         <div>
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#1f432b]">
               <History size={14} /> Danh sách phiên bản (Mới nhất trước)
             </h4>
@@ -161,16 +168,24 @@ export default function CharacterDetailsModal({
             </span>
           </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-[#d8e6dc] bg-white p-8 text-xs text-slate-500">
-              <Loader2 size={16} className="animate-spin" /> Đang tải lịch sử phiên bản...
+          {historyError ? (
+            <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-4">
+              <p role="alert" className="text-red-700">{historyError}</p>
+              <button type="button" className="min-h-11 font-semibold text-[#1f432b] underline" onClick={() => {
+                setHistoryError("");
+                setHistoryAttempt((attempt) => attempt + 1);
+              }}>Tải lại lịch sử phiên bản</button>
+            </div>
+          ) : isLoading || !loadedVersions ? (
+            <div role="status" className="flex items-center justify-center gap-2 rounded-xl border border-[#d8e6dc] bg-white p-8 text-xs text-slate-500">
+              <Loader2 size={16} className="motion-safe:animate-spin" aria-hidden="true" /> Đang tải lịch sử phiên bản…
             </div>
           ) : versions.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[#cbe0d1] bg-white p-8 text-center">
               <Palette size={28} className="mx-auto mb-2 text-[#88b998]" />
-              <p className="font-bold text-[#1f432b]">Character này chưa có phiên bản nào</p>
+              <p className="font-bold text-[#1f432b]">Nhân vật này chưa có phiên bản nào</p>
               <p className="mt-1 text-xs text-slate-500">
-                Bấm <strong>Draw New Version</strong> để mở Pixel Art Studio với bảng vẽ trống{" "}
+                Chọn <strong>Vẽ phiên bản mới</strong> để mở Pixel Art Studio với bảng vẽ{" "}
                 {matrixSize}.
               </p>
             </div>

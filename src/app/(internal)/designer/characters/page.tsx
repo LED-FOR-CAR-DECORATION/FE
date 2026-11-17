@@ -334,6 +334,7 @@ function DesignerDashboardContent() {
       {/* Character Details Modal */}
       {selectedCharacter && (
         <CharacterDetailsModal
+          key={selectedCharacter.characterId}
           character={selectedCharacter}
           onClose={() => setSelectedCharacter(null)}
           onOpenPublish={(char, versions) => {

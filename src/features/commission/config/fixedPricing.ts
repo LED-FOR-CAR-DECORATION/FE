@@ -14,6 +14,8 @@ export type CommissionDesign = {
   characterCount: string;
   palette: string;
   pose: string;
+  subject: string;
+  outline: string;
 };
 
 export type CommissionDesignField = {
@@ -25,6 +27,7 @@ export type CommissionDesignField = {
 const options = (...labels: string[]) => labels.map((label) => ({ value: label, label }));
 
 export const COMMISSION_DESIGN_FIELDS: readonly CommissionDesignField[] = [
+  { key: "subject", label: "Đối tượng chính", options: options("Nhân vật", "Biểu tượng (icon)", "Logo", "Đồ vật") },
   { key: "format", label: "Định dạng", options: [
     { value: "image", label: "Ảnh tĩnh" }, { value: "gif", label: "GIF động" },
   ] },
@@ -39,9 +42,10 @@ export const COMMISSION_DESIGN_FIELDS: readonly CommissionDesignField[] = [
     { value: "1", label: "1 nhân vật" }, { value: "2", label: "2 nhân vật" },
     { value: "3+", label: "3 nhân vật trở lên (ghi rõ trong brief)" },
   ] },
-  { key: "palette", label: "Tông màu", options: [
-    { value: "", label: "Chưa chọn" }, ...options("Ấm", "Lạnh", "Tương phản cao", "Theo ảnh tham khảo"),
+  { key: "palette", label: "Bảng màu", options: [
+    { value: "", label: "Chưa chọn" }, ...options("Ấm", "Lạnh", "Tương phản cao", "Neon", "Theo ảnh tham khảo"),
   ] },
+  { key: "outline", label: "Đường viền", options: options("Không viền", "Viền trắng", "Viền màu sáng", "Theo brief") },
   { key: "pose", label: "Tư thế nhân vật", options: [
     { value: "", label: "Chưa chọn" }, ...options("Đứng yên", "Đang chuyển động", "Theo brief"),
   ] },

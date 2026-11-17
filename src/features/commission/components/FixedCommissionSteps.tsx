@@ -21,6 +21,12 @@ export function CommissionDesignPicker({ design, onChange, fields = COMMISSION_D
             onChange={(event) => onChange({ ...design, [key]: event.target.value })}>
             {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
+          {key === "palette" && (
+            <span className="mt-1 block text-sm">Ưu tiên màu sáng, neon hoặc tương phản cao để dễ nhìn trên kính lái. Hạn chế tông quá tối.</span>
+          )}
+          {key === "outline" && design.background === "Trong suốt" && (
+            <span className="mt-1 block text-sm">Viền trắng hoặc màu sáng giúp đối tượng nổi bật trên nền trong suốt.</span>
+          )}
         </label>
       ))}
       {design.format === "gif" && (
@@ -52,10 +58,11 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
         Brief thiết kế (bắt buộc)
         <textarea className={field} rows={5} maxLength={1000} required value={note}
           onChange={(event) => onNote(event.target.value)}
-          placeholder="Mô tả chủ đề, tư thế, màu sắc, bố cục và chuyển động nếu chọn GIF." />
+          placeholder="Ghi tên đối tượng, biểu cảm (vui, giận, ngạc nhiên), tư thế (vẫy tay, giơ ngón cái), màu chủ đạo và đặc điểm phải giữ như kính, tóc hoặc mũ. Với ma trận 32×32, ghi rõ chi tiết nhỏ có thể lược bỏ." />
       </label>
       <label className="block">
         Ảnh tham khảo (không bắt buộc, tối đa 5 ảnh, 5 MB mỗi ảnh)
+        <span className="mt-1 block text-sm">Chọn ảnh gốc của đối tượng hoặc mẫu pixel art thể hiện nét vẽ và cách đổ bóng bạn muốn.</span>
         <input className={field} type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif"
           onChange={chooseFiles} disabled={references.length >= 5} />
       </label>

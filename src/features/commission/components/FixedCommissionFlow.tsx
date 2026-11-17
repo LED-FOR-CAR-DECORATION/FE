@@ -27,8 +27,11 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
   const [design, setDesign] = useState<CommissionDesign>({
     size: "32x32", format: "image", frames: "8", detail: "Cơ bản", background: "Trong suốt",
     artStyle: "", framing: "", characterCount: "1", palette: "", pose: "",
+    subject: "Nhân vật", outline: "Không viền",
   });
   const [note, setNote] = useState("");
+  const [expression, setExpression] = useState("");
+  const [essentialDetails, setEssentialDetails] = useState("");
   const [references, setReferences] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [checkout, setCheckout] = useState<{ code: string; amount: number }>();
@@ -74,14 +77,18 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
         progressStep: "DRAWING",
         commission: {
           characterName: "Commission " + checkout.code,
-          description: note.trim(),
+          description: [
+            note.trim(),
+            expression.trim() && `Biểu cảm và tư thế: ${expression.trim()}`,
+            essentialDetails.trim() && `Chi tiết giữ hoặc lược bỏ: ${essentialDetails.trim()}`,
+          ].filter(Boolean).join("\n"),
           price: checkout.amount,
           deliveryDate: "Chưa xác định",
           isPaid: true,
           selections: {
             size: design.size, format: design.format, detail: design.detail, background: design.background,
             artStyle: design.artStyle, framing: design.framing, characterCount: design.characterCount,
-            palette: design.palette, pose: design.pose,
+            palette: design.palette, pose: design.pose, subject: design.subject, outline: design.outline,
             ...(design.format === "gif" && { frames: design.frames }),
           },
         },
@@ -123,10 +130,22 @@ export default function FixedCommissionFlow({ onConversationCreated }: { onConve
         {stage === 1 && (
           <form onSubmit={openCheckout} className="space-y-5">
             <p className="font-semibold">{design.size.replace("x", " × ")} · {design.format === "gif" ? `GIF · ${design.frames} frame` : "Ảnh tĩnh"} · {amount !== null && formatCommissionMoney(amount)}</p>
-            <p className="text-sm">Độ chi tiết: {design.detail} · Phông nền: {design.background}</p>
+            <p className="text-sm">Đối tượng: {design.subject} · Độ chi tiết: {design.detail} · Phông nền: {design.background} · {design.outline}</p>
             <p className="text-sm">
               {[design.artStyle, design.framing, design.palette, design.pose, `${design.characterCount} nhân vật`].filter(Boolean).join(" · ")}
             </p>
+            <label className="block">
+              Biểu cảm và tư thế (tùy chọn)
+              <input className="mt-1 block w-full rounded-lg border border-[#819e8c] bg-white p-2.5" value={expression}
+                onChange={(event) => setExpression(event.target.value)} maxLength={250}
+                placeholder="Ví dụ: cười và giơ ngón cái" />
+            </label>
+            <label className="block">
+              Chi tiết cần giữ hoặc có thể lược bỏ (tùy chọn)
+              <input className="mt-1 block w-full rounded-lg border border-[#819e8c] bg-white p-2.5" value={essentialDetails}
+                onChange={(event) => setEssentialDetails(event.target.value)} maxLength={250}
+                placeholder="Ví dụ: giữ kính râm và tóc đỏ, bỏ họa tiết áo nhỏ" />
+            </label>
             <CommissionBrief note={note} onNote={setNote} references={references} onFiles={addReferences}
               onRemove={(index) => {
                 setReferences((current) => current.filter((_, position) => position !== index));

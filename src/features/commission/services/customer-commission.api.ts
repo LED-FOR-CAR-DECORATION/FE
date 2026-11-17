@@ -3,6 +3,7 @@ import type { CustomerCommissionDetailResponse } from "@/api_client/models/Custo
 import type { PublicCommissionPricingResponse } from "@/api_client/models/PublicCommissionPricingResponse";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "@/lib/api/client";
+import { buildSignedPutHeaders } from "@/lib/api/media";
 
 type CommissionSubmission = {
   title: string;
@@ -36,6 +37,8 @@ export async function uploadCommissionReference(file: File) {
     mediaType: "application/json",
     body: { purpose: "COMMISSION_REFERENCE", fileName: file.name, fileSize: file.size, contentType: file.type },
   });
-  await axios.put(data.signedUploadUrl, file, { headers: { "Content-Type": file.type } });
+  await axios.put(data.signedUploadUrl, file, {
+    headers: buildSignedPutHeaders(data.signedUploadUrl, file.type),
+  });
   return { imageUrl: data.publicUrl };
 }

@@ -14,13 +14,8 @@ import { formatCommissionMoney } from "@/features/commission/config/fixedPricing
 const endpoint = "/api/management/commissions/pricing";
 const panel = "space-y-4 rounded-xl border border-[#cfe3d0] bg-white p-5";
 const input = "mt-1 block min-h-11 w-full rounded-lg border border-[#819e8c] bg-white px-3 py-2";
-type PricingOption = ManagementPricingOptionResponse & { modifierType?: "FLAT_ADD" | "BASE_PERCENT" | "SUBTOTAL_PERCENT" };
-type PricingRule = Omit<ManagementPricingRuleResponse, "selectionType" | "options"> & {
-  selectionType?: ManagementPricingRuleResponse["selectionType"] | "QUANTITY";
-  minQuantity?: number | null;
-  maxQuantity?: number | null;
-  options?: PricingOption[];
-};
+type PricingOption = ManagementPricingOptionResponse;
+type PricingRule = ManagementPricingRuleResponse;
 type Pricing = { tiers: NonNullable<ManagementCommissionPricingResponse["tiers"]>; rules: PricingRule[] };
 
 function optionPrice(option: PricingOption, rule: PricingRule) {

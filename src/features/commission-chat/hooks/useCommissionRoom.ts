@@ -41,7 +41,7 @@ export interface CommissionRoomInfo {
   assignedStaffName?: string | null;
   assignedDesignerName?: string | null;
   attachments: { id: number; imageUrl: string; caption?: string | null }[];
-  deliveredPreviews: { id: number; versionNumber: number; imageUrl: string; designerNote?: string | null; status: string }[];
+  deliveredPreviews: { id: number; versionNumber: number; imageUrl: string; designerNote?: string | null; designerName?: string | null; status: string }[];
 }
 
 /** Tin đang gửi (chưa có messageId từ server). */
@@ -106,7 +106,7 @@ async function fetchInfo(commissionId: number, viewer: ChatViewer): Promise<Comm
     // Staff thấy mọi bản nộp của designer (kèm trạng thái duyệt), không chỉ bản đã giao cho khách.
     deliveredPreviews: (data.submissions ?? []).map((item) => ({
       id: item.submissionId, versionNumber: item.versionNumber, imageUrl: item.imageUrl,
-      designerNote: item.designerNote, status: item.status,
+      designerNote: item.designerNote, designerName: item.designerName, status: item.status,
     })),
   };
 }
@@ -306,6 +306,6 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
 
   return {
     info, infoError, messages, liveIds, historyLoaded, historyError, pending, realtime,
-    readable, canSend, send, retry, discard, reload,
+    readable, canSend, send, retry, discard, reload, refreshInfo: loadInfo,
   };
 }

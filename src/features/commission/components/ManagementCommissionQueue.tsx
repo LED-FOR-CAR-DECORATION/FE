@@ -8,6 +8,7 @@ import {
   type CommissionManagementDetail, type CommissionQueueItem, type DesignerOption,
 } from "../services/management-commission.api";
 import { commissionButton } from "./FixedCommissionSteps";
+import StaffDraftReview from "./StaffDraftReview";
 import Link from "next/link";
 import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
 
@@ -189,6 +190,10 @@ function CommissionDetails({ item, assigned, onChange }: {
           className="inline-flex min-h-11 items-center rounded-lg border border-[#155e59] px-4 font-semibold text-[#155e59] hover:bg-[#eaf5e8]">
           Mở phòng chat với khách
         </Link>
+      )}
+      {!assigned && detail?.submissions && (
+        <StaffDraftReview commissionId={commissionId} status={displayStatus} drafts={detail.submissions}
+          onChanged={() => { onChange(); reload((value) => value + 1); }} />
       )}
       {/* Không chờ brief: assign/approve chỉ cần commissionId, nên lỗi tải chi tiết không được làm mất nút. */}
       {!assigned && displayStatus === status && (status === "PAID" || status === "PENDING_REVIEW") && (

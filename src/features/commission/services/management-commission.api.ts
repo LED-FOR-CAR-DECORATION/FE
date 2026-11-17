@@ -26,10 +26,21 @@ export type CommissionManagementDetail = CommissionQueueItem & {
   chatActive?: boolean;
   slaDueAt?: string | null;
   createdAt?: string | null;
-  submissions?: {
-    submissionId: number; versionNumber: number; imageUrl: string; designerNote?: string | null;
-    designerName?: string | null; status: string;
-  }[];
+  autoCompleteAt?: string | null;
+  submissions?: CommissionSubmissionItem[];
+};
+
+export type CommissionSubmissionItem = {
+  submissionId: number;
+  versionNumber: number;
+  imageUrl: string;
+  designerNote?: string | null;
+  designerName?: string | null;
+  status: string;
+  staffReviewNote?: string | null;
+  reviewerStaffName?: string | null;
+  reviewedAt?: string | null;
+  deliveredAt?: string | null;
 };
 
 export type DesignerOption = { designerId: number; fullName: string };
@@ -59,5 +70,19 @@ export function approveCommission(id: number) {
 export function assignCommissionDesigner(id: number, designerId: number) {
   return request(OpenAPI, {
     method: "POST", url: endpoint + "/{id}/assign", path: { id }, mediaType: "application/json", body: { designerId },
+  });
+}
+
+/** CMS-17: duyệt bản nháp mới nhất đang PENDING_STAFF_REVIEW, đăng Deliverable Card vào chat, INTERNAL_REVIEW → PREVIEW_DELIVERED. */
+export function postDeliverableCard(id: number) {
+  return request<{ data: { commissionId: number; commissionStatus: string; approvedSubmissionId: number; versionNumber: number; autoCompleteAt?: string | null } }>(OpenAPI, {
+    method: "POST", url: endpoint + "/{id}/deliverable-card", path: { id },
+  });
+}
+
+/** CMS-16: trả bản nháp về designer kèm ghi chú nội bộ, INTERNAL_REVIEW → INTERNAL_REVISION_REQUIRED. */
+export function rejectCommissionDraft(id: number, body: { submissionId?: number; reviewNote: string }) {
+  return request(OpenAPI, {
+    method: "POST", url: endpoint + "/{id}/reviews", path: { id }, mediaType: "application/json", body,
   });
 }

@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, 
 import { ImagePlus, Loader2, RotateCcw, Send, Trash2, X } from "lucide-react";
 import "@/styles/transitions.css";
 import { formatPrice } from "@/lib/currency";
+import StaffDraftReview from "@/features/commission/components/StaffDraftReview";
 import { commissionStatusLabel } from "../commission-status";
 import { useCommissionRoom, type ChatViewer, type CommissionRoomInfo, type PendingMessage } from "../hooks/useCommissionRoom";
 import { MAX_MESSAGE_LENGTH, parseMetadata, type CommissionMessage } from "../services/commission-messages.api";
@@ -65,7 +66,12 @@ export default function CommissionChatRoom({ commissionId, viewer }: { commissio
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
       <ChatPanel room={room} info={info} viewer={viewer} />
-      <aside className="order-first lg:order-none">
+      <aside className="order-first space-y-4 lg:order-none">
+        {viewer === "STAFF" && (
+          <StaffDraftReview commissionId={info.commissionId} status={info.status}
+            drafts={info.deliveredPreviews.map((item) => ({ ...item, submissionId: item.id }))}
+            onChanged={() => void room.refreshInfo()} />
+        )}
         <InfoAccordion title={<>Thông tin Commission #{info.commissionId} <span className="text-sm font-normal">({commissionStatusLabel(info.status)})</span></>}>
           <CommissionInfoPanel info={info} viewer={viewer} />
         </InfoAccordion>
@@ -305,8 +311,11 @@ function MessageItem({ message, viewer, info, animate }: {
 
 function DeliverableCard({ message }: { message: CommissionMessage }) {
   const meta = parseMetadata(message.metadataJson);
-  const image = [message.mediaUrl, meta?.imageUrl, meta?.previewUrl].find(isHttpUrl);
-  const version = meta?.versionNumber ?? meta?.version;
+  const image = [message.mediaUrl, meta?.imageUrl].find(isHttpUrl);
+  const version = meta?.versionNumber;
+  const autoComplete = typeof meta?.autoCompleteAt === "string" ? formatDateTime(meta.autoCompleteAt) : null;
+  const revisions = typeof meta?.maxRevisions === "number"
+    ? `${typeof meta.revisionsUsed === "number" ? meta.revisionsUsed : 0}/${meta.maxRevisions}` : null;
   return (
     <div className="w-72 max-w-full overflow-hidden rounded-xl border-2 border-[#155e59] bg-white">
       <p className="bg-[#155e59] px-3 py-1.5 text-sm font-bold text-white">
@@ -319,6 +328,12 @@ function DeliverableCard({ message }: { message: CommissionMessage }) {
         </a>
       )}
       {message.content && <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm">{message.content}</p>}
+      {(revisions || autoComplete) && (
+        <dl className="space-y-0.5 border-t border-[#cfe3d0] px-3 py-2 text-xs text-[#526159]">
+          {revisions && <div className="flex justify-between gap-2"><dt>Lượt chỉnh sửa đã dùng</dt><dd className="font-semibold">{revisions}</dd></div>}
+          {autoComplete && <div className="flex justify-between gap-2"><dt>Tự hoàn thành lúc</dt><dd className="font-semibold">{autoComplete}</dd></div>}
+        </dl>
+      )}
     </div>
   );
 }

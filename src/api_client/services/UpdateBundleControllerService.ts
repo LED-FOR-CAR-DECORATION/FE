@@ -15,7 +15,7 @@ export class UpdateBundleControllerService {
      * @returns ApiResponseUpdatedBundleResponse OK
      * @throws ApiError
      */
-    public static update4(
+    public static update5(
         id: number,
         requestBody: UpdateBundleRequest,
     ): CancelablePromise<ApiResponseUpdatedBundleResponse> {

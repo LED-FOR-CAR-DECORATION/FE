@@ -31,6 +31,7 @@ export interface ChatMessage {
 }
 
 export interface Conversation {
+  customerUserId?: string;
   id: string;
   customerName: string;
   customerAvatar: string;

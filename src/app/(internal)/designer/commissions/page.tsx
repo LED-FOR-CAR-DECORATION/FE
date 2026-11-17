@@ -5,6 +5,7 @@ import { Eye, Search, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useCommissionRequests } from "@/features/commission/hooks/useCommissionRequests";
+import ManagementCommissionQueue from "@/features/commission/components/ManagementCommissionQueue";
 import type { DesignerCommissionStatus } from "@/features/commission/types";
 
 const statuses: Array<DesignerCommissionStatus | "ALL"> = [
@@ -51,6 +52,8 @@ export default function DesignerCommissionsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-6 pb-8">
+      <ManagementCommissionQueue assigned />
+      {requests.some((request) => request.assignedDesignerId === user?.userId) && <>
       <header>
         <p className="text-xs font-black uppercase tracking-[.2em] text-[#198653]">
           Không gian làm việc của nhà thiết kế
@@ -194,6 +197,7 @@ export default function DesignerCommissionsPage() {
           </table>
         </div>
       </section>
+      </>}
     </div>
   );
 }

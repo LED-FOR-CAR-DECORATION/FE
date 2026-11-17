@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import commissionMotion from "@/features/commission/components/CommissionMotion.module.css";
-import FixedCommissionFlow from "@/features/commission/components/FixedCommissionFlow";
+import ApiCommissionForm from "@/features/commission/components/ApiCommissionForm";
 import { useCommissionChat } from "../hooks/useCommissionChat";
 import { formatVND, formatVNDFull } from "../services/commission-chat.service";
 import type { ChatMessage, ProgressStep } from "../types";
@@ -703,12 +703,7 @@ export default function CustomerCommissionChat() {
             onClick={() => setIsCustomerRequestOpen(false)}>
             <X size={20} />
           </button>
-          <FixedCommissionFlow onConversationCreated={(code) => {
-            setActiveConvId(code);
-            setSearchQuery("");
-            setMessageInput("");
-            setIsCustomerRequestOpen(false);
-          }} />
+          <ApiCommissionForm />
         </dialog>
       )}
 

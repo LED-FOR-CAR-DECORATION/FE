@@ -128,6 +128,7 @@ export default function Header() {
 
           <nav className="hidden items-center gap-7 text-sm font-bold text-[#155e59] md:flex">
             <Link href="/" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">CỬA HÀNG</Link>
+            <Link href="/subscriptions" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">GÓI HỘI VIÊN</Link>
             <Link href="/about" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">GIỚI THIỆU</Link>
             <Link
               href="/commission"
@@ -188,8 +189,9 @@ export default function Header() {
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="md:hidden bg-white border-t-2 border-black px-4 py-4 flex flex-col gap-4 font-semibold">
-          <Link href="/"         onClick={() => setMobileOpen(false)}>CỬA HÀNG</Link>
-          <Link href="/about"    onClick={() => setMobileOpen(false)}>GIỚI THIỆU</Link>
+          <Link href="/"              onClick={() => setMobileOpen(false)}>CỬA HÀNG</Link>
+          <Link href="/subscriptions" onClick={() => setMobileOpen(false)}>GÓI HỘI VIÊN</Link>
+          <Link href="/about"         onClick={() => setMobileOpen(false)}>GIỚI THIỆU</Link>
           <Link href="/commission" onClick={() => setMobileOpen(false)}>Thiết kế Commission</Link>
           {!isLoading && !isAuthenticated && (
             <div className="flex gap-2 pt-2 border-t-2 border-black">

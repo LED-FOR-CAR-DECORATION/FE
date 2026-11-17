@@ -48,7 +48,7 @@ export class CustomerCommissionsService {
             method: 'GET',
             url: '/api/commissions/my',
             query: {
-                'filter': filter,
+                ...filter,
             },
             errors: {
                 400: `Invalid pagination, status enum, or sortDirection query parameter`,

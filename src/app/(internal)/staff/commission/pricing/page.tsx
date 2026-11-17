@@ -124,28 +124,56 @@ function AddCriterion({ onCreated }: { onCreated: (rule: ManagementPricingRuleRe
   );
 }
 
-function EditCriterion({ rule, onSaved, onCancel }: {
+function EditCriterion({ rule, onSaved, onCancel, onDeleted }: {
   rule: PricingRule;
   onSaved: (rule: PricingRule) => void;
   onCancel: () => void;
+  onDeleted: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const options = (rule.options ?? []).filter((option) => option.optionId !== undefined);
+  const [newOptionIds, setNewOptionIds] = useState<string[]>([]);
+  const [removedOptionIds, setRemovedOptionIds] = useState<number[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const options = (rule.options ?? []).filter((option): option is PricingOption & { optionId: number } =>
+    option.optionId !== undefined && option.isActive !== false);
+  const canRemoveOptions = rule.configCode !== "FORMAT_TYPE" && rule.selectionType !== "QUANTITY";
+  const isMatrixSize = rule.configCode === "MATRIX_SIZE";
+  const canAddOptions = rule.configCode !== "FORMAT_TYPE" &&
+    (rule.selectionType === "SINGLE_SELECT" || rule.selectionType === "MULTI_SELECT");
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || confirmDelete) return;
     const fields = new FormData(event.currentTarget);
     const value = (key: string) => String(fields.get(key) ?? "").trim();
     const configName = value("name");
-    const updatedOptions = options.map(({ optionId }) => ({
+    const updatedOptions = options.filter(({ optionId }) => !removedOptionIds.includes(optionId)).map(({ optionId }) => ({
       optionId,
       optionLabel: value("option-" + optionId),
       basePrice: Number(value("price-" + optionId)),
     }));
-    if (!configName || updatedOptions.some(({ optionLabel }) => !optionLabel)) {
+    const newOptions = newOptionIds.map((id) => {
+      const optionLabel = value("new-option-" + id);
+      const size = isMatrixSize
+        ? /^([1-9][0-9]{0,3})\s*[xX×]\s*([1-9][0-9]{0,3})(?=\s|$)/.exec(optionLabel)
+        : null;
+      return {
+        optionLabel,
+        basePrice: Number(value("new-price-" + id)),
+        ...(size && { matrixDimensions: `${size[1]}x${size[2]}` }),
+      };
+    });
+    if (!configName || [...updatedOptions, ...newOptions].some(({ optionLabel }) => !optionLabel)) {
       setError("Tên tiêu chí và tên phương án không được để trống.");
+      return;
+    }
+    if (isMatrixSize && newOptions.some(({ matrixDimensions }) => !matrixDimensions)) {
+      setError("Tên phương án kích thước LED phải bắt đầu bằng kích thước, ví dụ 32 × 64.");
+      return;
+    }
+    if (removedOptionIds.length > 0 && updatedOptions.length + newOptions.length === 0) {
+      setError("Tiêu chí phải còn ít nhất một phương án.");
       return;
     }
 
@@ -157,11 +185,31 @@ function EditCriterion({ rule, onSaved, onCancel }: {
         url: endpoint + "/rules/{id}",
         path: { id: rule.configId },
         mediaType: "application/json",
-        body: { configName, description: value("description"), isRequired: fields.has("required"), options: updatedOptions },
+        body: {
+          configName,
+          description: value("description"),
+          isRequired: rule.isSystem ? Boolean(rule.isRequired) : fields.has("required"),
+          options: updatedOptions,
+          newOptions,
+          removedOptionIds,
+        },
       });
       onSaved(data);
     } catch (failure) {
       setError(getApiErrorMessage(failure, "Không lưu được thay đổi. Vui lòng thử lại."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteRule() {
+    setBusy(true);
+    setError("");
+    try {
+      await request(OpenAPI, { method: "DELETE", url: endpoint + "/rules/{id}", path: { id: rule.configId } });
+      onDeleted();
+    } catch (failure) {
+      setError(getApiErrorMessage(failure, "Không xóa được tiêu chí."));
     } finally {
       setBusy(false);
     }
@@ -175,25 +223,69 @@ function EditCriterion({ rule, onSaved, onCancel }: {
         <label className="block">Hướng dẫn cho khách<textarea name="description" rows={2} className={input} defaultValue={rule.description} /></label>
         {options.map((option, index) => {
           const isPercent = option.modifierType === "BASE_PERCENT" || option.modifierType === "SUBTOTAL_PERCENT";
+          const id = option.optionId;
+          const removed = removedOptionIds.includes(id);
           return (
             <div key={option.optionId} className="grid gap-2 rounded-lg bg-[#f4f8f3] p-3 sm:grid-cols-2">
               <label className="text-sm">Phương án {index + 1}
-                <input name={"option-" + option.optionId} required maxLength={255} className={input} defaultValue={option.optionLabel} />
+                <input name={"option-" + id} required disabled={removed} maxLength={255} className={input} defaultValue={option.optionLabel} />
               </label>
               <label className="text-sm">
                 {isPercent ? "Phụ phí (%)" : rule.selectionType === "QUANTITY" ? "Đơn giá (₫)" : "Phụ phí (₫)"}
-                <input name={"price-" + option.optionId} type="number" required min={0} max={isPercent ? 1000 : 9999999999.99}
+                <input name={"price-" + id} type="number" required disabled={removed} min={0} max={isPercent ? 1000 : 9999999999.99}
                   step={0.01} className={input} defaultValue={option.basePrice} />
               </label>
+              {canRemoveOptions && (
+                <button type="button" className="min-h-11 justify-self-start text-sm text-red-700 underline sm:col-span-2"
+                  onClick={() => setRemovedOptionIds((ids) => removed ? ids.filter((item) => item !== id) : [...ids, id])}>
+                  {removed ? "Giữ lại phương án" : "Xóa phương án"} {index + 1}
+                </button>
+              )}
             </div>
           );
         })}
-        <label className="flex min-h-11 items-center gap-2"><input name="required" type="checkbox" defaultChecked={rule.isRequired} /> Khách bắt buộc nhập</label>
+        {newOptionIds.map((id, index) => (
+          <fieldset key={id} className="grid gap-2 rounded-lg bg-[#f4f8f3] p-3 sm:grid-cols-2">
+            <legend className="text-sm font-semibold">Phương án mới {index + 1}</legend>
+            <label className="text-sm">Tên phương án
+              <input name={"new-option-" + id} required maxLength={255} className={input} placeholder={isMatrixSize ? "Ví dụ 32 × 64" : undefined} />
+            </label>
+            <label className="text-sm">Phụ phí (₫)
+              <input name={"new-price-" + id} type="number" required min={0} max={9999999999.99} step={0.01} className={input} defaultValue={0} />
+            </label>
+            <button type="button" className="min-h-11 justify-self-start text-sm text-red-700 underline sm:col-span-2"
+              onClick={() => setNewOptionIds((ids) => ids.filter((item) => item !== id))}>
+              Bỏ phương án mới {index + 1}
+            </button>
+          </fieldset>
+        ))}
+        {canAddOptions && (
+          <button type="button" disabled={newOptionIds.length >= 50} className="min-h-11 font-semibold text-[#155e59] underline disabled:opacity-50"
+            onClick={() => setNewOptionIds((ids) => [...ids, crypto.randomUUID()])}>
+            Thêm phương án
+          </button>
+        )}
+        {rule.isSystem ? (
+          <p className="text-sm text-[#526159]">Thiết lập bắt buộc của tiêu chí mặc định được giữ theo quy tắc hệ thống.</p>
+        ) : (
+          <label className="flex min-h-11 items-center gap-2"><input name="required" type="checkbox" defaultChecked={rule.isRequired} /> Khách bắt buộc nhập</label>
+        )}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         <div className="flex flex-wrap items-center gap-3">
-          <button className={commissionButton}>{busy ? "Đang lưu…" : "Lưu thay đổi"}</button>
+          <button disabled={confirmDelete} className={commissionButton}>{busy ? "Đang xử lý…" : "Lưu thay đổi"}</button>
           <button type="button" className="min-h-11 px-3 text-[#155e59] underline" onClick={onCancel}>Hủy</button>
         </div>
+        {!rule.isSystem && (
+          confirmDelete ? (
+            <div className="space-y-2 rounded-lg border border-red-200 p-3">
+              <p>Xóa tiêu chí “{rule.configName}” khỏi form khách hàng?</p>
+              <button type="button" className="min-h-11 font-semibold text-red-700 underline" onClick={() => void deleteRule()}>Xác nhận xóa tiêu chí</button>
+              <button type="button" className="ml-3 min-h-11 underline" onClick={() => setConfirmDelete(false)}>Quay lại</button>
+            </div>
+          ) : (
+            <button type="button" className="min-h-11 font-semibold text-red-700 underline" onClick={() => setConfirmDelete(true)}>Xóa tiêu chí</button>
+          )
+        )}
       </fieldset>
     </form>
   );
@@ -205,7 +297,8 @@ export default function CommissionPricingConfigPage() {
   const [notice, setNotice] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [editingId, setEditingId] = useState<number>();
-  const editing = pricing?.rules.find((rule) => editingId !== undefined && rule.configId === editingId);
+  const activeRules = (pricing?.rules ?? []).filter((rule) => rule.isActive !== false);
+  const editing = activeRules.find((rule) => editingId !== undefined && rule.configId === editingId);
 
   useEffect(() => {
     let active = true;
@@ -219,7 +312,7 @@ export default function CommissionPricingConfigPage() {
     <main className="mx-auto max-w-6xl space-y-5 pb-10 text-[#26352f]">
       <header>
         <h1 className="text-3xl font-black text-[#155e59]">Tiêu chí và bảng giá Commission</h1>
-        <p className="mt-2 text-sm text-[#526159]">Xem cấu hình của form khách hàng, thêm hoặc sửa tiêu chí tùy chỉnh.</p>
+        <p className="mt-2 text-sm text-[#526159]">Thêm và sửa tiêu chí thiết kế trên form khách hàng.</p>
       </header>
       {error ? (
         <div className={panel}>
@@ -242,27 +335,25 @@ export default function CommissionPricingConfigPage() {
             </section>}
             <section className={panel}>
               <h2 className="text-lg font-bold text-[#155e59]">Tiêu chí thiết kế</h2>
-              <p className="text-sm text-[#526159]">Giá nằm cạnh từng phương án. Tiêu chí hệ thống được khóa.</p>
-              {!pricing.rules.length && <p>Chưa có tiêu chí thiết kế.</p>}
-              {pricing.rules.map((rule) => (
+              {!activeRules.length && <p>Chưa có tiêu chí thiết kế.</p>}
+              {activeRules.map((rule) => (
                 <details key={rule.configId} open={rule.isSystem || undefined} className="rounded-lg border border-[#cfe3d0] bg-[#f4f8f3] px-3">
                   <summary className="cursor-pointer py-3 font-semibold text-[#155e59]">
                     {rule.configName}
-                    {rule.isActive === false && <small className="ml-2 text-[#526159]">Đang ẩn</small>}
                   </summary>
                   <div className="space-y-2 pb-3 text-sm">
                     {rule.description && <p>{rule.description}</p>}
                     <p>{rule.isRequired ? "Bắt buộc" : "Tùy chọn"}{rule.dependsOnOptionCode && ` · Hiện khi chọn ${rule.dependsOnOptionCode}`}</p>
                     {rule.selectionType === "QUANTITY" && <p>Số lượng từ {rule.minQuantity ?? 0}{rule.maxQuantity != null && ` đến ${rule.maxQuantity}`}</p>}
                     <ul className="divide-y divide-[#dce8df]">
-                      {(rule.options ?? []).map((option) => (
+                      {(rule.options ?? []).filter((option) => option.isActive !== false).map((option) => (
                         <li key={option.optionId} className="flex flex-wrap justify-between gap-2 py-2">
-                          <span>{option.optionLabel}{option.isActive === false && <small className="ml-2 text-[#526159]">Đang ẩn</small>}</span>
+                          <span>{option.optionLabel}</span>
                           <strong>{optionPrice(option, rule)}</strong>
                         </li>
                       ))}
                     </ul>
-                    {!rule.isSystem && rule.configId !== undefined && (
+                    {rule.configId !== undefined && (
                       <button type="button" aria-label={`Sửa tiêu chí ${rule.configName}`} className="min-h-11 font-semibold text-[#155e59] underline"
                         onClick={() => { setEditingId(rule.configId); setNotice(""); }}>
                         Sửa tiêu chí
@@ -275,7 +366,11 @@ export default function CommissionPricingConfigPage() {
           </div>
           <div className="space-y-3">
             {notice && <p role="status" className="rounded-lg bg-[#eaf5e8] p-3 text-[#155e59]">{notice}</p>}
-            {editing ? <EditCriterion key={editingId} rule={editing} onCancel={() => setEditingId(undefined)} onSaved={(rule) => {
+            {editing ? <EditCriterion key={editingId} rule={editing} onCancel={() => setEditingId(undefined)} onDeleted={() => {
+              setPricing((current) => current && { ...current, rules: current.rules.filter((item) => item.configId !== editingId) });
+              setEditingId(undefined);
+              setNotice(`Đã xóa tiêu chí “${editing.configName}”.`);
+            }} onSaved={(rule) => {
               setPricing((current) => current && { ...current, rules: current.rules.map((item) => item.configId === rule.configId ? rule : item) });
               setEditingId(undefined);
               setNotice(`Đã cập nhật tiêu chí “${rule.configName}”.`);

@@ -1,4 +1,5 @@
 import type { ChangeEvent, ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
   COMMISSION_DESIGN_FIELDS, MAX_COMMISSION_FRAMES, MIN_COMMISSION_FRAMES,
   formatCommissionMoney, type CommissionDesign, type CommissionDesignField,
@@ -40,6 +41,22 @@ export function CommissionDesignPicker({ design, onChange, fields = COMMISSION_D
   );
 }
 
+function ReferenceThumbnail({ file }: { file: File }) {
+  const [src, setSrc] = useState<string>();
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#eaf5e8]">
+      {src && <img src={src} alt="" className="size-full object-contain" />}
+    </div>
+  );
+}
+
 export function CommissionBrief({ note, onNote, references, onFiles, onRemove, error }: {
   note: string;
   onNote: (note: string) => void;
@@ -71,7 +88,8 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
         <ul className="space-y-2">
           {references.map((file, index) => (
             <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-white p-3">
-              <span className="min-w-0 break-all">{file.name}</span>
+              <ReferenceThumbnail file={file} />
+              <span className="min-w-0 flex-1 break-all">{file.name}</span>
               <button type="button" className="shrink-0 font-semibold text-red-700"
                 aria-label={`Xóa ${file.name}`} onClick={() => onRemove(index)}>Xóa</button>
             </li>

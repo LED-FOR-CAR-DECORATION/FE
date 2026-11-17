@@ -134,7 +134,7 @@ export default function Header() {
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#155e59] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#0e4b47]"
             >
               <Sparkles size={15} aria-hidden="true" />
-              Thiết kế Custom
+              Thiết kế Commission
             </Link>
           </nav>
         </div>
@@ -190,7 +190,7 @@ export default function Header() {
         <div className="md:hidden bg-white border-t-2 border-black px-4 py-4 flex flex-col gap-4 font-semibold">
           <Link href="/"         onClick={() => setMobileOpen(false)}>CỬA HÀNG</Link>
           <Link href="/about"    onClick={() => setMobileOpen(false)}>GIỚI THIỆU</Link>
-          <Link href="/commission" onClick={() => setMobileOpen(false)}>Thiết kế Custom</Link>
+          <Link href="/commission" onClick={() => setMobileOpen(false)}>Thiết kế Commission</Link>
           {!isLoading && !isAuthenticated && (
             <div className="flex gap-2 pt-2 border-t-2 border-black">
               <Link href="/login"    onClick={() => setMobileOpen(false)} className="btn-secondary flex-1 text-center text-sm py-1.5">Đăng nhập</Link>

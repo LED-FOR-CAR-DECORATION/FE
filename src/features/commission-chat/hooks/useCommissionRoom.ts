@@ -298,6 +298,12 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
     });
   }, []);
 
+  /** Gộp tin do một thao tác trả về (thẻ, tin hệ thống) — STOMP cũng sẽ gửi lại, mergeMessages tự khử trùng lặp. */
+  const addMessages = useCallback((incoming: CommissionMessage[]) => {
+    for (const message of incoming) knownIds.current.add(message.messageId);
+    setMessages((current) => mergeMessages(current, incoming));
+  }, []);
+
   const reload = useCallback(() => {
     setInfoError("");
     setHistoryError("");
@@ -306,6 +312,6 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
 
   return {
     info, infoError, messages, liveIds, historyLoaded, historyError, pending, realtime,
-    readable, canSend, send, retry, discard, reload, refreshInfo: loadInfo,
+    readable, canSend, send, retry, discard, reload, refreshInfo: loadInfo, addMessages,
   };
 }

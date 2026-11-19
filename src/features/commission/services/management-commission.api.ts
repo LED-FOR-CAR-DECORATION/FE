@@ -1,5 +1,6 @@
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "@/lib/api/client";
+import type { CommissionMessage } from "@/features/commission-chat/services/commission-messages.api";
 
 const endpoint = "/api/management/commissions";
 
@@ -84,5 +85,13 @@ export function postDeliverableCard(id: number) {
 export function rejectCommissionDraft(id: number, body: { submissionId?: number; reviewNote: string }) {
   return request(OpenAPI, {
     method: "POST", url: endpoint + "/{id}/reviews", path: { id }, mediaType: "application/json", body,
+  });
+}
+
+/** CMS-19: staff phụ trách gửi thẻ yêu cầu chỉnh sửa (EXTRA_FEE_CARD) khi commission ở PREVIEW_DELIVERED. */
+export function postRevisionCard(id: number, brief: string) {
+  return request<{ data: CommissionMessage }>(OpenAPI, {
+    method: "POST", url: "/api/management/commissions/{id}/revision-card", path: { id },
+    mediaType: "application/json", body: { brief },
   });
 }

@@ -14,7 +14,6 @@ import {
   type DesignerCharacterItem,
   type PaginationMeta,
 } from "@/lib/api/designerCharacters";
-import { saveCreatedStoreProduct } from "@/features/store-listing/services/store-listing.service";
 import type { CreatedStoreProductResponse } from "@/api_client";
 
 export type MatrixSize = "32x32" | "64x32";
@@ -46,7 +45,6 @@ export interface PublishToStoreInput {
   character: DesignerCharacterItem;
   version: CharacterVersionItem;
   productName: string;
-  basePrice: number;
   description?: string;
   tagIds?: number[];
 }
@@ -203,7 +201,6 @@ export function DesignerCharactersProvider({ children }: { children: React.React
       character,
       version,
       productName,
-      basePrice,
       description,
       tagIds,
     }: PublishToStoreInput): Promise<CreatedStoreProductResponse> => {
@@ -217,54 +214,28 @@ export function DesignerCharactersProvider({ children }: { children: React.React
           ? version.previewGifUrl
           : undefined;
 
-      // Hardcode status = UNPUBLISHED (pending Manager approval) and instruct backend
-      // to auto-generate a Watermarked Preview GIF/PNG for public store protection.
       const payload = {
         productName: productName.trim(),
         productType: "CHARACTER",
-        basePrice,
+        basePrice: 0,
         description: description?.trim() || character.description || undefined,
         thumbnailUrl: safeThumb,
         characterVersionId: version.versionId,
         tagIds: tagIds && tagIds.length > 0 ? tagIds : undefined,
-        status: "UNPUBLISHED",
-        generateWatermarkedPreview: true,
       };
 
-      let created: CreatedStoreProductResponse;
-      try {
-        const { data: envelope } = await axios.post<{
-          data: CreatedStoreProductResponse;
-        }>("/api/management/admin/store/products", payload, {
-          baseURL: getApiBaseUrl(),
-          withCredentials: OpenAPI.WITH_CREDENTIALS,
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        created = envelope.data;
-      } catch (err: any) {
-        // Backend /api/management/admin/store/products currently enforces ADMIN/MANAGER.
-        // Mirror PixelArtStudio behavior when a DESIGNER submits a listing for Manager approval (UNPUBLISHED).
-        if (err?.response?.status === 403) {
-          created = {
-            productId: Date.now(),
-            productName: payload.productName,
-            productType: "CHARACTER",
-            basePrice: payload.basePrice,
-            description: payload.description,
-            thumbnailUrl: payload.thumbnailUrl,
-            characterVersionId: version.versionId,
-            status: "UNPUBLISHED",
-            createdAt: new Date().toISOString(),
-          } as CreatedStoreProductResponse;
-        } else {
-          throw err;
-        }
-      }
+      const { data: envelope } = await axios.post<{
+        data: CreatedStoreProductResponse;
+      }>("/api/management/designer/store/drafts", payload, {
+        baseURL: getApiBaseUrl(),
+        withCredentials: OpenAPI.WITH_CREDENTIALS,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
 
-      if (created) {
-        saveCreatedStoreProduct(created);
-      }
-      await loadVersions(character.characterId);
+      const created = envelope.data;
+      await loadVersions(character.characterId).catch(() => {
+        // The draft was saved. The details dialog will retry the history request when it opens.
+      });
       await refreshCharacters();
       return created;
     },

@@ -8,7 +8,6 @@ import {
   ClipboardList,
   Image,
   LayoutDashboard,
-  MessageCircle,
   Plus,
   RotateCcw,
   Settings2,
@@ -61,13 +60,6 @@ const menuItems: MenuItem[] = [
     description: "Xác nhận đơn và chuẩn bị giao hàng",
     href: "/staff/orders",
     icon: ShoppingCart,
-    roles: ["STAFF"],
-  },
-  {
-    label: "Quản lý Chat",
-    description: "Trả lời khách hàng và hỗ trợ sau bán hàng",
-    href: "/staff/chat",
-    icon: MessageCircle,
     roles: ["STAFF"],
   },
   {

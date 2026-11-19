@@ -11,6 +11,7 @@ import {
   Layers,
   Loader2,
   Lock,
+  ShieldCheck,
   Store,
   Tag,
   Trash2,
@@ -72,7 +73,6 @@ export default function PublishToStoreModal({
 
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [productName, setProductName] = useState(character.characterName);
-  const [basePrice, setBasePrice] = useState("49000");
   const [description, setDescription] = useState(character.description ?? "");
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
@@ -205,20 +205,14 @@ export default function PublishToStoreModal({
       return;
     }
 
-    const trimmedName = productName.trim() || `${character.characterName} (v${selectedVersion.versionNumber})`;
-    const priceNum = Number(basePrice);
-    if (basePrice.trim() === "" || !Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Giá bán phải là số lớn hơn hoặc bằng 0 đ.");
-      return;
-    }
-
+    const trimmedName =
+      productName.trim() || `${character.characterName} (v${selectedVersion.versionNumber})`;
     setIsSubmitting(true);
     try {
       const created = await publishVersionToStore({
         character,
         version: selectedVersion,
         productName: trimmedName,
-        basePrice: priceNum,
         description: description.trim() || undefined,
         tagIds: selectedTagIds,
       });
@@ -283,7 +277,7 @@ export default function PublishToStoreModal({
               </>
             ) : (
               <>
-                <Store size={15} /> Publish lên Store
+                <Store size={15} /> Gửi yêu cầu đăng bán
               </>
             )}
           </button>
@@ -312,6 +306,16 @@ export default function PublishToStoreModal({
             <span>{error}</span>
           </div>
         )}
+
+        <div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+          <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-700" />
+          <div>
+            <p className="font-bold">Chờ manager duyệt</p>
+            <p className="mt-0.5 text-sky-800">
+              Yêu cầu được tạo với giá tạm 0 ₫. Manager sẽ đặt giá trước khi đăng bán.
+            </p>
+          </div>
+        </div>
 
         {historyError ? (
           <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-5 text-center">
@@ -408,35 +412,19 @@ export default function PublishToStoreModal({
               {/* Store Listing Inputs */}
               {selectedVersion && (
                 <div className="space-y-3 rounded-xl border border-[#e3efe6] bg-[#f9fcfa] p-4">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                        Tên sản phẩm trên Store <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        maxLength={255}
-                        disabled={isSelectedVersionListed || isSubmitting}
-                        value={productName}
-                        onChange={(e) => setProductName(e.target.value)}
-                        className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#439660] disabled:bg-slate-100"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                        Giá bán (VNĐ) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        required
-                        disabled={isSelectedVersionListed || isSubmitting}
-                        value={basePrice}
-                        onChange={(e) => setBasePrice(e.target.value)}
-                        className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#439660] disabled:bg-slate-100"
-                      />
-                    </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[#1f432b]">
+                      Tên sản phẩm trên Store <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={255}
+                      disabled={isSelectedVersionListed || isSubmitting}
+                      value={productName}
+                      onChange={(e) => setProductName(e.target.value)}
+                      className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#439660] disabled:bg-slate-100"
+                    />
                   </div>
 
                   <div>

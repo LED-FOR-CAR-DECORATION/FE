@@ -12,7 +12,6 @@ import {
   Eye,
   HelpCircle,
   Loader2,
-  MessageSquare,
   Package,
   QrCode,
   Search,
@@ -452,12 +451,6 @@ export default function OrderHistoryPage() {
                             MIRAGE
                           </span>
                           <span className="text-sm font-bold text-gray-900">Đơn hàng #{order.id}</span>
-                          <Link
-                            href="/chat"
-                            className="inline-flex items-center gap-1 rounded-xs bg-[#155e59] px-2 py-0.5 text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
-                          >
-                            <MessageSquare size={11} /> Chat
-                          </Link>
                           <Link
                             href="/"
                             className="inline-flex items-center gap-1 rounded-xs border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-50"

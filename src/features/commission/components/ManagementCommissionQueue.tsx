@@ -8,6 +8,9 @@ import {
   type CommissionManagementDetail, type CommissionQueueItem, type DesignerOption,
 } from "../services/management-commission.api";
 import { commissionButton } from "./FixedCommissionSteps";
+import StaffDraftReview from "./StaffDraftReview";
+import Link from "next/link";
+import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
 
 const labels: Record<string, string> = {
   PENDING_REVIEW: "Chờ duyệt", PENDING_PAYMENT: "Chờ thanh toán", PAID: "Đã thanh toán · Chờ phân công",
@@ -17,6 +20,18 @@ const labels: Record<string, string> = {
   COMPLETED: "Hoàn thành", CANCELLED: "Đã hủy", EXPIRED: "Hết hạn",
 };
 const panel = "space-y-3 rounded-xl border border-[#cfe3d0] bg-white p-5";
+/** Giải thích vì sao trạng thái hiện tại không có nút thao tác cho staff. */
+const idleHints: Record<string, string> = {
+  PENDING_PAYMENT: "Đang chờ khách thanh toán. Khi khách thanh toán xong, nút phân công designer sẽ hiện ở đây.",
+  AWAITING_EXTRA_PAYMENT: "Đang chờ khách thanh toán phí chỉnh sửa bổ sung.",
+  IN_PROGRESS: "Designer đang thực hiện. Khi designer nộp bản nháp, phần duyệt bản nháp sẽ hiện ở đây.",
+  INTERNAL_REVISION_REQUIRED: "Đã trả bản nháp về designer, đang chờ bản sửa.",
+  PREVIEW_DELIVERED: "Đã gửi bản xem trước, đang chờ khách phản hồi. Nếu khách muốn sửa, mở phòng chat để gửi thẻ yêu cầu chỉnh sửa.",
+  CUSTOMER_REVISION_REQUESTED: "Khách đã xác nhận yêu cầu chỉnh sửa. Đang chờ designer nộp bản sửa.",
+  COMPLETED: "Commission đã hoàn thành.",
+  CANCELLED: "Commission đã bị hủy.",
+  EXPIRED: "Commission đã hết hạn thanh toán.",
+};
 
 export default function ManagementCommissionQueue({ assigned = false }: { assigned?: boolean }) {
   const [page, setPage] = useState(0);
@@ -102,6 +117,7 @@ function CommissionDetails({ item, assigned, onChange }: {
 }) {
   const [detail, setDetail] = useState<CommissionManagementDetail>();
   const [designers, setDesigners] = useState<DesignerOption[]>();
+  const [designersFailed, setDesignersFailed] = useState(false);
   const [designerId, setDesignerId] = useState("");
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
@@ -123,15 +139,21 @@ function CommissionDetails({ item, assigned, onChange }: {
     if (assigned || status !== "PAID") return;
     let active = true;
     const query = listCommissionDesigners();
-    query.then(({ data }) => { if (active) setDesigners(data); }).catch((failure) => {
-      if (active) setError(getApiErrorMessage(failure, "Không tải được danh sách designer."));
+    query.then(({ data }) => {
+      if (!active) return;
+      setDesigners(data);
+      setDesignersFailed(false);
+    }).catch((failure) => {
+      if (!active) return;
+      setDesignersFailed(true);
+      setError(getApiErrorMessage(failure, "Không tải được danh sách designer."));
     });
     return () => { active = false; query.cancel(); };
   }, [assigned, revision, status]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending.current || assigned || !detail) return;
+    if (pending.current || assigned) return;
     if (status !== "PENDING_REVIEW" && (status !== "PAID" || !designerId)) return;
     pending.current = true;
     setBusy(true);
@@ -175,13 +197,27 @@ function CommissionDetails({ item, assigned, onChange }: {
         <button type="button" className="min-h-11 underline" onClick={() => { setError(""); reload((value) => value + 1); }}>Tải lại chi tiết</button>
       </div>}
       {notice && <p role="status">{notice}</p>}
-      {!assigned && detail && displayStatus === status && (status === "PAID" || status === "PENDING_REVIEW") && (
+      {canReadHistory(displayStatus) && (
+        <Link href={`/staff/commission/${commissionId}/chat`}
+          className="inline-flex min-h-11 items-center rounded-lg border border-[#155e59] px-4 font-semibold text-[#155e59] hover:bg-[#eaf5e8]">
+          Mở phòng chat với khách
+        </Link>
+      )}
+      {!assigned && idleHints[displayStatus] && (
+        <p className="rounded-lg bg-[#f4f8f3] px-3 py-2 text-sm text-[#526159]">{idleHints[displayStatus]}</p>
+      )}
+      {!assigned && detail?.submissions && (
+        <StaffDraftReview commissionId={commissionId} status={displayStatus} drafts={detail.submissions}
+          onChanged={() => { onChange(); reload((value) => value + 1); }} />
+      )}
+      {/* Không chờ brief: assign/approve chỉ cần commissionId, nên lỗi tải chi tiết không được làm mất nút. */}
+      {!assigned && displayStatus === status && (status === "PAID" || status === "PENDING_REVIEW") && (
         <form onSubmit={submit} className="space-y-3">
           {status === "PAID" && (
             <label className="block font-semibold">Designer phụ trách
               <select className="mt-1 block min-h-11 w-full rounded-lg border border-[#819e8c] bg-white px-3"
                 value={designerId} onChange={(event) => setDesignerId(event.target.value)} disabled={busy || !designers?.length}>
-                <option value="">{!designers ? "Đang tải designer…" : designers.length ? "Chọn designer" : "Chưa có designer hoạt động"}</option>
+                <option value="">{designersFailed ? "Không tải được danh sách designer" : !designers ? "Đang tải designer…" : designers.length ? "Chọn designer" : "Chưa có designer hoạt động"}</option>
                 {designers?.map((designer) => <option key={designer.designerId} value={designer.designerId}>{designer.fullName} (#{designer.designerId})</option>)}
               </select>
             </label>

@@ -352,9 +352,9 @@ function DesignerDashboardContent() {
           key={publishCharacter.characterId}
           character={publishCharacter}
           onClose={() => setPublishCharacter(null)}
-          onSuccess={(created, version) => {
+          onSuccess={(created) => {
             setNotice(
-              `Đăng bán lên Store thành công! "${created.productName}" (v${version.versionNumber}) đã được gửi ở trạng thái UNPUBLISHED (chờ Manager duyệt).`,
+              `Đã gửi “${created.productName}” (#${created.productId}) để manager đặt giá và duyệt đăng bán.`,
             );
           }}
         />

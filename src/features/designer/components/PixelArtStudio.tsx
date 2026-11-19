@@ -107,6 +107,8 @@ export interface PixelArtStudioProps {
   initialDescription?: string;
   /** URL ảnh của phiên bản trước đó cần kế thừa lên canvas */
   initialArtworkUrl?: string | null;
+  /** Data URL dự phòng cục bộ nếu URL ảnh từ CDN bị chặn CORS khi nạp lên Canvas */
+  fallbackArtworkUrl?: string | null;
   /** Số phiên bản kế tiếp (ví dụ v2, v3) */
   targetVersionNumber?: number;
   /** Khóa cố định kích thước ma trận của Character (32x32, 64x32 hoặc 64x64) */
@@ -144,6 +146,7 @@ export default function PixelArtStudio({
   initialCharacterName = "",
   initialDescription = "",
   initialArtworkUrl = null,
+  fallbackArtworkUrl = null,
   targetVersionNumber,
   lockedMatrixSize,
   onSaveVersion,
@@ -298,7 +301,8 @@ export default function PixelArtStudio({
 
   // Design Inheritance: Load previous version's artwork onto Canvas
   useEffect(() => {
-    if (!initialArtworkUrl) {
+    const primaryUrl = initialArtworkUrl || fallbackArtworkUrl;
+    if (!primaryUrl) {
       if (!propCharacterId) {
         // Reset to clean blank canvas when in "Create New Character" mode
         undoStackRef.current = [];
@@ -311,56 +315,74 @@ export default function PixelArtStudio({
     }
 
     let isCancelled = false;
+    let triedFallback = false;
     setIsInheriting(true);
     setStatusNotice({
       type: "info",
-      message: `Đang nạp dữ liệu pixel phiên bản trước (${initialCharacterName || "Nhân vật"})...`,
+      message: `Đang nạp dữ liệu pixel phiên bản mới nhất (${initialCharacterName || "Nhân vật"})...`,
     });
 
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      if (isCancelled) return;
-      try {
-        const inheritedPixels = rasterizeImageToPixels(
-          img,
-          docRef.current.width,
-          docRef.current.height,
-          "CONTAIN",
-          100,
-          100,
-        );
-        if (inheritedPixels && inheritedPixels.length > 0) {
-          commitDocumentChange(docRef.current, {
-            ...docRef.current,
-            pixels: inheritedPixels,
-          });
-          setStatusNotice({
-            type: "success",
-            message: `Kế thừa thiết kế từ phiên bản trước thành công! Bạn có thể chỉnh sửa tiếp trên nền này.`,
-          });
-        }
-      } catch (err) {
-        console.warn("Failed to rasterize inherited artwork:", err);
-      } finally {
-        setIsInheriting(false);
+    const loadImageToCanvas = (srcUrl: string) => {
+      const img = new Image();
+      if (!srcUrl.startsWith("data:")) {
+        img.crossOrigin = "anonymous";
       }
+      img.onload = () => {
+        if (isCancelled) return;
+        try {
+          const inheritedPixels = rasterizeImageToPixels(
+            img,
+            docRef.current.width,
+            docRef.current.height,
+            "CONTAIN",
+            100,
+            100,
+          );
+          if (inheritedPixels && inheritedPixels.length > 0) {
+            commitDocumentChange(docRef.current, {
+              ...docRef.current,
+              pixels: inheritedPixels,
+            });
+            setStatusNotice({
+              type: "success",
+              message: `Đã nạp phiên bản mới nhất lên bảng vẽ! Bạn có thể tiếp tục vẽ để tạo phiên bản mới.`,
+            });
+          }
+          setIsInheriting(false);
+        } catch (err) {
+          console.warn("Failed to rasterize inherited artwork:", err);
+          if (!triedFallback && fallbackArtworkUrl && fallbackArtworkUrl !== srcUrl) {
+            triedFallback = true;
+            loadImageToCanvas(fallbackArtworkUrl);
+          } else {
+            setIsInheriting(false);
+          }
+        }
+      };
+      img.onerror = () => {
+        if (isCancelled) return;
+        if (!triedFallback && fallbackArtworkUrl && fallbackArtworkUrl !== srcUrl) {
+          triedFallback = true;
+          loadImageToCanvas(fallbackArtworkUrl);
+          return;
+        }
+        setIsInheriting(false);
+        setStatusNotice({
+          type: "info",
+          message: "Không thể nạp trực tiếp ảnh qua URL (có thể do CORS). Bạn có thể dùng nút Nhập ảnh để tải tệp.",
+        });
+      };
+      img.src = srcUrl;
     };
-    img.onerror = () => {
-      if (isCancelled) return;
-      setIsInheriting(false);
-      setStatusNotice({
-        type: "info",
-        message: "Không thể nạp trực tiếp ảnh qua URL (có thể do CORS). Bạn có thể dùng nút Nhập ảnh để tải tệp.",
-      });
-    };
-    img.src = initialArtworkUrl;
+
+    loadImageToCanvas(primaryUrl);
 
     return () => {
       isCancelled = true;
     };
   }, [
     initialArtworkUrl,
+    fallbackArtworkUrl,
     propCharacterId,
     commitDocumentChange,
     initialCharacterName,
@@ -1048,6 +1070,16 @@ export default function PixelArtStudio({
           isCurrent: true,
         });
         createdVersionId = versionRes.versionId;
+        if (createdVersionId && typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(
+              `character_version_artwork_${createdVersionId}`,
+              dataUrl,
+            );
+          } catch {
+            // Ignore quota warning
+          }
+        }
       } catch (verErr) {
         console.warn("Create character version warning:", verErr);
         throw verErr;

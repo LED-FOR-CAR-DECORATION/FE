@@ -269,7 +269,7 @@ export default function PublishToStoreModal({
                   ? "Phiên bản đang chọn đã được đăng lên Store"
                   : "Đăng bán phiên bản này lên Store"
             }
-            className="inline-flex items-center gap-2 rounded-lg bg-[#2d6a4f] px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-[#1f432b] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-studio-accent px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
@@ -289,7 +289,7 @@ export default function PublishToStoreModal({
         {publishSuccess && (
           <div
             role="status"
-            className="flex items-start gap-2.5 rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 text-xs sm:text-sm font-semibold text-emerald-800"
+            className="flex items-start gap-2.5 rounded border border-emerald-300 bg-emerald-50 p-3.5 text-xs sm:text-sm font-semibold text-emerald-800"
           >
             <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-600" />
             <span>{publishSuccess}</span>
@@ -300,7 +300,7 @@ export default function PublishToStoreModal({
         {error && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
+            className="flex items-start gap-2 rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700"
           >
             <AlertCircle size={15} className="mt-0.5 shrink-0" />
             <span>{error}</span>
@@ -318,14 +318,14 @@ export default function PublishToStoreModal({
         </div>
 
         {historyError ? (
-          <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-5 text-center">
+          <div className="space-y-2 rounded border border-red-200 bg-red-50 p-5 text-center">
             <p role="alert" className="text-sm font-semibold text-red-700">
               {historyError}
             </p>
             <button
               type="button"
               onClick={() => setHistoryAttempt((n) => n + 1)}
-              className="rounded-lg bg-white px-4 py-2 text-xs font-bold text-[#1f432b] shadow-xs ring-1 ring-red-200 hover:bg-red-50"
+              className="rounded-lg bg-white px-4 py-2 text-xs font-bold text-studio-ink shadow-xs ring-1 ring-red-200 hover:bg-red-50"
             >
               Thử tải lại phiên bản
             </button>
@@ -333,16 +333,16 @@ export default function PublishToStoreModal({
         ) : isLoading ? (
           <div
             role="status"
-            className="flex min-h-[300px] items-center justify-center gap-2 rounded-xl border border-[#d8e6dc] bg-[#f9fcfa] text-xs font-medium text-slate-500"
+            className="flex min-h-[300px] items-center justify-center gap-2 rounded border border-studio-line bg-studio-wash text-xs font-medium text-slate-500"
           >
-            <Loader2 size={18} className="animate-spin text-[#2d6a4f]" />
+            <Loader2 size={18} className="animate-spin text-studio-link" />
             <span>Đang tải phiên bản của nhân vật...</span>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
             {/* CENTER / LEFT STAGE: Large Preview of Selected (Latest) Version + Publish Details */}
             <div className="space-y-4 md:col-span-7">
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-[#d8e6dc] bg-[#0f172a] p-5 text-center relative min-h-[270px]">
+              <div className="flex flex-col items-center justify-center rounded-md border border-studio-line bg-[#0f172a] p-5 text-center relative min-h-[270px]">
                 {/* Matrix Size & Version Badges */}
                 <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
                   <span className="inline-flex items-center gap-1 rounded-full bg-black/75 px-2.5 py-0.5 font-mono text-[11px] font-bold text-white backdrop-blur-xs">
@@ -411,9 +411,9 @@ export default function PublishToStoreModal({
 
               {/* Store Listing Inputs */}
               {selectedVersion && (
-                <div className="space-y-3 rounded-xl border border-[#e3efe6] bg-[#f9fcfa] p-4">
+                <div className="space-y-3 rounded border border-studio-line bg-studio-wash p-4">
                   <div>
-                    <label className="mb-1 block text-xs font-bold text-[#1f432b]">
+                    <label className="mb-1 block text-xs font-bold text-studio-ink">
                       Tên sản phẩm trên Store <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -423,12 +423,12 @@ export default function PublishToStoreModal({
                       disabled={isSelectedVersionListed || isSubmitting}
                       value={productName}
                       onChange={(e) => setProductName(e.target.value)}
-                      className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#439660] disabled:bg-slate-100"
+                      className="w-full rounded-lg border border-studio-line bg-white px-3 py-1.5 text-xs outline-none focus:border-studio-focus disabled:bg-slate-100"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-bold text-[#1f432b]">
+                    <label className="mb-1 block text-xs font-bold text-studio-ink">
                       Mô tả sản phẩm
                     </label>
                     <textarea
@@ -437,14 +437,14 @@ export default function PublishToStoreModal({
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       placeholder="Mô tả phong cách, điểm nổi bật của nhân vật..."
-                      className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#439660] disabled:bg-slate-100"
+                      className="w-full rounded-lg border border-studio-line bg-white px-3 py-1.5 text-xs outline-none focus:border-studio-focus disabled:bg-slate-100"
                     />
                   </div>
 
                   {/* Optional Tags */}
                   {!isLoadingTags && availableTags.length > 0 && (
                     <div>
-                      <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-[#1f432b]">
+                      <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-studio-ink">
                         <Tag size={12} /> Thẻ phân loại (Tags)
                       </label>
                       <div className="flex flex-wrap gap-1.5">
@@ -459,8 +459,8 @@ export default function PublishToStoreModal({
                               onClick={() => toggleTag(id)}
                               className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition ${
                                 active
-                                  ? "border-[#2d6a4f] bg-[#2d6a4f] text-white"
-                                  : "border-[#d8e6dc] bg-white text-[#1f432b] hover:bg-[#eef8f0]"
+                                  ? "border-studio-accent bg-studio-accent text-white"
+                                  : "border-studio-line bg-white text-studio-ink hover:bg-studio-soft"
                               } disabled:opacity-50`}
                             >
                               {active && <Check size={10} />}
@@ -476,17 +476,17 @@ export default function PublishToStoreModal({
             </div>
 
             {/* RIGHT COLUMN: Version List (Select to preview/publish, or Delete only — no Update) */}
-            <div className="flex flex-col rounded-2xl border border-[#d8e6dc] bg-white p-4 md:col-span-5">
-              <div className="mb-3 flex items-center justify-between gap-2 border-b border-[#eef5f0] pb-2.5">
-                <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#1f432b]">
+            <div className="flex flex-col rounded-md border border-studio-line bg-white p-4 md:col-span-5">
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-studio-line pb-2.5">
+                <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-studio-ink">
                   <History size={14} /> Danh sách phiên bản ({versions.length})
                 </h4>
                 <span className="text-[10px] font-medium text-slate-400">Mới nhất trước</span>
               </div>
 
               {versions.length === 0 ? (
-                <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[#cbe0d1] bg-[#fafdfb] p-6 text-center text-xs text-slate-500">
-                  <p className="font-bold text-[#1f432b]">Chưa có phiên bản nào</p>
+                <div className="flex flex-1 flex-col items-center justify-center rounded border border-dashed border-studio-line bg-studio-wash p-6 text-center text-xs text-slate-500">
+                  <p className="font-bold text-studio-ink">Chưa có phiên bản nào</p>
                   <p className="mt-1 text-[11px]">
                     Bấm vào nhân vật ngoài danh sách để bắt đầu vẽ v1.
                   </p>
@@ -514,12 +514,12 @@ export default function PublishToStoreModal({
                             handleSelectVersion(ver);
                           }
                         }}
-                        className={`flex cursor-pointer items-center gap-2.5 rounded-xl border p-2.5 transition ${
+                        className={`flex cursor-pointer items-center gap-2.5 rounded border p-2.5 transition ${
                           isSelected
-                            ? "border-[#2d6a4f] bg-[#eaf7ee] ring-1 ring-[#2d6a4f]"
+                            ? "border-studio-accent bg-studio-soft ring-1 ring-studio-accent"
                             : locked
                               ? "border-amber-200 bg-amber-50/40 hover:bg-amber-50"
-                              : "border-[#d8e6dc] bg-white hover:bg-[#f7fbf8]"
+                              : "border-studio-line bg-white hover:bg-studio-wash"
                         }`}
                       >
                         {/* Thumbnail */}
@@ -541,7 +541,7 @@ export default function PublishToStoreModal({
                         {/* Metadata */}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1">
-                            <span className="font-mono text-xs font-black text-[#1f432b]">
+                            <span className="font-mono text-xs font-semibold text-studio-ink">
                               v{ver.versionNumber}
                             </span>
                             {isLatest && (

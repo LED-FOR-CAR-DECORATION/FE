@@ -69,7 +69,7 @@ export default function CreateCharacterModal({
             type="submit"
             form="create-character-modal-form"
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#2d6a4f] px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-[#1f432b] disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-studio-accent px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
@@ -93,7 +93,7 @@ export default function CreateCharacterModal({
         )}
 
         <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">
+          <label className="mb-1 block font-bold text-studio-ink">
             Tên nhân vật <span className="text-red-500">*</span>
           </label>
           <input
@@ -103,30 +103,30 @@ export default function CreateCharacterModal({
             value={characterName}
             onChange={(e) => setCharacterName(e.target.value)}
             placeholder="Ví dụ: Neon Samurai, Cyberpunk Cat..."
-            className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+            className="w-full rounded-lg border border-studio-line bg-white px-3 py-2 outline-none focus:border-studio-focus"
           />
         </div>
 
         <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">Mô tả</label>
+          <label className="mb-1 block font-bold text-studio-ink">Mô tả</label>
           <textarea
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Phong cách pixel art, chủ đề, gợi ý hiển thị trên LED..."
-            className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+            className="w-full rounded-lg border border-studio-line bg-white px-3 py-2 outline-none focus:border-studio-focus"
           />
         </div>
 
         <div>
-          <label className="mb-1 flex items-center gap-1.5 font-bold text-[#1f432b]">
+          <label className="mb-1 flex items-center gap-1.5 font-bold text-studio-ink">
             <Grid size={14} /> Kích thước Ma trận LED (Matrix Size){" "}
             <span className="text-red-500">*</span>
           </label>
           <select
             value={matrixSize}
             onChange={(e) => setMatrixSize(e.target.value as MatrixSize)}
-            className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 font-semibold text-[#1f432b] outline-none focus:border-[#439660]"
+            className="w-full rounded-lg border border-studio-line bg-white px-3 py-2 font-semibold text-studio-ink outline-none focus:border-studio-focus"
           >
             <option value="32x32">32 x 32 px (Vuông tiêu chuẩn)</option>
             <option value="64x32">64 x 32 px (Màn hình rộng)</option>

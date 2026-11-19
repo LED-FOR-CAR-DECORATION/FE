@@ -95,8 +95,8 @@ export default function DesignerCharacterStudioPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[420px] flex-col items-center justify-center gap-3 text-sm font-semibold text-[#1f432b]">
-        <Loader2 size={24} className="animate-spin text-[#2d6a4f]" />
+      <div className="flex min-h-[420px] flex-col items-center justify-center gap-3 text-sm font-semibold text-studio-ink">
+        <Loader2 size={24} className="animate-spin text-studio-link" />
         <span>Đang chuẩn bị Pixel Art Studio &amp; nạp phiên bản mới nhất...</span>
       </div>
     );
@@ -104,11 +104,11 @@ export default function DesignerCharacterStudioPage() {
 
   if (error || !character) {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+      <div className="mx-auto mt-10 max-w-xl rounded-[4px] border border-red-200 bg-red-50 p-8 text-center">
         <p className="text-base font-bold text-red-700">{error || "Không tìm thấy nhân vật."}</p>
         <Link
           href="/designer/characters"
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#2d6a4f] px-4 py-2 text-sm font-bold text-white"
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-studio-accent px-4 py-2 text-sm font-bold text-white"
         >
           <ArrowLeft size={15} /> Quay lại Danh sách nhân vật
         </Link>
@@ -120,27 +120,27 @@ export default function DesignerCharacterStudioPage() {
   const backHref = commissionId ? `/designer/commissions/${commissionId}` : "/designer/characters";
 
   return (
-    <div className="space-y-4">
-      {/* Studio Top Navigation Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#d8e6dc] bg-white px-5 py-3.5 shadow-xs">
+    <div className="flex flex-col">
+      {/* Studio document bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-[var(--ps-chrome)] px-3 py-1.5">
         <div className="flex items-center gap-3">
           <Link
             href={backHref}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#d8e6dc] bg-[#f7fbf8] px-3 py-1.5 text-xs font-bold text-[#1f432b] hover:bg-[#eaf5ed]"
+            className="inline-flex items-center gap-1.5 rounded-[3px] border border-studio-line px-2.5 py-1 text-[11px] font-semibold text-studio-ink hover:bg-slate-100"
           >
             <ArrowLeft size={14} /> {commissionId ? `Về Commission #${commissionId}` : "Quay lại danh sách"}
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-black text-[#1f432b]">{character.characterName}</h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#1f432b] px-2.5 py-0.5 font-mono text-[11px] font-bold text-white">
+              <h1 className="text-[13px] font-semibold text-studio-ink">{character.characterName}</h1>
+              <span className="inline-flex items-center gap-1 rounded-full bg-studio-accent-hover px-2.5 py-0.5 font-mono text-[11px] font-bold text-white">
                 <Grid size={11} /> {lockedMatrixSize}
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
                 <Sparkles size={11} /> Tạo phiên bản mới v{nextVersionNumber}
               </span>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-[11px] text-slate-500">
               {latestArtworkUrl
                 ? "Bản mới nhất đã được hiển thị trên bảng vẽ để bạn tiếp tục vẽ phiên bản mới."
                 : `Nhân vật chưa có phiên bản nào — Bảng vẽ trống ${lockedMatrixSize} để tạo v1.`}
@@ -148,10 +148,10 @@ export default function DesignerCharacterStudioPage() {
           </div>
         </div>
         {commissionId && (
-          <p className="max-w-sm text-xs text-slate-500">
-            Character của <strong className="text-[#1f432b]">Commission #{commissionId}</strong>. Lưu bao nhiêu version tùy ý,
+          <p className="max-w-sm text-[11px] text-slate-500">
+            Character của <strong className="text-studio-ink">Commission #{commissionId}</strong>. Lưu bao nhiêu version tùy ý,
             rồi{" "}
-            <Link href={backHref} className="font-bold text-[#2d6a4f] underline">quay lại commission</Link> để chọn version nộp staff duyệt.
+            <Link href={backHref} className="font-bold text-studio-link underline">quay lại commission</Link> để chọn version nộp staff duyệt.
           </p>
         )}
       </div>

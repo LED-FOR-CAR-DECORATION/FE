@@ -36,7 +36,7 @@ export default function ManagerRouteGuard({ children }: { children: ReactNode })
             : user?.role === "MANAGER"
               ? "/manager"
               : user?.role === "DESIGNER"
-                ? "/designer/characters"
+                ? "/designer/dashboard"
                 : "/staff"
       );
     }

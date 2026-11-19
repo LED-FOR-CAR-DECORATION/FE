@@ -26,23 +26,7 @@ import CreateCharacterModal from "@/features/designer/components/CreateCharacter
 import { linkedCommissionId, stripCommissionMarker } from "@/features/designer/commission-link";
 import PublishToStoreModal from "@/features/designer/components/PublishToStoreModal";
 import type { DesignerCharacterItem } from "@/lib/api/designerCharacters";
-
-function getCharacterArtwork(character: DesignerCharacterItem): string | null {
-  if (typeof window !== "undefined") {
-    if (character.currentVersion?.versionId) {
-      const versionCached = window.localStorage.getItem(
-        `character_version_artwork_${character.currentVersion.versionId}`,
-      );
-      if (versionCached) return versionCached;
-    }
-    const cached = window.localStorage.getItem(`character_artwork_${character.characterId}`);
-    if (cached && character.totalVersions > 0) return cached;
-  }
-  if (character.currentVersion?.previewGifUrl) {
-    return character.currentVersion.previewGifUrl;
-  }
-  return null;
-}
+import { getCharacterArtwork } from "@/features/designer/character-artwork";
 
 function DesignerDashboardContent() {
   const router = useRouter();
@@ -105,9 +89,9 @@ function DesignerDashboardContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#d8e6dc] bg-white p-6 shadow-xs">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-studio-line bg-white p-6 shadow-xs">
         <div>
-          <h1 className="text-2xl font-black text-[#1f432b]">Danh sách nhân vật</h1>
+          <h1 className="text-2xl font-semibold text-studio-ink">Danh sách nhân vật</h1>
           <p className="mt-1 text-xs text-slate-500">
             Bấm trực tiếp vào thẻ nhân vật để mở Pixel Art Studio vẽ phiên bản mới, hoặc bấm{" "}
             <strong>Đăng bán (Publish)</strong> để quản lý phiên bản và đăng lên Store.
@@ -117,7 +101,7 @@ function DesignerDashboardContent() {
         <button
           type="button"
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#2d6a4f] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#1f432b]"
+          className="inline-flex items-center gap-2 rounded bg-studio-accent px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-studio-accent-hover"
         >
           <Plus size={17} /> Tạo nhân vật
         </button>
@@ -125,7 +109,7 @@ function DesignerDashboardContent() {
 
       {/* Notice */}
       {notice && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+        <div className="flex items-center justify-between gap-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
           <div className="flex items-center gap-2">
             <CheckCircle2 size={16} className="shrink-0" />
             <span>{notice}</span>
@@ -153,12 +137,12 @@ function DesignerDashboardContent() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Tìm nhân vật theo tên..."
-              className="w-full rounded-xl border border-[#d8e6dc] bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-[#439660]"
+              className="w-full rounded border border-studio-line bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-studio-focus"
             />
           </div>
           <button
             type="submit"
-            className="rounded-xl border border-[#d8e6dc] bg-white px-4 py-2 text-xs font-bold text-[#1f432b] hover:bg-slate-50"
+            className="rounded border border-studio-line bg-white px-4 py-2 text-xs font-bold text-studio-ink hover:bg-slate-50"
           >
             Tìm kiếm
           </button>
@@ -166,12 +150,12 @@ function DesignerDashboardContent() {
 
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span>
-            Tổng cộng: <strong className="text-[#1f432b]">{meta.totalElements}</strong> nhân vật
+            Tổng cộng: <strong className="text-studio-ink">{meta.totalElements}</strong> nhân vật
           </span>
           <button
             type="button"
             onClick={() => void refreshCharacters()}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[#d8e6dc] bg-white px-3 py-2 font-bold text-[#1f432b] hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 rounded border border-studio-line bg-white px-3 py-2 font-bold text-studio-ink hover:bg-slate-50"
           >
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Làm mới
           </button>
@@ -180,7 +164,7 @@ function DesignerDashboardContent() {
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="flex items-center gap-2 rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <AlertCircle size={16} />
           <span>{error}</span>
         </div>
@@ -188,18 +172,18 @@ function DesignerDashboardContent() {
 
       {/* Character Cards Grid */}
       {loading ? (
-        <div className="flex min-h-[260px] items-center justify-center gap-2 rounded-2xl border border-[#d8e6dc] bg-white text-sm text-slate-500">
-          <Loader2 size={18} className="animate-spin text-[#2d6a4f]" />
+        <div className="flex min-h-[260px] items-center justify-center gap-2 rounded-md border border-studio-line bg-white text-sm text-slate-500">
+          <Loader2 size={18} className="animate-spin text-studio-link" />
           <span>Đang tải danh sách Character...</span>
         </div>
       ) : characters.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[#cbe0d1] bg-white p-14 text-center">
-          <Sparkles size={36} className="mx-auto mb-3 text-[#88b998]" />
-          <h2 className="text-lg font-black text-[#1f432b]">Danh sách nhân vật đang rỗng</h2>
+        <div className="rounded-md border border-dashed border-studio-line bg-white p-14 text-center">
+          <Sparkles size={36} className="mx-auto mb-3 text-studio-muted" />
+          <h2 className="text-lg font-semibold text-studio-ink">Danh sách nhân vật đang rỗng</h2>
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#2d6a4f] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#1f432b]"
+            className="mt-5 inline-flex items-center gap-2 rounded bg-studio-accent px-5 py-2.5 text-sm font-bold text-white hover:bg-studio-accent-hover"
           >
             <Plus size={16} /> Tạo nhân vật mới
           </button>
@@ -224,10 +208,10 @@ function DesignerDashboardContent() {
                       handleOpenStudio(char);
                     }
                   }}
-                  className="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-[#d8e6dc] bg-white shadow-xs transition hover:-translate-y-0.5 hover:border-[#2d6a4f] hover:shadow-md"
+                  className="group flex cursor-pointer flex-col overflow-hidden rounded-md border border-studio-line bg-white shadow-xs transition hover:-translate-y-0.5 hover:border-studio-accent hover:shadow-md"
                 >
                   {/* Thumbnail Preview (Clicking goes to Pixel Art Studio) */}
-                  <div className="relative aspect-square w-full overflow-hidden border-b border-[#eef5f0] bg-[#0f172a]">
+                  <div className="relative aspect-square w-full overflow-hidden border-b border-studio-line bg-[#0f172a]">
                     {artwork ? (
                       <img
                         src={artwork}
@@ -249,7 +233,7 @@ function DesignerDashboardContent() {
 
                     {/* Hover Hint: Open Pixel Art Studio */}
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-3 pt-8 opacity-0 transition-opacity group-hover:opacity-100">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#2d6a4f] px-3 py-1 text-[11px] font-bold text-white shadow-xs">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-studio-accent px-3 py-1 text-[11px] font-bold text-white shadow-xs">
                         <Palette size={12} />
                         {hasVersions ? "Mở Studio vẽ phiên bản mới" : "Mở Studio tạo bản vẽ v1"}
                       </span>
@@ -260,7 +244,7 @@ function DesignerDashboardContent() {
                   <div className="flex flex-1 flex-col justify-between p-4">
                     <div>
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="line-clamp-1 text-base font-black text-[#1f432b] group-hover:text-[#2d6a4f]">
+                        <h3 className="line-clamp-1 text-base font-semibold text-studio-ink group-hover:text-studio-link">
                           {char.characterName}
                         </h3>
                         <span className="shrink-0 font-mono text-[11px] text-slate-400">
@@ -268,7 +252,7 @@ function DesignerDashboardContent() {
                         </span>
                       </div>
                       {linkedCommissionId(char.description) !== undefined && (
-                        <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-extrabold text-amber-900">
+                        <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
                           Commission #{linkedCommissionId(char.description)}
                         </span>
                       )}
@@ -277,14 +261,14 @@ function DesignerDashboardContent() {
                       </p>
                     </div>
 
-                    <div className="mt-4 space-y-3 border-t border-[#eef5f0] pt-3">
+                    <div className="mt-4 space-y-3 border-t border-studio-line pt-3">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="inline-flex items-center gap-1 font-bold text-[#1f432b]">
-                          <Layers size={13} className="text-[#2d6a4f]" />
+                        <span className="inline-flex items-center gap-1 font-bold text-studio-ink">
+                          <Layers size={13} className="text-studio-link" />
                           {hasVersions ? `${char.totalVersions} phiên bản` : "0 phiên bản"}
                         </span>
                         {char.currentVersion ? (
-                          <span className="rounded bg-[#e9f5ed] px-2 py-0.5 font-mono text-[11px] font-bold text-[#1f432b]">
+                          <span className="rounded bg-studio-soft px-2 py-0.5 font-mono text-[11px] font-bold text-studio-ink">
                             v{char.currentVersion.versionNumber}
                           </span>
                         ) : (
@@ -299,7 +283,7 @@ function DesignerDashboardContent() {
                           e.stopPropagation();
                           setPublishCharacter(char);
                         }}
-                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#2d6a4f] bg-[#f4fbf6] px-3 py-2 text-xs font-bold text-[#1f432b] transition hover:bg-[#2d6a4f] hover:text-white"
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded border border-studio-accent bg-studio-wash px-3 py-2 text-xs font-bold text-studio-ink transition hover:bg-studio-accent hover:text-white"
                       >
                         <Store size={14} /> Đăng bán (Publish)
                       </button>
@@ -312,7 +296,7 @@ function DesignerDashboardContent() {
 
           {/* Pagination */}
           {meta.totalPages > 1 && (
-            <div className="flex items-center justify-between rounded-xl border border-[#d8e6dc] bg-white px-4 py-3 text-xs">
+            <div className="flex items-center justify-between rounded border border-studio-line bg-white px-4 py-3 text-xs">
               <span className="text-slate-500">
                 Trang <strong>{meta.page + 1}</strong> / {meta.totalPages}
               </span>

@@ -117,7 +117,7 @@ export default function CharacterDetailsModal({
                   ? "Cần có ít nhất 1 phiên bản trước khi đăng bán lên Store"
                   : "Chọn 1 phiên bản để gửi duyệt bán lên Store"
               }
-              className="inline-flex items-center gap-2 rounded-lg border border-[#2d6a4f] bg-white px-4 py-2 text-sm font-bold text-[#1f432b] transition hover:bg-[#f4fbf6] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-studio-accent bg-white px-4 py-2 text-sm font-bold text-studio-ink transition hover:bg-studio-wash disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Store size={15} /> Publish to Store
             </button>
@@ -126,7 +126,7 @@ export default function CharacterDetailsModal({
             <button
               type="button"
               onClick={handleDrawNewVersion}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#2d6a4f] px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-[#1f432b]"
+              className="inline-flex items-center gap-2 rounded-lg bg-studio-accent px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover"
             >
               <Palette size={15} /> Vẽ phiên bản mới
             </button>
@@ -136,11 +136,11 @@ export default function CharacterDetailsModal({
     >
       <div className="space-y-4 text-sm">
         {/* Character Header Summary */}
-        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[#d8e6dc] bg-[#f6fbf7] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-studio-line bg-studio-wash p-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-black text-[#1f432b]">{character.characterName}</h3>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#1f432b] px-2.5 py-0.5 font-mono text-[11px] font-bold text-white">
+              <h3 className="text-base font-black text-studio-ink">{character.characterName}</h3>
+              <span className="inline-flex items-center gap-1 rounded-full bg-studio-accent-hover px-2.5 py-0.5 font-mono text-[11px] font-bold text-white">
                 <Grid size={11} /> {matrixSize} (Đã khóa)
               </span>
             </div>
@@ -149,7 +149,7 @@ export default function CharacterDetailsModal({
             </p>
           </div>
           <div className="text-right text-xs text-slate-500">
-            <p className="font-bold text-[#1f432b]">
+            <p className="font-bold text-studio-ink">
               Tổng phiên bản: {loadedVersions?.length ?? character.totalVersions}
             </p>
             <p>ID: #{character.characterId}</p>
@@ -166,7 +166,7 @@ export default function CharacterDetailsModal({
         {/* Versions List (Chronologically Newest First) */}
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#1f432b]">
+            <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-studio-ink">
               <History size={14} /> Danh sách phiên bản (Mới nhất trước)
             </h4>
             <span className="text-[11px] text-slate-500">
@@ -177,19 +177,19 @@ export default function CharacterDetailsModal({
           {historyError ? (
             <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-4">
               <p role="alert" className="text-red-700">{historyError}</p>
-              <button type="button" className="min-h-11 font-semibold text-[#1f432b] underline" onClick={() => {
+              <button type="button" className="min-h-11 font-semibold text-studio-ink underline" onClick={() => {
                 setHistoryError("");
                 setHistoryAttempt((attempt) => attempt + 1);
               }}>Tải lại lịch sử phiên bản</button>
             </div>
           ) : isLoading || !loadedVersions ? (
-            <div role="status" className="flex items-center justify-center gap-2 rounded-xl border border-[#d8e6dc] bg-white p-8 text-xs text-slate-500">
+            <div role="status" className="flex items-center justify-center gap-2 rounded-xl border border-studio-line bg-white p-8 text-xs text-slate-500">
               <Loader2 size={16} className="motion-safe:animate-spin" aria-hidden="true" /> Đang tải lịch sử phiên bản…
             </div>
           ) : versions.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[#cbe0d1] bg-white p-8 text-center">
-              <Palette size={28} className="mx-auto mb-2 text-[#88b998]" />
-              <p className="font-bold text-[#1f432b]">Nhân vật này chưa có phiên bản nào</p>
+            <div className="rounded-xl border border-dashed border-studio-line bg-white p-8 text-center">
+              <Palette size={28} className="mx-auto mb-2 text-studio-muted" />
+              <p className="font-bold text-studio-ink">Nhân vật này chưa có phiên bản nào</p>
               <p className="mt-1 text-xs text-slate-500">
                 Chọn <strong>Vẽ phiên bản mới</strong> để mở Pixel Art Studio với bảng vẽ{" "}
                 {matrixSize}.
@@ -207,7 +207,7 @@ export default function CharacterDetailsModal({
                     className={`flex items-center gap-3 rounded-xl border p-3 transition ${
                       isLocked
                         ? "border-amber-200 bg-amber-50/40"
-                        : "border-[#d8e6dc] bg-white hover:bg-[#fafdfb]"
+                        : "border-studio-line bg-white hover:bg-studio-wash"
                     }`}
                   >
                     {/* Preview Artwork */}
@@ -229,7 +229,7 @@ export default function CharacterDetailsModal({
                     {/* Metadata */}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono text-sm font-black text-[#1f432b]">
+                        <span className="font-mono text-sm font-black text-studio-ink">
                           v{ver.versionNumber}
                         </span>
                         {ver.isCurrent && (
@@ -269,7 +269,7 @@ export default function CharacterDetailsModal({
                             ? "Phiên bản đã đăng bán lên Store — không thể chỉnh sửa"
                             : "Mở Studio vẽ kế thừa từ bản này"
                         }
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs font-bold text-[#1f432b] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex items-center gap-1 rounded-lg border border-studio-line bg-white px-2.5 py-1.5 text-xs font-bold text-studio-ink transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         <Edit3 size={12} /> Sửa
                       </button>

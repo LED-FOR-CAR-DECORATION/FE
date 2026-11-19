@@ -42,7 +42,7 @@ const statusMeta = (status: string) => STATUS_META[status] ?? { label: status, h
 const TONE_CHIP: Record<string, string> = {
   todo: "bg-amber-100 text-amber-900",
   wait: "bg-sky-100 text-sky-900",
-  done: "bg-[#e9f5ed] text-[#1f432b]",
+  done: "bg-studio-soft text-studio-ink",
   muted: "bg-slate-100 text-slate-600",
 };
 
@@ -61,13 +61,13 @@ const formatDate = (iso?: string | null) => {
 };
 
 // Phong cách Designer Dashboard
-const shell = "rounded-2xl border border-[#d8e6dc] bg-white shadow-xs";
-const primaryBtn = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#2d6a4f] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1f432b] disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryBtn = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d8e6dc] bg-white px-4 text-sm font-bold text-[#1f432b] transition hover:bg-[#f7fbf8] disabled:opacity-50";
+const shell = "rounded-md border border-studio-line bg-white shadow-xs";
+const primaryBtn = "inline-flex min-h-11 items-center justify-center gap-2 rounded bg-studio-accent px-5 text-sm font-bold text-white shadow-sm transition hover:bg-studio-accent-hover disabled:cursor-not-allowed disabled:opacity-50";
+const secondaryBtn = "inline-flex min-h-11 items-center justify-center gap-2 rounded border border-studio-line bg-white px-4 text-sm font-bold text-studio-ink transition hover:bg-studio-wash disabled:opacity-50";
 
 function StatusChip({ status }: { status: string }) {
   const meta = statusMeta(status);
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-extrabold ${TONE_CHIP[meta.tone]}`}>{meta.label}</span>;
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${TONE_CHIP[meta.tone]}`}>{meta.label}</span>;
 }
 
 function SkeletonGrid({ count = 4 }: { count?: number }) {
@@ -77,8 +77,8 @@ function SkeletonGrid({ count = 4 }: { count?: number }) {
       <span className="sr-only" role="status">Đang tải…</span>
       {Array.from({ length: count }, (_, index) => (
         <div key={index} className={`${shell} overflow-hidden`} aria-hidden="true">
-          <div className="aspect-[4/3] bg-[#e4ece6]" />
-          <div className="space-y-2 p-4"><div className="h-4 w-3/4 rounded bg-[#e4ece6]" /><div className="h-3 w-1/2 rounded bg-[#e4ece6]" /></div>
+          <div className="aspect-[4/3] bg-studio-soft" />
+          <div className="space-y-2 p-4"><div className="h-4 w-3/4 rounded bg-studio-soft" /><div className="h-3 w-1/2 rounded bg-studio-soft" /></div>
         </div>
       ))}
     </div>
@@ -87,7 +87,7 @@ function SkeletonGrid({ count = 4 }: { count?: number }) {
 
 function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+    <div role="alert" className="flex flex-wrap items-center gap-3 rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
       <AlertTriangle size={16} className="shrink-0" /> <span className="flex-1">{message}</span>
       {onRetry && <button type="button" onClick={onRetry} className="min-h-11 font-bold underline">Thử lại</button>}
     </div>
@@ -157,10 +157,10 @@ export function DesignerCommissionBoard() {
     <div className="space-y-6">
       <header className={`${shell} flex flex-wrap items-center justify-between gap-4 p-6`}>
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e9f5ed] px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-[#1f432b]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-studio-soft px-3 py-1 text-xs font-semibold uppercase tracking-wider text-studio-ink">
             <ClipboardList size={13} /> Commission
           </span>
-          <h1 className="mt-2 text-2xl font-black text-[#1f432b]">Commission được phân công</h1>
+          <h1 className="mt-2 text-2xl font-semibold text-studio-ink">Commission được phân công</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             Mỗi commission có một character riêng. Vẽ và lưu bao nhiêu version tùy ý trong Studio, rồi chọn version ưng ý để nộp staff duyệt.
           </p>
@@ -171,9 +171,9 @@ export function DesignerCommissionBoard() {
       <div role="tablist" aria-label="Lọc commission" className="flex flex-wrap gap-2">
         {TABS.map((entry) => (
           <button key={entry.key} type="button" role="tab" aria-selected={tab === entry.key} onClick={() => setTab(entry.key)}
-            className={`min-h-11 rounded-xl border px-4 text-sm font-bold transition ${tab === entry.key
-              ? "border-[#2d6a4f] bg-[#2d6a4f] text-white" : "border-[#d8e6dc] bg-white text-[#1f432b] hover:bg-[#f7fbf8]"}`}>
-            {entry.label} <span className={`ml-1 rounded-full px-1.5 text-xs ${tab === entry.key ? "bg-white/20" : "bg-[#e9f5ed]"}`}>{counts[entry.key] ?? 0}</span>
+            className={`min-h-11 rounded border px-4 text-sm font-bold transition ${tab === entry.key
+              ? "border-studio-accent bg-studio-accent text-white" : "border-studio-line bg-white text-studio-ink hover:bg-studio-wash"}`}>
+            {entry.label} <span className={`ml-1 rounded-full px-1.5 text-xs ${tab === entry.key ? "bg-white/20" : "bg-studio-soft"}`}>{counts[entry.key] ?? 0}</span>
           </button>
         ))}
       </div>
@@ -181,9 +181,9 @@ export function DesignerCommissionBoard() {
       {error && <ErrorBox message={error} onRetry={refresh} />}
 
       {!items && !error ? <SkeletonGrid /> : visible.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[#cbe0d1] bg-white p-14 text-center">
-          <Sparkles size={36} className="mx-auto mb-3 text-[#88b998]" />
-          <h2 className="text-lg font-black text-[#1f432b]">{tab === "todo" ? "Không có commission nào cần làm" : "Chưa có commission ở mục này"}</h2>
+        <div className="rounded-md border border-dashed border-studio-line bg-white p-14 text-center">
+          <Sparkles size={36} className="mx-auto mb-3 text-studio-muted" />
+          <h2 className="text-lg font-semibold text-studio-ink">{tab === "todo" ? "Không có commission nào cần làm" : "Chưa có commission ở mục này"}</h2>
           <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">Commission mới được staff phân công sẽ xuất hiện ở mục “Cần làm”.</p>
           {tab !== "all" && <button type="button" onClick={() => setTab("all")} className={`${secondaryBtn} mt-5`}>Xem tất cả</button>}
         </div>
@@ -196,8 +196,8 @@ export function DesignerCommissionBoard() {
             return (
               <li key={item.commissionId}>
                 <Link href={`/designer/commissions/${item.commissionId}`}
-                  className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-xs transition hover:-translate-y-0.5 hover:border-[#2d6a4f] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6a4f] ${todo ? "border-amber-300" : "border-[#d8e6dc]"}`}>
-                  <div className="relative aspect-[4/3] w-full overflow-hidden border-b border-[#eef5f0] bg-[#0f172a]">
+                  className={`group flex h-full flex-col overflow-hidden rounded-md border bg-white shadow-xs transition hover:-translate-y-0.5 hover:border-studio-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-studio-accent ${todo ? "border-amber-300" : "border-studio-line"}`}>
+                  <div className="relative aspect-[4/3] w-full overflow-hidden border-b border-studio-line bg-[#0f172a]">
                     {isHttpUrl(preview) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={preview} alt={`Version hiện hành của ${item.title}`} loading="lazy"
@@ -218,14 +218,14 @@ export function DesignerCommissionBoard() {
                   <div className="flex flex-1 flex-col justify-between p-4">
                     <div>
                       <div className="flex items-start justify-between gap-2">
-                        <h2 className="line-clamp-2 text-base font-black text-[#1f432b] group-hover:text-[#2d6a4f]">{item.title}</h2>
+                        <h2 className="line-clamp-2 text-base font-semibold text-studio-ink group-hover:text-studio-link">{item.title}</h2>
                         <span className="shrink-0 font-mono text-[11px] text-slate-400">#{item.commissionId}</span>
                       </div>
                       {item.customerName && <p className="mt-1 text-xs text-slate-500">Khách: {item.customerName}</p>}
                     </div>
-                    <div className="mt-4 flex items-center justify-between border-t border-[#eef5f0] pt-3 text-xs">
-                      <span className="inline-flex items-center gap-1 font-bold text-[#1f432b]">
-                        <Layers size={13} className="text-[#2d6a4f]" /> {character ? `${character.totalVersions} version` : "—"}
+                    <div className="mt-4 flex items-center justify-between border-t border-studio-line pt-3 text-xs">
+                      <span className="inline-flex items-center gap-1 font-bold text-studio-ink">
+                        <Layers size={13} className="text-studio-link" /> {character ? `${character.totalVersions} version` : "—"}
                       </span>
                       {todo && <span className="font-bold text-amber-700">Mở để làm →</span>}
                     </div>
@@ -266,7 +266,7 @@ function SuccessCheck() {
     el.setAttribute("data-state", "in");
   }, []);
   return (
-    <span ref={ref} className="t-success-check text-[#2d6a4f]" data-state="out" aria-hidden="true">
+    <span ref={ref} className="t-success-check text-studio-link" data-state="out" aria-hidden="true">
       <svg viewBox="0 0 48 48" width="40" height="40" fill="none">
         <circle cx="24" cy="24" r="22" fill="#e9f5ed" />
         <path d="M14 25l7 7 13-14" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
@@ -327,7 +327,7 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
       </div>
     ) : (
       <div className="flex min-h-[320px] items-center justify-center gap-2 text-sm text-slate-500" role="status">
-        <Loader2 size={18} className="animate-spin text-[#2d6a4f]" /> Đang tải commission…
+        <Loader2 size={18} className="animate-spin text-studio-link" /> Đang tải commission…
       </div>
     );
   }
@@ -379,43 +379,43 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
 
   return (
     <div className="space-y-6 pb-8">
-      <Link href="/designer/commissions" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-bold text-[#1f432b] hover:underline">
+      <Link href="/designer/commissions" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-bold text-studio-ink hover:underline">
         <ArrowLeft size={15} /> Commission được phân công
       </Link>
 
       <header className={`${shell} flex flex-wrap items-start justify-between gap-4 p-6`}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e9f5ed] px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-[#1f432b]">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-studio-soft px-3 py-1 text-xs font-semibold uppercase tracking-wider text-studio-ink">
               <ClipboardList size={13} /> Commission #{detail.commissionId}
             </span>
             <StatusChip status={detail.status} />
             {detail.targetMatrixDimensions && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#1f432b] px-2.5 py-0.5 font-mono text-[11px] font-bold text-white"><Grid size={11} /> {detail.targetMatrixDimensions}</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-studio-accent-hover px-2.5 py-0.5 font-mono text-[11px] font-bold text-white"><Grid size={11} /> {detail.targetMatrixDimensions}</span>
             )}
           </div>
-          <h1 className="mt-2 break-words text-2xl font-black text-[#1f432b]">{detail.title}</h1>
+          <h1 className="mt-2 break-words text-2xl font-semibold text-studio-ink">{detail.title}</h1>
           <p className="mt-1 text-sm text-slate-600">{meta.hint}</p>
         </div>
         <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-1 text-sm">
-          {detail.assignedStaffName && <><dt className="text-slate-500">Staff</dt><dd className="font-bold text-[#1f432b]">{detail.assignedStaffName}</dd></>}
-          {formatDate(detail.slaDueAt) && <><dt className="text-slate-500">Hạn</dt><dd className="font-bold text-[#1f432b]">{formatDate(detail.slaDueAt)}</dd></>}
-          {typeof detail.maxRevisions === "number" && <><dt className="text-slate-500">Lượt sửa khách</dt><dd className="font-bold text-[#1f432b]">{detail.revisionsUsed ?? 0}/{detail.maxRevisions}</dd></>}
+          {detail.assignedStaffName && <><dt className="text-slate-500">Staff</dt><dd className="font-bold text-studio-ink">{detail.assignedStaffName}</dd></>}
+          {formatDate(detail.slaDueAt) && <><dt className="text-slate-500">Hạn</dt><dd className="font-bold text-studio-ink">{formatDate(detail.slaDueAt)}</dd></>}
+          {typeof detail.maxRevisions === "number" && <><dt className="text-slate-500">Lượt sửa khách</dt><dd className="font-bold text-studio-ink">{detail.revisionsUsed ?? 0}/{detail.maxRevisions}</dd></>}
         </dl>
       </header>
 
       {rejected?.staffReviewNote && (
-        <section className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
-          <p className="flex items-center gap-2 text-sm font-black text-amber-900"><AlertTriangle size={16} /> Staff yêu cầu sửa bản nộp #{rejected.versionNumber}{rejected.reviewerStaffName ? ` · ${rejected.reviewerStaffName}` : ""}</p>
+        <section className="rounded-md border-2 border-amber-300 bg-amber-50 p-4">
+          <p className="flex items-center gap-2 text-sm font-semibold text-amber-900"><AlertTriangle size={16} /> Staff yêu cầu sửa bản nộp #{rejected.versionNumber}{rejected.reviewerStaffName ? ` · ${rejected.reviewerStaffName}` : ""}</p>
           <p className="mt-1 whitespace-pre-wrap break-words text-sm text-amber-950">{rejected.staffReviewNote}</p>
         </section>
       )}
 
       {submitted && (
-        <section role="status" className="flex items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+        <section role="status" className="flex items-center gap-4 rounded-md border border-emerald-200 bg-emerald-50 p-4">
           <SuccessCheck />
           <div className="text-sm">
-            <p className="font-black text-emerald-900">Đã nộp version v{submitted.versionNumber} cho staff duyệt (bản nộp #{submitted.draftVersion}).</p>
+            <p className="font-semibold text-emerald-900">Đã nộp version v{submitted.versionNumber} cho staff duyệt (bản nộp #{submitted.draftVersion}).</p>
             <p className="text-emerald-800">Staff sẽ gửi cho khách hoặc trả về kèm ghi chú nếu cần sửa.</p>
           </div>
         </section>
@@ -423,9 +423,9 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className={`${shell} p-5`} aria-labelledby="character-heading">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eef5f0] pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-studio-line pb-4">
             <div>
-              <h2 id="character-heading" className="flex items-center gap-2 text-lg font-black text-[#1f432b]"><Palette size={18} className="text-[#2d6a4f]" /> Character & phiên bản</h2>
+              <h2 id="character-heading" className="flex items-center gap-2 text-lg font-semibold text-studio-ink"><Palette size={18} className="text-studio-link" /> Character & phiên bản</h2>
               <p className="text-xs text-slate-500">Lưu bao nhiêu version tùy ý trong Studio. Chọn một version bên dưới để nộp.</p>
             </div>
             {studioHref && <Link href={studioHref} className={primaryBtn}><Palette size={15} /> Mở Studio</Link>}
@@ -436,9 +436,9 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
           {character === undefined && !characterError ? (
             <div className="mt-4"><SkeletonGrid count={3} /></div>
           ) : character === null ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-[#cbe0d1] p-10 text-center">
-              <Sparkles size={36} className="mx-auto mb-3 text-[#88b998]" />
-              <h3 className="text-lg font-black text-[#1f432b]">Chưa có character cho commission này</h3>
+            <div className="mt-4 rounded-md border border-dashed border-studio-line p-10 text-center">
+              <Sparkles size={36} className="mx-auto mb-3 text-studio-muted" />
+              <h3 className="text-lg font-semibold text-studio-ink">Chưa có character cho commission này</h3>
               <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
                 Character mới mang tên commission{matrix ? ` và khóa khổ ${matrix}` : ""}, nằm trong thư viện của bạn như mọi character khác.
               </p>
@@ -448,11 +448,11 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
             </div>
           ) : character && (
             <>
-              <p className="mt-4 text-sm"><span className="font-black text-[#1f432b]">{character.characterName}</span> <span className="text-slate-500">· {versions?.length ?? character.totalVersions} version</span></p>
+              <p className="mt-4 text-sm"><span className="font-semibold text-studio-ink">{character.characterName}</span> <span className="text-slate-500">· {versions?.length ?? character.totalVersions} version</span></p>
               {!versions ? <div className="mt-4"><SkeletonGrid count={3} /></div> : versions.length === 0 ? (
-                <div className="mt-4 rounded-2xl border border-dashed border-[#cbe0d1] p-10 text-center">
-                  <Layers size={32} className="mx-auto mb-3 text-[#88b998]" />
-                  <h3 className="font-black text-[#1f432b]">Character chưa có version nào</h3>
+                <div className="mt-4 rounded-md border border-dashed border-studio-line p-10 text-center">
+                  <Layers size={32} className="mx-auto mb-3 text-studio-muted" />
+                  <h3 className="font-semibold text-studio-ink">Character chưa có version nào</h3>
                   <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">Mở Studio, vẽ và bấm “Lưu phiên bản”. Version sẽ hiện ở đây để bạn chọn nộp.</p>
                   {studioHref && <Link href={studioHref} className={`${primaryBtn} mt-5`}><Palette size={15} /> Mở Studio</Link>}
                 </div>
@@ -465,19 +465,19 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
                       <li key={version.versionId}>
                         <button type="button" aria-pressed={isSelected} disabled={!draftable}
                           onClick={() => { setSelectedId(isSelected ? undefined : version.versionId); setSubmitError(""); setSubmitted(undefined); }}
-                          className={`group block w-full overflow-hidden rounded-2xl border-2 bg-white text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6a4f] disabled:cursor-default ${isSelected
-                            ? "border-[#2d6a4f] shadow-md" : "border-[#d8e6dc] hover:border-[#88b998]"}`}>
+                          className={`group block w-full overflow-hidden rounded-md border-2 bg-white text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-studio-accent disabled:cursor-default ${isSelected
+                            ? "border-studio-accent shadow-md" : "border-studio-line hover:border-studio-muted"}`}>
                           <div className="relative aspect-square bg-[#0f172a]">
                             {isHttpUrl(version.previewGifUrl) ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={version.previewGifUrl} alt={`Version v${version.versionNumber}`} loading="lazy"
                                 className="h-full w-full object-contain p-2 [image-rendering:pixelated]" />
                             ) : <div className="flex h-full items-center justify-center text-xs text-slate-400">Không có ảnh</div>}
-                            {isSelected && <span className="absolute right-2 top-2 rounded-full bg-[#2d6a4f] p-1 text-white"><CheckCircle2 size={16} /></span>}
+                            {isSelected && <span className="absolute right-2 top-2 rounded-full bg-studio-accent p-1 text-white"><CheckCircle2 size={16} /></span>}
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5 p-2.5 text-xs">
-                            <span className="font-black text-[#1f432b]">v{version.versionNumber}</span>
-                            {version.isCurrent && <span className="rounded bg-[#e9f5ed] px-1.5 font-bold text-[#1f432b]">Hiện hành</span>}
+                            <span className="font-semibold text-studio-ink">v{version.versionNumber}</span>
+                            {version.isCurrent && <span className="rounded bg-studio-soft px-1.5 font-bold text-studio-ink">Hiện hành</span>}
                             {submittedAs !== undefined && <span className="rounded bg-sky-100 px-1.5 font-bold text-sky-900">Đã nộp (#{submittedAs})</span>}
                           </div>
                         </button>
@@ -488,19 +488,19 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
               )}
 
               {!draftable && versions && versions.length > 0 && (
-                <p className="mt-4 rounded-xl bg-[#f7fbf8] px-4 py-3 text-sm text-slate-600">Chỉ nộp được khi commission ở “Cần thiết kế” hoặc “Staff yêu cầu sửa”. Bạn vẫn có thể vẽ và lưu version trong Studio.</p>
+                <p className="mt-4 rounded bg-studio-wash px-4 py-3 text-sm text-slate-600">Chỉ nộp được khi commission ở “Cần thiết kế” hoặc “Staff yêu cầu sửa”. Bạn vẫn có thể vẽ và lưu version trong Studio.</p>
               )}
 
               {/* Khung nộp — transitions.dev "Panel reveal" */}
               <div className="t-panel-slide mt-5" data-open={String(Boolean(selected && draftable))} aria-hidden={!selected}>
                 {selected && draftable && (
-                  <div className="space-y-3 rounded-2xl border border-[#2d6a4f] bg-[#f7fbf8] p-4">
-                    <p className="flex items-center gap-2 font-black text-[#1f432b]"><Send size={16} /> Nộp version v{selected.versionNumber} cho staff duyệt</p>
+                  <div className="space-y-3 rounded-md border border-studio-accent bg-studio-wash p-4">
+                    <p className="flex items-center gap-2 font-semibold text-studio-ink"><Send size={16} /> Nộp version v{selected.versionNumber} cho staff duyệt</p>
                     {submittedUrls.has(selected.previewGifUrl) && <p className="text-sm text-amber-800">Version này đã được nộp trước đây. Bạn vẫn có thể nộp lại nếu muốn.</p>}
-                    <label htmlFor="designer-note" className="block text-sm font-bold text-[#1f432b]">Ghi chú cho staff (không bắt buộc)</label>
+                    <label htmlFor="designer-note" className="block text-sm font-bold text-studio-ink">Ghi chú cho staff (không bắt buộc)</label>
                     <textarea id="designer-note" rows={3} maxLength={2000} value={note} disabled={submitting} onChange={(event) => setNote(event.target.value)}
                       placeholder="Ví dụ: đã tăng độ sáng viền neon và làm mượt vòng lặp theo ghi chú."
-                      className="w-full rounded-xl border border-[#d8e6dc] bg-white px-3 py-2 text-sm outline-none focus:border-[#439660] focus:ring-2 focus:ring-[#439660]/30" />
+                      className="w-full rounded border border-studio-line bg-white px-3 py-2 text-sm outline-none focus:border-studio-focus focus:ring-2 focus:ring-studio-focus/30" />
                     {submitError && <p role="alert" className="text-sm text-red-700">{submitError}</p>}
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => void submit()} disabled={submitting} className={primaryBtn}>
@@ -517,15 +517,15 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
 
         <aside className="space-y-6">
           <section className={`${shell} space-y-3 p-5`}>
-            <h2 className="flex items-center gap-2 font-black text-[#1f432b]"><ClipboardList size={17} className="text-[#2d6a4f]" /> Yêu cầu của khách</h2>
+            <h2 className="flex items-center gap-2 font-semibold text-studio-ink"><ClipboardList size={17} className="text-studio-link" /> Yêu cầu của khách</h2>
             {detail.description ? <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{detail.description}</p> : <p className="text-sm text-slate-500">Không có mô tả.</p>}
             {(detail.attachments ?? []).some((item) => isHttpUrl(item.imageUrl)) && (
               <ul className="grid grid-cols-3 gap-2">
                 {(detail.attachments ?? []).filter((item) => isHttpUrl(item.imageUrl)).map((item) => (
                   <li key={item.attachmentId}>
-                    <a href={item.imageUrl} target="_blank" rel="noreferrer" title={item.caption ?? "Ảnh tham khảo"} className="block overflow-hidden rounded-xl border border-[#d8e6dc]">
+                    <a href={item.imageUrl} target="_blank" rel="noreferrer" title={item.caption ?? "Ảnh tham khảo"} className="block overflow-hidden rounded border border-studio-line">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={item.imageUrl} alt={item.caption || "Ảnh tham khảo"} loading="lazy" className="aspect-square w-full bg-[#f7fbf8] object-contain" />
+                      <img src={item.imageUrl} alt={item.caption || "Ảnh tham khảo"} loading="lazy" className="aspect-square w-full bg-studio-wash object-contain" />
                     </a>
                   </li>
                 ))}
@@ -543,11 +543,11 @@ function SubmissionHistory({ submissions }: { submissions: CommissionSubmissionI
   const sorted = [...submissions].sort((a, b) => b.versionNumber - a.versionNumber);
   return (
     <section className={`${shell} p-5`}>
-      <h2 className="mb-3 flex items-center gap-2 font-black text-[#1f432b]"><History size={17} className="text-[#2d6a4f]" /> Lịch sử bản nộp</h2>
+      <h2 className="mb-3 flex items-center gap-2 font-semibold text-studio-ink"><History size={17} className="text-studio-link" /> Lịch sử bản nộp</h2>
       {sorted.length === 0 ? <p className="text-sm text-slate-500">Chưa nộp bản nào.</p> : (
         <ol className="space-y-3">
           {sorted.map((item) => (
-            <li key={item.submissionId} className="flex gap-3 rounded-xl border border-[#eef5f0] p-3">
+            <li key={item.submissionId} className="flex gap-3 rounded border border-studio-line p-3">
               {isHttpUrl(item.imageUrl) && (
                 <a href={item.imageUrl} target="_blank" rel="noreferrer" className="shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -555,7 +555,7 @@ function SubmissionHistory({ submissions }: { submissions: CommissionSubmissionI
                 </a>
               )}
               <div className="min-w-0 text-sm">
-                <p className="font-bold text-[#1f432b]">Bản nộp #{item.versionNumber} · <span className="font-semibold text-slate-600">{SUBMISSION_LABELS[item.status] ?? item.status}</span></p>
+                <p className="font-bold text-studio-ink">Bản nộp #{item.versionNumber} · <span className="font-semibold text-slate-600">{SUBMISSION_LABELS[item.status] ?? item.status}</span></p>
                 {item.designerNote && <p className="break-words text-xs text-slate-500">Ghi chú: {item.designerNote}</p>}
                 {item.staffReviewNote && <p className="break-words text-xs text-amber-800">Staff: {item.staffReviewNote}</p>}
               </div>

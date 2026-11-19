@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { ImagePlus, Loader2, RotateCcw, Send, Trash2, X } from "lucide-react";
 import "@/styles/transitions.css";
 import { formatPrice } from "@/lib/currency";
 import StaffDraftReview from "@/features/commission/components/StaffDraftReview";
+import StaffRevisionCard from "@/features/commission/components/StaffRevisionCard";
+import { DeliverableCard, RevisionCard, type CardContext } from "./CommissionCards";
 import { commissionStatusLabel } from "../commission-status";
 import { useCommissionRoom, type ChatViewer, type CommissionRoomInfo, type PendingMessage } from "../hooks/useCommissionRoom";
 import { MAX_MESSAGE_LENGTH, parseMetadata, type CommissionMessage } from "../services/commission-messages.api";
@@ -46,7 +48,12 @@ function formatDateTime(iso?: string | null) {
 
 export default function CommissionChatRoom({ commissionId, viewer }: { commissionId: number; viewer: ChatViewer }) {
   const room = useCommissionRoom(commissionId, viewer);
-  const { info, infoError } = room;
+  const { info, infoError, messages, addMessages, refreshInfo } = room;
+  const cardIds = useMemo(() => latestCardIds(messages), [messages]);
+  const onCardChanged = useCallback((incoming?: CommissionMessage[]) => {
+    if (incoming?.length) addMessages(incoming);
+    void refreshInfo();
+  }, [addMessages, refreshInfo]);
   const backHref = viewer === "CUSTOMER" ? "/commission" : "/staff/commission";
 
   if (!info) {
@@ -65,12 +72,19 @@ export default function CommissionChatRoom({ commissionId, viewer }: { commissio
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <ChatPanel room={room} info={info} viewer={viewer} />
+      <ChatPanel room={room} info={info} viewer={viewer}
+        cardCtx={{ viewer, info, ...cardIds, onChanged: onCardChanged }} />
       <aside className="order-first space-y-4 lg:order-none">
         {viewer === "STAFF" && (
           <StaffDraftReview commissionId={info.commissionId} status={info.status}
             drafts={info.deliveredPreviews.map((item) => ({ ...item, submissionId: item.id }))}
             onChanged={() => void room.refreshInfo()} />
+        )}
+        {viewer === "STAFF" && (
+          <StaffRevisionCard commissionId={info.commissionId} status={info.status}
+            revisionsUsed={info.revisionsUsed} maxRevisions={info.maxRevisions} initialPrice={info.initialPrice}
+            hasPendingCard={cardIds.hasPendingRevision}
+            onPosted={(message) => onCardChanged([message])} />
         )}
         <InfoAccordion title={<>Thông tin Commission #{info.commissionId} <span className="text-sm font-normal">({commissionStatusLabel(info.status)})</span></>}>
           <CommissionInfoPanel info={info} viewer={viewer} />
@@ -129,7 +143,24 @@ function Shimmer({ text, className = "" }: { text: string; className?: string })
 
 type Room = ReturnType<typeof useCommissionRoom>;
 
-function ChatPanel({ room, info, viewer }: { room: Room; info: CommissionRoomInfo; viewer: ChatViewer }) {
+/** messageId của bản xem trước và thẻ chỉnh sửa mới nhất; thẻ chỉnh sửa chỉ còn hiệu lực khi đăng sau bản xem trước mới nhất. */
+function latestCardIds(messages: CommissionMessage[]) {
+  let latestDeliverableId: number | undefined;
+  let latestRevisionId: number | undefined;
+  let latestRevisionStatus: string | undefined;
+  for (const message of messages) {
+    if (message.messageType === "DELIVERABLE_CARD" && message.messageId > (latestDeliverableId ?? 0)) latestDeliverableId = message.messageId;
+    if (message.messageType === "EXTRA_FEE_CARD" && message.messageId > (latestRevisionId ?? 0)) {
+      latestRevisionId = message.messageId;
+      const status = parseMetadata(message.metadataJson)?.status;
+      latestRevisionStatus = typeof status === "string" ? status : "PENDING";
+    }
+  }
+  const hasPendingRevision = latestRevisionId !== undefined && latestRevisionId > (latestDeliverableId ?? 0) && latestRevisionStatus === "PENDING";
+  return { latestDeliverableId, latestRevisionId, hasPendingRevision };
+}
+
+function ChatPanel({ room, info, viewer, cardCtx }: { room: Room; info: CommissionRoomInfo; viewer: ChatViewer; cardCtx: CardContext }) {
   const { messages, liveIds, pending, historyLoaded, historyError, readable, canSend, realtime } = room;
   const listRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -198,7 +229,7 @@ function ChatPanel({ room, info, viewer }: { room: Room; info: CommissionRoomInf
               <div key={group.day} className="space-y-3">
                 <div className="flex justify-center"><span className="rounded-full bg-white px-3 py-0.5 text-xs text-[#526159] shadow-sm">{group.day}</span></div>
                 {group.items.map((message) => (
-                  <MessageItem key={message.messageId} message={message} viewer={viewer} info={info} animate={liveIds.has(message.messageId)} />
+                  <MessageItem key={message.messageId} message={message} viewer={viewer} info={info} animate={liveIds.has(message.messageId)} cardCtx={cardCtx} />
                 ))}
               </div>
             ))}
@@ -270,8 +301,8 @@ function senderLabel(message: CommissionMessage, viewer: ChatViewer, info: Commi
   return message.senderId ? `${role} #${message.senderId}` : role;
 }
 
-function MessageItem({ message, viewer, info, animate }: {
-  message: CommissionMessage; viewer: ChatViewer; info: CommissionRoomInfo; animate: boolean;
+function MessageItem({ message, viewer, info, animate, cardCtx }: {
+  message: CommissionMessage; viewer: ChatViewer; info: CommissionRoomInfo; animate: boolean; cardCtx: CardContext;
 }) {
   if (message.messageType === "SYSTEM" || message.senderRole === "SYSTEM") {
     return (
@@ -290,9 +321,9 @@ function MessageItem({ message, viewer, info, animate }: {
     <Reveal animate={animate} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
       {!mine && <span className="t-stagger-line t-stagger-line--1 mb-0.5 px-1 text-xs text-[#526159]">{senderLabel(message, viewer, info)}</span>}
       {message.messageType === "DELIVERABLE_CARD" ? (
-        <div className="t-stagger-line t-stagger-line--2"><DeliverableCard message={message} /></div>
+        <div className="t-stagger-line t-stagger-line--2"><DeliverableCard message={message} ctx={cardCtx} /></div>
       ) : message.messageType === "EXTRA_FEE_CARD" ? (
-        <div className="t-stagger-line t-stagger-line--2"><ExtraFeeCard message={message} viewer={viewer} info={info} /></div>
+        <div className="t-stagger-line t-stagger-line--2"><RevisionCard message={message} ctx={cardCtx} /></div>
       ) : (
         <div className={`t-stagger-line t-stagger-line--2 max-w-[80%] overflow-hidden rounded-2xl ${mine ? "rounded-br-sm bg-[#155e59] text-white" : "rounded-bl-sm border border-[#cfe3d0] bg-white"}`}>
           {message.messageType === "IMAGE" && isHttpUrl(message.mediaUrl) && (
@@ -306,52 +337,6 @@ function MessageItem({ message, viewer, info, animate }: {
       )}
       <span className="t-stagger-line t-stagger-line--3 mt-0.5 px-1 text-[11px] text-[#5f6f67]">{formatTime(message.createdAt)}</span>
     </Reveal>
-  );
-}
-
-function DeliverableCard({ message }: { message: CommissionMessage }) {
-  const meta = parseMetadata(message.metadataJson);
-  const image = [message.mediaUrl, meta?.imageUrl].find(isHttpUrl);
-  const version = meta?.versionNumber;
-  const autoComplete = typeof meta?.autoCompleteAt === "string" ? formatDateTime(meta.autoCompleteAt) : null;
-  const revisions = typeof meta?.maxRevisions === "number"
-    ? `${typeof meta.revisionsUsed === "number" ? meta.revisionsUsed : 0}/${meta.maxRevisions}` : null;
-  return (
-    <div className="w-72 max-w-full overflow-hidden rounded-xl border-2 border-[#155e59] bg-white">
-      <p className="bg-[#155e59] px-3 py-1.5 text-sm font-bold text-white">
-        Bản xem trước{typeof version === "number" || typeof version === "string" ? ` · v${version}` : ""}
-      </p>
-      {image && (
-        <a href={image} target="_blank" rel="noreferrer">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={image} alt="Bản xem trước artwork" loading="lazy" decoding="async" className="h-60 w-full bg-black object-contain [image-rendering:pixelated]" />
-        </a>
-      )}
-      {message.content && <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm">{message.content}</p>}
-      {(revisions || autoComplete) && (
-        <dl className="space-y-0.5 border-t border-[#cfe3d0] px-3 py-2 text-xs text-[#526159]">
-          {revisions && <div className="flex justify-between gap-2"><dt>Lượt chỉnh sửa đã dùng</dt><dd className="font-semibold">{revisions}</dd></div>}
-          {autoComplete && <div className="flex justify-between gap-2"><dt>Tự hoàn thành lúc</dt><dd className="font-semibold">{autoComplete}</dd></div>}
-        </dl>
-      )}
-    </div>
-  );
-}
-
-function ExtraFeeCard({ message, viewer, info }: { message: CommissionMessage; viewer: ChatViewer; info: CommissionRoomInfo }) {
-  const meta = parseMetadata(message.metadataJson);
-  const amount = [meta?.amount, meta?.extraFee, meta?.fee].find((value): value is number => typeof value === "number");
-  return (
-    <div className="w-72 max-w-full rounded-xl border-2 border-amber-500 bg-amber-50 p-3">
-      <p className="text-sm font-bold text-amber-900">Phí chỉnh sửa bổ sung</p>
-      {amount !== undefined && <p className="text-lg font-black text-amber-900">{formatPrice(amount)}</p>}
-      {message.content && <p className="mt-1 whitespace-pre-wrap break-words text-sm">{message.content}</p>}
-      {viewer === "CUSTOMER" && info.status === "AWAITING_EXTRA_PAYMENT" && (
-        <Link href={`/commission/${info.commissionId}/payment`} className="mt-2 inline-block rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700">
-          Thanh toán phí bổ sung
-        </Link>
-      )}
-    </div>
   );
 }
 

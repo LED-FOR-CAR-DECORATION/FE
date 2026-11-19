@@ -16,7 +16,7 @@ import {
 } from "@/lib/api/designerCharacters";
 import type { CreatedStoreProductResponse } from "@/api_client";
 
-export type MatrixSize = "32x32" | "64x32";
+export type MatrixSize = "32x32" | "64x32" | "64x64";
 
 const MATRIX_STORAGE_PREFIX = "character_matrix_size_";
 const PAGE_SIZE = 12;
@@ -24,7 +24,7 @@ const PAGE_SIZE = 12;
 export function getStoredMatrixSize(characterId: number): MatrixSize {
   if (typeof window === "undefined") return "32x32";
   const saved = window.localStorage.getItem(`${MATRIX_STORAGE_PREFIX}${characterId}`);
-  return saved === "64x32" ? "64x32" : "32x32";
+  return saved === "64x32" || saved === "64x64" ? saved : "32x32";
 }
 
 export function setStoredMatrixSize(characterId: number, size: MatrixSize) {

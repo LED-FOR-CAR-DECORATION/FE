@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../styles/ps-theme.css";
 
 @theme {
   --font-sans: var(--font-inter);
@@ -13,6 +14,17 @@
   
   --color-text-main: #111111;
   --color-text-muted: #555555;
+
+  /* Designer studio tokens (light defaults; remapped by .ps-theme) */
+  --color-studio-ink: #1f432b;
+  --color-studio-link: #2d6a4f;
+  --color-studio-accent: #2d6a4f;
+  --color-studio-accent-hover: #1f432b;
+  --color-studio-line: #d8e6dc;
+  --color-studio-soft: #e9f5ed;
+  --color-studio-wash: #f7fbf8;
+  --color-studio-focus: #439660;
+  --color-studio-muted: #88b998;
 }
 
 @layer base {

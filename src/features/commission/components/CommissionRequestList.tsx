@@ -71,7 +71,7 @@ function ServerCommissionRequests() {
                       <span className="sr-only"> cho {item.title}</span>
                     </Link>
                     {canReadHistory(item.status) && (
-                      <Link href={`/commission/${item.commissionId}/chat`} className="inline-flex min-h-11 items-center font-semibold text-[#155e59] underline">
+                      <Link href={`/messages?commissionId=${item.commissionId}`} className="inline-flex min-h-11 items-center font-semibold text-[#155e59] underline">
                         Mở chat<span className="sr-only"> cho {item.title}</span>
                       </Link>
                     )}

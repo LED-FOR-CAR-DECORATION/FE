@@ -6,29 +6,12 @@ import type { CustomerCommissionSummaryItem } from "@/api_client/models/Customer
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { belongsToCustomer, loadConversations } from "@/features/commission-chat/services/commission-chat.service";
-import type { Conversation } from "@/features/commission-chat/types";
 import { formatCommissionMoney } from "../config/fixedPricing";
+import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
 
 export default function CommissionRequestList() {
-  const [requests, setRequests] = useState<Conversation[] | null>(null);
-
   const { user, isLoading } = useAuth();
   const userId = user?.role === "CUSTOMER" ? user.userId : undefined;
-  const visibleRequests = requests?.filter((request) => belongsToCustomer(request, userId));
-
-  useEffect(() => {
-    function refresh() {
-      setRequests(loadConversations().filter(({ id }) => /^CM[0-9A-F]{8}$/.test(id)));
-    }
-    refresh();
-    window.addEventListener("storage", refresh);
-    window.addEventListener("mirage-commission-chat-updated", refresh);
-    return () => {
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("mirage-commission-chat-updated", refresh);
-    };
-  }, []);
 
   return (
     <section aria-labelledby="commission-list-heading" className="space-y-5">
@@ -38,26 +21,12 @@ export default function CommissionRequestList() {
           Tạo yêu cầu mới
         </Link>
       </div>
-      {userId && <ServerCommissionRequests key={userId} />}
-      {isLoading || !visibleRequests ? (
+      {isLoading ? (
         <p role="status">Đang tải yêu cầu…</p>
-      ) : visibleRequests.length === 0 ? (
-        <p className="rounded-xl border border-[#cfe3d0] bg-white p-5">Bạn chưa có yêu cầu demo nào.</p>
+      ) : userId ? (
+        <ServerCommissionRequests key={userId} />
       ) : (
-        <ul className="space-y-3">
-          {visibleRequests.map(({ id, commission }) => (
-            <li key={id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#cfe3d0] bg-white p-5">
-              <div className="min-w-0 space-y-1">
-                <h2 className="font-bold text-[#155e59]">{commission.characterName}</h2>
-                <p className="line-clamp-2 break-words text-sm">{commission.description}</p>
-                <p className="text-sm">{formatCommissionMoney(commission.price)} · {commission.isPaid ? "Đã thanh toán (demo)" : "Chờ thanh toán"}</p>
-              </div>
-              <Link href={`/chat#${encodeURIComponent(id)}`} className="font-semibold text-[#155e59] underline">
-                Mở chat <span className="sr-only">cho {id}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <p className="rounded-xl border border-[#cfe3d0] bg-white p-5">Đăng nhập bằng tài khoản khách hàng để xem yêu cầu Commission.</p>
       )}
     </section>
   );
@@ -89,17 +58,28 @@ function ServerCommissionRequests() {
     <div className="space-y-3">
       {failedPage === page ? <p role="alert">Không tải được yêu cầu Commission.</p> :
         !items ? <p role="status">Đang tải yêu cầu Commission…</p> :
-        items.length === 0 ? <p>Bạn chưa có yêu cầu Commission trên trang này.</p> : (
-          <ul className="space-y-3">
-            {items.map((item) => (
-              <li key={item.commissionId} className="rounded-xl border border-[#cfe3d0] bg-white p-5">
-                <h2 className="font-bold text-[#155e59]">{item.title}</h2>
-                <p className="text-sm">{item.targetMatrixDimensions} · {item.status === "PENDING_REVIEW" ? "Chờ nhân viên duyệt" : item.status}</p>
-                {item.totalPrice !== undefined && <p className="text-sm">{formatCommissionMoney(item.totalPrice)}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
+          items.length === 0 ? <p className="rounded-xl border border-[#cfe3d0] bg-white p-5">Chưa có yêu cầu nào. <Link href="/commission/new" className="font-semibold text-[#155e59] underline">Tạo yêu cầu mới</Link></p> : (
+            <ul className="space-y-3">
+              {items.map((item) => (
+                <li key={item.commissionId} className="rounded-xl border border-[#cfe3d0] bg-white p-5">
+                  <h2 className="font-bold text-[#155e59]">{item.title}</h2>
+                  <p className="text-sm">{item.targetMatrixDimensions} · {item.status === "PENDING_REVIEW" ? "Chờ nhân viên duyệt" : item.status}</p>
+                  {item.totalPrice !== undefined && <p className="text-sm">{formatCommissionMoney(item.totalPrice)}</p>}
+                  <div className="mt-2 flex flex-wrap gap-x-5">
+                    <Link href={`/commission/${item.commissionId}/payment`} className="inline-flex min-h-11 items-center font-semibold text-[#155e59] underline">
+                      {item.status === "PENDING_PAYMENT" || item.status === "AWAITING_EXTRA_PAYMENT" ? "Thanh toán" : "Xem thanh toán"}
+                      <span className="sr-only"> cho {item.title}</span>
+                    </Link>
+                    {canReadHistory(item.status) && (
+                      <Link href={`/messages?commissionId=${item.commissionId}`} className="inline-flex min-h-11 items-center font-semibold text-[#155e59] underline">
+                        Mở chat<span className="sr-only"> cho {item.title}</span>
+                      </Link>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
       {(page > 0 || items?.length === size) && (
         <div className="flex gap-4">
           <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>Trang trước</button>

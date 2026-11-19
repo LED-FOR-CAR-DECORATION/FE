@@ -27,8 +27,22 @@ export type BundledOptionResponse = {
      */
     optionLabel?: string;
     /**
-     * Standard individual option price in VND
+     * Pricing modifier calculation type
+     */
+    modifierType?: BundledOptionResponse.modifierType;
+    /**
+     * Standard individual option price in VND or percentage points
      */
     basePrice?: number;
 };
+export namespace BundledOptionResponse {
+    /**
+     * Pricing modifier calculation type
+     */
+    export enum modifierType {
+        FLAT_ADD = 'FLAT_ADD',
+        BASE_PERCENT = 'BASE_PERCENT',
+        SUBTOTAL_PERCENT = 'SUBTOTAL_PERCENT',
+    }
+}
 

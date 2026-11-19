@@ -24,13 +24,25 @@ export type PricingRuleResponse = {
      */
     description?: string;
     /**
-     * Selection cardinality type
+     * Selection cardinality or input primitive type
      */
     selectionType?: PricingRuleResponse.selectionType;
     /**
      * UI component presentation type
      */
     uiType?: PricingRuleResponse.uiType;
+    /**
+     * Whether this rule contributes to the Base bucket used by BASE_PERCENT modifiers
+     */
+    isBasePrice?: boolean;
+    /**
+     * Minimum allowed quantity when selectionType is QUANTITY
+     */
+    minQuantity?: number | null;
+    /**
+     * Maximum allowed quantity when selectionType is QUANTITY
+     */
+    maxQuantity?: number | null;
     /**
      * Whether selection is mandatory
      */
@@ -62,11 +74,12 @@ export type PricingRuleResponse = {
 };
 export namespace PricingRuleResponse {
     /**
-     * Selection cardinality type
+     * Selection cardinality or input primitive type
      */
     export enum selectionType {
         SINGLE_SELECT = 'SINGLE_SELECT',
         MULTI_SELECT = 'MULTI_SELECT',
+        QUANTITY = 'QUANTITY',
         TEXT_INPUT = 'TEXT_INPUT',
     }
     /**
@@ -76,6 +89,7 @@ export namespace PricingRuleResponse {
         RADIO = 'RADIO',
         DROPDOWN = 'DROPDOWN',
         CHECKBOX = 'CHECKBOX',
+        NUMBER = 'NUMBER',
         TEXT = 'TEXT',
     }
 }

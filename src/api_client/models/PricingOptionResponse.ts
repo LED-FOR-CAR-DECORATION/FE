@@ -19,7 +19,11 @@ export type PricingOptionResponse = {
      */
     optionLabel?: string;
     /**
-     * Price surcharge in VND
+     * Pricing modifier calculation type
+     */
+    modifierType?: PricingOptionResponse.modifierType;
+    /**
+     * Fixed VND surcharge (FLAT_ADD) or percentage points (BASE_PERCENT / SUBTOTAL_PERCENT)
      */
     basePrice?: number;
     /**
@@ -31,4 +35,14 @@ export type PricingOptionResponse = {
      */
     displayOrder?: number;
 };
+export namespace PricingOptionResponse {
+    /**
+     * Pricing modifier calculation type
+     */
+    export enum modifierType {
+        FLAT_ADD = 'FLAT_ADD',
+        BASE_PERCENT = 'BASE_PERCENT',
+        SUBTOTAL_PERCENT = 'SUBTOTAL_PERCENT',
+    }
+}
 

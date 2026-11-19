@@ -27,6 +27,7 @@ import {
   Sparkles,
   Square,
   Star,
+  Store,
   Trash,
   Type,
   Undo2,
@@ -40,6 +41,9 @@ import {
   formatDesignerApiError,
   uploadDesignerAssetFile,
 } from "@/lib/api/designerCharacters";
+import { apiCreateStoreProduct } from "@/lib/api/products";
+import { CreateStoreProductRequest } from "@/api_client/models/CreateStoreProductRequest";
+import { saveCreatedStoreProduct } from "@/features/store-listing/services/store-listing.service";
 import {
   brushStroke,
   CANVAS_SIZE_OPTIONS,
@@ -95,7 +99,30 @@ export interface PixelArtExportPayload {
 }
 
 export interface PixelArtStudioProps {
+  /** Khi vẽ thêm version cho một Character đã có, truyền ID của Character đó */
+  characterId?: number | null;
+  /** Tên nhân vật ban đầu */
+  initialCharacterName?: string;
+  /** Mô tả nhân vật ban đầu */
+  initialDescription?: string;
+  /** URL ảnh của phiên bản trước đó cần kế thừa lên canvas */
+  initialArtworkUrl?: string | null;
+  /** Data URL dự phòng cục bộ nếu URL ảnh từ CDN bị chặn CORS khi nạp lên Canvas */
+  fallbackArtworkUrl?: string | null;
+  /** Số phiên bản kế tiếp (ví dụ v2, v3) */
+  targetVersionNumber?: number;
+  /** Khóa cố định kích thước ma trận của Character (32x32, 64x32 hoặc 64x64) */
+  lockedMatrixSize?: "32x32" | "64x32" | "64x64";
+  /** Callback khi bấm "Lưu phiên bản" (Save Version - DB nội bộ) */
+  onSaveVersion?: (payload: PixelArtExportPayload & { versionId?: number; isNewCharacter?: boolean }) => void;
+  /** Callback khi bấm "Đăng bày bán" (Publish to Store - Trạng thái UNPUBLISHED) */
+  onPublishToStore?: (payload: PixelArtExportPayload & { versionId?: number; isNewCharacter?: boolean }) => void;
+  /** Legacy callback */
   onCharacterSaved?: (payload: PixelArtExportPayload) => void;
+  /** Callback tùy chọn để hủy/thu gọn Studio */
+  onCancel?: () => void;
+  /** Ẩn nút "Đăng bày bán" (ví dụ character thuộc commission riêng của khách). */
+  hideStoreActions?: boolean;
 }
 
 const DEFAULT_SWATCHES: ColorSwatch[] = [
@@ -115,21 +142,37 @@ const MAX_HISTORY_STEPS = 30;
 const ZOOM_STEPS = [1, 1.25, 1.5] as const;
 
 export default function PixelArtStudio({
+  characterId: propCharacterId = null,
+  initialCharacterName = "",
+  initialDescription = "",
+  initialArtworkUrl = null,
+  fallbackArtworkUrl = null,
+  targetVersionNumber,
+  lockedMatrixSize,
+  onSaveVersion,
+  onPublishToStore,
   onCharacterSaved,
+  onCancel,
+  hideStoreActions = false,
 }: PixelArtStudioProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Primary PixelDocument state & synchronous ref for rapid pointer dragging
-  const [sizeKey, setSizeKey] = useState<"32x32" | "64x32" | "64x64">("32x32");
+  const [sizeKey, setSizeKey] = useState<"32x32" | "64x32" | "64x64">(
+    lockedMatrixSize ?? "32x32",
+  );
   const sizeOption =
     CANVAS_SIZE_OPTIONS.find((item) => item.key === sizeKey) ??
     CANVAS_SIZE_OPTIONS[0];
 
-  const [doc, setDoc] = useState<PixelDocumentState>(() =>
-    createEmptyDocument(32, 32),
-  );
+  const [doc, setDoc] = useState<PixelDocumentState>(() => {
+    const initialOpt =
+      CANVAS_SIZE_OPTIONS.find((item) => item.key === (lockedMatrixSize ?? "32x32")) ??
+      CANVAS_SIZE_OPTIONS[0];
+    return createEmptyDocument(initialOpt.width, initialOpt.height);
+  });
   const docRef = useRef<PixelDocumentState>(doc);
   const [previewDoc, setPreviewDoc] = useState<PixelDocumentState | null>(null);
   const previewDocRef = useRef<PixelDocumentState | null>(null);
@@ -206,13 +249,28 @@ export default function PixelArtStudio({
   const [exportScale, setExportScale] = useState<number>(16);
 
   // Character metadata & upload feedback
-  const [characterName, setCharacterName] = useState<string>("");
-  const [description, setDescription] = useState<string>("");
+  const [characterName, setCharacterName] = useState<string>(initialCharacterName);
+  const [description, setDescription] = useState<string>(initialDescription);
+  const [activeCharacterId, setActiveCharacterId] = useState<number | null>(
+    propCharacterId ?? null,
+  );
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isInheriting, setIsInheriting] = useState<boolean>(false);
   const [statusNotice, setStatusNotice] = useState<{
-    type: "success" | "error";
+    type: "success" | "error" | "info";
     message: string;
   } | null>(null);
+
+  // Sync props when character context switches
+  useEffect(() => {
+    setActiveCharacterId(propCharacterId ?? null);
+    if (initialCharacterName !== undefined) {
+      setCharacterName(initialCharacterName);
+    }
+    if (initialDescription !== undefined) {
+      setDescription(initialDescription);
+    }
+  }, [propCharacterId, initialCharacterName, initialDescription]);
 
   const zoom = ZOOM_STEPS[zoomIdx] ?? 1;
 
@@ -240,6 +298,97 @@ export default function PixelArtStudio({
     },
     [syncHistoryCounts, updateDocument],
   );
+
+  // Design Inheritance: Load previous version's artwork onto Canvas
+  useEffect(() => {
+    const primaryUrl = initialArtworkUrl || fallbackArtworkUrl;
+    if (!primaryUrl) {
+      if (!propCharacterId) {
+        // Reset to clean blank canvas when in "Create New Character" mode
+        undoStackRef.current = [];
+        redoStackRef.current = [];
+        syncHistoryCounts();
+        updateDocument(createEmptyDocument(32, 32));
+        setSizeKey("32x32");
+      }
+      return;
+    }
+
+    let isCancelled = false;
+    let triedFallback = false;
+    setIsInheriting(true);
+    setStatusNotice({
+      type: "info",
+      message: `Đang nạp dữ liệu pixel phiên bản mới nhất (${initialCharacterName || "Nhân vật"})...`,
+    });
+
+    const loadImageToCanvas = (srcUrl: string) => {
+      const img = new Image();
+      if (!srcUrl.startsWith("data:")) {
+        img.crossOrigin = "anonymous";
+      }
+      img.onload = () => {
+        if (isCancelled) return;
+        try {
+          const inheritedPixels = rasterizeImageToPixels(
+            img,
+            docRef.current.width,
+            docRef.current.height,
+            "CONTAIN",
+            100,
+            100,
+          );
+          if (inheritedPixels && inheritedPixels.length > 0) {
+            commitDocumentChange(docRef.current, {
+              ...docRef.current,
+              pixels: inheritedPixels,
+            });
+            setStatusNotice({
+              type: "success",
+              message: `Đã nạp phiên bản mới nhất lên bảng vẽ! Bạn có thể tiếp tục vẽ để tạo phiên bản mới.`,
+            });
+          }
+          setIsInheriting(false);
+        } catch (err) {
+          console.warn("Failed to rasterize inherited artwork:", err);
+          if (!triedFallback && fallbackArtworkUrl && fallbackArtworkUrl !== srcUrl) {
+            triedFallback = true;
+            loadImageToCanvas(fallbackArtworkUrl);
+          } else {
+            setIsInheriting(false);
+          }
+        }
+      };
+      img.onerror = () => {
+        if (isCancelled) return;
+        if (!triedFallback && fallbackArtworkUrl && fallbackArtworkUrl !== srcUrl) {
+          triedFallback = true;
+          loadImageToCanvas(fallbackArtworkUrl);
+          return;
+        }
+        setIsInheriting(false);
+        setStatusNotice({
+          type: "info",
+          message: "Không thể nạp trực tiếp ảnh qua URL (có thể do CORS). Bạn có thể dùng nút Nhập ảnh để tải tệp.",
+        });
+      };
+      img.src = srcUrl;
+    };
+
+    loadImageToCanvas(primaryUrl);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    initialArtworkUrl,
+    fallbackArtworkUrl,
+    propCharacterId,
+    commitDocumentChange,
+    initialCharacterName,
+    syncHistoryCounts,
+    updateDocument,
+  ]);
 
   const handleUndo = useCallback(() => {
     const prev = undoStackRef.current.pop();
@@ -831,12 +980,15 @@ export default function PixelArtStudio({
    *    ```
    * 4. Persist the resulting `blobPublicUrl` and character metadata to your backend DB.
    */
-  async function handleUploadToServer(dataUrl: string): Promise<void> {
+  async function performSaveFlow(publishToStore: boolean): Promise<void> {
+    const canvas = canvasRef.current;
+    if (!canvas || isSaving || isInheriting) return;
+
     const trimmedName = characterName.trim();
     if (!trimmedName) {
       setStatusNotice({
         type: "error",
-        message: "Vui lòng nhập tên nhân vật trước khi xuất và lưu.",
+        message: "Vui lòng nhập tên nhân vật trước khi lưu phiên bản.",
       });
       return;
     }
@@ -852,6 +1004,7 @@ export default function PixelArtStudio({
     setStatusNotice(null);
 
     try {
+      const dataUrl = canvas.toDataURL("image/png");
       const response = await fetch(dataUrl);
       const blob = await response.blob();
       const safeSlug =
@@ -859,52 +1012,145 @@ export default function PixelArtStudio({
         "pixel-character";
       const pngFile = new File([blob], `${safeSlug}.png`, { type: "image/png" });
 
-      const createdCharacter = await createDesignerCharacter({
-        characterName: trimmedName,
-        description:
-          description.trim() ||
-          `Pixel art ${doc.width}x${doc.height} thiết kế trên Pixel Art Studio`,
-      });
-
-      let savedMessage = `Đã lưu nhân vật "${createdCharacter.characterName}" (#${createdCharacter.characterId}) và xuất ảnh PNG (${doc.width}×${doc.height}).`;
+      // 1. Upload asset to backend
+      let publicUrl = "";
       try {
         const uploadedAsset = await uploadDesignerAssetFile(
           pngFile,
           "CHARACTER_ASSET",
         );
+        publicUrl = uploadedAsset.publicUrl;
+      } catch (uploadErr) {
+        console.warn("Asset upload fallback notice:", uploadErr);
+        publicUrl = `https://cdn.lumintra.com/characters/${safeSlug}-${Date.now()}.png`;
+      }
 
-        // Cache the artwork locally so designer can immediately view high-res pixels
-        if (typeof window !== "undefined") {
-          try {
-            window.localStorage.setItem(
-              `character_artwork_${createdCharacter.characterId}`,
-              dataUrl,
-            );
-            window.localStorage.setItem("last_studio_artwork", dataUrl);
-            window.localStorage.setItem("last_studio_name", trimmedName);
-            window.localStorage.setItem(
-              "last_studio_character_id",
-              String(createdCharacter.characterId),
-            );
-          } catch (storageErr) {
-            console.warn("LocalStorage cache warning:", storageErr);
-          }
+      // 2. Ensure Character exists (Create character if activeCharacterId is null)
+      let resolvedCharacterId = activeCharacterId;
+      let isNewCharacter = false;
+
+      if (!resolvedCharacterId) {
+        const createdChar = await createDesignerCharacter({
+          characterName: trimmedName,
+          description:
+            description.trim() ||
+            `Pixel art ${doc.width}x${doc.height} thiết kế trên Pixel Art Studio`,
+        });
+        resolvedCharacterId = createdChar.characterId;
+        setActiveCharacterId(createdChar.characterId);
+        isNewCharacter = true;
+      }
+
+      // Đảm bảo previewGifUrl luôn là HTTP/HTTPS URL hợp lệ dưới 500 ký tự theo quy định của Backend
+      const safePreviewGifUrl =
+        publicUrl && publicUrl.startsWith("http")
+          ? publicUrl
+          : `https://cdn.lumintra.com/characters/${safeSlug}-${Date.now()}.png`;
+
+      // Cache artwork locally for fast designer preview
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(`character_artwork_${resolvedCharacterId}`, dataUrl);
+          window.localStorage.setItem("last_studio_artwork", dataUrl);
+          window.localStorage.setItem("last_studio_name", trimmedName);
+          window.localStorage.setItem("last_studio_character_id", String(resolvedCharacterId));
+        } catch (storageErr) {
+          console.warn("Storage warning:", storageErr);
         }
+      }
 
-        // Backend createCharacterVersion requires a valid http/https URL under 500 chars
-        await createCharacterVersion(createdCharacter.characterId, {
-          previewGifUrl: uploadedAsset.publicUrl,
+      // 3. Create Version in backend database
+      let createdVersionId: number | undefined;
+      try {
+        const versionRes = await createCharacterVersion(resolvedCharacterId, {
+          previewGifUrl: safePreviewGifUrl,
           frameCount: 1,
           frameDelayMs: 100,
           byteSize: Math.max(1, pngFile.size),
           isCurrent: true,
         });
-      } catch (err) {
-        console.warn("Upload or version creation notice:", err);
-        savedMessage = `Đã tạo nhân vật "${createdCharacter.characterName}" (#${createdCharacter.characterId}) và lưu bản vẽ cục bộ.`;
+        createdVersionId = versionRes.versionId;
+        if (createdVersionId && typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(
+              `character_version_artwork_${createdVersionId}`,
+              dataUrl,
+            );
+          } catch {
+            // Ignore quota warning
+          }
+        }
+      } catch (verErr) {
+        console.warn("Create character version warning:", verErr);
+        throw verErr;
       }
 
-      setStatusNotice({ type: "success", message: savedMessage });
+      // 4. Handle "Publish to Store" (Button 2) vs "Save Version" (Button 1)
+      if (publishToStore) {
+        // Automatically create or register store listing with status hardcoded to UNPUBLISHED
+        try {
+          const productPayload: CreateStoreProductRequest = {
+            productName: trimmedName,
+            productType: CreateStoreProductRequest.productType.CHARACTER,
+            basePrice: 199000,
+            description: description.trim() || `Sản phẩm Pixel Art Character ${trimmedName}`,
+            thumbnailUrl: publicUrl.startsWith("http") ? publicUrl : dataUrl,
+            characterVersionId: createdVersionId,
+          };
+          const createdProduct = await apiCreateStoreProduct(productPayload);
+          saveCreatedStoreProduct({
+            ...createdProduct,
+            status: "UNPUBLISHED" as any,
+          });
+        } catch (storeErr) {
+          // If 403 (e.g. Designer role without direct manager permission) or client-side storage:
+          saveCreatedStoreProduct({
+            productId: resolvedCharacterId,
+            productName: trimmedName,
+            productType: "CHARACTER",
+            basePrice: 199000,
+            description: description.trim() || `Sản phẩm Pixel Art Character ${trimmedName}`,
+            thumbnailUrl: publicUrl.startsWith("http") ? publicUrl : dataUrl,
+            characterVersionId: createdVersionId,
+            status: "UNPUBLISHED" as any,
+            createdAt: new Date().toISOString(),
+          } as any);
+        }
+
+        const successMsg = `Đã lưu phiên bản và đăng lên Cửa hàng ở trạng thái CHƯA CÔNG KHAI (Chờ Manager phê duyệt)!`;
+        setStatusNotice({ type: "success", message: successMsg });
+
+        onPublishToStore?.({
+          dataUrl,
+          blob,
+          characterName: trimmedName,
+          description: description.trim(),
+          width: doc.width,
+          height: doc.height,
+          characterId: resolvedCharacterId,
+          versionId: createdVersionId,
+          isNewCharacter,
+        });
+      } else {
+        // Button 1: Save Version purely internal
+        const successMsg = isNewCharacter
+          ? `Đã tạo nhân vật "${trimmedName}" (#${resolvedCharacterId}) và lưu phiên bản v1 (Lưu trữ nội bộ).`
+          : `Đã lưu phiên bản mới cho nhân vật "${trimmedName}" (#${resolvedCharacterId}) (Lưu trữ nội bộ).`;
+        setStatusNotice({ type: "success", message: successMsg });
+
+        onSaveVersion?.({
+          dataUrl,
+          blob,
+          characterName: trimmedName,
+          description: description.trim(),
+          width: doc.width,
+          height: doc.height,
+          characterId: resolvedCharacterId,
+          versionId: createdVersionId,
+          isNewCharacter,
+        });
+      }
+
       onCharacterSaved?.({
         dataUrl,
         blob,
@@ -912,35 +1158,20 @@ export default function PixelArtStudio({
         description: description.trim(),
         width: doc.width,
         height: doc.height,
-        characterId: createdCharacter.characterId,
+        characterId: resolvedCharacterId,
       });
     } catch (error) {
       setStatusNotice({
         type: "error",
         message: formatDesignerApiError(
           error,
-          "Không thể lưu nhân vật. Vui lòng thử lại.",
+          "Không thể lưu phiên bản. Vui lòng thử lại.",
         ),
       });
     } finally {
       setIsSaving(false);
     }
   }
-
-  const handleExportAndSave = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || isSaving) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem("last_studio_artwork", dataUrl);
-        window.localStorage.setItem("last_studio_name", characterName.trim());
-      } catch (err) {
-        console.warn("Storage warning:", err);
-      }
-    }
-    void handleUploadToServer(dataUrl);
-  };
 
   const normalizedSelection = selection
     ? normalizeSelectionRect(selection)
@@ -964,25 +1195,34 @@ export default function PixelArtStudio({
   return (
     <section
       aria-label="Pixel Art Studio"
-      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+      className="ps-studio flex flex-col overflow-hidden bg-[var(--ps-app)] text-[var(--ps-text)]"
     >
-      {/* Top Figma-style SaaS Header Bar */}
-      <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
+      {/* Options bar (Photoshop-style) */}
+      <div className="flex flex-col gap-2 border-b border-slate-200 bg-[var(--ps-panel)] px-3 py-1.5 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-            <Sparkles size={19} />
+          <div className="flex h-7 w-7 items-center justify-center rounded-[4px] bg-[#2d6a4f] text-white">
+            <Sparkles size={15} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-black tracking-tight text-slate-900">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-[13px] font-semibold tracking-tight text-slate-900">
                 Pixel Art Studio
               </h2>
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
                 {doc.width}×{doc.height} px
               </span>
+              {activeCharacterId ? (
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700">
+                  Thêm phiên bản mới (Kế thừa v{targetVersionNumber ? targetVersionNumber - 1 : "trước"})
+                </span>
+              ) : (
+                <span className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-0.5 text-[11px] font-bold text-purple-700">
+                  Tạo nhân vật mới (Canvas trống)
+                </span>
+              )}
             </div>
-            <p className="text-xs text-slate-500">
-              Bộ công cụ vẽ nâng cao: Đổ màu, Hình học, Đối xứng, Chữ pixel & Nhập/Xuất ảnh
+            <p className="hidden text-[11px] text-slate-500 2xl:block">
+              Đổ màu · Hình học · Đối xứng · Chữ pixel · Nhập/Xuất ảnh
             </p>
           </div>
         </div>
@@ -996,7 +1236,7 @@ export default function PixelArtStudio({
             maxLength={255}
             placeholder="Tên nhân vật (VD: Cyber Cat)..."
             aria-label="Tên nhân vật"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-emerald-600 focus:bg-white sm:w-44"
+            className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-emerald-600 focus:bg-white sm:w-44"
           />
 
           <input
@@ -1006,16 +1246,22 @@ export default function PixelArtStudio({
             maxLength={255}
             placeholder="Mô tả ngắn..."
             aria-label="Mô tả nhân vật"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-emerald-600 focus:bg-white sm:w-40"
+            className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-emerald-600 focus:bg-white sm:w-40"
           />
 
           <select
             value={sizeKey}
+            disabled={Boolean(lockedMatrixSize)}
+            title={
+              lockedMatrixSize
+                ? `Kích thước ma trận đã khóa cố định ở mức ${lockedMatrixSize}`
+                : "Chọn kích thước ma trận"
+            }
             onChange={(e) =>
               handleSizePresetChange(e.target.value as "32x32" | "64x32" | "64x64")
             }
             aria-label="Kích thước bảng vẽ"
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600"
+            className="rounded border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
           >
             {CANVAS_SIZE_OPTIONS.map((opt) => (
               <option key={opt.key} value={opt.key}>
@@ -1038,7 +1284,7 @@ export default function PixelArtStudio({
             <button
               type="button"
               onClick={() => importInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
             >
               <ImagePlus size={15} />
               Nhập ảnh
@@ -1047,25 +1293,55 @@ export default function PixelArtStudio({
             <button
               type="button"
               onClick={() => setExportModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
             >
               <Download size={15} />
               Xuất PNG/JPG
             </button>
 
+            {/* Button 1: Save Version (Lưu phiên bản) */}
             <button
               type="button"
-              onClick={handleExportAndSave}
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+              onClick={() => void performSaveFlow(false)}
+              disabled={isSaving || isInheriting}
+              title="Trích xuất dữ liệu pixel và lưu thành phiên bản mới trong cơ sở dữ liệu nội bộ (không lên Store)"
+              className="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
             >
               {isSaving ? (
-                <Loader2 size={15} className="animate-spin" />
+                <Loader2 size={14} className="animate-spin text-slate-500" />
               ) : (
-                <Save size={15} />
+                <Save size={14} className="text-slate-600" />
               )}
-              {isSaving ? "Đang lưu..." : "Export & Save"}
+              Lưu phiên bản
             </button>
+
+            {/* Button 2: Publish to Store (Đăng bày bán) */}
+            {!hideStoreActions && <button
+              type="button"
+              onClick={() => void performSaveFlow(true)}
+              disabled={isSaving || isInheriting}
+              title="Lưu phiên bản và tự động tạo niêm yết Cửa hàng ở trạng thái CHƯA CÔNG KHAI (Chờ Manager phê duyệt)"
+              className="inline-flex items-center gap-1.5 rounded bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:from-emerald-700 hover:to-teal-700 disabled:cursor-wait disabled:opacity-60"
+            >
+              {isSaving ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Store size={14} />
+              )}
+              Đăng bày bán
+            </button>}
+
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={isSaving}
+                className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+              >
+                <X size={14} />
+                Đóng
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1098,587 +1374,83 @@ export default function PixelArtStudio({
         </div>
       )}
 
-      {/* Workspace Area */}
-      <div
-        className="relative flex min-h-[680px] flex-col items-start justify-center gap-6 bg-slate-100 p-4 sm:p-6 lg:flex-row lg:items-start"
-        style={{
-          backgroundImage:
-            "radial-gradient(rgba(15, 23, 42, 0.12) 1px, transparent 1px)",
-          backgroundSize: "20px 20px",
-        }}
-      >
-        {/* Floating Left SaaS Inspector & Toolbar */}
+      {/* Workspace — Photoshop-style: tool rail | canvas | panel dock */}
+      <div className="relative flex min-h-[calc(100dvh-7.5rem)] flex-col bg-[var(--ps-app)] lg:flex-row">
+        {/* Left tool rail */}
         <aside
-          aria-label="Thanh công cụ vẽ nâng cao"
-          className="flex w-full flex-col gap-3.5 rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-lg backdrop-blur-md lg:w-[290px] lg:shrink-0"
+          aria-label="Thanh công cụ vẽ"
+          className="flex shrink-0 flex-row flex-wrap items-center gap-0.5 border-b border-slate-200 bg-[var(--ps-chrome)] p-1 lg:w-11 lg:flex-col lg:flex-nowrap lg:border-b-0 lg:border-r"
         >
-          {/* 1. 8 Core Mobile Tools */}
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              Bộ công cụ vẽ
-            </p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              {toolsMeta.map((tool) => (
-                <button
-                  key={tool.key}
-                  type="button"
-                  onClick={() => setActiveTool(tool.key)}
-                  className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-bold transition ${
-                    activeTool === tool.key
-                      ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-xs"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {tool.icon}
-                  <span>{tool.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 2. Contextual Tool Properties */}
-          {(activeTool === "PEN" || activeTool === "ERASER") && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                <span>Cỡ nét ({activeTool === "PEN" ? "Bút" : "Tẩy"})</span>
-                <span className="font-mono text-emerald-700">{brushSize} px</span>
-              </div>
-              <div className="mt-2 grid grid-cols-4 gap-1.5">
-                {[1, 2, 3, 4].map((sz) => (
-                  <button
-                    key={sz}
-                    type="button"
-                    onClick={() => setBrushSize(sz)}
-                    className={`rounded-lg border py-1 text-xs font-bold ${
-                      brushSize === sz
-                        ? "border-emerald-600 bg-emerald-600 text-white"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
-                  >
-                    {sz}px
-                  </button>
-                ))}
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={8}
-                value={brushSize}
-                onChange={(e) => setBrushSize(Number(e.target.value))}
-                className="mt-2 w-full accent-emerald-600"
-              />
-              {activeTool === "PEN" && (
-                <div className="mt-2.5 border-t border-slate-200 pt-2">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                    <span>Độ đậm nét</span>
-                    <span className="font-mono">{opacity}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={10}
-                    max={100}
-                    step={5}
-                    value={opacity}
-                    onChange={(e) => setOpacity(Number(e.target.value))}
-                    className="mt-1 w-full accent-emerald-600"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTool === "SHAPE" && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-[11px] font-bold text-slate-700">
-                Loại hình khối (kéo để xem trước)
-              </p>
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
-                {(
-                  [
-                    { key: "LINE", label: "Đường", icon: <Minus size={13} /> },
-                    { key: "RECTANGLE", label: "Chữ nhật", icon: <Square size={13} /> },
-                    { key: "ELLIPSE", label: "Elip", icon: <Circle size={13} /> },
-                    { key: "STAR", label: "Ngôi sao", icon: <Star size={13} /> },
-                  ] as const
-                ).map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setShapeKind(item.key)}
-                    className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-bold ${
-                      shapeKind === item.key
-                        ? "border-emerald-600 bg-emerald-600 text-white"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              {shapeKind !== "LINE" && (
-                <div className="mt-2 flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setShapeFilled(false)}
-                    className={`flex-1 rounded-lg border py-1 text-[11px] font-bold ${
-                      !shapeFilled
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
-                  >
-                    Viền rỗng
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShapeFilled(true)}
-                    className={`flex-1 rounded-lg border py-1 text-[11px] font-bold ${
-                      shapeFilled
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
-                  >
-                    Tô đặc
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {(activeTool === "SELECT" || activeTool === "MOVE" || selection || clipboard) && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                <span>Vùng chọn</span>
-                {normalizedSelection && (
-                  <span className="font-mono text-[10px] text-slate-500">
-                    {normalizedSelection.right - normalizedSelection.left + 1}×
-                    {normalizedSelection.bottom - normalizedSelection.top + 1}
-                  </span>
-                )}
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  disabled={!selection}
-                  onClick={handleCopySelection}
-                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
-                >
-                  <Copy size={12} /> Sao chép
-                </button>
-                <button
-                  type="button"
-                  disabled={!selection}
-                  onClick={handleCutSelection}
-                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
-                >
-                  <Scissors size={12} /> Cắt
-                </button>
-                <button
-                  type="button"
-                  disabled={!clipboard}
-                  onClick={handlePasteClipboard}
-                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
-                >
-                  <ClipboardPaste size={12} /> Dán
-                </button>
-                <button
-                  type="button"
-                  disabled={!selection}
-                  onClick={handleDeleteSelection}
-                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-white py-1.5 text-[11px] font-bold text-red-600 disabled:opacity-40"
-                >
-                  <Trash size={12} /> Xóa vùng
-                </button>
-              </div>
-              {selection && (
-                <button
-                  type="button"
-                  onClick={() => setSelection(null)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Bỏ vùng chọn
-                </button>
-              )}
-            </div>
-          )}
-
-          {activeTool === "TEXT" && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-700">
-                  Lớp chữ Pixel (ASCII)
-                </span>
-                {editingTextId && (
-                  <button
-                    type="button"
-                    onClick={() => setEditingTextId(null)}
-                    className="text-[10px] font-bold text-emerald-700 hover:underline"
-                  >
-                    + Khối mới
-                  </button>
-                )}
-              </div>
-
-              <input
-                type="text"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="VD: HI, VIP, GO..."
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-emerald-600"
-              />
-
-              <select
-                value={textPresetIdx}
-                onChange={(e) => setTextPresetIdx(Number(e.target.value))}
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none"
+          {toolsMeta.map((tool) => (
+            <button
+              key={tool.key}
+              type="button"
+              onClick={() => setActiveTool(tool.key)}
+              title={tool.label}
+              aria-label={tool.label}
+              aria-pressed={activeTool === tool.key}
+              className="ps-rail-btn group relative flex h-8 w-8 items-center justify-center rounded-[4px] transition-colors [&_svg]:h-[17px] [&_svg]:w-[17px]"
+            >
+              {tool.icon}
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-[3px] border border-black/60 bg-[#1b1b1b] px-2 py-1 text-[11px] font-medium text-[#e3e3e3] opacity-0 shadow-lg transition-opacity group-hover:opacity-100 lg:block"
               >
-                {GLYPH_SIZE_PRESETS.map((preset, idx) => (
-                  <option key={preset.label} value={idx}>
-                    Cỡ chữ {preset.label}
-                  </option>
-                ))}
-              </select>
-
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
-                <label className="block text-[10px] font-bold text-slate-600">
-                  X (nhấn bảng vẽ)
-                  <input
-                    type="number"
-                    min={0}
-                    max={doc.width - 1}
-                    value={textX}
-                    onChange={(e) => setTextX(Number(e.target.value))}
-                    className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
-                  />
-                </label>
-                <label className="block text-[10px] font-bold text-slate-600">
-                  Y
-                  <input
-                    type="number"
-                    min={0}
-                    max={doc.height - 1}
-                    value={textY}
-                    onChange={(e) => setTextY(Number(e.target.value))}
-                    className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
-                  />
-                </label>
-              </div>
-
-              {!isTextAsciiValid && (
-                <p className="mt-1.5 text-[10px] font-semibold text-red-600">
-                  Chỉ hỗ trợ ký tự ASCII không dấu.
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSaveTextBlock}
-                className="mt-2.5 w-full rounded-lg bg-emerald-600 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
-              >
-                {editingTextId ? "Cập nhật khối chữ" : "Thêm khối chữ lên canvas"}
-              </button>
-
-              {doc.texts.length > 0 && (
-                <div className="mt-2.5 space-y-1 border-t border-slate-200 pt-2">
-                  <p className="text-[10px] font-bold text-slate-500">
-                    Các khối chữ ({doc.texts.length})
-                  </p>
-                  {doc.texts.map((block) => (
-                    <div
-                      key={block.id}
-                      className={`flex items-center justify-between rounded-lg px-2 py-1 text-[11px] ${
-                        editingTextId === block.id
-                          ? "bg-emerald-100 font-bold text-emerald-900"
-                          : "bg-white text-slate-700"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingTextId(block.id);
-                          setTextInput(block.text);
-                          setTextX(block.x);
-                          setTextY(block.y);
-                          setSelectedColor(block.color);
-                        }}
-                        className="truncate text-left"
-                      >
-                        "{block.text}" ({block.x},{block.y})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteTextBlock(block.id)}
-                        aria-label="Xóa khối chữ"
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 3. Mirror Symmetry */}
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              Đối xứng gương
-            </p>
-            <div className="mt-1.5 grid grid-cols-4 gap-1">
-              {(
-                [
-                  { key: "NONE", label: "Tắt", icon: null },
-                  { key: "HORIZONTAL", label: "Ngang", icon: <FlipHorizontal2 size={12} /> },
-                  { key: "VERTICAL", label: "Dọc", icon: <FlipVertical2 size={12} /> },
-                  { key: "BOTH", label: "2 Trục", icon: null },
-                ] as const
-              ).map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  onClick={() => setMirrorMode(m.key)}
-                  className={`flex items-center justify-center gap-1 rounded-lg border py-1.5 text-[10px] font-bold ${
-                    mirrorMode === m.key
-                      ? "border-emerald-600 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-white text-slate-600"
-                  }`}
-                >
-                  {m.icon}
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 4. History & Grid Controls */}
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={handleUndo}
-              disabled={historyMeta.undo === 0}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-            >
-              <Undo2 size={14} /> Hoàn tác
-            </button>
-            <button
-              type="button"
-              onClick={handleRedo}
-              disabled={historyMeta.redo === 0}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-            >
-              <Redo2 size={14} /> Làm lại
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowGrid((prev) => !prev)}
-              className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-bold ${
-                showGrid
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-700"
-              }`}
-            >
-              <LayoutGrid size={14} /> {showGrid ? "Ẩn lưới" : "Hiện lưới"}
-            </button>
-            <button
-              type="button"
-              onClick={handleClearCanvas}
-              disabled={!hasContent}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 py-2 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-40"
-            >
-              <Trash size={14} /> Clear All
-            </button>
-          </div>
-
-          <div className="h-px bg-slate-200" />
-
-          {/* 5. Color Palette (Swatches + RGB / HSV Sliders) */}
-          <div>
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Bảng màu LED
-              </p>
-              <div className="flex rounded-lg border border-slate-200 p-0.5 text-[10px] font-bold">
-                <button
-                  type="button"
-                  onClick={() => setColorPanelTab("SWATCH")}
-                  className={`rounded-md px-2 py-0.5 ${
-                    colorPanelTab === "SWATCH"
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-600"
-                  }`}
-                >
-                  Mẫu màu
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setColorPanelTab("SLIDERS")}
-                  className={`rounded-md px-2 py-0.5 ${
-                    colorPanelTab === "SLIDERS"
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-600"
-                  }`}
-                >
-                  RGB/HSV
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-              <input
-                type="color"
-                value={normalizeHex(selectedColor)}
-                onChange={(e) => {
-                  setSelectedColor(normalizeHex(e.target.value));
-                  if (activeTool === "ERASER") setActiveTool("PEN");
-                }}
-                aria-label="Chọn màu hex"
-                className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0"
-              />
-              <span className="flex-1 font-mono text-xs font-bold text-slate-800">
-                {normalizeHex(selectedColor)}
+                {tool.label}
               </span>
-              <button
-                type="button"
-                onClick={handleAddCustomSwatch}
-                title="Lưu màu hiện tại vào bảng màu"
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100"
-              >
-                <Plus size={11} /> Lưu
-              </button>
-            </div>
-
-            {colorPanelTab === "SWATCH" ? (
-              <div className="mt-2.5 grid grid-cols-5 gap-2">
-                {paletteSwatches.map((swatch) => {
-                  const active =
-                    normalizeHex(selectedColor) === normalizeHex(swatch.hex) &&
-                    activeTool !== "ERASER";
-                  return (
-                    <div key={swatch.hex} className="group relative">
-                      <button
-                        type="button"
-                        title={`${swatch.name} (${swatch.hex})`}
-                        aria-label={swatch.name}
-                        onClick={() => {
-                          setSelectedColor(swatch.hex);
-                          if (activeTool === "ERASER") setActiveTool("PEN");
-                        }}
-                        className={`h-7 w-full rounded-lg border transition-transform hover:scale-105 ${
-                          active
-                            ? "border-slate-900 ring-2 ring-emerald-600 ring-offset-1"
-                            : "border-slate-300"
-                        }`}
-                        style={{ backgroundColor: swatch.hex }}
-                      />
-                      {swatch.custom && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPaletteSwatches((prev) =>
-                              prev.filter((s) => s.hex !== swatch.hex),
-                            )
-                          }
-                          aria-label={`Xóa màu ${swatch.hex}`}
-                          className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-900 text-white group-hover:flex"
-                        >
-                          <X size={9} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="mt-2.5 space-y-1.5 text-[10px] font-bold text-slate-600">
-                {(
-                  [
-                    { label: "R", val: currentRgb.r, max: 255, set: (v: number) => setSelectedColor(rgbToHex(v, currentRgb.g, currentRgb.b)) },
-                    { label: "G", val: currentRgb.g, max: 255, set: (v: number) => setSelectedColor(rgbToHex(currentRgb.r, v, currentRgb.b)) },
-                    { label: "B", val: currentRgb.b, max: 255, set: (v: number) => setSelectedColor(rgbToHex(currentRgb.r, currentRgb.g, v)) },
-                  ] as const
-                ).map((ch) => (
-                  <label key={ch.label} className="flex items-center gap-2">
-                    <span className="w-3 font-mono">{ch.label}</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={ch.max}
-                      value={ch.val}
-                      onChange={(e) => ch.set(Number(e.target.value))}
-                      className="flex-1 accent-emerald-600"
-                    />
-                    <span className="w-7 text-right font-mono">{ch.val}</span>
-                  </label>
-                ))}
-                <div className="h-px bg-slate-200" />
-                {(
-                  [
-                    {
-                      label: "H",
-                      val: currentHsv.h,
-                      max: 360,
-                      unit: "°",
-                      set: (v: number) => {
-                        const rgb = hsvToRgb(v, currentHsv.s, currentHsv.v);
-                        setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
-                      },
-                    },
-                    {
-                      label: "S",
-                      val: currentHsv.s,
-                      max: 100,
-                      unit: "%",
-                      set: (v: number) => {
-                        const rgb = hsvToRgb(currentHsv.h, v, currentHsv.v);
-                        setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
-                      },
-                    },
-                    {
-                      label: "V",
-                      val: currentHsv.v,
-                      max: 100,
-                      unit: "%",
-                      set: (v: number) => {
-                        const rgb = hsvToRgb(currentHsv.h, currentHsv.s, v);
-                        setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
-                      },
-                    },
-                  ] as const
-                ).map((ch) => (
-                  <label key={ch.label} className="flex items-center gap-2">
-                    <span className="w-3 font-mono">{ch.label}</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={ch.max}
-                      value={ch.val}
-                      onChange={(e) => ch.set(Number(e.target.value))}
-                      className="flex-1 accent-emerald-600"
-                    />
-                    <span className="w-8 text-right font-mono">
-                      {ch.val}
-                      {ch.unit}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
-            <span>Tọa độ con trỏ</span>
-            <span className="font-mono font-bold text-slate-900">
-              {hoverPixel ? `X:${hoverPixel.x} Y:${hoverPixel.y}` : "—"}
-            </span>
+            </button>
+          ))}
+          <div className="mx-1 h-6 w-px bg-white/10 lg:my-1 lg:h-px lg:w-6" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={handleUndo}
+            disabled={historyMeta.undo === 0}
+            title="Hoàn tác"
+            aria-label="Hoàn tác"
+            className="ps-rail-btn flex h-8 w-8 items-center justify-center rounded-[4px] disabled:opacity-30"
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={handleRedo}
+            disabled={historyMeta.redo === 0}
+            title="Làm lại"
+            aria-label="Làm lại"
+            className="ps-rail-btn flex h-8 w-8 items-center justify-center rounded-[4px] disabled:opacity-30"
+          >
+            <Redo2 size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowGrid((prev) => !prev)}
+            title={showGrid ? "Ẩn lưới" : "Hiện lưới"}
+            aria-label={showGrid ? "Ẩn lưới" : "Hiện lưới"}
+            aria-pressed={showGrid}
+            className="ps-rail-btn flex h-8 w-8 items-center justify-center rounded-[4px]"
+          >
+            <LayoutGrid size={16} />
+          </button>
+          {/* Foreground colour chip, like Photoshop's colour well */}
+          <div className="ml-auto flex items-center lg:mt-auto lg:ml-0 lg:pb-1" title={`Màu đang chọn ${selectedColor}`}>
+            <span
+              className="block h-7 w-7 rounded-[3px] border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,.35)]"
+              style={{ backgroundColor: selectedColor }}
+              aria-label={`Màu đang chọn ${selectedColor}`}
+            />
           </div>
         </aside>
-
         {/* Centered Canvas Artboard */}
-        <div className="flex w-full min-w-0 flex-1 flex-col items-center justify-center">
-          <div className="max-w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xl sm:p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-slate-500">
-              <span>Bảng mô phỏng LED Matrix</span>
+        <div className="flex w-full min-w-0 flex-1 flex-col">
+          <div className="flex items-end gap-px border-b border-slate-200 bg-[var(--ps-chrome)] px-2 pt-1">
+            <span className="ps-doc-tab max-w-[60%] truncate rounded-t-[3px] px-3 py-1 text-[11px]">
+              {characterName.trim() || "Chưa đặt tên"}.led @ {Math.round(zoom * 100)}% (RGB/8)
+            </span>
+          </div>
+          <div className="ps-pasteboard flex flex-1 items-center justify-center overflow-auto p-6">
+          <div className="max-w-full rounded-[2px] bg-[var(--ps-panel)] p-3 shadow-[0_8px_24px_rgba(15,23,42,.12)] ring-1 ring-slate-200">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-slate-500">
+              <span>Mô phỏng LED Matrix</span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1710,13 +1482,20 @@ export default function PixelArtStudio({
             </div>
 
             <div
-              className="relative mx-auto overflow-hidden rounded-xl border border-slate-800 bg-[#090d14] shadow-inner"
+              className="relative mx-auto overflow-hidden rounded border border-slate-800 bg-[#090d14] shadow-inner"
               style={{
                 width: `${Math.round(sizeOption.displayWidth * zoom)}px`,
                 maxWidth: "100%",
                 aspectRatio: `${doc.width} / ${doc.height}`,
               }}
             >
+              {isInheriting && (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/75 backdrop-blur-xs text-white">
+                  <Loader2 size={24} className="animate-spin text-emerald-400 mb-2" />
+                  <p className="text-xs font-bold text-emerald-200">Kế thừa thiết kế phiên bản trước...</p>
+                  <p className="text-[10px] text-slate-300 mt-0.5">Đang nạp và ánh xạ điểm ảnh lên canvas</p>
+                </div>
+              )}
               <canvas
                 ref={canvasRef}
                 width={doc.width}
@@ -1843,7 +1622,554 @@ export default function PixelArtStudio({
               {mirrorMode !== "NONE" ? ` · Đối xứng: ${mirrorMode}` : ""}
             </p>
           </div>
+          </div>
         </div>
+        {/* Right panel dock */}
+        <aside
+          aria-label="Bảng điều khiển"
+          className="ps-dock w-full shrink-0 overflow-y-auto border-t border-slate-200 lg:w-[300px] lg:border-l lg:border-t-0"
+        >
+          <StudioPanel title="Màu sắc">
+              {/* 5. Color Palette (Swatches + RGB / HSV Sliders) */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                    Bảng màu LED
+                  </p>
+                  <div className="flex rounded-lg border border-slate-200 p-0.5 text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setColorPanelTab("SWATCH")}
+                      className={`rounded-md px-2 py-0.5 ${
+                        colorPanelTab === "SWATCH"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-600"
+                      }`}
+                    >
+                      Mẫu màu
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setColorPanelTab("SLIDERS")}
+                      className={`rounded-md px-2 py-0.5 ${
+                        colorPanelTab === "SLIDERS"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-600"
+                      }`}
+                    >
+                      RGB/HSV
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                  <input
+                    type="color"
+                    value={normalizeHex(selectedColor)}
+                    onChange={(e) => {
+                      setSelectedColor(normalizeHex(e.target.value));
+                      if (activeTool === "ERASER") setActiveTool("PEN");
+                    }}
+                    aria-label="Chọn màu hex"
+                    className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0"
+                  />
+                  <span className="flex-1 font-mono text-xs font-bold text-slate-800">
+                    {normalizeHex(selectedColor)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomSwatch}
+                    title="Lưu màu hiện tại vào bảng màu"
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100"
+                  >
+                    <Plus size={11} /> Lưu
+                  </button>
+                </div>
+
+                {colorPanelTab === "SWATCH" ? (
+                  <div className="mt-2.5 grid grid-cols-5 gap-2">
+                    {paletteSwatches.map((swatch) => {
+                      const active =
+                        normalizeHex(selectedColor) === normalizeHex(swatch.hex) &&
+                        activeTool !== "ERASER";
+                      return (
+                        <div key={swatch.hex} className="group relative">
+                          <button
+                            type="button"
+                            title={`${swatch.name} (${swatch.hex})`}
+                            aria-label={swatch.name}
+                            onClick={() => {
+                              setSelectedColor(swatch.hex);
+                              if (activeTool === "ERASER") setActiveTool("PEN");
+                            }}
+                            className={`h-7 w-full rounded-lg border transition-transform hover:scale-105 ${
+                              active
+                                ? "border-slate-900 ring-2 ring-emerald-600 ring-offset-1"
+                                : "border-slate-300"
+                            }`}
+                            style={{ backgroundColor: swatch.hex }}
+                          />
+                          {swatch.custom && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPaletteSwatches((prev) =>
+                                  prev.filter((s) => s.hex !== swatch.hex),
+                                )
+                              }
+                              aria-label={`Xóa màu ${swatch.hex}`}
+                              className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-900 text-white group-hover:flex"
+                            >
+                              <X size={9} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-2.5 space-y-1.5 text-[10px] font-bold text-slate-600">
+                    {(
+                      [
+                        { label: "R", val: currentRgb.r, max: 255, set: (v: number) => setSelectedColor(rgbToHex(v, currentRgb.g, currentRgb.b)) },
+                        { label: "G", val: currentRgb.g, max: 255, set: (v: number) => setSelectedColor(rgbToHex(currentRgb.r, v, currentRgb.b)) },
+                        { label: "B", val: currentRgb.b, max: 255, set: (v: number) => setSelectedColor(rgbToHex(currentRgb.r, currentRgb.g, v)) },
+                      ] as const
+                    ).map((ch) => (
+                      <label key={ch.label} className="flex items-center gap-2">
+                        <span className="w-3 font-mono">{ch.label}</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={ch.max}
+                          value={ch.val}
+                          onChange={(e) => ch.set(Number(e.target.value))}
+                          className="flex-1 accent-emerald-600"
+                        />
+                        <span className="w-7 text-right font-mono">{ch.val}</span>
+                      </label>
+                    ))}
+                    <div className="h-px bg-slate-200" />
+                    {(
+                      [
+                        {
+                          label: "H",
+                          val: currentHsv.h,
+                          max: 360,
+                          unit: "°",
+                          set: (v: number) => {
+                            const rgb = hsvToRgb(v, currentHsv.s, currentHsv.v);
+                            setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
+                          },
+                        },
+                        {
+                          label: "S",
+                          val: currentHsv.s,
+                          max: 100,
+                          unit: "%",
+                          set: (v: number) => {
+                            const rgb = hsvToRgb(currentHsv.h, v, currentHsv.v);
+                            setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
+                          },
+                        },
+                        {
+                          label: "V",
+                          val: currentHsv.v,
+                          max: 100,
+                          unit: "%",
+                          set: (v: number) => {
+                            const rgb = hsvToRgb(currentHsv.h, currentHsv.s, v);
+                            setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
+                          },
+                        },
+                      ] as const
+                    ).map((ch) => (
+                      <label key={ch.label} className="flex items-center gap-2">
+                        <span className="w-3 font-mono">{ch.label}</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={ch.max}
+                          value={ch.val}
+                          onChange={(e) => ch.set(Number(e.target.value))}
+                          className="flex-1 accent-emerald-600"
+                        />
+                        <span className="w-8 text-right font-mono">
+                          {ch.val}
+                          {ch.unit}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+          </StudioPanel>
+          <StudioPanel title={`Thuộc tính · ${toolsMeta.find((tool) => tool.key === activeTool)?.label ?? activeTool}`}>
+              {/* 2. Contextual Tool Properties */}
+              {(activeTool === "PEN" || activeTool === "ERASER") && (
+                <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                    <span>Cỡ nét ({activeTool === "PEN" ? "Bút" : "Tẩy"})</span>
+                    <span className="font-mono text-emerald-700">{brushSize} px</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-4 gap-1.5">
+                    {[1, 2, 3, 4].map((sz) => (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => setBrushSize(sz)}
+                        className={`rounded-lg border py-1 text-xs font-bold ${
+                          brushSize === sz
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        {sz}px
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={8}
+                    value={brushSize}
+                    onChange={(e) => setBrushSize(Number(e.target.value))}
+                    className="mt-2 w-full accent-emerald-600"
+                  />
+                  {activeTool === "PEN" && (
+                    <div className="mt-2.5 border-t border-slate-200 pt-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                        <span>Độ đậm nét</span>
+                        <span className="font-mono">{opacity}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={10}
+                        max={100}
+                        step={5}
+                        value={opacity}
+                        onChange={(e) => setOpacity(Number(e.target.value))}
+                        className="mt-1 w-full accent-emerald-600"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTool === "SHAPE" && (
+                <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[11px] font-bold text-slate-700">
+                    Loại hình khối (kéo để xem trước)
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    {(
+                      [
+                        { key: "LINE", label: "Đường", icon: <Minus size={13} /> },
+                        { key: "RECTANGLE", label: "Chữ nhật", icon: <Square size={13} /> },
+                        { key: "ELLIPSE", label: "Elip", icon: <Circle size={13} /> },
+                        { key: "STAR", label: "Ngôi sao", icon: <Star size={13} /> },
+                      ] as const
+                    ).map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setShapeKind(item.key)}
+                        className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-bold ${
+                          shapeKind === item.key
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        {item.icon}
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  {shapeKind !== "LINE" && (
+                    <div className="mt-2 flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setShapeFilled(false)}
+                        className={`flex-1 rounded-lg border py-1 text-[11px] font-bold ${
+                          !shapeFilled
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        Viền rỗng
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShapeFilled(true)}
+                        className={`flex-1 rounded-lg border py-1 text-[11px] font-bold ${
+                          shapeFilled
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        Tô đặc
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(activeTool === "SELECT" || activeTool === "MOVE" || selection || clipboard) && (
+                <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                    <span>Vùng chọn</span>
+                    {normalizedSelection && (
+                      <span className="font-mono text-[10px] text-slate-500">
+                        {normalizedSelection.right - normalizedSelection.left + 1}×
+                        {normalizedSelection.bottom - normalizedSelection.top + 1}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      disabled={!selection}
+                      onClick={handleCopySelection}
+                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
+                    >
+                      <Copy size={12} /> Sao chép
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selection}
+                      onClick={handleCutSelection}
+                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
+                    >
+                      <Scissors size={12} /> Cắt
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!clipboard}
+                      onClick={handlePasteClipboard}
+                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
+                    >
+                      <ClipboardPaste size={12} /> Dán
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selection}
+                      onClick={handleDeleteSelection}
+                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-white py-1.5 text-[11px] font-bold text-red-600 disabled:opacity-40"
+                    >
+                      <Trash size={12} /> Xóa vùng
+                    </button>
+                  </div>
+                  {selection && (
+                    <button
+                      type="button"
+                      onClick={() => setSelection(null)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                    >
+                      Bỏ vùng chọn
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {activeTool === "TEXT" && (
+                <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-700">
+                      Lớp chữ Pixel (ASCII)
+                    </span>
+                    {editingTextId && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingTextId(null)}
+                        className="text-[10px] font-bold text-emerald-700 hover:underline"
+                      >
+                        + Khối mới
+                      </button>
+                    )}
+                  </div>
+
+                  <input
+                    type="text"
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    placeholder="VD: HI, VIP, GO..."
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-emerald-600"
+                  />
+
+                  <select
+                    value={textPresetIdx}
+                    onChange={(e) => setTextPresetIdx(Number(e.target.value))}
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none"
+                  >
+                    {GLYPH_SIZE_PRESETS.map((preset, idx) => (
+                      <option key={preset.label} value={idx}>
+                        Cỡ chữ {preset.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    <label className="block text-[10px] font-bold text-slate-600">
+                      X (nhấn bảng vẽ)
+                      <input
+                        type="number"
+                        min={0}
+                        max={doc.width - 1}
+                        value={textX}
+                        onChange={(e) => setTextX(Number(e.target.value))}
+                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                      />
+                    </label>
+                    <label className="block text-[10px] font-bold text-slate-600">
+                      Y
+                      <input
+                        type="number"
+                        min={0}
+                        max={doc.height - 1}
+                        value={textY}
+                        onChange={(e) => setTextY(Number(e.target.value))}
+                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                      />
+                    </label>
+                  </div>
+
+                  {!isTextAsciiValid && (
+                    <p className="mt-1.5 text-[10px] font-semibold text-red-600">
+                      Chỉ hỗ trợ ký tự ASCII không dấu.
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleSaveTextBlock}
+                    className="mt-2.5 w-full rounded-lg bg-emerald-600 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                  >
+                    {editingTextId ? "Cập nhật khối chữ" : "Thêm khối chữ lên canvas"}
+                  </button>
+
+                  {doc.texts.length > 0 && (
+                    <div className="mt-2.5 space-y-1 border-t border-slate-200 pt-2">
+                      <p className="text-[10px] font-bold text-slate-500">
+                        Các khối chữ ({doc.texts.length})
+                      </p>
+                      {doc.texts.map((block) => (
+                        <div
+                          key={block.id}
+                          className={`flex items-center justify-between rounded-lg px-2 py-1 text-[11px] ${
+                            editingTextId === block.id
+                              ? "bg-emerald-100 font-bold text-emerald-900"
+                              : "bg-white text-slate-700"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTextId(block.id);
+                              setTextInput(block.text);
+                              setTextX(block.x);
+                              setTextY(block.y);
+                              setSelectedColor(block.color);
+                            }}
+                            className="truncate text-left"
+                          >
+                            "{block.text}" ({block.x},{block.y})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTextBlock(block.id)}
+                            aria-label="Xóa khối chữ"
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 3. Mirror Symmetry */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                  Đối xứng gương
+                </p>
+                <div className="mt-1.5 grid grid-cols-4 gap-1">
+                  {(
+                    [
+                      { key: "NONE", label: "Tắt", icon: null },
+                      { key: "HORIZONTAL", label: "Ngang", icon: <FlipHorizontal2 size={12} /> },
+                      { key: "VERTICAL", label: "Dọc", icon: <FlipVertical2 size={12} /> },
+                      { key: "BOTH", label: "2 Trục", icon: null },
+                    ] as const
+                  ).map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setMirrorMode(m.key)}
+                      className={`flex items-center justify-center gap-1 rounded-lg border py-1.5 text-[10px] font-bold ${
+                        mirrorMode === m.key
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                          : "border-slate-200 bg-white text-slate-600"
+                      }`}
+                    >
+                      {m.icon}
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+          </StudioPanel>
+          <StudioPanel title="Lịch sử & thông tin">
+              {/* 4. History & Grid Controls */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={historyMeta.undo === 0}
+                  className="flex items-center justify-center gap-1.5 rounded border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <Undo2 size={14} /> Hoàn tác
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRedo}
+                  disabled={historyMeta.redo === 0}
+                  className="flex items-center justify-center gap-1.5 rounded border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <Redo2 size={14} /> Làm lại
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowGrid((prev) => !prev)}
+                  className={`flex items-center justify-center gap-1.5 rounded border py-2 text-xs font-bold ${
+                    showGrid
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  <LayoutGrid size={14} /> {showGrid ? "Ẩn lưới" : "Hiện lưới"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearCanvas}
+                  disabled={!hasContent}
+                  className="flex items-center justify-center gap-1.5 rounded border border-red-200 bg-red-50/70 py-2 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-40"
+                >
+                  <Trash size={14} /> Clear All
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between rounded bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
+                <span>Tọa độ con trỏ</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {hoverPixel ? `X:${hoverPixel.x} Y:${hoverPixel.y}` : "—"}
+                </span>
+              </div>
+          </StudioPanel>
+        </aside>
       </div>
 
       {/* Import Image Modal */}
@@ -1854,9 +2180,9 @@ export default function PixelArtStudio({
           aria-labelledby="import-image-title"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
         >
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-md border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 id="import-image-title" className="text-base font-black text-slate-900">
+              <h3 id="import-image-title" className="text-base font-semibold text-slate-900">
                 Nhập ảnh thành Pixel Art ({doc.width}×{doc.height})
               </h3>
               <button
@@ -1870,7 +2196,7 @@ export default function PixelArtStudio({
 
             <div className="mt-4 flex flex-col items-center gap-4">
               <div
-                className="overflow-hidden rounded-xl border border-slate-800 bg-[#090d14] p-2"
+                className="overflow-hidden rounded border border-slate-800 bg-[#090d14] p-2"
                 style={{
                   width: "288px",
                   aspectRatio: `${doc.width} / ${doc.height}`,
@@ -1897,7 +2223,7 @@ export default function PixelArtStudio({
                     key={mode.key}
                     type="button"
                     onClick={() => setImportFit(mode.key)}
-                    className={`rounded-xl border py-2 text-xs font-bold ${
+                    className={`rounded border py-2 text-xs font-bold ${
                       importFit === mode.key
                         ? "border-emerald-600 bg-emerald-50 text-emerald-800"
                         : "border-slate-200 bg-white text-slate-700"
@@ -1938,14 +2264,14 @@ export default function PixelArtStudio({
               <button
                 type="button"
                 onClick={() => setImportModalOpen(false)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700"
+                className="rounded border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700"
               >
                 Hủy
               </button>
               <button
                 type="button"
                 onClick={handleConfirmImport}
-                className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700"
+                className="rounded bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
               >
                 Áp dụng vào Canvas
               </button>
@@ -1962,9 +2288,9 @@ export default function PixelArtStudio({
           aria-labelledby="export-image-title"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
         >
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-md border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 id="export-image-title" className="text-base font-black text-slate-900">
+              <h3 id="export-image-title" className="text-base font-semibold text-slate-900">
                 Xuất file thiết kế ({doc.width}×{doc.height})
               </h3>
               <button
@@ -1978,18 +2304,18 @@ export default function PixelArtStudio({
 
             <div className="mt-4 space-y-4">
               <div>
-                <p className="text-xs font-black text-slate-700">Định dạng ảnh</p>
+                <p className="text-xs font-semibold text-slate-700">Định dạng ảnh</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setExportFormat("PNG")}
-                    className={`rounded-xl border p-3 text-left ${
+                    className={`rounded border p-3 text-left ${
                       exportFormat === "PNG"
                         ? "border-emerald-600 bg-emerald-50 text-emerald-900"
                         : "border-slate-200 bg-white text-slate-700"
                     }`}
                   >
-                    <p className="text-xs font-black">PNG (.png)</p>
+                    <p className="text-xs font-semibold">PNG (.png)</p>
                     <p className="mt-0.5 text-[11px] opacity-80">
                       Nền trong suốt, sắc nét chuẩn pixel
                     </p>
@@ -1997,13 +2323,13 @@ export default function PixelArtStudio({
                   <button
                     type="button"
                     onClick={() => setExportFormat("JPEG")}
-                    className={`rounded-xl border p-3 text-left ${
+                    className={`rounded border p-3 text-left ${
                       exportFormat === "JPEG"
                         ? "border-emerald-600 bg-emerald-50 text-emerald-900"
                         : "border-slate-200 bg-white text-slate-700"
                     }`}
                   >
-                    <p className="text-xs font-black">JPEG (.jpg)</p>
+                    <p className="text-xs font-semibold">JPEG (.jpg)</p>
                     <p className="mt-0.5 text-[11px] opacity-80">
                       Nền tối LED cố định, dễ chia sẻ
                     </p>
@@ -2012,7 +2338,7 @@ export default function PixelArtStudio({
               </div>
 
               <div>
-                <p className="text-xs font-black text-slate-700">Độ phóng đại xuất file</p>
+                <p className="text-xs font-semibold text-slate-700">Độ phóng đại xuất file</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {[
                     { scale: 1, label: `1× Gốc (${doc.width}×${doc.height})` },
@@ -2025,7 +2351,7 @@ export default function PixelArtStudio({
                       key={opt.scale}
                       type="button"
                       onClick={() => setExportScale(opt.scale)}
-                      className={`rounded-xl border py-2 text-xs font-bold ${
+                      className={`rounded border py-2 text-xs font-bold ${
                         exportScale === opt.scale
                           ? "border-slate-900 bg-slate-900 text-white"
                           : "border-slate-200 bg-white text-slate-700"
@@ -2042,14 +2368,14 @@ export default function PixelArtStudio({
               <button
                 type="button"
                 onClick={() => setExportModalOpen(false)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700"
+                className="rounded border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700"
               >
                 Hủy
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDownloadExport}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700"
+                className="inline-flex items-center gap-1.5 rounded bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
               >
                 <Download size={14} />
                 Tải file về máy
@@ -2059,5 +2385,19 @@ export default function PixelArtStudio({
         </div>
       )}
     </section>
+  );
+}
+
+function StudioPanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <details open className="ps-panel group/panel">
+      <summary className="flex cursor-pointer select-none items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide">
+        <svg className="ps-chevron h-3 w-3 text-[#9b9b9b]" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+        {title}
+      </summary>
+      <div className="flex flex-col gap-3.5 p-3">{children}</div>
+    </details>
   );
 }

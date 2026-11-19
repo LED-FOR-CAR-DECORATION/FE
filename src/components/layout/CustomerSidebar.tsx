@@ -1,13 +1,7 @@
 "use client";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import {
-  ClipboardList,
-  Edit2,
-  Image as ImageIcon,
-  Sparkles,
-  User,
-} from "lucide-react";
+import { ClipboardList, Edit2, Image as ImageIcon, ShieldCheck, Sparkles, User, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -24,7 +18,9 @@ export default function CustomerSidebar() {
     pathname.startsWith("/profile/addresses");
   const isOrdersActive = pathname.startsWith("/profile/orders");
   const isGalleryActive = pathname.startsWith("/profile/gallery");
+  const isWarrantyActive = pathname.startsWith("/profile/warranty");
   const isCommissionActive = pathname.startsWith("/commission");
+  const isMessagesActive = pathname.startsWith("/messages");
 
   const navItems = [
     {
@@ -61,6 +57,17 @@ export default function CustomerSidebar() {
       ),
     },
     {
+      href: "/profile/warranty",
+      label: "Bảo Hành Thiết Bị",
+      active: isWarrantyActive,
+      icon: (
+        <ShieldCheck
+          size={17}
+          className={isWarrantyActive ? "text-[#155e59]" : "text-emerald-600"}
+        />
+      ),
+    },
+    {
       href: "/commission",
       label: "Yêu Cầu Thiết Kế",
       active: isCommissionActive,
@@ -68,6 +75,17 @@ export default function CustomerSidebar() {
         <Sparkles
           size={17}
           className={isCommissionActive ? "text-[#155e59]" : "text-amber-500"}
+        />
+      ),
+    },
+    {
+      href: "/messages",
+      label: "Tin Nhắn",
+      active: isMessagesActive,
+      icon: (
+        <MessageCircle
+          size={17}
+          className={isMessagesActive ? "text-[#155e59]" : "text-sky-600"}
         />
       ),
     },

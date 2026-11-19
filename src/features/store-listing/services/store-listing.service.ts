@@ -1,5 +1,7 @@
 import { apiDeleteStoreProduct, apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
 import type { CreatedStoreProductResponse } from "@/api_client";
+import { request } from "@/api_client/core/request";
+import { OpenAPI } from "@/lib/api/client";
 import type {
   CharacterVersion,
   ListingActor,
@@ -190,6 +192,16 @@ function toRow(character: StoreCharacter): StoreCharacterRow {
 
 /** GET /manager/store-listings/characters */
 export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
+  const draftsPromise = request<{ data: {
+    productId: number; productName: string; basePrice: number; description?: string | null;
+    thumbnailUrl?: string | null; galleryUrls: string[]; createdAt: string; updatedAt?: string | null;
+  }[] }>(OpenAPI, {
+    method: "GET",
+    url: "/api/management/admin/store/products/drafts",
+  }).then(({ data }) => data).catch((error) => {
+    console.error("Failed to load Store drafts:", error);
+    return [];
+  });
   try {
     const { items } = await fetchStoreProducts({ size: 100 });
     const charactersFromBackend = items.filter((p) => p.productType === "CHARACTER");
@@ -373,7 +385,23 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
   } catch (err) {
     console.error("Failed to fetch characters from backend:", err);
   }
-  return structuredClone(db.characters.map(toRow));
+  const drafts: StoreCharacterRow[] = (await draftsPromise).map((item) => ({
+    characterId: String(item.productId),
+    name: item.productName,
+    description: item.description ?? "",
+    thumbnailUrl: item.thumbnailUrl || "/images/products/characters/cyber-fox.png",
+    creatorUserId: "",
+    creatorName: "—",
+    listingId: `lst-${item.productId}`,
+    visibility: "Hidden",
+    status: "Pending Review",
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt ?? item.createdAt,
+    activeVersion: null,
+    draft: { basePrice: item.basePrice, thumbnailUrl: item.thumbnailUrl, galleryUrls: item.galleryUrls },
+  }));
+  const draftIds = new Set(drafts.map((draft) => draft.characterId));
+  return [...drafts, ...structuredClone(db.characters.filter((row) => !draftIds.has(row.characterId)).map(toRow))];
 }
 
 /** GET /manager/store-listings/characters/:characterId/versions — every CHARACTER_VERSION of the character. */

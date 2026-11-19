@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
-import StaffCommissionChat from "@/features/commission-chat/components/StaffCommissionChat";
+import { Suspense } from "react";
+import StaffInbox from "@/features/commission-chat/components/StaffInbox";
 
 export const metadata: Metadata = {
-  title: "Quản lý Chat & Chốt đơn Commission | MIRAGE Staff",
-  description:
-    "Không gian quản lý hội thoại khách hàng, tạo Form báo giá Commission và cập nhật tiến độ đơn vẽ dành cho Nhân viên MIRAGE.",
+  title: "Tin nhắn khách hàng | MIRAGE Staff",
 };
 
-export default function StaffCommissionChatPage() {
-  return <StaffCommissionChat />;
+export default function StaffChatPage() {
+  return (
+    <Suspense fallback={<p role="status" className="p-6 text-sm">Đang tải tin nhắn…</p>}>
+      <StaffInbox />
+    </Suspense>
+  );
 }

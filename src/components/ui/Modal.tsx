@@ -10,7 +10,7 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "md" | "lg";
+  size?: "md" | "lg" | "xl";
   /** While true (e.g. a request is in flight) Escape / backdrop / X will not close the modal. */
   busy?: boolean;
 }
@@ -66,7 +66,7 @@ export default function Modal({ title, description, onClose, children, footer, s
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl border border-[#d8e6dc] bg-white text-[#173b28] shadow-[0_24px_60px_rgba(16,53,31,0.28)] outline-none ${
-          size === "lg" ? "max-w-2xl" : "max-w-md"
+          size === "xl" ? "max-w-4xl" : size === "lg" ? "max-w-2xl" : "max-w-md"
         }`}
       >
         <header className="flex items-start justify-between gap-4 border-b border-[#e3efe6] bg-gradient-to-br from-[#f4fbf6] to-white px-6 py-4">

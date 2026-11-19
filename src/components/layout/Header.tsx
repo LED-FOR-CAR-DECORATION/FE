@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, Sparkles, LayoutDashboard } from "lucide-react";
+import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, Sparkles, LayoutDashboard, MessageCircle } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getRoleHomePath } from "@/features/auth/services/auth.service";
@@ -75,6 +75,13 @@ function UserDropdown() {
               >
                 Yêu cầu thiết kế
               </Link>
+              <Link
+                href="/messages"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-[#eaf5e8]"
+              >
+                <MessageCircle size={15} /> Tin nhắn
+              </Link>
             </>
           )}
           <button
@@ -128,6 +135,7 @@ export default function Header() {
 
           <nav className="hidden items-center gap-7 text-sm font-bold text-[#155e59] md:flex">
             <Link href="/" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">CỬA HÀNG</Link>
+            <Link href="/subscriptions" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">GÓI HỘI VIÊN</Link>
             <Link href="/about" className="transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white">GIỚI THIỆU</Link>
             <Link
               href="/commission"
@@ -188,8 +196,9 @@ export default function Header() {
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="md:hidden bg-white border-t-2 border-black px-4 py-4 flex flex-col gap-4 font-semibold">
-          <Link href="/"         onClick={() => setMobileOpen(false)}>CỬA HÀNG</Link>
-          <Link href="/about"    onClick={() => setMobileOpen(false)}>GIỚI THIỆU</Link>
+          <Link href="/"              onClick={() => setMobileOpen(false)}>CỬA HÀNG</Link>
+          <Link href="/subscriptions" onClick={() => setMobileOpen(false)}>GÓI HỘI VIÊN</Link>
+          <Link href="/about"         onClick={() => setMobileOpen(false)}>GIỚI THIỆU</Link>
           <Link href="/commission" onClick={() => setMobileOpen(false)}>Thiết kế Commission</Link>
           {!isLoading && !isAuthenticated && (
             <div className="flex gap-2 pt-2 border-t-2 border-black">

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CheckCircle2, Clock3, Cpu, EyeOff, Lock, Plus, Sparkles, Store, X } from "lucide-react";
-import { apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
+import { CheckCircle2, Clock3, Cpu, Crown, EyeOff, Lock, Plus, Sparkles, Store, X } from "lucide-react";
+import { apiUpdateProductStatus, apiUpdateStoreProduct, fetchStoreProducts } from "@/lib/api/products";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
 import {
   getCreatedStoreProducts,
@@ -18,13 +18,21 @@ import PublishVersionModal from "./PublishVersionModal";
 import UnlistConfirmModal from "./UnlistConfirmModal";
 import ArchiveProductConfirmModal from "./ArchiveProductConfirmModal";
 import DeleteProductConfirmModal from "./DeleteProductConfirmModal";
+import ManagerProductListingTable from "./ManagerProductListingTable";
 import BundleListingTable from "./BundleListingTable";
 import CreateBundleModal from "./CreateBundleModal";
 import EditBundleModal from "./EditBundleModal";
 import DeleteBundleConfirmModal from "./DeleteBundleConfirmModal";
+import SubscriptionListingTable from "./SubscriptionListingTable";
+import CreateSubscriptionModal from "./CreateSubscriptionModal";
+import EditSubscriptionModal from "./EditSubscriptionModal";
 import { fetchManagedBundles, type ManagedBundleItem } from "@/lib/api/bundles";
+import {
+  fetchManagedSubscriptions,
+  type ManagedSubscriptionPlan,
+} from "@/lib/api/subscriptions";
 
-type TabId = "characters" | "led-models" | "bundles";
+type TabId = "characters" | "approval-queue" | "led-models" | "bundles" | "subscriptions";
 
 type ModalState =
   | { kind: "create" }
@@ -37,6 +45,8 @@ type ModalState =
   | { kind: "create-bundle" }
   | { kind: "edit-bundle"; bundle: ManagedBundleItem }
   | { kind: "delete-bundle"; bundle: ManagedBundleItem }
+  | { kind: "create-subscription" }
+  | { kind: "edit-subscription"; plan: ManagedSubscriptionPlan }
   | null;
 
 const NOTICE_DURATION_MS = 6000;
@@ -50,10 +60,14 @@ export default function StoreListingDashboard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [bundleRefreshTrigger, setBundleRefreshTrigger] = useState(0);
   const [bundleCount, setBundleCount] = useState<number | null>(null);
+  const [subscriptionRefreshTrigger, setSubscriptionRefreshTrigger] = useState(0);
+  const [subscriptionCount, setSubscriptionCount] = useState<number | null>(null);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
     characters: null,
+    "approval-queue": null,
     "led-models": null,
     bundles: null,
+    subscriptions: null,
   });
 
   useEffect(() => {
@@ -61,6 +75,12 @@ export default function StoreListingDashboard() {
       .then((res) => setBundleCount(res.totalElements))
       .catch(() => { });
   }, [bundleRefreshTrigger]);
+
+  useEffect(() => {
+    fetchManagedSubscriptions()
+      .then((list) => setSubscriptionCount(list.length))
+      .catch(() => { });
+  }, [subscriptionRefreshTrigger]);
 
   const refreshCatalog = () => {
     fetchStoreProducts({ size: 100 })
@@ -127,6 +147,11 @@ export default function StoreListingDashboard() {
   const tabs: { id: TabId; label: string; count: number | null }[] = [
     { id: "characters", label: "Characters", count: isLoading ? null : rows.length },
     {
+      id: "approval-queue",
+      label: "Chờ duyệt (UNPUBLISHED)",
+      count: isLoading ? null : counts.pending,
+    },
+    {
       id: "led-models",
       label: "LED Models",
       count: catalogProducts.filter((product) => product.productType === "LED_MODEL").length,
@@ -135,6 +160,11 @@ export default function StoreListingDashboard() {
       id: "bundles",
       label: "Gói Combo (Bundles)",
       count: bundleCount,
+    },
+    {
+      id: "subscriptions",
+      label: "Gói Hội viên (Subscriptions)",
+      count: subscriptionCount,
     },
   ];
 
@@ -202,6 +232,14 @@ export default function StoreListingDashboard() {
               <Cpu size={16} />
               Tạo sản phẩm LED
             </button>
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "create-subscription" })}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-[#1f432b] shadow-sm transition hover:bg-[#f4fbf6]"
+            >
+              <Crown size={16} className="text-[#2d6a4f]" />
+              Tạo gói hội viên
+            </button>
           </div>
         )}
       </header>
@@ -221,8 +259,9 @@ export default function StoreListingDashboard() {
           icon={<Clock3 size={19} />}
           label="Chờ duyệt"
           value={isLoading ? null : counts.pending}
-          helper="Đang đợi quyết định của bạn"
+          helper="Click để xem & duyệt UNPUBLISHED"
           tone="amber"
+          onClick={() => setActiveTab("approval-queue")}
         />
         <SummaryCard
           icon={<CheckCircle2 size={19} />}
@@ -230,6 +269,7 @@ export default function StoreListingDashboard() {
           value={isLoading ? null : counts.published}
           helper="Đang mở bán trên Store"
           tone="green"
+          onClick={() => setActiveTab("characters")}
         />
         <SummaryCard
           icon={<EyeOff size={19} />}
@@ -237,6 +277,7 @@ export default function StoreListingDashboard() {
           value={isLoading ? null : counts.hidden}
           helper="Tạm ngừng hiển thị trên Store"
           tone="gray"
+          onClick={() => setActiveTab("characters")}
         />
       </div>
 
@@ -337,6 +378,32 @@ export default function StoreListingDashboard() {
               onCreateCharacter={() => setModal({ kind: "create-character" })}
             />
           )}
+          {activeTab === "approval-queue" && (
+            <ManagerProductListingTable
+              rows={rows}
+              isLoading={isLoading}
+              canManage={canManage}
+              onApprove={async (character, price) => {
+                const numericId = Number(character.characterId);
+                if (Number.isSafeInteger(numericId) && numericId > 0) {
+                  if (character.draft && price !== undefined) {
+                    await apiUpdateStoreProduct(numericId, {
+                      productName: character.name,
+                      basePrice: price,
+                      description: character.description,
+                      thumbnailUrl: character.draft.thumbnailUrl ?? undefined,
+                      galleryUrls: character.draft.galleryUrls,
+                    });
+                  }
+                  await apiUpdateProductStatus(numericId, "PUBLISHED");
+                }
+                updateCreatedStoreProductStatus(character.characterId, "PUBLISHED");
+                setNotice(`Đã duyệt sản phẩm "${character.name}" và công khai mở bán trên Store!`);
+                refreshCatalog();
+              }}
+              onRefresh={refreshCatalog}
+            />
+          )}
           {activeTab === "led-models" && (
             <CatalogListingTable
               kind="LED_MODEL"
@@ -415,6 +482,33 @@ export default function StoreListingDashboard() {
                   setBundleRefreshTrigger((prev) => prev + 1);
                 } catch {
                   setNotice(`Ẩn gói combo thất bại.`);
+                }
+              }}
+            />
+          )}
+          {activeTab === "subscriptions" && (
+            <SubscriptionListingTable
+              canManage={canManage}
+              refreshTrigger={subscriptionRefreshTrigger}
+              onCountChange={setSubscriptionCount}
+              onCreate={() => setModal({ kind: "create-subscription" })}
+              onEdit={(plan) => setModal({ kind: "edit-subscription", plan })}
+              onPublish={async (plan) => {
+                try {
+                  await apiUpdateProductStatus(plan.productId, "PUBLISHED");
+                  setNotice(`Đã mở bán gói hội viên "${plan.planName}" lên Store.`);
+                  setSubscriptionRefreshTrigger((prev) => prev + 1);
+                } catch {
+                  setNotice(`Mở bán gói hội viên thất bại.`);
+                }
+              }}
+              onUnlist={async (plan) => {
+                try {
+                  await apiUpdateProductStatus(plan.productId, "UNPUBLISHED");
+                  setNotice(`Đã ẩn gói hội viên "${plan.planName}" khỏi Store.`);
+                  setSubscriptionRefreshTrigger((prev) => prev + 1);
+                } catch {
+                  setNotice(`Ẩn gói hội viên thất bại.`);
                 }
               }}
             />
@@ -542,6 +636,32 @@ export default function StoreListingDashboard() {
           }}
         />
       )}
+
+      {modal?.kind === "create-subscription" && (
+        <CreateSubscriptionModal
+          onClose={() => setModal(null)}
+          onSuccess={(created) => {
+            setModal(null);
+            setSubscriptionRefreshTrigger((prev) => prev + 1);
+            setActiveTab("subscriptions");
+            setNotice(
+              `Tạo gói hội viên "${created.planName}" (${created.planCode}) thành công ở trạng thái ${created.status}.`,
+            );
+          }}
+        />
+      )}
+
+      {modal?.kind === "edit-subscription" && (
+        <EditSubscriptionModal
+          plan={modal.plan}
+          onClose={() => setModal(null)}
+          onSuccess={(updated) => {
+            setModal(null);
+            setSubscriptionRefreshTrigger((prev) => prev + 1);
+            setNotice(`Cập nhật gói hội viên "${updated.planName}" thành công.`);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -558,15 +678,32 @@ function SummaryCard({
   value,
   helper,
   tone,
+  onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number | null;
   helper: string;
   tone: keyof typeof TONE;
+  onClick?: () => void;
 }) {
   return (
-    <div className="neo-box-no-hover bg-white p-4">
+    <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={`neo-box-no-hover bg-white p-4 transition-all ${
+        onClick
+          ? "cursor-pointer hover:border-[#198653] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#198653]"
+          : ""
+      }`}
+    >
       <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg border ${TONE[tone]}`}>{icon}</div>
       <p className="text-[11px] font-bold uppercase tracking-wide text-text-muted">{label}</p>
       {value === null ? (

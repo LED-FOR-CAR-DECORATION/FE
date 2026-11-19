@@ -53,7 +53,7 @@ export default function CreateCharacterModal({
   return (
     <Modal
       onClose={onClose}
-      title="Tạo nhân vật mới (Create Character)"
+      title="Tạo nhân vật mới"
       size="md"
       footer={
         <>
@@ -77,7 +77,7 @@ export default function CreateCharacterModal({
               </>
             ) : (
               <>
-                <Sparkles size={15} /> Khởi tạo Character
+                <Sparkles size={15} /> Khởi tạo
               </>
             )}
           </button>
@@ -92,14 +92,9 @@ export default function CreateCharacterModal({
           </div>
         )}
 
-        <div className="rounded-lg border border-[#d6eadc] bg-[#f4fbf6] p-3 text-xs text-[#1f432b]">
-          Nhân vật mới được khởi tạo là một <strong>thư mục gốc trống (0 phiên bản)</strong>. Sau
-          khi tạo xong, bạn có thể bấm <strong>Vẽ phiên bản mới</strong> để mở Pixel Art Studio.
-        </div>
-
         <div>
           <label className="mb-1 block font-bold text-[#1f432b]">
-            Tên nhân vật (Name) <span className="text-red-500">*</span>
+            Tên nhân vật <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -113,7 +108,7 @@ export default function CreateCharacterModal({
         </div>
 
         <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">Mô tả (Description)</label>
+          <label className="mb-1 block font-bold text-[#1f432b]">Mô tả</label>
           <textarea
             rows={3}
             value={description}

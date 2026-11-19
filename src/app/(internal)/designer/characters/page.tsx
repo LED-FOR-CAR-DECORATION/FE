@@ -10,6 +10,7 @@ import {
   Grid,
   Layers,
   Loader2,
+  Palette,
   Plus,
   RefreshCw,
   Search,
@@ -22,19 +23,22 @@ import {
   useDesignerCharacters,
 } from "@/features/designer/context/DesignerCharactersContext";
 import CreateCharacterModal from "@/features/designer/components/CreateCharacterModal";
-import CharacterDetailsModal from "@/features/designer/components/CharacterDetailsModal";
 import PublishToStoreModal from "@/features/designer/components/PublishToStoreModal";
-import type {
-  CharacterVersionItem,
-  DesignerCharacterItem,
-} from "@/lib/api/designerCharacters";
+import type { DesignerCharacterItem } from "@/lib/api/designerCharacters";
 
 function getCharacterArtwork(character: DesignerCharacterItem): string | null {
+  if (typeof window !== "undefined") {
+    if (character.currentVersion?.versionId) {
+      const versionCached = window.localStorage.getItem(
+        `character_version_artwork_${character.currentVersion.versionId}`,
+      );
+      if (versionCached) return versionCached;
+    }
+    const cached = window.localStorage.getItem(`character_artwork_${character.characterId}`);
+    if (cached && character.totalVersions > 0) return cached;
+  }
   if (character.currentVersion?.previewGifUrl) {
     return character.currentVersion.previewGifUrl;
-  }
-  if (typeof window !== "undefined") {
-    return window.localStorage.getItem(`character_artwork_${character.characterId}`);
   }
   return null;
 }
@@ -56,11 +60,7 @@ function DesignerDashboardContent() {
 
   const [searchInput, setSearchInput] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedCharacter, setSelectedCharacter] = useState<DesignerCharacterItem | null>(null);
-  const [publishTarget, setPublishTarget] = useState<{
-    character: DesignerCharacterItem;
-    versions: CharacterVersionItem[];
-  } | null>(null);
+  const [publishCharacter, setPublishCharacter] = useState<DesignerCharacterItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Open Create Character modal if ?create=1 is passed from Sidebar
@@ -71,17 +71,18 @@ function DesignerDashboardContent() {
     }
   }, [searchParams, router]);
 
-  // Open Character Details modal if ?characterId=... is passed (e.g. returning from Studio)
+  // Show notice if returning from Studio after saving a version
   useEffect(() => {
-    const paramId = Number(searchParams?.get("characterId"));
-    if (Number.isFinite(paramId) && paramId > 0 && characters.length > 0) {
-      const match = characters.find((c) => c.characterId === paramId);
-      if (match) {
-        setSelectedCharacter(match);
-        router.replace("/designer/characters");
-      }
+    if (searchParams?.get("saved") === "1") {
+      const savedName = searchParams.get("name");
+      setNotice(
+        savedName
+          ? `Đã lưu phiên bản mới cho nhân vật "${savedName}" thành công!`
+          : "Đã lưu phiên bản mới thành công!",
+      );
+      router.replace("/designer/characters");
     }
-  }, [searchParams, characters, router]);
+  }, [searchParams, router]);
 
   // Auto-dismiss toast notice
   useEffect(() => {
@@ -96,20 +97,19 @@ function DesignerDashboardContent() {
     setQuery(searchInput);
   };
 
+  const handleOpenStudio = (char: DesignerCharacterItem) => {
+    router.push(`/designer/studio/${char.characterId}`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#d8e6dc] bg-white p-6 shadow-xs">
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e9f5ed] px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-[#1f432b]">
-            <Sparkles size={13} /> Designer Workspace
-          </span>
-          <h1 className="mt-2 text-2xl font-black text-[#1f432b]">
-            Danh sách nhân vật (Characters)
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Mỗi Character là một thư mục chứa nhiều Versions. Bấm vào thẻ nhân vật để xem phiên
-            bản, vẽ phiên bản mới hoặc gửi đăng bán lên Store.
+          <h1 className="text-2xl font-black text-[#1f432b]">Danh sách nhân vật</h1>
+          <p className="mt-1 text-xs text-slate-500">
+            Bấm trực tiếp vào thẻ nhân vật để mở Pixel Art Studio vẽ phiên bản mới, hoặc bấm{" "}
+            <strong>Đăng bán (Publish)</strong> để quản lý phiên bản và đăng lên Store.
           </p>
         </div>
 
@@ -118,7 +118,7 @@ function DesignerDashboardContent() {
           onClick={() => setShowCreateModal(true)}
           className="inline-flex items-center gap-2 rounded-xl bg-[#2d6a4f] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#1f432b]"
         >
-          <Plus size={17} /> Create Character
+          <Plus size={17} /> Tạo nhân vật
         </button>
       </header>
 
@@ -141,7 +141,7 @@ function DesignerDashboardContent() {
 
       {/* Search & Refresh Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <form onSubmit={handleSearchSubmit} className="flex flex-1 min-w-[260px] max-w-md gap-2">
+        <form onSubmit={handleSearchSubmit} className="flex min-w-[260px] max-w-md flex-1 gap-2">
           <div className="relative flex-1">
             <Search
               size={15}
@@ -194,17 +194,13 @@ function DesignerDashboardContent() {
       ) : characters.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[#cbe0d1] bg-white p-14 text-center">
           <Sparkles size={36} className="mx-auto mb-3 text-[#88b998]" />
-          <h2 className="text-lg font-black text-[#1f432b]">Chưa có Character nào</h2>
-          <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-            Hãy bấm <strong>Create Character</strong> để khởi tạo nhân vật đầu tiên (chọn tên, mô
-            tả và khóa kích thước ma trận LED).
-          </p>
+          <h2 className="text-lg font-black text-[#1f432b]">Danh sách nhân vật đang rỗng</h2>
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
             className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#2d6a4f] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#1f432b]"
           >
-            <Plus size={16} /> Create Character
+            <Plus size={16} /> Tạo nhân vật mới
           </button>
         </div>
       ) : (
@@ -218,18 +214,18 @@ function DesignerDashboardContent() {
               return (
                 <article
                   key={char.characterId}
-                  onClick={() => setSelectedCharacter(char)}
+                  onClick={() => handleOpenStudio(char)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setSelectedCharacter(char);
+                      handleOpenStudio(char);
                     }
                   }}
                   className="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-[#d8e6dc] bg-white shadow-xs transition hover:-translate-y-0.5 hover:border-[#2d6a4f] hover:shadow-md"
                 >
-                  {/* Thumbnail Preview */}
+                  {/* Thumbnail Preview (Clicking goes to Pixel Art Studio) */}
                   <div className="relative aspect-square w-full overflow-hidden border-b border-[#eef5f0] bg-[#0f172a]">
                     {artwork ? (
                       <img
@@ -241,7 +237,7 @@ function DesignerDashboardContent() {
                     ) : (
                       <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
                         <Layers size={28} className="opacity-60" />
-                        <span className="text-xs font-semibold">Thư mục trống (0 bản)</span>
+                        <span className="text-xs font-semibold">Chưa có bản vẽ (0 bản)</span>
                       </div>
                     )}
 
@@ -249,6 +245,14 @@ function DesignerDashboardContent() {
                     <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/75 px-2.5 py-1 font-mono text-[11px] font-bold text-white backdrop-blur-xs">
                       <Grid size={11} /> {matrixSize}
                     </span>
+
+                    {/* Hover Hint: Open Pixel Art Studio */}
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-3 pt-8 opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#2d6a4f] px-3 py-1 text-[11px] font-bold text-white shadow-xs">
+                        <Palette size={12} />
+                        {hasVersions ? "Mở Studio vẽ phiên bản mới" : "Mở Studio tạo bản vẽ v1"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Card Body */}
@@ -267,20 +271,32 @@ function DesignerDashboardContent() {
                       </p>
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between border-t border-[#eef5f0] pt-3 text-xs">
-                      <span className="inline-flex items-center gap-1 font-bold text-[#1f432b]">
-                        <Layers size={13} className="text-[#2d6a4f]" />
-                        {hasVersions ? `${char.totalVersions} phiên bản` : "0 phiên bản"}
-                      </span>
-                      {char.currentVersion ? (
-                        <span className="rounded bg-[#e9f5ed] px-2 py-0.5 font-mono text-[11px] font-bold text-[#1f432b]">
-                          v{char.currentVersion.versionNumber}
+                    <div className="mt-4 space-y-3 border-t border-[#eef5f0] pt-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="inline-flex items-center gap-1 font-bold text-[#1f432b]">
+                          <Layers size={13} className="text-[#2d6a4f]" />
+                          {hasVersions ? `${char.totalVersions} phiên bản` : "0 phiên bản"}
                         </span>
-                      ) : (
-                        <span className="text-[11px] font-semibold text-amber-600">
-                          Chưa vẽ
-                        </span>
-                      )}
+                        {char.currentVersion ? (
+                          <span className="rounded bg-[#e9f5ed] px-2 py-0.5 font-mono text-[11px] font-bold text-[#1f432b]">
+                            v{char.currentVersion.versionNumber}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-amber-600">Chưa vẽ</span>
+                        )}
+                      </div>
+
+                      {/* Publish to Store Button (Opens Publish Modal without navigating to Studio) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPublishCharacter(char);
+                        }}
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#2d6a4f] bg-[#f4fbf6] px-3 py-2 text-xs font-bold text-[#1f432b] transition hover:bg-[#2d6a4f] hover:text-white"
+                      >
+                        <Store size={14} /> Đăng bán (Publish)
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -324,39 +340,22 @@ function DesignerDashboardContent() {
           onCreated={(created) => {
             setShowCreateModal(false);
             setNotice(
-              `Đã khởi tạo Character "${created.characterName}" (0 phiên bản). Hãy bấm vào thẻ để vẽ phiên bản đầu tiên!`,
+              `Đã khởi tạo nhân vật "${created.characterName}" (0 phiên bản). Bấm vào thẻ nhân vật để mở Pixel Art Studio vẽ bản đầu tiên!`,
             );
-            setSelectedCharacter(created);
           }}
         />
       )}
 
-      {/* Character Details Modal */}
-      {selectedCharacter && (
-        <CharacterDetailsModal
-          key={selectedCharacter.characterId}
-          character={selectedCharacter}
-          onClose={() => setSelectedCharacter(null)}
-          onOpenPublish={(char, versions) => {
-            setSelectedCharacter(null);
-            setPublishTarget({ character: char, versions });
-          }}
-        />
-      )}
-
-      {/* Publish to Store Modal */}
-      {publishTarget && (
+      {/* Publish to Store Modal (Replaces old Character Details Modal) */}
+      {publishCharacter && (
         <PublishToStoreModal
-          character={publishTarget.character}
-          versions={publishTarget.versions}
-          onClose={() => setPublishTarget(null)}
-          onSuccess={(created) => {
-            const char = publishTarget.character;
-            setPublishTarget(null);
+          key={publishCharacter.characterId}
+          character={publishCharacter}
+          onClose={() => setPublishCharacter(null)}
+          onSuccess={(created, version) => {
             setNotice(
-              `Đã gửi "${created.productName}" (ID #${created.productId}) lên Store ở trạng thái UNPUBLISHED (chờ Manager duyệt) kèm Watermarked Preview!`,
+              `Đăng bán lên Store thành công! "${created.productName}" (v${version.versionNumber}) đã được gửi ở trạng thái UNPUBLISHED (chờ Manager duyệt).`,
             );
-            setSelectedCharacter(char);
           }}
         />
       )}
@@ -370,7 +369,7 @@ export default function DesignerCharactersPage() {
       <Suspense
         fallback={
           <div className="flex min-h-[240px] items-center justify-center text-sm text-slate-500">
-            Đang tải Designer Dashboard...
+            Đang tải Danh sách nhân vật...
           </div>
         }
       >

@@ -36,17 +36,10 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   {
-    label: "Designer Dashboard",
+    label: "Danh sách nhân vật",
     description: "Quản lý danh sách nhân vật & phiên bản",
     href: "/designer/characters",
     icon: Sparkles,
-    roles: ["DESIGNER"],
-  },
-  {
-    label: "Create Character",
-    description: "Khởi tạo nhân vật mới (Name, Matrix Size)",
-    href: "/designer/characters?create=1",
-    icon: Plus,
     roles: ["DESIGNER"],
   },
   {
@@ -188,8 +181,8 @@ function MenuLink({ item, activeHref }: { item: MenuItem; activeHref?: string })
     <Link
       href={item.href}
       className={`manager-nav-link flex items-start gap-3 rounded-lg border-2 px-3 py-2.5 text-sm transition-colors ${active
-          ? "bg-primary border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-          : "border-transparent hover:bg-primary/30"
+        ? "bg-primary border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+        : "border-transparent hover:bg-primary/30"
         }`}
     >
       <Icon size={17} className="mt-0.5 flex-shrink-0" />

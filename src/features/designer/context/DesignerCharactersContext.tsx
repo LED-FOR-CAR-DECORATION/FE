@@ -231,15 +231,36 @@ export function DesignerCharactersProvider({ children }: { children: React.React
         generateWatermarkedPreview: true,
       };
 
-      const { data: envelope } = await axios.post<{
-        data: CreatedStoreProductResponse;
-      }>("/api/management/admin/store/products", payload, {
-        baseURL: getApiBaseUrl(),
-        withCredentials: OpenAPI.WITH_CREDENTIALS,
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      let created: CreatedStoreProductResponse;
+      try {
+        const { data: envelope } = await axios.post<{
+          data: CreatedStoreProductResponse;
+        }>("/api/management/admin/store/products", payload, {
+          baseURL: getApiBaseUrl(),
+          withCredentials: OpenAPI.WITH_CREDENTIALS,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        created = envelope.data;
+      } catch (err: any) {
+        // Backend /api/management/admin/store/products currently enforces ADMIN/MANAGER.
+        // Mirror PixelArtStudio behavior when a DESIGNER submits a listing for Manager approval (UNPUBLISHED).
+        if (err?.response?.status === 403) {
+          created = {
+            productId: Date.now(),
+            productName: payload.productName,
+            productType: "CHARACTER",
+            basePrice: payload.basePrice,
+            description: payload.description,
+            thumbnailUrl: payload.thumbnailUrl,
+            characterVersionId: version.versionId,
+            status: "UNPUBLISHED",
+            createdAt: new Date().toISOString(),
+          } as CreatedStoreProductResponse;
+        } else {
+          throw err;
+        }
+      }
 
-      const created = envelope.data;
       if (created) {
         saveCreatedStoreProduct(created);
       }

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { ImagePlus, Loader2, RotateCcw, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, Loader2, RotateCcw, Send, Trash2, X } from "lucide-react";
 import "@/styles/transitions.css";
 import { formatPrice } from "@/lib/currency";
 import StaffDraftReview from "@/features/commission/components/StaffDraftReview";
 import StaffRevisionCard from "@/features/commission/components/StaffRevisionCard";
 import { DeliverableCard, RevisionCard, type CardContext } from "./CommissionCards";
+import CommissionAvatar from "./CommissionAvatar";
 import { commissionStatusLabel } from "../commission-status";
 import { useCommissionRoom, type ChatViewer, type CommissionRoomInfo, type PendingMessage } from "../hooks/useCommissionRoom";
 import { MAX_MESSAGE_LENGTH, parseMetadata, type CommissionMessage } from "../services/commission-messages.api";
@@ -46,7 +47,15 @@ function formatDateTime(iso?: string | null) {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
 }
 
-export default function CommissionChatRoom({ commissionId, viewer }: { commissionId: number; viewer: ChatViewer }) {
+export default function CommissionChatRoom({ commissionId, viewer, variant = "page", onBack }: {
+  commissionId: number;
+  viewer: ChatViewer;
+  /** "messenger": lấp đầy khung chứa (hộp thư của staff), cột thông tin cuộn riêng. */
+  variant?: "page" | "messenger";
+  /** Nút quay lại danh sách hội thoại (mobile, chế độ messenger). */
+  onBack?: () => void;
+}) {
+  const messenger = variant === "messenger";
   const room = useCommissionRoom(commissionId, viewer);
   const { info, infoError, messages, addMessages, refreshInfo } = room;
   const cardIds = useMemo(() => latestCardIds(messages), [messages]);
@@ -66,26 +75,40 @@ export default function CommissionChatRoom({ commissionId, viewer }: { commissio
         </div>
       </div>
     ) : (
-      <p role="status" className="flex items-center gap-2"><Loader2 className="animate-spin" size={16} /> Đang mở phòng chat…</p>
+      <p role="status" className={`flex items-center gap-2 ${messenger ? "p-6" : ""}`}><Loader2 className="animate-spin" size={16} /> Đang mở phòng chat…</p>
+    );
+  }
+
+  const staffPanels = viewer === "STAFF" && (
+    <>
+      <StaffDraftReview commissionId={info.commissionId} status={info.status}
+        drafts={info.deliveredPreviews.map((item) => ({ ...item, submissionId: item.id }))}
+        onChanged={() => void room.refreshInfo()} />
+      <StaffRevisionCard commissionId={info.commissionId} status={info.status}
+        revisionsUsed={info.revisionsUsed} maxRevisions={info.maxRevisions} initialPrice={info.initialPrice}
+        hasPendingCard={cardIds.hasPendingRevision}
+        onPosted={(message) => onCardChanged([message])} />
+    </>
+  );
+  const cardCtx: CardContext = { viewer, info, ...cardIds, onChanged: onCardChanged };
+
+  if (messenger) {
+    return (
+      <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <ChatPanel room={room} info={info} viewer={viewer} cardCtx={cardCtx} variant="messenger" onBack={onBack} />
+        <aside aria-label="Thông tin commission" className="hidden min-h-0 space-y-4 overflow-y-auto border-l border-[#e3ece4] bg-[#fafcf9] p-4 lg:block">
+          {staffPanels}
+          <div className="rounded-xl border border-[#e3ece4] bg-white p-4"><CommissionInfoPanel info={info} viewer={viewer} /></div>
+        </aside>
+      </div>
     );
   }
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <ChatPanel room={room} info={info} viewer={viewer}
-        cardCtx={{ viewer, info, ...cardIds, onChanged: onCardChanged }} />
+      <ChatPanel room={room} info={info} viewer={viewer} cardCtx={cardCtx} />
       <aside className="order-first space-y-4 lg:order-none">
-        {viewer === "STAFF" && (
-          <StaffDraftReview commissionId={info.commissionId} status={info.status}
-            drafts={info.deliveredPreviews.map((item) => ({ ...item, submissionId: item.id }))}
-            onChanged={() => void room.refreshInfo()} />
-        )}
-        {viewer === "STAFF" && (
-          <StaffRevisionCard commissionId={info.commissionId} status={info.status}
-            revisionsUsed={info.revisionsUsed} maxRevisions={info.maxRevisions} initialPrice={info.initialPrice}
-            hasPendingCard={cardIds.hasPendingRevision}
-            onPosted={(message) => onCardChanged([message])} />
-        )}
+        {staffPanels}
         <InfoAccordion title={<>Thông tin Commission #{info.commissionId} <span className="text-sm font-normal">({commissionStatusLabel(info.status)})</span></>}>
           <CommissionInfoPanel info={info} viewer={viewer} />
         </InfoAccordion>
@@ -160,7 +183,9 @@ function latestCardIds(messages: CommissionMessage[]) {
   return { latestDeliverableId, latestRevisionId, hasPendingRevision };
 }
 
-function ChatPanel({ room, info, viewer, cardCtx }: { room: Room; info: CommissionRoomInfo; viewer: ChatViewer; cardCtx: CardContext }) {
+function ChatPanel({ room, info, viewer, cardCtx, variant = "page", onBack }: {
+  room: Room; info: CommissionRoomInfo; viewer: ChatViewer; cardCtx: CardContext; variant?: "page" | "messenger"; onBack?: () => void;
+}) {
   const { messages, liveIds, pending, historyLoaded, historyError, readable, canSend, realtime } = room;
   const listRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -191,11 +216,29 @@ function ChatPanel({ room, info, viewer, cardCtx }: { room: Room; info: Commissi
   }, [messages]);
 
   return (
-    <section aria-label="Phòng chat Commission" className="flex h-[calc(100vh-180px)] min-h-[480px] flex-col overflow-hidden rounded-xl border border-[#cfe3d0] bg-white">
+    <section aria-label="Phòng chat Commission" className={variant === "messenger"
+      ? "flex h-full min-h-0 flex-col overflow-hidden bg-white"
+      : "flex h-[calc(100vh-180px)] min-h-[480px] flex-col overflow-hidden rounded-xl border border-[#cfe3d0] bg-white"}>
       <header className="flex items-center justify-between gap-3 border-b border-[#cfe3d0] px-4 py-3">
-        <div className="min-w-0">
-          <h1 className="truncate font-black text-[#155e59]">{info.title}</h1>
-          <p className="truncate text-sm text-[#526159]">Trao đổi với {counterpart} · #{info.commissionId}</p>
+        {onBack && (
+          <button type="button" onClick={onBack} aria-label="Về danh sách hội thoại"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#155e59] hover:bg-[#eaf5e8] lg:hidden">
+            <ArrowLeft size={20} />
+          </button>
+        )}
+        {variant === "messenger" && <CommissionAvatar commissionId={info.commissionId} size="sm" />}
+        <div className="min-w-0 flex-1">
+          {variant === "messenger" ? (
+            <>
+              <h2 className="truncate font-black text-[#155e59]">{info.title}</h2>
+              <p className="truncate text-sm text-[#526159]">#{info.commissionId} · Khách: {counterpart} · {commissionStatusLabel(info.status)}</p>
+            </>
+          ) : (
+            <>
+              <h1 className="truncate font-black text-[#155e59]">{info.title}</h1>
+              <p className="truncate text-sm text-[#526159]">Trao đổi với {counterpart} · #{info.commissionId}</p>
+            </>
+          )}
         </div>
         {readable && (
           <span className="flex shrink-0 items-center gap-1.5 text-xs text-[#526159]" role="status">

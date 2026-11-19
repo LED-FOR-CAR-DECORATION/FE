@@ -197,10 +197,11 @@ function CommissionDetails({ item, assigned, onChange }: {
         <button type="button" className="min-h-11 underline" onClick={() => { setError(""); reload((value) => value + 1); }}>Tải lại chi tiết</button>
       </div>}
       {notice && <p role="status">{notice}</p>}
-      {canReadHistory(displayStatus) && (
-        <Link href={`/staff/commission/${commissionId}/chat`}
+      {/* Designer không có quyền vào phòng chat (backend chặn role DESIGNER). */}
+      {!assigned && canReadHistory(displayStatus) && (
+        <Link href={`/staff/chat?commissionId=${commissionId}`}
           className="inline-flex min-h-11 items-center rounded-lg border border-[#155e59] px-4 font-semibold text-[#155e59] hover:bg-[#eaf5e8]">
-          Mở phòng chat với khách
+          Nhắn tin với khách
         </Link>
       )}
       {!assigned && idleHints[displayStatus] && (

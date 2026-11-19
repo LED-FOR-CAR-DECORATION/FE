@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, Sparkles, LayoutDashboard } from "lucide-react";
+import { Search, ShoppingBag, Menu, User, LogOut, ChevronDown, Sparkles, LayoutDashboard, MessageCircle } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getRoleHomePath } from "@/features/auth/services/auth.service";
@@ -74,6 +74,13 @@ function UserDropdown() {
                 className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-[#eaf5e8]"
               >
                 Yêu cầu thiết kế
+              </Link>
+              <Link
+                href="/messages"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-[#eaf5e8]"
+              >
+                <MessageCircle size={15} /> Tin nhắn
               </Link>
             </>
           )}

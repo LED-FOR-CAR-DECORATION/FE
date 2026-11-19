@@ -95,3 +95,13 @@ export function postRevisionCard(id: number, brief: string) {
     mediaType: "application/json", body: { brief },
   });
 }
+
+/** CMS-15: designer được giao nộp bản nháp (ảnh đã upload qua MED-01 purpose COMMISSION_DRAFT) → INTERNAL_REVIEW. */
+export function uploadCommissionDraft(id: number, body: { imageUrl: string; designerNote?: string }) {
+  return request<{ data: {
+    submissionId: number; commissionId: number; versionNumber: number; imageUrl: string;
+    designerNote?: string | null; submissionStatus: string; commissionStatus: string; createdAt?: string | null;
+  } }>(OpenAPI, {
+    method: "POST", url: endpoint + "/{id}/drafts", path: { id }, mediaType: "application/json", body,
+  });
+}

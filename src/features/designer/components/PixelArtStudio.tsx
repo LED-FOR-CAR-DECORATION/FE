@@ -109,8 +109,8 @@ export interface PixelArtStudioProps {
   initialArtworkUrl?: string | null;
   /** Số phiên bản kế tiếp (ví dụ v2, v3) */
   targetVersionNumber?: number;
-  /** Khóa cố định kích thước ma trận của Character (32x32 hoặc 64x32) */
-  lockedMatrixSize?: "32x32" | "64x32";
+  /** Khóa cố định kích thước ma trận của Character (32x32, 64x32 hoặc 64x64) */
+  lockedMatrixSize?: "32x32" | "64x32" | "64x64";
   /** Callback khi bấm "Lưu phiên bản" (Save Version - DB nội bộ) */
   onSaveVersion?: (payload: PixelArtExportPayload & { versionId?: number; isNewCharacter?: boolean }) => void;
   /** Callback khi bấm "Đăng bày bán" (Publish to Store - Trạng thái UNPUBLISHED) */
@@ -119,6 +119,8 @@ export interface PixelArtStudioProps {
   onCharacterSaved?: (payload: PixelArtExportPayload) => void;
   /** Callback tùy chọn để hủy/thu gọn Studio */
   onCancel?: () => void;
+  /** Ẩn nút "Đăng bày bán" (ví dụ character thuộc commission riêng của khách). */
+  hideStoreActions?: boolean;
 }
 
 const DEFAULT_SWATCHES: ColorSwatch[] = [
@@ -148,6 +150,7 @@ export default function PixelArtStudio({
   onPublishToStore,
   onCharacterSaved,
   onCancel,
+  hideStoreActions = false,
 }: PixelArtStudioProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -1281,7 +1284,7 @@ export default function PixelArtStudio({
             </button>
 
             {/* Button 2: Publish to Store (Đăng bày bán) */}
-            <button
+            {!hideStoreActions && <button
               type="button"
               onClick={() => void performSaveFlow(true)}
               disabled={isSaving || isInheriting}
@@ -1294,7 +1297,7 @@ export default function PixelArtStudio({
                 <Store size={14} />
               )}
               Đăng bày bán
-            </button>
+            </button>}
 
             {onCancel && (
               <button

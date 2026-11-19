@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Image,
   LayoutDashboard,
+  MessageCircle,
   Plus,
   RotateCcw,
   Settings2,
@@ -74,6 +75,13 @@ const menuItems: MenuItem[] = [
     description: "Duyệt yêu cầu, báo giá và phân công nhà thiết kế",
     href: "/staff/commission",
     icon: ClipboardList,
+    roles: ["STAFF"],
+  },
+  {
+    label: "Tin nhắn khách hàng",
+    description: "Trao đổi với khách, duyệt bản nháp và gửi thẻ chỉnh sửa",
+    href: "/staff/chat",
+    icon: MessageCircle,
     roles: ["STAFF"],
   },
   {

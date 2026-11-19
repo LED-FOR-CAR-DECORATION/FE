@@ -31,7 +31,7 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
   const [cancelError, setCancelError] = useState("");
   const router = useRouter();
   const redirectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const chatHref = `/commission/${commissionId}/chat`;
+  const chatHref = `/messages?commissionId=${commissionId}`;
 
   useEffect(() => () => clearTimeout(redirectTimer.current), []);
 

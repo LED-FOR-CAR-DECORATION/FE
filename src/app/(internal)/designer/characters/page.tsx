@@ -22,6 +22,7 @@ import {
   useDesignerCharacters,
 } from "@/features/designer/context/DesignerCharactersContext";
 import CreateCharacterModal from "@/features/designer/components/CreateCharacterModal";
+import { linkedCommissionId, stripCommissionMarker } from "@/features/designer/commission-link";
 import CharacterDetailsModal from "@/features/designer/components/CharacterDetailsModal";
 import PublishToStoreModal from "@/features/designer/components/PublishToStoreModal";
 import type {
@@ -262,8 +263,13 @@ function DesignerDashboardContent() {
                           #{char.characterId}
                         </span>
                       </div>
+                      {linkedCommissionId(char.description) !== undefined && (
+                        <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-extrabold text-amber-900">
+                          Commission #{linkedCommissionId(char.description)}
+                        </span>
+                      )}
                       <p className="mt-1 line-clamp-2 min-h-[32px] text-xs text-slate-500">
-                        {char.description || "Chưa có mô tả cho nhân vật này."}
+                        {stripCommissionMarker(char.description) || "Chưa có mô tả cho nhân vật này."}
                       </p>
                     </div>
 

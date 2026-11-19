@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Grid, Loader2, Sparkles } from "lucide-react";
 import PixelArtStudio from "@/features/designer/components/PixelArtStudio";
+import { linkedCommissionId } from "@/features/designer/commission-link";
 import {
   getStoredMatrixSize,
   sortVersionsNewestFirst,
@@ -106,16 +107,19 @@ export default function DesignerCharacterStudioPage() {
     );
   }
 
+  const commissionId = linkedCommissionId(character.description);
+  const backHref = commissionId ? `/designer/commissions/${commissionId}` : `/designer/characters?characterId=${character.characterId}`;
+
   return (
     <div className="space-y-4">
       {/* Studio Top Navigation Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#d8e6dc] bg-white px-5 py-3.5 shadow-xs">
         <div className="flex items-center gap-3">
           <Link
-            href={`/designer/characters?characterId=${character.characterId}`}
+            href={backHref}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[#d8e6dc] bg-[#f7fbf8] px-3 py-1.5 text-xs font-bold text-[#1f432b] hover:bg-[#eaf5ed]"
           >
-            <ArrowLeft size={14} /> Quay lại Dashboard
+            <ArrowLeft size={14} /> {commissionId ? `Về Commission #${commissionId}` : "Quay lại Dashboard"}
           </Link>
           <div>
             <div className="flex items-center gap-2">
@@ -134,6 +138,13 @@ export default function DesignerCharacterStudioPage() {
             </p>
           </div>
         </div>
+        {commissionId && (
+          <p className="max-w-sm text-xs text-slate-500">
+            Character của <strong className="text-[#1f432b]">Commission #{commissionId}</strong>. Lưu bao nhiêu version tùy ý,
+            rồi{" "}
+            <Link href={backHref} className="font-bold text-[#2d6a4f] underline">quay lại commission</Link> để chọn version nộp staff duyệt.
+          </p>
+        )}
       </div>
 
       {/* Pixel Art Studio Canvas */}
@@ -145,6 +156,7 @@ export default function DesignerCharacterStudioPage() {
         initialArtworkUrl={latestArtworkUrl}
         targetVersionNumber={nextVersionNumber}
         lockedMatrixSize={lockedMatrixSize}
+        hideStoreActions={Boolean(commissionId)}
         onSaveVersion={() => {
           router.push(`/designer/characters?characterId=${character.characterId}`);
         }}

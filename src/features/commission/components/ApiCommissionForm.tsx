@@ -32,6 +32,7 @@ function optionPrice(option: PricingOptionResponse) {
 export default function ApiCommissionForm() {
   const [pricing, setPricing] = useState<PublicCommissionPricingResponse>();
   const [pricingError, setPricingError] = useState(false);
+  const [tierCode, setTierCode] = useState("CUSTOM");
   const [choices, setChoices] = useState<Record<number, number[]>>({});
   const [values, setValues] = useState<Record<number, string>>({});
   const [note, setNote] = useState("");
@@ -57,7 +58,9 @@ export default function ApiCommissionForm() {
     };
   }, []);
 
-  const tier = pricing?.tiers?.find((item) => item.isCustom);
+  const tier = pricing?.tiers?.find((item) => item.tierCode === tierCode)
+    ?? pricing?.tiers?.find((item) => item.isCustom);
+  const bundledIds = new Set(tier?.isCustom ? [] : tier?.bundledOptionIds ?? []);
   const rules: Rule[] = (pricing?.rules ?? []).flatMap((rule) =>
     rule.configId === undefined ? [] : [{ ...rule, configId: rule.configId }]);
   const optionsByRule = new Map(rules.map((rule) => [
@@ -75,6 +78,19 @@ export default function ApiCommissionForm() {
       && isVisible(parent, new Set([...visited, rule.configId]));
   }
   const visible = rules.filter((rule) => isVisible(rule));
+  function selectTier(code: string) {
+    const next = pricing?.tiers?.find((item) => item.tierCode === code);
+    if (!next) return;
+    setTierCode(code);
+    const optionIds = new Set([...(next.bundledOptionIds ?? []), ...(next.triggerOptionIds ?? [])]);
+    const nextChoices: Record<number, number[]> = {};
+    for (const rule of rules) {
+      const selected = (rule.options ?? []).flatMap((option) =>
+        option.optionId !== undefined && optionIds.has(option.optionId) ? [option.optionId] : []);
+      if (selected.length) nextChoices[rule.configId] = selected;
+    }
+    setChoices(nextChoices);
+  }
   const basePrice = tier?.basePrice ?? 0;
   const baseCents = Math.round(basePrice * 100);
   const selectedLines = visible.flatMap((rule) => {
@@ -82,7 +98,7 @@ export default function ApiCommissionForm() {
     const quantity = rule.selectionType === "QUANTITY" ? Number(values[rule.configId] || 0) : 1;
     const options = rule.selectionType === "QUANTITY" ? (rule.options ?? []).slice(0, 1)
       : (rule.options ?? []).filter(({ optionId }) => optionId !== undefined && selected.includes(optionId));
-    return options.map((option) => ({
+    return options.filter((option) => !bundledIds.has(option.optionId!)).map((option) => ({
       rule,
       modifier: option.modifierType ?? "FLAT_ADD",
       rate: option.basePrice ?? 0,
@@ -140,6 +156,11 @@ export default function ApiCommissionForm() {
       setError("Hãy điền các lựa chọn bắt buộc.");
       return;
     }
+    const selectedIds = new Set(selectedOptions.flatMap((item) => item.optionIds ?? []));
+    if ((tier.triggerOptionIds ?? []).some((id) => !selectedIds.has(id))) {
+      setError("Các lựa chọn chưa đáp ứng điều kiện của gói. Hãy chọn lại gói hoặc chuyển sang tùy chỉnh.");
+      return;
+    }
 
     pending.current = true;
     setBusy(true);
@@ -170,6 +191,15 @@ export default function ApiCommissionForm() {
   return (
     <form onSubmit={submit} className="space-y-5 rounded-xl border border-[#cfe3d0] bg-[#eaf5e8] p-5 sm:p-7">
       <h1 className="text-2xl font-black text-[#155e59]">Yêu cầu thiết kế Pixel Art</h1>
+      {(pricing.tiers?.length ?? 0) > 1 && (
+        <label className="block font-semibold">Gói thiết kế
+          <select className={control} value={tier?.tierCode} disabled={busy} onChange={(event) => selectTier(event.target.value)}>
+            {pricing.tiers?.map((item) => <option key={item.tierId} value={item.tierCode}>{item.tierName}</option>)}
+          </select>
+          {tier?.description && <span className="mt-1 block text-sm font-normal">{tier.description}</span>}
+          <span className="mt-1 block text-sm font-normal">{tier?.maxRevisions ?? 0} lượt chỉnh sửa miễn phí</span>
+        </label>
+      )}
       <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
         {visible.map((rule) => {
           const id = rule.configId;
@@ -186,7 +216,7 @@ export default function ApiCommissionForm() {
                 return (
                   <label key={optionId} className="flex items-center justify-between gap-3 py-1">
                     <span className="flex items-center gap-2">
-                    <input type="checkbox" checked={selected.includes(optionId)} onChange={(event) =>
+                    <input type="checkbox" disabled={bundledIds.has(optionId)} checked={selected.includes(optionId)} onChange={(event) =>
                       setChoices({ ...choices, [id]: event.target.checked ? [...selected, optionId] : selected.filter((item) => item !== optionId) })} />
                     {optionLabel(option)}
                     </span>
@@ -205,7 +235,8 @@ export default function ApiCommissionForm() {
                   min={rule.minQuantity ?? undefined} max={rule.maxQuantity ?? undefined} maxLength={500}
                   value={values[id] ?? ""} onChange={(event) => setValues({ ...values, [id]: event.target.value })} />
               ) : (
-                <select className={control} required={rule.isRequired || rule.ruleKey === "FRAME_RANGE"} aria-describedby={descriptionId}
+                <select className={control} required={rule.isRequired} aria-describedby={descriptionId}
+                  disabled={selected.some((optionId) => bundledIds.has(optionId))}
                   value={selected[0] ?? ""} onChange={(event) => setChoices({ ...choices, [id]: event.target.value ? [Number(event.target.value)] : [] })}>
                   <option value="">Chọn {rule.configName}</option>
                   {(rule.options ?? []).map((option) => option.optionId !== undefined && (
@@ -247,6 +278,7 @@ export default function ApiCommissionForm() {
         <h2 id="commission-price-heading" className="font-bold text-[#155e59]">Chi tiết giá</h2>
         <dl className="space-y-1 text-sm">
           <div className="flex justify-between gap-3"><dt>Giá cơ bản</dt><dd>{formatPrice(basePrice)}</dd></div>
+          {!tier?.isCustom && <p className="text-sm">Giá gói đã bao gồm các phương án được chọn sẵn trong gói.</p>}
           {priceLines.filter((line) => line.cents !== 0).map((line) => (
             <div key={line.id} className="flex justify-between gap-3"><dt>{line.label}</dt><dd>{formatPrice(line.cents / 100)}</dd></div>
           ))}

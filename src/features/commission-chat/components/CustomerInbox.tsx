@@ -13,7 +13,7 @@ const CUSTOMER_FILTERS: InboxFilter[] = [
   { key: "all", label: "Tất cả" },
   { key: "unread", label: "Chưa đọc" },
   { key: "action", label: "Cần bạn phản hồi", statuses: ["PREVIEW_DELIVERED", "AWAITING_EXTRA_PAYMENT"] },
-  { key: "design", label: "Đang thiết kế", statuses: ["PAID", "IN_PROGRESS", "INTERNAL_REVIEW", "INTERNAL_REVISION_REQUIRED", "CUSTOMER_REVISION_REQUESTED"] },
+  { key: "design", label: "Đang thiết kế", statuses: ["PAID", "IN_PROGRESS", "INTERNAL_REVIEW", "INTERNAL_REVISION_REQUIRED", "AWAITING_ESTIMATE"] },
   { key: "done", label: "Hoàn thành", statuses: ["COMPLETED"] },
 ];
 

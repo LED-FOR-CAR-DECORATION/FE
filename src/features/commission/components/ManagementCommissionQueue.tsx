@@ -9,6 +9,9 @@ import {
 } from "../services/management-commission.api";
 import { commissionButton } from "./FixedCommissionSteps";
 import StaffDraftReview from "./StaffDraftReview";
+import CommissionRevisionTimeline from "./CommissionRevisionTimeline";
+import CommissionReassignment from "./CommissionReassignment";
+import CommissionRequestRejection from "./CommissionRequestRejection";
 import Link from "next/link";
 import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
 
@@ -16,7 +19,7 @@ const labels: Record<string, string> = {
   PENDING_REVIEW: "Chờ duyệt", PENDING_PAYMENT: "Chờ thanh toán", PAID: "Đã thanh toán · Chờ phân công",
   IN_PROGRESS: "Đang thiết kế", INTERNAL_REVIEW: "Chờ duyệt bản thiết kế", INTERNAL_REVISION_REQUIRED: "Cần chỉnh sửa",
   PREVIEW_DELIVERED: "Đã gửi bản xem trước", AWAITING_EXTRA_PAYMENT: "Chờ thanh toán bổ sung",
-  CUSTOMER_REVISION_REQUESTED: "Khách yêu cầu chỉnh sửa", AWAITING_ESTIMATE: "Chờ báo giá",
+  AWAITING_ESTIMATE: "Chờ designer dự kiến thời gian sửa",
   COMPLETED: "Hoàn thành", CANCELLED: "Đã hủy", EXPIRED: "Hết hạn",
 };
 const panel = "space-y-3 rounded-xl border border-[#cfe3d0] bg-white p-5";
@@ -27,7 +30,7 @@ const idleHints: Record<string, string> = {
   IN_PROGRESS: "Designer đang thực hiện. Khi designer nộp bản nháp, phần duyệt bản nháp sẽ hiện ở đây.",
   INTERNAL_REVISION_REQUIRED: "Đã trả bản nháp về designer, đang chờ bản sửa.",
   PREVIEW_DELIVERED: "Đã gửi bản xem trước, đang chờ khách phản hồi. Nếu khách muốn sửa, mở phòng chat để gửi thẻ yêu cầu chỉnh sửa.",
-  CUSTOMER_REVISION_REQUESTED: "Khách đã xác nhận yêu cầu chỉnh sửa. Đang chờ designer nộp bản sửa.",
+  AWAITING_ESTIMATE: "Khách đã xác nhận chỉnh sửa. Designer cần nhập thời gian dự kiến trước khi nộp bản sửa.",
   COMPLETED: "Commission đã hoàn thành.",
   CANCELLED: "Commission đã bị hủy.",
   EXPIRED: "Commission đã hết hạn thanh toán.",
@@ -187,6 +190,8 @@ function CommissionDetails({ item, assigned, onChange }: {
       {typeof item.totalPrice === "number" && <p className="font-semibold">{formatPrice(item.totalPrice)}</p>}
       {item.assignedStaffName && <p className="text-sm">Staff phụ trách: {item.assignedStaffName}</p>}
       {detail?.description && <p className="whitespace-pre-wrap break-words">{detail.description}</p>}
+      {detail && <CommissionRevisionTimeline detail={detail} onChanged={() => { onChange(); reload((value) => value + 1); }} />}
+      {detail && !assigned && <CommissionReassignment detail={detail} onChanged={() => { onChange(); reload((value) => value + 1); }} />}
       {detail?.attachments?.map(({ attachmentId, imageUrl, caption }) => /^https?:\/\//i.test(imageUrl) && (
         <a key={attachmentId} href={imageUrl} target="_blank" rel="noreferrer" className="block text-[#155e59] underline">
           {caption || "Ảnh tham khảo"}
@@ -210,6 +215,9 @@ function CommissionDetails({ item, assigned, onChange }: {
       {!assigned && detail?.submissions && (
         <StaffDraftReview commissionId={commissionId} status={displayStatus} drafts={detail.submissions}
           onChanged={() => { onChange(); reload((value) => value + 1); }} />
+      )}
+      {!assigned && displayStatus === "PENDING_REVIEW" && (
+        <CommissionRequestRejection commissionId={commissionId} onChanged={() => { onChange(); reload((value) => value + 1); }} />
       )}
       {/* Không chờ brief: assign/approve chỉ cần commissionId, nên lỗi tải chi tiết không được làm mất nút. */}
       {!assigned && displayStatus === status && (status === "PAID" || status === "PENDING_REVIEW") && (

@@ -190,8 +190,8 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
             <>
               <p className="text-sm">
                 {usesFreeQuota
-                  ? "Designer sẽ bắt đầu chỉnh sửa theo nội dung trên và dùng 1 lượt chỉnh sửa miễn phí."
-                  : `Bạn sẽ được chuyển tới trang thanh toán ${formatPrice(fee)}. Designer bắt đầu sửa sau khi thanh toán xong.`}
+                  ? "Yêu cầu dùng 1 lượt miễn phí. Designer sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
+                  : `Bạn sẽ được chuyển tới trang thanh toán ${formatPrice(fee)}. Sau thanh toán, designer sẽ xác nhận thời gian thực hiện.`}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={action.busy} className={`${primaryButton} bg-amber-600 hover:bg-amber-700`}

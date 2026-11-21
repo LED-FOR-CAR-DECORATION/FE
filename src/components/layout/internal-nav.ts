@@ -62,7 +62,7 @@ export const menuItems: MenuItem[] = [
     description: "Duyệt yêu cầu, báo giá và phân công nhà thiết kế",
     href: "/staff/commission",
     icon: ClipboardList,
-    roles: ["STAFF"],
+    roles: ["STAFF", "MANAGER", "ADMIN"],
   },
   {
     label: "Tin nhắn khách hàng",

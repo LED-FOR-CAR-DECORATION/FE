@@ -14,6 +14,7 @@ export interface SignedUploadUrlResult {
   signedUploadUrl: string;
   publicUrl: string;
   objectKey?: string;
+  uploadHeaders?: Record<string, string>;
   expiresAt?: string;
   localPreviewUrl?: string;
 }
@@ -76,14 +77,13 @@ export async function uploadMediaFile(
   }
 
   const token = await getSessionToken();
-  const localPreviewUrl =
-    typeof window !== "undefined" ? URL.createObjectURL(file) : undefined;
 
   // Step 1: Request signed upload URL from Media Service
   let signedData: {
     signedUploadUrl: string;
     publicUrl: string;
     objectKey?: string;
+    uploadHeaders?: Record<string, string>;
     expiresAt?: string;
   } | undefined;
 
@@ -95,6 +95,7 @@ export async function uploadMediaFile(
         signedUploadUrl: string;
         publicUrl: string;
         objectKey?: string;
+        uploadHeaders?: Record<string, string>;
         expiresAt?: string;
       };
     }>(
@@ -132,12 +133,16 @@ export async function uploadMediaFile(
     );
   }
 
-  if (!signedData?.signedUploadUrl || !signedData?.publicUrl) {
+  const privatePurpose = ["COMMISSION_REFERENCE", "COMMISSION_CHAT", "COMMISSION_DRAFT", "WARRANTY_EVIDENCE"].includes(purpose);
+  if (!signedData?.signedUploadUrl || (privatePurpose ? !signedData.objectKey : !signedData.publicUrl)) {
     throw new Error("Media Service không trả về signedUploadUrl hoặc publicUrl hợp lệ.");
   }
 
   // Step 2: PUT binary file directly to Cloud Storage signedUploadUrl
-  const putHeaders = buildSignedPutHeaders(signedData.signedUploadUrl, contentType);
+  if (privatePurpose && !signedData.uploadHeaders) {
+    throw new Error("Máy chủ chưa trả về thông tin tải ảnh riêng tư. Vui lòng thử lại.");
+  }
+  const putHeaders = signedData.uploadHeaders ?? buildSignedPutHeaders(signedData.signedUploadUrl, contentType);
   const putResponse = await fetch(signedData.signedUploadUrl, {
     method: "PUT",
     headers: putHeaders,
@@ -152,9 +157,9 @@ export async function uploadMediaFile(
 
   return {
     signedUploadUrl: signedData.signedUploadUrl,
-    publicUrl: signedData.publicUrl,
+    publicUrl: signedData.publicUrl ?? "",
     objectKey: signedData.objectKey,
     expiresAt: signedData.expiresAt,
-    localPreviewUrl,
+    localPreviewUrl: typeof window !== "undefined" ? URL.createObjectURL(file) : undefined,
   };
 }

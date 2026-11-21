@@ -3,7 +3,7 @@
 import "@/lib/api/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/api_client/core/ApiError";
-import { CustomerCommissionsService } from "@/api_client/services/CustomerCommissionsService";
+import { getCustomerCommission } from "@/features/commission/services/customer-commission.api";
 import { getApiBaseUrl, refreshAccessToken } from "@/lib/api/client";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { getSessionToken } from "@/lib/auth/session";
@@ -60,7 +60,7 @@ const MAX_STOMP_ERRORS = 3;
 
 async function fetchInfo(commissionId: number, viewer: ChatViewer): Promise<CommissionRoomInfo> {
   if (viewer === "CUSTOMER") {
-    const { data } = await CustomerCommissionsService.getMyCommissionDetail(commissionId);
+    const { data } = await getCustomerCommission(commissionId);
     if (!data) throw new Error("Không tìm thấy Commission.");
     return {
       commissionId: data.commissionId,
@@ -74,7 +74,7 @@ async function fetchInfo(commissionId: number, viewer: ChatViewer): Promise<Comm
       extraRevisionFee: data.extraRevisionFee,
       revisionsUsed: data.revisionsUsed,
       maxRevisions: data.maxRevisions,
-      slaDueAt: data.slaDueAt,
+      slaDueAt: data.estimatedDeliveryAt,
       createdAt: data.createdAt,
       attachments: (data.attachments ?? []).map((item) => ({ id: item.attachmentId, imageUrl: item.imageUrl, caption: item.caption })),
       deliveredPreviews: (data.deliveredPreviews ?? []).map((item) => ({

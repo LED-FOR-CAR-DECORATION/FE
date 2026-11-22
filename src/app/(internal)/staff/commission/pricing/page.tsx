@@ -1,5 +1,7 @@
 "use client";
 
+export const instant = false;
+
 import { useEffect, useState, type FormEvent } from "react";
 import { CreatePricingRuleRequest } from "@/api_client/models/CreatePricingRuleRequest";
 import type { ManagementCommissionPricingResponse } from "@/api_client/models/ManagementCommissionPricingResponse";

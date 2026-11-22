@@ -14,6 +14,7 @@ import {
   Edit3,
   Eye,
   FileSpreadsheet,
+  History,
   List,
   Loader2,
   PackageCheck,
@@ -190,6 +191,9 @@ export default function InventoryPage() {
     message: string;
   } | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importModalTab, setImportModalTab] = useState<
+    "excel" | "manual" | "history"
+  >("excel");
   const [adjustingItem, setAdjustingItem] = useState<LedInventoryItem | null>(
     null,
   );
@@ -434,14 +438,36 @@ export default function InventoryPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setImportModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg border-2 border-black bg-primary px-4 py-2.5 text-sm font-black shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
-        >
-          <Plus size={16} />
-          Nhập kho LED
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              setImportModalTab("history");
+              setImportModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-black bg-white px-3.5 py-2.5 text-sm font-bold shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-gray-50"
+          >
+            <History size={16} />
+            Lịch sử nhập kho
+            {importRecords.length > 0 && (
+              <span className="rounded-full bg-primary/40 px-2 py-0.5 text-xs font-black text-primary-dark">
+                {importRecords.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setImportModalTab("excel");
+              setImportModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-black bg-primary px-4 py-2.5 text-sm font-black shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
+          >
+            <Upload size={16} />
+            Nhập kho LED
+          </button>
+        </div>
       </header>
 
       {notice && (
@@ -500,7 +526,7 @@ export default function InventoryPage() {
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,.8fr)]">
+      <div className="w-full">
         <section className="neo-box-no-hover overflow-hidden bg-white">
           <div className="flex flex-wrap items-center gap-1 border-b-2 border-primary-light px-4 pt-3">
             <button
@@ -572,94 +598,110 @@ export default function InventoryPage() {
                 </button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] text-sm">
-                  <thead className="border-b border-gray-200 bg-gray-50">
+                <table className="w-full min-w-[920px] table-fixed text-sm">
+                  <colgroup>
+                    <col className="w-[34%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[18%]" />
+                  </colgroup>
+                  <thead className="border-b border-gray-200 bg-gray-50/90 text-gray-700">
                     <tr>
-                      {[
-                        "Model",
-                        "Mã model",
-                        "Tồn kho",
-                        "Đã đặt",
-                        "Khả dụng",
-                        "Ngưỡng tối thiểu",
-                        "Trạng thái",
-                        "Thao tác",
-                      ].map((heading) => (
-                        <th
-                          key={heading}
-                          className={`whitespace-nowrap px-4 py-3 text-[11px] font-black uppercase ${
-                            heading === "Thao tác" ? "text-right" : "text-left"
-                          }`}
-                        >
-                          {heading}
-                        </th>
-                      ))}
+                      <th className="px-5 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                        Model
+                      </th>
+                      <th className="px-3 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                        Mã model
+                      </th>
+                      <th className="px-2 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                        Tồn kho
+                      </th>
+                      <th className="px-2 py-3.5 text-center text-[11px] font-black uppercase tracking-wider text-primary-dark">
+                        Khả dụng
+                      </th>
+                      <th className="px-2 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                        Trạng thái
+                      </th>
+                      <th className="px-4 py-3.5 text-right text-[11px] font-black uppercase tracking-wider">
+                        Thao tác
+                      </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-gray-100">
                     {paginatedItems.map((item) => {
                       const itemStatus = getInventoryStatus(item);
                       return (
                         <tr
                           key={item.productId}
-                          className="border-b border-gray-100 hover:bg-green-50/50"
+                          className="transition-colors hover:bg-green-50/40"
                         >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-gray-200 bg-gray-50">
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-3.5">
+                              <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-xs">
                                 {item.previewUrl ? (
                                   <Image
                                     src={item.previewUrl}
                                     alt=""
-                                    width={40}
-                                    height={40}
+                                    width={44}
+                                    height={44}
                                     className="h-full w-full object-contain"
                                   />
                                 ) : (
                                   <Boxes
-                                    size={17}
+                                    size={18}
                                     className="text-text-muted"
                                   />
                                 )}
                               </div>
-                              <div>
-                                <p className="font-bold">{item.name}</p>
-                                <p className="text-[11px] text-text-muted">
-                                  {item.description || "Không có mô tả"}
+                              <div className="min-w-0 flex-1">
+                                <p className="font-bold text-gray-900 text-sm leading-snug">
+                                  {item.name}
                                 </p>
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-xs font-bold text-text-muted">
-                            {item.modelCode}
-                          </td>
-                          <td className="px-4 py-3 font-black">{item.stock}</td>
-                          <td className="px-4 py-3">{item.reserved}</td>
-                          <td className="px-4 py-3 font-black text-primary-dark">
-                            {getAvailableStock(item)}
-                          </td>
-                          <td className="px-4 py-3">{item.minimumStock}</td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-bold ${STATUS_CLASS[itemStatus]}`}
-                            >
-                              {STATUS_LABEL[itemStatus]}
+                          <td className="px-3 py-3.5">
+                            <span className="inline-block whitespace-nowrap font-mono text-xs font-bold text-gray-800 bg-gray-100/90 px-2.5 py-1 rounded border border-gray-200">
+                              {item.modelCode}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-2 py-3.5 text-center">
+                            <span className="font-black text-sm text-gray-900">
+                              {item.stock}
+                            </span>
+                          </td>
+                          <td className="px-2 py-3.5 text-center">
+                            <span className="font-black text-sm text-primary-dark">
+                              {getAvailableStock(item)}
+                            </span>
+                          </td>
+                          <td className="px-2 py-3.5 text-center">
+                            <div className="flex justify-center">
+                              <span
+                                className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${STATUS_CLASS[itemStatus]}`}
+                              >
+                                {STATUS_LABEL[itemStatus]}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 text-right">
                             <div className="inline-flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => setAdjustingItem(item)}
-                                className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold hover:bg-primary/20"
+                                className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold shadow-xs hover:bg-primary/20"
+                                title="Cập nhật số lượng tồn kho & ngưỡng cảnh báo"
                               >
                                 <Edit3 size={13} />
-                                Chỉnh số lượng
+                                Cập nhật LED
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteModel(item)}
-                                className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50"
+                                className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs font-bold text-red-600 shadow-xs hover:bg-red-50"
+                                title="Xóa model khỏi kho"
                               >
                                 <Trash2 size={13} />
                                 Xóa
@@ -672,7 +714,7 @@ export default function InventoryPage() {
                     {filteredItems.length === 0 && (
                       <tr>
                         <td
-                          colSpan={8}
+                          colSpan={6}
                           className="px-4 py-12 text-center font-semibold text-text-muted"
                         >
                           Không tìm thấy model LED phù hợp.
@@ -737,72 +779,18 @@ export default function InventoryPage() {
             </>
           )}
         </section>
-
-        <aside className="flex flex-col gap-5">
-          <ImportCard
-            fileName={fileName}
-            models={inventoryItems}
-            onFileChange={setFileName}
-            onConfirmExcelImport={(productId, quantity, importedFile) => {
-              handleImportExistingStock(productId, quantity, importedFile);
-              setFileName("");
-            }}
-          />
-          <section className="neo-box-no-hover bg-white p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet size={17} className="text-primary-dark" />
-                <h2 className="font-black">Lịch sử nhập kho</h2>
-              </div>
-              <span className="text-xs font-bold text-text-muted">
-                {importRecords.length} lượt
-              </span>
-            </div>
-            <div className="flex flex-col gap-3">
-              {importRecords.length === 0 ? (
-                <p className="py-4 text-center text-xs text-text-muted">
-                  Chưa có lượt nhập kho nào được ghi nhận.
-                </p>
-              ) : (
-                importRecords.slice(0, 8).map((record) => (
-                  <div
-                    key={record.id}
-                    className="flex items-center gap-3 border-b border-gray-100 pb-3 last:border-0 last:pb-0"
-                  >
-                    <FileSpreadsheet
-                      size={17}
-                      className="shrink-0 text-primary-dark"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-bold">
-                        {record.fileName}
-                      </p>
-                      <p className="text-[10px] text-text-muted">
-                        +{record.itemCount} thiết bị ·{" "}
-                        {new Date(record.importedAt).toLocaleString("vi-VN")}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
-                        record.status === "Completed"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {record.status === "Completed" ? "Thành công" : "Lỗi"}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        </aside>
       </div>
 
       {importModalOpen && (
         <ImportStockModal
           models={inventoryItems}
+          importRecords={importRecords}
+          initialTab={importModalTab}
           onClose={() => setImportModalOpen(false)}
+          onConfirmExcelImport={(productId, quantity, importedFileName) => {
+            handleImportExistingStock(productId, quantity, importedFileName);
+            setImportModalOpen(false);
+          }}
           onImportExisting={(productId, qty, note) => {
             handleImportExistingStock(productId, qty, note);
             setImportModalOpen(false);
@@ -1038,26 +1026,43 @@ function LedInstancesSection() {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50">
+        <table className="w-full min-w-[1020px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-[17%]" />
+            <col className="w-[20%]" />
+            <col className="w-[13%]" />
+            <col className="w-[12%]" />
+            <col className="w-[15%]" />
+            <col className="w-[12%]" />
+            <col className="w-[5.5%]" />
+            <col className="w-[5.5%]" />
+          </colgroup>
+          <thead className="border-b border-gray-200 bg-gray-50/90 text-gray-700">
             <tr>
-              {[
-                "Serial & ID",
-                "Model LED",
-                "Địa chỉ MAC",
-                "Trạng thái",
-                "Đơn hàng / Chủ sở hữu",
-                "Bảo hành / Ngày SX",
-                "QR Nhà máy",
-                "Chi tiết",
-              ].map((heading) => (
-                <th
-                  key={heading}
-                  className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase"
-                >
-                  {heading}
-                </th>
-              ))}
+              <th className="px-4 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Serial & ID
+              </th>
+              <th className="px-4 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Model LED
+              </th>
+              <th className="px-3 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Địa chỉ MAC
+              </th>
+              <th className="px-3 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                Trạng thái
+              </th>
+              <th className="px-4 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Đơn hàng / Chủ sở hữu
+              </th>
+              <th className="px-3 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Bảo hành / Ngày SX
+              </th>
+              <th className="px-2 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                QR Nhà máy
+              </th>
+              <th className="px-4 py-3.5 text-right text-[11px] font-black uppercase tracking-wider">
+                Chi tiết
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1082,9 +1087,9 @@ function LedInstancesSection() {
                 return (
                   <tr
                     key={row.instanceId}
-                    className="border-b border-gray-100 hover:bg-green-50/50"
+                    className="border-b border-gray-100 transition-colors hover:bg-green-50/40"
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <p className="font-bold text-gray-900">
                         {row.serialNumber}
                       </p>
@@ -1096,7 +1101,7 @@ function LedInstancesSection() {
                       </p>
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <p className="font-semibold text-gray-900">
                         {row.modelName ?? `Model #${row.modelId}`}
                       </p>
@@ -1107,19 +1112,19 @@ function LedInstancesSection() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3 text-xs font-semibold text-gray-700">
+                    <td className="px-3 py-3.5 font-mono text-xs font-semibold text-gray-700">
                       {row.macAddress}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3.5 text-center">
                       <span
-                        className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusBadge.className}`}
+                        className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${statusBadge.className}`}
                       >
                         {statusBadge.label}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 text-xs">
+                    <td className="px-4 py-3.5 text-xs">
                       {row.fulfillment || row.owner ? (
                         <div className="space-y-0.5">
                           {row.fulfillment && (
@@ -1140,7 +1145,7 @@ function LedInstancesSection() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3 text-xs text-gray-700">
+                    <td className="px-3 py-3.5 text-xs text-gray-700">
                       {row.warrantyExpiresAt ? (
                         <span>
                           BH đến {formatDateTime(row.warrantyExpiresAt, false)}
@@ -1154,25 +1159,25 @@ function LedInstancesSection() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-3.5 text-center">
                       {hasQrPayload ? (
-                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
                           <QrCode size={12} /> Có sẵn
                         </span>
                       ) : (
-                        <span className="inline-flex whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-600">
+                        <span className="inline-flex whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-[11px] font-bold text-gray-600">
                           Đã ẩn
                         </span>
                       )}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5 text-right">
                       <button
                         type="button"
                         onClick={() => setSelectedInstanceId(row.instanceId)}
-                        className="inline-flex items-center gap-1 whitespace-nowrap border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold hover:border-black hover:bg-primary/20"
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold shadow-2xs hover:border-black hover:bg-primary/20"
                       >
-                        <Eye size={14} /> Xem chi tiết
+                        <Eye size={13} /> Chi tiết
                       </button>
                     </td>
                   </tr>
@@ -1774,26 +1779,46 @@ function SummaryCard({
   );
 }
 
-function ImportCard({
-  fileName,
+function ImportStockModal({
   models,
-  onFileChange,
+  importRecords,
+  initialTab = "excel",
+  onClose,
   onConfirmExcelImport,
+  onImportExisting,
+  onCreateNewModel,
 }: {
-  fileName: string;
   models: LedInventoryItem[];
-  onFileChange: (value: string) => void;
+  importRecords: InventoryImportRecord[];
+  initialTab?: "excel" | "manual" | "history";
+  onClose: () => void;
   onConfirmExcelImport: (
     productId: string,
     quantity: number,
     importedFileName: string,
   ) => void;
+  onImportExisting: (productId: string, qty: number, note: string) => void;
+  onCreateNewModel: (newModel: {
+    modelCode: string;
+    name: string;
+    description: string;
+    stock: number;
+    minimumStock: number;
+    unitPrice: number;
+  }) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<"excel" | "manual" | "history">(
+    initialTab,
+  );
+
+  // --- Excel Import State ---
+  const [excelFileName, setExcelFileName] = useState("");
   const [targetProductId, setTargetProductId] = useState(
     models[0]?.productId ?? "",
   );
-  const [importQty, setImportQty] = useState("10");
-  const [cardError, setCardError] = useState("");
+  const [excelQty, setExcelQty] = useState("10");
+  const [excelError, setExcelError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!models.some((m) => m.productId === targetProductId)) {
@@ -1813,136 +1838,26 @@ function ImportCard({
     URL.revokeObjectURL(url);
   };
 
-  const handleConfirm = () => {
-    setCardError("");
-    if (!fileName) {
-      setCardError("Vui lòng chọn file Excel/CSV trước khi xác nhận.");
+  const handleConfirmExcel = () => {
+    setExcelError("");
+    if (!excelFileName) {
+      setExcelError("Vui lòng chọn file Excel/CSV trước khi xác nhận.");
       return;
     }
     if (!targetProductId) {
-      setCardError("Chưa có model LED trong kho để nhập.");
+      setExcelError("Chưa có model LED trong kho để nhập.");
       return;
     }
-    const qty = Number(importQty);
+    const qty = Number(excelQty);
     if (!Number.isInteger(qty) || qty <= 0) {
-      setCardError("Số lượng nhập phải là số nguyên dương (> 0).");
+      setExcelError("Số lượng nhập phải là số nguyên dương (> 0).");
       return;
     }
-    onConfirmExcelImport(targetProductId, qty, fileName);
+    onConfirmExcelImport(targetProductId, qty, excelFileName);
   };
 
-  return (
-    <section className="neo-box-no-hover bg-white p-5">
-      <div className="mb-4 flex items-center gap-2">
-        <Upload size={17} className="text-primary-dark" />
-        <h2 className="font-black">Nhập kho từ file Excel</h2>
-      </div>
-      <div className="flex flex-col gap-3.5 text-xs">
-        <div className="flex gap-2">
-          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary font-black">
-            1
-          </span>
-          <div>
-            <p className="font-bold">Tải file Excel / CSV</p>
-            <p className="text-text-muted">
-              Chọn file chứa danh sách thiết bị để nhập kho
-            </p>
-          </div>
-        </div>
-
-        <label className="flex cursor-pointer flex-col items-center gap-2 border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center hover:border-primary-dark">
-          <Upload size={20} className="text-primary-dark" />
-          <span className="font-bold">
-            {fileName || "Nhấn để chọn hoặc kéo thả file Excel/CSV"}
-          </span>
-          <span className="text-text-muted">.xlsx, .xls, .csv (tối đa 10MB)</span>
-          <input
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="sr-only"
-            onChange={(event) => {
-              setCardError("");
-              onFileChange(event.target.files?.[0]?.name ?? "");
-            }}
-          />
-        </label>
-
-        <button
-          type="button"
-          onClick={handleDownloadSample}
-          className="inline-flex items-center justify-center gap-2 border-2 border-black bg-white px-3 py-2 text-xs font-bold hover:bg-primary/20"
-        >
-          <FileSpreadsheet size={14} /> Tải mẫu file Excel
-        </button>
-
-        <div className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-          <p className="font-bold text-gray-800">2. Áp dụng vào kho model</p>
-          <select
-            value={targetProductId}
-            onChange={(e) => setTargetProductId(e.target.value)}
-            disabled={models.length === 0}
-            className="w-full rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
-          >
-            {models.length === 0 ? (
-              <option value="">Chưa có model trong kho</option>
-            ) : (
-              models.map((m) => (
-                <option key={m.productId} value={m.productId}>
-                  {m.modelCode} · {m.name}
-                </option>
-              ))
-            )}
-          </select>
-          <label className="block font-semibold text-gray-700">
-            Số lượng nhập thêm
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={importQty}
-              onChange={(e) => setImportQty(e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
-            />
-          </label>
-        </div>
-
-        {cardError && (
-          <p role="alert" className="rounded bg-red-50 p-2 font-semibold text-red-700">
-            {cardError}
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={handleConfirm}
-          className="inline-flex items-center justify-center gap-2 border-2 border-black bg-primary px-3 py-2 text-xs font-black hover:bg-primary/80"
-        >
-          <Check size={14} /> 3. Xác nhận nhập kho
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function ImportStockModal({
-  models,
-  onClose,
-  onImportExisting,
-  onCreateNewModel,
-}: {
-  models: LedInventoryItem[];
-  onClose: () => void;
-  onImportExisting: (productId: string, qty: number, note: string) => void;
-  onCreateNewModel: (newModel: {
-    modelCode: string;
-    name: string;
-    description: string;
-    stock: number;
-    minimumStock: number;
-    unitPrice: number;
-  }) => void;
-}) {
-  const [mode, setMode] = useState<"existing" | "new">(
+  // --- Manual Import State ---
+  const [manualMode, setManualMode] = useState<"existing" | "new">(
     models.length > 0 ? "existing" : "new",
   );
   const [selectedId, setSelectedId] = useState(models[0]?.productId ?? "");
@@ -1957,20 +1872,20 @@ function ImportStockModal({
   const [minimumStock, setMinimumStock] = useState("5");
   const [unitPrice, setUnitPrice] = useState("1490000");
 
-  const [error, setError] = useState("");
+  const [manualError, setManualError] = useState("");
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleManualSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    setError("");
+    setManualError("");
 
-    if (mode === "existing") {
+    if (manualMode === "existing") {
       if (!selectedId) {
-        setError("Vui lòng chọn model LED cần nhập thêm.");
+        setManualError("Vui lòng chọn model LED cần nhập thêm.");
         return;
       }
       const parsedQty = Number(addQty);
       if (!Number.isInteger(parsedQty) || parsedQty <= 0) {
-        setError("Số lượng nhập thêm phải là số nguyên lớn hơn 0.");
+        setManualError("Số lượng nhập thêm phải là số nguyên lớn hơn 0.");
         return;
       }
       const selectedModel = models.find((m) => m.productId === selectedId);
@@ -1984,7 +1899,7 @@ function ImportStockModal({
     const cleanCode = modelCode.trim().toUpperCase();
     const cleanName = name.trim();
     if (!cleanCode || !cleanName) {
-      setError("Vui lòng nhập đầy đủ Mã model và Tên model LED.");
+      setManualError("Vui lòng nhập đầy đủ Mã model và Tên model LED.");
       return;
     }
     if (
@@ -1992,7 +1907,7 @@ function ImportStockModal({
         (m) => m.modelCode.toLowerCase() === cleanCode.toLowerCase(),
       )
     ) {
-      setError(`Mã model "${cleanCode}" đã tồn tại trong kho.`);
+      setManualError(`Mã model "${cleanCode}" đã tồn tại trong kho.`);
       return;
     }
 
@@ -2001,15 +1916,15 @@ function ImportStockModal({
     const priceNum = Number(unitPrice);
 
     if (!Number.isInteger(stockNum) || stockNum < 0) {
-      setError("Số lượng ban đầu phải là số nguyên >= 0.");
+      setManualError("Số lượng ban đầu phải là số nguyên >= 0.");
       return;
     }
     if (!Number.isInteger(minNum) || minNum < 0) {
-      setError("Ngưỡng cảnh báo tối thiểu phải là số nguyên >= 0.");
+      setManualError("Ngưỡng cảnh báo tối thiểu phải là số nguyên >= 0.");
       return;
     }
     if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Đơn giá phải lớn hơn hoặc bằng 0.");
+      setManualError("Đơn giá phải lớn hơn hoặc bằng 0.");
       return;
     }
 
@@ -2025,196 +1940,475 @@ function ImportStockModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
       aria-labelledby="import-stock-title"
     >
-      <div className="w-full max-w-lg rounded-2xl border-2 border-black bg-white p-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <h2 id="import-stock-title" className="text-lg font-black">
-            Nhập kho LED
-          </h2>
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border-2 border-black bg-white shadow-[6px_6px_0_0_rgba(0,0,0,1)]">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between border-b-2 border-gray-100 px-6 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-black bg-primary">
+              <Upload size={18} className="text-black" />
+            </div>
+            <div>
+              <h2 id="import-stock-title" className="text-lg font-black text-gray-900">
+                Nhập kho thiết bị LED
+              </h2>
+              <p className="text-xs text-text-muted">
+                Tải lên file danh sách hoặc nhập số lượng trực tiếp vào kho
+              </p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Đóng"
-            className="rounded-lg p-1 text-gray-500 hover:bg-gray-100"
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        {/* Tab Selection */}
+        <div className="flex border-b border-gray-200 bg-gray-50/70 px-6 pt-2">
           <button
             type="button"
-            disabled={models.length === 0}
-            onClick={() => {
-              setMode("existing");
-              setError("");
-            }}
-            className={`rounded-lg border px-3 py-2 text-xs font-bold ${
-              mode === "existing"
-                ? "border-black bg-primary text-black"
-                : "border-gray-300 bg-white text-gray-600"
-            } disabled:opacity-40`}
-          >
-            Nhập thêm model có sẵn
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("new");
-              setError("");
-            }}
-            className={`rounded-lg border px-3 py-2 text-xs font-bold ${
-              mode === "new"
-                ? "border-black bg-primary text-black"
-                : "border-gray-300 bg-white text-gray-600"
+            onClick={() => setActiveTab("excel")}
+            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === "excel"
+                ? "border-primary-dark text-primary-dark"
+                : "border-transparent text-gray-500 hover:text-gray-800"
             }`}
           >
-            Nhập model LED mới
+            <FileSpreadsheet size={15} />
+            Nhập từ file Excel / CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("manual")}
+            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === "manual"
+                ? "border-primary-dark text-primary-dark"
+                : "border-transparent text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            <Edit3 size={15} />
+            Nhập thủ công
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("history")}
+            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === "history"
+                ? "border-primary-dark text-primary-dark"
+                : "border-transparent text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            <History size={15} />
+            Lịch sử nhập kho
+            {importRecords.length > 0 && (
+              <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-[10px] font-bold text-gray-700">
+                {importRecords.length}
+              </span>
+            )}
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3 text-sm">
-          {mode === "existing" ? (
-            <>
-              <label className="block text-xs font-bold text-gray-700">
-                Chọn model LED
-                <select
-                  value={selectedId}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        {/* Modal Body */}
+        <div className="overflow-y-auto p-6">
+          {activeTab === "excel" && (
+            <div className="flex flex-col gap-4 text-xs">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-primary text-[11px] font-black">
+                      1
+                    </span>
+                    <span className="font-bold text-gray-900">
+                      Tải lên file danh sách thiết bị (.xlsx, .xls, .csv)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadSample}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-bold text-gray-700 shadow-2xs hover:bg-primary/20"
+                  >
+                    <FileSpreadsheet size={13} className="text-primary-dark" />
+                    Tải mẫu file Excel
+                  </button>
+                </div>
+
+                <div className="mt-3">
+                  <label
+                    htmlFor="inventory-excel-file-upload"
+                    className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-5 text-center transition ${
+                      excelFileName
+                        ? "border-primary-dark bg-green-50/50"
+                        : "border-gray-300 bg-white hover:border-primary-dark hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      id="inventory-excel-file-upload"
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="sr-only"
+                      onChange={(event) => {
+                        setExcelError("");
+                        setExcelFileName(event.target.files?.[0]?.name ?? "");
+                      }}
+                    />
+                    <Upload
+                      size={24}
+                      className={excelFileName ? "text-primary-dark" : "text-gray-400"}
+                    />
+                    {excelFileName ? (
+                      <div className="flex flex-col items-center">
+                        <span className="font-bold text-gray-900">
+                          {excelFileName}
+                        </span>
+                        <span className="mt-0.5 text-[11px] font-semibold text-green-700">
+                          ✓ File đã sẵn sàng để nhập kho
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="font-bold text-gray-800">
+                          Nhấn để chọn file hoặc kéo thả vào đây
+                        </span>
+                        <span className="text-text-muted">
+                          Hỗ trợ file .xlsx, .xls, .csv (tối đa 10MB)
+                        </span>
+                      </>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-primary text-[11px] font-black">
+                    2
+                  </span>
+                  <span className="font-bold text-gray-900">
+                    Áp dụng vào kho model LED
+                  </span>
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1.5fr_1fr]">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700">
+                      Chọn model nhận hàng *
+                    </label>
+                    <select
+                      value={targetProductId}
+                      onChange={(e) => setTargetProductId(e.target.value)}
+                      disabled={models.length === 0}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium"
+                    >
+                      {models.length === 0 ? (
+                        <option value="">Chưa có model trong kho</option>
+                      ) : (
+                        models.map((m) => (
+                          <option key={m.productId} value={m.productId}>
+                            {m.modelCode} · {m.name} (Tồn hiện tại: {m.stock})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700">
+                      Số lượng nhập thêm *
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={excelQty}
+                      onChange={(e) => setExcelQty(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {excelError && (
+                <div
+                  role="alert"
+                  className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 font-semibold text-red-700"
                 >
-                  {models.map((m) => (
-                    <option key={m.productId} value={m.productId}>
-                      {m.modelCode} · {m.name} (Hiện có: {m.stock})
-                    </option>
+                  <AlertTriangle size={15} className="shrink-0" />
+                  <span>{excelError}</span>
+                </div>
+              )}
+
+              <div className="mt-2 flex items-center justify-end gap-2 border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold hover:bg-gray-50"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmExcel}
+                  className="inline-flex items-center gap-1.5 rounded-lg border-2 border-black bg-primary px-5 py-2 text-xs font-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
+                >
+                  <Check size={15} />
+                  Xác nhận nhập kho
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "manual" && (
+            <form onSubmit={handleManualSubmit} className="flex flex-col gap-3.5 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={models.length === 0}
+                  onClick={() => {
+                    setManualMode("existing");
+                    setManualError("");
+                  }}
+                  className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                    manualMode === "existing"
+                      ? "border-black bg-primary text-black"
+                      : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                  } disabled:opacity-40`}
+                >
+                  Nhập thêm model có sẵn
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualMode("new");
+                    setManualError("");
+                  }}
+                  className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                    manualMode === "new"
+                      ? "border-black bg-primary text-black"
+                      : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  Nhập model LED mới
+                </button>
+              </div>
+
+              {manualMode === "existing" ? (
+                <div className="flex flex-col gap-3">
+                  <label className="block text-xs font-bold text-gray-700">
+                    Chọn model LED nhận hàng *
+                    <select
+                      value={selectedId}
+                      onChange={(e) => setSelectedId(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium"
+                    >
+                      {models.map((m) => (
+                        <option key={m.productId} value={m.productId}>
+                          {m.modelCode} · {m.name} (Tồn hiện tại: {m.stock})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block text-xs font-bold text-gray-700">
+                    Số lượng nhập thêm *
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={addQty}
+                      onChange={(e) => setAddQty(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold"
+                    />
+                  </label>
+
+                  <label className="block text-xs font-bold text-gray-700">
+                    Ghi chú lô nhập (tùy chọn)
+                    <input
+                      type="text"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Ví dụ: Lô nhập nhà máy đợt 2 - Tháng 11"
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block text-xs font-bold text-gray-700">
+                      Mã model *
+                      <input
+                        type="text"
+                        value={modelCode}
+                        onChange={(e) => setModelCode(e.target.value)}
+                        placeholder="Ví dụ: LUM-CAR-6432"
+                        className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-mono font-bold"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-gray-700">
+                      Đơn giá tham chiếu (VNĐ)
+                      <input
+                        type="number"
+                        min={0}
+                        step={1000}
+                        value={unitPrice}
+                        onChange={(e) => setUnitPrice(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block text-xs font-bold text-gray-700">
+                    Tên model LED *
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Ví dụ: Lumintra Windshield Matrix 64×32"
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
+                    />
+                  </label>
+
+                  <label className="block text-xs font-bold text-gray-700">
+                    Mô tả kỹ thuật
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Độ phân giải, kết nối, kích thước, vỏ nhôm..."
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block text-xs font-bold text-gray-700">
+                      Số lượng nhập kho *
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={initialStock}
+                        onChange={(e) => setInitialStock(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold text-gray-700">
+                      Ngưỡng cảnh báo tối thiểu *
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={minimumStock}
+                        onChange={(e) => setMinimumStock(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {manualError && (
+                <div
+                  role="alert"
+                  className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 font-semibold text-red-700"
+                >
+                  <AlertTriangle size={15} className="shrink-0" />
+                  <span>{manualError}</span>
+                </div>
+              )}
+
+              <div className="mt-2 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold hover:bg-gray-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg border-2 border-black bg-primary px-5 py-2 text-xs font-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
+                >
+                  {manualMode === "existing"
+                    ? "Xác nhận nhập thêm"
+                    : "Thêm model vào kho"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {activeTab === "history" && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-700">
+                  Các lần nhập kho gần nhất
+                </span>
+                <span className="text-xs font-bold text-text-muted">
+                  Tổng {importRecords.length} lượt
+                </span>
+              </div>
+
+              {importRecords.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-xs text-text-muted">
+                  <FileSpreadsheet size={28} className="mx-auto mb-2 opacity-40" />
+                  Chưa có lượt nhập kho nào được ghi nhận.
+                </div>
+              ) : (
+                <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50/50">
+                  {importRecords.map((record) => (
+                    <div
+                      key={record.id}
+                      className="flex items-center gap-3 p-3 transition hover:bg-white"
+                    >
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white">
+                        <FileSpreadsheet
+                          size={16}
+                          className="text-primary-dark"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-gray-900">
+                          {record.fileName}
+                        </p>
+                        <p className="text-[11px] text-text-muted">
+                          +{record.itemCount} thiết bị ·{" "}
+                          {new Date(record.importedAt).toLocaleString("vi-VN")}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                          record.status === "Completed"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {record.status === "Completed" ? "Thành công" : "Lỗi"}
+                      </span>
+                    </div>
                   ))}
-                </select>
-              </label>
+                </div>
+              )}
 
-              <label className="block text-xs font-bold text-gray-700">
-                Số lượng nhập thêm *
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={addQty}
-                  onChange={(e) => setAddQty(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </label>
-
-              <label className="block text-xs font-bold text-gray-700">
-                Ghi chú lô nhập (tùy chọn)
-                <input
-                  type="text"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ví dụ: Lô nhập tháng 11 - Nhà cung cấp A"
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </label>
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="block text-xs font-bold text-gray-700">
-                  Mã model *
-                  <input
-                    type="text"
-                    value={modelCode}
-                    onChange={(e) => setModelCode(e.target.value)}
-                    placeholder="Ví dụ: LUM-CAR-6432"
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="block text-xs font-bold text-gray-700">
-                  Đơn giá tham chiếu (VNĐ)
-                  <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    value={unitPrice}
-                    onChange={(e) => setUnitPrice(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </label>
+              <div className="mt-2 flex justify-end border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold hover:bg-gray-50"
+                >
+                  Đóng
+                </button>
               </div>
-
-              <label className="block text-xs font-bold text-gray-700">
-                Tên model LED *
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ví dụ: Lumintra Windshield Matrix 64×32"
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </label>
-
-              <label className="block text-xs font-bold text-gray-700">
-                Mô tả kỹ thuật
-                <input
-                  type="text"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Độ phân giải, kết nối, kích thước..."
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs font-bold text-gray-700">
-                  Số lượng nhập kho *
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={initialStock}
-                    onChange={(e) => setInitialStock(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="block text-xs font-bold text-gray-700">
-                  Ngưỡng cảnh báo tối thiểu *
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={minimumStock}
-                    onChange={(e) => setMinimumStock(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </label>
-              </div>
-            </>
+            </div>
           )}
-
-          {error && (
-            <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-xs font-semibold text-red-700">
-              {error}
-            </p>
-          )}
-
-          <div className="mt-2 flex justify-end gap-2 border-t border-gray-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold hover:bg-gray-50"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              className="rounded-lg border-2 border-black bg-primary px-4 py-2 text-xs font-black hover:bg-primary/80"
-            >
-              {mode === "existing" ? "Xác nhận nhập thêm" : "Thêm model vào kho"}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
@@ -2262,7 +2456,7 @@ function AdjustQuantityModal({
       return;
     }
     if (!Number.isInteger(nextMin) || nextMin < 0) {
-      setError("Ngưỡng tối thiểu phải là số nguyên >= 0.");
+      setError("Ngưỡng cảnh báo tối thiểu (Ngưỡng min) phải là số nguyên >= 0.");
       return;
     }
 
@@ -2279,8 +2473,8 @@ function AdjustQuantityModal({
       <div className="w-full max-w-md rounded-2xl border-2 border-black bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-200 pb-3">
           <div>
-            <h2 id="adjust-stock-title" className="text-lg font-black">
-              Chỉnh số lượng tồn kho
+            <h2 id="adjust-stock-title" className="text-lg font-black text-gray-900">
+              Cập nhật LED
             </h2>
             <p className="text-xs font-semibold text-text-muted">
               {item.modelCode} · {item.name}
@@ -2298,25 +2492,25 @@ function AdjustQuantityModal({
 
         <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-center text-xs">
           <div>
-            <p className="text-text-muted">Hiện tại</p>
+            <p className="text-text-muted">Tồn kho hiện tại</p>
             <p className="mt-0.5 text-base font-black">{item.stock}</p>
           </div>
           <div>
-            <p className="text-text-muted">Đang đặt</p>
-            <p className="mt-0.5 text-base font-black">{item.reserved}</p>
+            <p className="text-text-muted">Đang đặt giữ</p>
+            <p className="mt-0.5 text-base font-black text-gray-600">{item.reserved}</p>
           </div>
           <div>
-            <p className="text-text-muted">Khả dụng mới</p>
+            <p className="text-text-muted">Khả dụng dự kiến</p>
             <p className="mt-0.5 text-base font-black text-primary-dark">
               {previewAvailable}
             </p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3 text-sm">
+        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3.5 text-sm">
           <div>
             <span className="text-xs font-bold text-gray-700">
-              Điều chỉnh nhanh
+              Điều chỉnh nhanh số lượng tồn kho
             </span>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {[-5, -1, 1, 5, 10].map((delta) => (
@@ -2345,15 +2539,18 @@ function AdjustQuantityModal({
           </label>
 
           <label className="block text-xs font-bold text-gray-700">
-            Ngưỡng cảnh báo sắp hết hàng *
+            Ngưỡng cảnh báo tối thiểu (Ngưỡng min) *
             <input
               type="number"
               min={0}
               step={1}
               value={minStockInput}
               onChange={(e) => setMinStockInput(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold"
             />
+            <span className="mt-0.5 block text-[11px] font-normal text-text-muted">
+              Hệ thống sẽ gắn cờ &quot;Sắp hết hàng&quot; khi khả dụng thấp hơn mức này.
+            </span>
           </label>
 
           {error && (
@@ -2372,9 +2569,9 @@ function AdjustQuantityModal({
             </button>
             <button
               type="submit"
-              className="rounded-lg border-2 border-black bg-primary px-4 py-2 text-xs font-black hover:bg-primary/80"
+              className="rounded-lg border-2 border-black bg-primary px-5 py-2 text-xs font-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
             >
-              Lưu thay đổi
+              Lưu cập nhật
             </button>
           </div>
         </form>

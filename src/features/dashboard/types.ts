@@ -35,6 +35,7 @@ export interface ManagerKpiSummary {
   pendingCharactersCount: number;
   lowStockModelsCount: number;
   activeBundlesCount: number;
+  activeSubscriptionsCount?: number;
   activePriceConfigsCount: number;
 }
 
@@ -49,7 +50,7 @@ export interface RevenueCategoryItem {
 export interface TopProductItem {
   id: string;
   name: string;
-  category: "HARDWARE" | "CHARACTER" | "BUNDLE";
+  category: "HARDWARE" | "CHARACTER" | "BUNDLE" | "SUBSCRIPTION";
   unitsSold: number;
   revenue: number;
   rank: number;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CheckCircle2, Clock3, Cpu, Crown, EyeOff, Lock, Plus, Sparkles, Store, X } from "lucide-react";
+import { CheckCircle2, Clock3, Cpu, Crown, EyeOff, Lock, Package, Plus, Sparkles, Store, X } from "lucide-react";
 import { apiUpdateProductStatus, apiUpdateStoreProduct, fetchStoreProducts } from "@/lib/api/products";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
 import {
@@ -222,7 +222,7 @@ export default function StoreListingDashboard() {
               className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2.5 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]"
             >
               <Sparkles size={16} />
-              Tạo sản phẩm Character
+              Mở bán Character
             </button>
             <button
               type="button"
@@ -231,6 +231,14 @@ export default function StoreListingDashboard() {
             >
               <Cpu size={16} />
               Tạo sản phẩm LED
+            </button>
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "create-bundle" })}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <Package size={16} className="text-[#2d6a4f]" />
+              Tạo gói Combo
             </button>
             <button
               type="button"
@@ -303,7 +311,7 @@ export default function StoreListingDashboard() {
         <div
           role="tablist"
           aria-label="Các danh mục sản phẩm trên Store"
-          className="flex flex-wrap items-center gap-1 border-b border-[#e3efe6] px-4 pt-3"
+          className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b border-[#e3efe6] px-4 pt-3"
         >
           {tabs.map((tab, index) => {
             const selected = tab.id === activeTab;
@@ -320,7 +328,7 @@ export default function StoreListingDashboard() {
                 tabIndex={selected ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={(event) => onTabKeyDown(event, index)}
-                className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${selected
+                className={`-mb-px flex shrink-0 whitespace-nowrap items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${selected
                     ? "border-primary-dark text-primary-dark"
                     : "border-transparent text-text-muted hover:text-[#173b28]"
                   }`}
@@ -383,16 +391,34 @@ export default function StoreListingDashboard() {
               rows={rows}
               isLoading={isLoading}
               canManage={canManage}
+              onEdit={(character) =>
+                setModal({
+                  kind: "edit",
+                  product: {
+                    id: character.characterId,
+                    productName: character.name,
+                    basePrice: character.draft?.basePrice ?? 199000,
+                    description: character.description,
+                    thumbnailUrl: character.draft?.thumbnailUrl ?? character.thumbnailUrl,
+                    galleryUrls: character.draft?.galleryUrls ?? [],
+                  },
+                })
+              }
               onApprove={async (character, price) => {
                 const numericId = Number(character.characterId);
                 if (Number.isSafeInteger(numericId) && numericId > 0) {
                   if (character.draft && price !== undefined) {
+                    const safeThumb =
+                      character.draft.thumbnailUrl && /^https?:\/\//i.test(character.draft.thumbnailUrl)
+                        ? character.draft.thumbnailUrl
+                        : undefined;
+                    const safeGallery = (character.draft.galleryUrls || []).filter((u) => /^https?:\/\//i.test(u));
                     await apiUpdateStoreProduct(numericId, {
                       productName: character.name,
                       basePrice: price,
-                      description: character.description,
-                      thumbnailUrl: character.draft.thumbnailUrl ?? undefined,
-                      galleryUrls: character.draft.galleryUrls,
+                      description: character.description || undefined,
+                      thumbnailUrl: safeThumb,
+                      galleryUrls: safeGallery,
                     });
                   }
                   await apiUpdateProductStatus(numericId, "PUBLISHED");

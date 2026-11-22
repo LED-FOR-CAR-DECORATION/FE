@@ -19,6 +19,7 @@ export const MANAGER_KPI_MOCK: ManagerKpiSummary = {
   pendingCharactersCount: 0,
   lowStockModelsCount: 0,
   activeBundlesCount: 0,
+  activeSubscriptionsCount: 0,
   activePriceConfigsCount: 0,
 };
 

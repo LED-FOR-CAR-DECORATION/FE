@@ -120,6 +120,7 @@ const PRODUCT_CATEGORY_LABELS: Record<TopProductItem["category"], string> = {
   HARDWARE: "Phần cứng",
   CHARACTER: "Character",
   BUNDLE: "Gói sản phẩm",
+  SUBSCRIPTION: "Gói hội viên",
 };
 
 const STOCK_STATUS_MAP: Record<

@@ -2,6 +2,7 @@ import axios from "axios";
 import { ApiError } from "@/api_client";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "./client";
+import { buildSignedPutHeaders } from "./media";
 
 const USE_MOCK_AUTH = process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true";
 
@@ -98,6 +99,7 @@ interface SignedUploadUrlResponse {
   signedUploadUrl: string;
   publicUrl: string;
   objectKey: string;
+  uploadHeaders?: Record<string, string>;
   expiresAt: string;
 }
 
@@ -640,7 +642,8 @@ export async function deleteCharacterVersion(
 
 export async function uploadDesignerAssetFile(
   file: File,
-  purpose: "CHARACTER_ASSET" | "COMMISSION_DRAFT",
+  // Chỉ dùng cho purpose public. COMMISSION_DRAFT là media private (publicUrl = null) → dùng uploadMediaFile trong ./media và gửi objectKey.
+  purpose: "CHARACTER_ASSET",
   targetId?: number,
 ): Promise<UploadedDesignerAsset> {
   const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -652,9 +655,7 @@ export async function uploadDesignerAssetFile(
   }
 
   const previewUrl = await readFileAsDataUrl(file);
-  const fallbackUrl = `https://cdn.lumintra.shop/${
-    purpose === "CHARACTER_ASSET" ? "characters" : "commissions"
-  }/${Date.now()}-${encodeURIComponent(file.name)}`;
+  const fallbackUrl = `https://cdn.lumintra.shop/characters/${Date.now()}-${encodeURIComponent(file.name)}`;
 
   if (USE_MOCK_AUTH) {
     return {
@@ -683,23 +684,9 @@ export async function uploadDesignerAssetFile(
       throw new Error("Máy chủ không trả về liên kết tải tệp hợp lệ.");
     }
 
-    const putHeaders: Record<string, string> = {
-      "Content-Type": file.type,
-    };
-    try {
-      const parsed = new URL(signedData.signedUploadUrl);
-      const signedHeaders = (
-        parsed.searchParams.get("X-Goog-SignedHeaders") ?? ""
-      ).toLowerCase();
-      if (signedHeaders.includes("cache-control")) {
-        putHeaders["Cache-Control"] = "public, max-age=31536000, immutable";
-      }
-      if (signedHeaders.includes("x-goog-content-length-range")) {
-        putHeaders["x-goog-content-length-range"] = "0,10485760";
-      }
-    } catch {
-      // Ignore URL parsing errors
-    }
+    // BE trả uploadHeaders (nằm trong chữ ký) → phải gửi nguyên văn khi PUT
+    const putHeaders =
+      signedData.uploadHeaders ?? buildSignedPutHeaders(signedData.signedUploadUrl, file.type);
 
     const putResponse = await fetch(signedData.signedUploadUrl, {
       method: "PUT",

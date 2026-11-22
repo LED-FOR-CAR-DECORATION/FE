@@ -80,7 +80,8 @@ export default function CustomerWarrantyPage() {
   // Claim modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [issueDescription, setIssueDescription] = useState("");
-  const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
+  // objectKey: gửi lên BE (WARRANTY_EVIDENCE là media private, không có publicUrl); previewUrl: blob local để xem trước
+  const [uploadedEvidence, setUploadedEvidence] = useState<{ objectKey: string; previewUrl: string }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
@@ -158,7 +159,7 @@ export default function CustomerWarrantyPage() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    if (uploadedUrls.length + files.length > 5) {
+    if (uploadedEvidence.length + files.length > 5) {
       setFormError("Chỉ được đính kèm tối đa 5 hình ảnh bằng chứng.");
       return;
     }
@@ -167,7 +168,7 @@ export default function CustomerWarrantyPage() {
     setFormError(null);
 
     try {
-      const newUrls: string[] = [];
+      const newEvidence: { objectKey: string; previewUrl: string }[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (!file.type.startsWith("image/")) {
@@ -185,16 +186,20 @@ export default function CustomerWarrantyPage() {
             "WARRANTY_EVIDENCE",
             selectedDeviceId ?? undefined
           );
-          if (res.publicUrl) {
-            newUrls.push(res.publicUrl);
+          if (!res.objectKey) {
+            throw new Error("Không nhận được mã ảnh bằng chứng");
           }
+          newEvidence.push({
+            objectKey: res.objectKey,
+            previewUrl: res.localPreviewUrl ?? "",
+          });
         } catch (uploadErr: any) {
           setFormError(
             `Không thể tải ảnh lên (${uploadErr.message || "Lỗi máy chủ lưu trữ"}). Bạn vẫn có thể gửi yêu cầu bảo hành bình thường với phần mô tả lỗi mà không cần đính kèm ảnh.`
           );
         }
       }
-      setUploadedUrls((prev) => [...prev, ...newUrls].slice(0, 5));
+      setUploadedEvidence((prev) => [...prev, ...newEvidence].slice(0, 5));
     } catch {
       setFormError("Tải ảnh lên thất bại. Vui lòng thử lại.");
     } finally {
@@ -204,7 +209,7 @@ export default function CustomerWarrantyPage() {
   };
 
   const removeUploadedImage = (indexToRemove: number) => {
-    setUploadedUrls((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    setUploadedEvidence((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   // Submit claim
@@ -228,14 +233,14 @@ export default function CustomerWarrantyPage() {
     try {
       const newClaim = await createWarrantyClaim(selectedDeviceId, {
         issueDescription: trimmed,
-        evidenceMediaUrls: uploadedUrls,
+        evidenceMediaUrls: uploadedEvidence.map((item) => item.objectKey),
       });
 
       setFormSuccess(
         `Gửi yêu cầu bảo hành thành công! Mã phiếu của bạn là #${newClaim.ticketId}. Quản lý sẽ tiếp nhận xét duyệt và gửi email hướng dẫn bạn mang máy đến cửa hàng.`
       );
       setIssueDescription("");
-      setUploadedUrls([]);
+      setUploadedEvidence([]);
       setIsModalOpen(false);
       await loadDeviceWarranty(selectedDeviceId);
     } catch (err: any) {
@@ -668,15 +673,15 @@ export default function CustomerWarrantyPage() {
                 </p>
 
                 {/* Uploaded previews */}
-                {uploadedUrls.length > 0 && (
+                {uploadedEvidence.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {uploadedUrls.map((url, idx) => (
+                    {uploadedEvidence.map((item, idx) => (
                       <div
                         key={idx}
                         className="group relative h-16 w-16 sm:h-20 sm:w-20 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 shrink-0"
                       >
                         <img
-                          src={url}
+                          src={item.previewUrl}
                           alt="preview"
                           className="h-full w-full object-cover"
                         />
@@ -693,7 +698,7 @@ export default function CustomerWarrantyPage() {
                 )}
 
                 {/* Upload button */}
-                {uploadedUrls.length < 5 && (
+                {uploadedEvidence.length < 5 && (
                   <label
                     className={`mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 p-3 text-xs font-semibold text-gray-600 transition hover:border-[#155e59] hover:bg-teal-50/30 ${
                       isUploading ? "opacity-50 pointer-events-none" : ""

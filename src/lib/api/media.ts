@@ -12,7 +12,9 @@ export type MediaPurposeType =
 
 export interface SignedUploadUrlResult {
   signedUploadUrl: string;
+  /** Chỉ có với purpose public (CHARACTER_ASSET, STORE_PRODUCT); purpose private trả về "" */
   publicUrl: string;
+  /** Với purpose private (COMMISSION_*, WARRANTY_EVIDENCE) phải gửi objectKey này cho endpoint phía sau */
   objectKey?: string;
   uploadHeaders?: Record<string, string>;
   expiresAt?: string;
@@ -57,9 +59,11 @@ export function buildSignedPutHeaders(
 /**
  * Uploads an image file following the Lumintra Media Service V4 Signed URL flow:
  * 1. Validate MIME type (JPEG/PNG/WEBP/GIF) & file size (1B - 10MB)
- * 2. POST /api/media/upload-url -> get { signedUploadUrl, publicUrl, objectKey, expiresAt }
- * 3. PUT file binary directly to signedUploadUrl with required signed headers
- * 4. Return publicUrl (e.g. https://cdn.lumintra.shop/...) for saving to product/character endpoints
+ * 2. POST /api/media/upload-url -> get { signedUploadUrl, publicUrl, objectKey, uploadHeaders, expiresAt }
+ * 3. PUT file binary directly to signedUploadUrl, sending every uploadHeaders entry verbatim
+ * 4. Public purposes (CHARACTER_ASSET, STORE_PRODUCT): save publicUrl.
+ *    Private purposes (COMMISSION_REFERENCE, COMMISSION_CHAT, COMMISSION_DRAFT, WARRANTY_EVIDENCE):
+ *    publicUrl is null → send objectKey downstream; BE returns short-lived signed view URLs on read.
  */
 export async function uploadMediaFile(
   file: File,
@@ -159,6 +163,7 @@ export async function uploadMediaFile(
     signedUploadUrl: signedData.signedUploadUrl,
     publicUrl: signedData.publicUrl ?? "",
     objectKey: signedData.objectKey,
+    uploadHeaders: signedData.uploadHeaders,
     expiresAt: signedData.expiresAt,
     localPreviewUrl: typeof window !== "undefined" ? URL.createObjectURL(file) : undefined,
   };

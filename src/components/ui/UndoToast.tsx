@@ -17,7 +17,7 @@ export default function UndoToast({ message, onUndo }: UndoToastProps) {
           <button
             type="button"
             onClick={onUndo}
-            className="inline-flex min-h-9 items-center gap-1.5 border-2 border-black bg-primary px-3 text-xs font-black uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            className="cursor-pointer inline-flex min-h-9 items-center gap-1.5 border-2 border-black bg-primary px-3 text-xs font-black uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
           >
             <Undo2 size={13} /> Hoàn tác
           </button>

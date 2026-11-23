@@ -120,7 +120,7 @@ export default function NeoDialog({
             onClick={onClose}
             disabled={busy}
             aria-label="Đóng"
-            className="grid h-9 w-9 shrink-0 place-items-center border-2 border-black bg-white hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-40"
+            className="cursor-pointer grid h-9 w-9 shrink-0 place-items-center border-2 border-black bg-white hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-40"
           >
             <X size={14} />
           </button>

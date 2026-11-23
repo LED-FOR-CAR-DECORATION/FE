@@ -140,20 +140,20 @@ export default function CartPage() {
                         </div>
                       ) : (
                         <div className="flex h-9 border-2 border-black">
-                          <button onClick={() => updateQuantity(item.id, item.quantity - 1)} disabled={item.quantity <= 1} className="w-9 border-r-2 border-black disabled:opacity-40" aria-label="Giảm số lượng"><Minus size={14} className="mx-auto" /></button>
+                          <button onClick={() => updateQuantity(item.id, item.quantity - 1)} disabled={item.quantity <= 1} className="cursor-pointer disabled:cursor-not-allowed w-9 border-r-2 border-black disabled:opacity-40" aria-label="Giảm số lượng"><Minus size={14} className="mx-auto" /></button>
                           <span className="grid w-10 place-items-center font-bold">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-9 border-l-2 border-black" aria-label="Tăng số lượng"><Plus size={14} className="mx-auto" /></button>
+                          <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="cursor-pointer w-9 border-l-2 border-black" aria-label="Tăng số lượng"><Plus size={14} className="mx-auto" /></button>
                         </div>
                       )}
                       <strong className="w-24 text-right text-primary-ink">{formatPrice(item.price * item.quantity)}</strong>
-                      <button onClick={() => scheduleRemove(item.id, item.name)} className="grid h-11 w-11 place-items-center text-text-muted hover:text-red-600" aria-label={`Xóa ${item.name}`}><Trash2 size={17} /></button>
+                      <button onClick={() => scheduleRemove(item.id, item.name)} className="cursor-pointer grid h-11 w-11 place-items-center text-text-muted hover:text-red-600" aria-label={`Xóa ${item.name}`}><Trash2 size={17} /></button>
                     </div>
                   );
                 })}
 
                 <div className="flex flex-wrap items-center gap-5 border-t-2 border-gray-100 px-4 py-3">
-                  <button onClick={() => setBulkDelete("selected")} disabled={!selectedIds.length} className="flex items-center gap-2 text-sm font-bold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={15} /> Xóa đã chọn ({selectedIds.length})</button>
-                  <button onClick={() => setBulkDelete("all")} className="flex items-center gap-2 text-sm font-bold text-red-600 hover:underline"><Trash2 size={15} /> Xóa toàn bộ</button>
+                  <button onClick={() => setBulkDelete("selected")} disabled={!selectedIds.length} className="cursor-pointer flex items-center gap-2 text-sm font-bold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={15} /> Xóa đã chọn ({selectedIds.length})</button>
+                  <button onClick={() => setBulkDelete("all")} className="cursor-pointer flex items-center gap-2 text-sm font-bold text-red-600 hover:underline"><Trash2 size={15} /> Xóa toàn bộ</button>
                 </div>
               </div>
 

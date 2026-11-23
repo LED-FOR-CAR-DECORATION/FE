@@ -16,9 +16,9 @@ export default function ConsentCheckbox({ checked, onChange, children, disabled,
   return (
     <label
       htmlFor={id}
-      className={`flex cursor-pointer items-start gap-3 border-2 p-3 text-sm leading-relaxed transition-colors ${
+      className={`flex items-start gap-2.5 border-2 p-2.5 text-xs font-medium leading-normal transition-colors ${
         checked ? "border-black bg-primary/10" : "border-black bg-white hover:bg-gray-50"
-      } ${disabled ? "cursor-not-allowed opacity-60" : ""} ${className}`}
+      } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"} ${className}`}
     >
       <input
         id={id}
@@ -27,7 +27,7 @@ export default function ConsentCheckbox({ checked, onChange, children, disabled,
         checked={checked}
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-primary-ink"
+        className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-primary-ink disabled:cursor-not-allowed"
       />
       <span>{children}</span>
     </label>
@@ -42,7 +42,7 @@ export function PolicyLink({ href, children }: { href: string; children: ReactNo
       target="_blank"
       rel="noopener noreferrer"
       onClick={(event) => event.stopPropagation()}
-      className="font-bold text-primary-ink underline underline-offset-2 hover:no-underline"
+      className="cursor-pointer font-bold text-primary-ink underline underline-offset-2 hover:no-underline"
     >
       {children}
     </a>

@@ -7,9 +7,9 @@ export default function NewCommissionPage() {
   return (
     <>
       <Header />
-      <main className="flex-1 bg-[#f5f5f5] py-6 text-[#26352f] md:py-8">
-        <div className="mx-auto w-full max-w-4xl px-4">
-          <Link href="/commission" className="mb-5 inline-block font-semibold text-[#155e59] underline">Về danh sách Commission</Link>
+      <main className="flex-1 bg-background py-6 text-text-main md:py-10">
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
+          <Link href="/commission" className="btn-secondary mb-5 inline-flex min-h-11 items-center text-sm">Về danh sách Commission</Link>
           <ApiCommissionForm />
         </div>
       </main>

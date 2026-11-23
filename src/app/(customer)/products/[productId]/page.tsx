@@ -12,9 +12,8 @@ import {
   Minus,
   Monitor,
   Plus,
-  ShoppingBag,
+  ShoppingCart,
   Sparkles,
-  Star,
   Zap,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
@@ -24,15 +23,15 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CatalogProduct } from "@/features/cart/catalog";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchStoreProductDetail, fetchStoreProducts } from "@/lib/api/products";
-
-const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} đ`;
+import { formatPrice } from "@/lib/currency";
 
 export default function ProductDetailPage() {
   const router = useRouter();
   const params = useParams<{ productId: string }>();
-  const { items, addItem } = useCart();
+  const { items: cartItems, addItem, setSelectedIds } = useCart();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const canBuy = isAuthenticated && !authLoading;
+
   const [item, setItem] = useState<CatalogProduct | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<CatalogProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +55,7 @@ export default function ProductDetailPage() {
           setRelatedProducts(
             listRes.items
               .filter((p) => p.id !== detail.id && p.productType === detail.productType)
-              .slice(0, 6),
+              .slice(0, 4),
           );
         }
       })
@@ -72,8 +71,10 @@ export default function ProductDetailPage() {
     return (
       <>
         <Header />
-        <main className="flex-1 grid place-items-center p-16">
-          <p className="text-sm font-bold text-gray-600">Đang tải chi tiết sản phẩm...</p>
+        <main className="flex-1 grid place-items-center p-20 bg-background">
+          <p className="text-xs font-black uppercase tracking-wider text-text-muted">
+            Đang tải chi tiết sản phẩm...
+          </p>
         </main>
         <Footer />
       </>
@@ -84,11 +85,14 @@ export default function ProductDetailPage() {
     return (
       <>
         <Header />
-        <main className="flex-1 grid place-items-center p-16">
-          <div className="text-center">
-            <h1 className="text-2xl font-black">Không tìm thấy sản phẩm</h1>
-            <Link href="/products" className="btn-primary mt-4 inline-block">
-              Quay lại sản phẩm
+        <main className="flex-1 grid place-items-center p-20 bg-background">
+          <div className="neo-box-no-hover bg-white p-12 text-center">
+            <h1 className="text-2xl font-black uppercase">Không tìm thấy sản phẩm</h1>
+            <p className="mt-2 text-xs font-semibold text-text-muted">
+              Sản phẩm bạn đang tìm kiếm có thể đã được gỡ hoặc không tồn tại.
+            </p>
+            <Link href="/" className="btn-primary mt-5 inline-block text-xs font-black uppercase">
+              Quay lại cửa hàng
             </Link>
           </div>
         </main>
@@ -98,35 +102,28 @@ export default function ProductDetailPage() {
   }
 
   const isCharacter = item.productType === "CHARACTER";
-  const isBundle = item.productType === "BUNDLE";
   const isSubscription = item.productType === "SUBSCRIPTION";
   const isDigital = isCharacter || isSubscription;
-  const isAlreadyInCart = items.some(
-    (cartItem) => cartItem.productId === Number(params.productId) || cartItem.id === params.productId
-  );
-  const isOwned = Boolean(
-    actionError &&
-      (actionError.toLowerCase().includes("sở hữu") || actionError.toLowerCase().includes("owned"))
-  );
+  const isOwned = false; // Resolved via entitlements if needed
+  const isAlreadyInCart = cartItems.some((i) => i.id === String(item.id));
 
   const productTypeLabel = isSubscription
     ? "Gói thành viên"
-    : isBundle
-      ? "Bundle"
+    : item.productType === "BUNDLE"
+      ? "Gói Combo"
       : isCharacter
-        ? "Character"
+        ? "Nhân vật Pixel"
         : "Thiết bị LED";
 
-  const mediaList =
-    item.galleryUrls && item.galleryUrls.length > 0
-      ? item.galleryUrls
-      : [item.previewUrl, item.previewUrl, item.previewUrl, item.previewUrl];
-  const currentPreview = mediaList[activeMedia] ?? item.previewUrl;
+  const mediaList: string[] = [
+    item.previewUrl,
+    ...(item.galleryUrls ?? []),
+  ].filter((url): url is string => Boolean(url));
+  if (mediaList.length === 0) mediaList.push("");
 
-  const specifications: [string, string][] = [
-    ["Tên sản phẩm", item.name],
-    ["Phân loại", productTypeLabel],
-  ];
+  const currentPreview = mediaList[activeMedia] || item.previewUrl;
+
+  const specifications: [string, string][] = [];
   if (item.ledDetails) {
     specifications.push(["Mã thiết bị", item.ledDetails.modelName]);
     specifications.push(["Tồn kho khả dụng", `${item.ledDetails.stockQuantity} sản phẩm`]);
@@ -139,10 +136,6 @@ export default function ProductDetailPage() {
     specifications.push(["Độ trễ khung hình", `${item.characterDetails.frameDelayMs ?? 0} ms`]);
     specifications.push(["Định dạng tệp", "Chuẩn LED Binary (.lbin)"]);
   } else if (item.bundleDetails) {
-    specifications.push([
-      "Giá gốc cộng dồn",
-      formatPrice(Number(item.bundleDetails.originalPrice ?? item.price)),
-    ]);
     specifications.push([
       "Thành phần gói",
       item.bundleDetails.items
@@ -161,15 +154,11 @@ export default function ProductDetailPage() {
       "Mở khóa toàn bộ Character",
       item.subscriptionDetails.allAccessCharacters ? "Có" : "Không",
     ]);
-    specifications.push([
-      "Số cấu hình thiết bị tối đa",
-      `${item.subscriptionDetails.maxMobileProfiles ?? 1} profiles`,
-    ]);
   }
 
   const add = async (): Promise<boolean> => {
     if (!isAuthenticated) {
-      router.push("/login");
+      router.push(`/login?returnUrl=${encodeURIComponent(`/products/${params.productId}`)}`);
       return false;
     }
     if (isOwned) return false;
@@ -189,56 +178,73 @@ export default function ProductDetailPage() {
 
   const handleBuyNow = async () => {
     if (!isAuthenticated) {
-      router.push("/login");
+      router.push(`/login?returnUrl=${encodeURIComponent(`/products/${params.productId}`)}`);
       return;
     }
     if (isOwned) return;
-    if (added || isAlreadyInCart) {
-      router.push("/cart");
-      return;
-    }
-    const success = await add();
-    if (success) {
-      router.push("/cart");
+    setActionError("");
+    setIsSubmitting(true);
+    try {
+      await addItem(item, isDigital ? 1 : quantity);
+      // Select strictly this item and jump straight to checkout
+      setSelectedIds([String(item.id)]);
+      router.push("/checkout");
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, "Không thể tiếp tục mua ngay."));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <>
       <Header />
-      <main className="flex-1 bg-[#fbfaf3] py-5 text-[#173c35]">
-        <div className="container mx-auto max-w-7xl px-4">
-          <nav className="mb-4 flex items-center gap-1 text-xs text-gray-500">
-            <Link href="/" className="hover:text-primary-dark">
+      <main className="flex-1 bg-background py-8 text-text-main">
+        <div className="container mx-auto max-w-7xl px-4 lg:px-8">
+
+          {/* Breadcrumb */}
+          <nav className="mb-6 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text-muted">
+            <Link href="/" className="cursor-pointer hover:text-primary-ink hover:underline">
               Trang chủ
             </Link>
-            <ChevronRight size={13} />
-            <Link href="/products" className="hover:text-primary-dark">
+            <span>›</span>
+            <Link href="/" className="cursor-pointer hover:text-primary-ink hover:underline">
               {productTypeLabel}
             </Link>
-            <ChevronRight size={13} />
-            <span className="font-semibold text-gray-700">{item.name}</span>
+            <span>›</span>
+            <span className="text-black font-black truncate">{item.name}</span>
           </nav>
 
-          <section className="grid gap-6 lg:grid-cols-[1.05fr_1.1fr_0.72fr]">
+          {/* Main Product Layout */}
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_1.1fr_0.8fr]">
+
+            {/* ── Left Column: Media Gallery ── */}
             <div className="flex gap-3">
-              <div className="flex w-14 flex-col gap-2">
-                {mediaList.map((image, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setActiveMedia(index)}
-                    className={`relative aspect-square overflow-hidden rounded border-2 bg-[#e4e3c8] ${activeMedia === index ? "border-[#126356]" : "border-transparent"}`}
-                    aria-label={`Xem ảnh ${index + 1}`}
-                  >
-                    {image ? (
-                      <Image src={image} alt="" fill sizes="56px" className="object-contain p-1" />
-                    ) : (
-                      <Sparkles size={18} className="m-auto text-[#126356]" />
-                    )}
-                  </button>
-                ))}
-              </div>
-              <div className="relative min-h-[330px] flex-1 overflow-hidden rounded bg-[#d9d8b4]">
+              {mediaList.length > 1 && (
+                <div className="flex w-16 shrink-0 flex-col gap-2">
+                  {mediaList.map((image, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setActiveMedia(index)}
+                      className={`cursor-pointer relative aspect-square border-2 transition-all ${
+                        activeMedia === index
+                          ? "border-black bg-primary/20 shadow-[2px_2px_0_0_#000]"
+                          : "border-black bg-white hover:bg-gray-100"
+                      }`}
+                      aria-label={`Xem ảnh ${index + 1}`}
+                    >
+                      {image ? (
+                        <Image src={image} alt="" fill sizes="64px" className="object-contain p-1" />
+                      ) : (
+                        <Sparkles size={16} className="m-auto text-primary-ink" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="neo-box-no-hover relative flex min-h-[360px] flex-1 items-center justify-center overflow-hidden bg-white p-6">
                 {currentPreview ? (
                   <Image
                     src={currentPreview}
@@ -246,214 +252,204 @@ export default function ProductDetailPage() {
                     fill
                     sizes="(max-width: 1024px) 100vw, 45vw"
                     priority
-                    className="object-contain p-8"
+                    className="object-contain p-6 [image-rendering:pixelated]"
                   />
                 ) : (
-                  <div className="grid h-full place-items-center text-sm font-bold text-gray-500">
-                    Ảnh sản phẩm
+                  <div className="grid place-items-center text-xs font-black uppercase text-text-muted">
+                    <Monitor size={48} className="mb-2 text-primary-ink/60" />
+                    Hình ảnh sản phẩm
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="flex flex-col">
-              <div className="flex flex-wrap gap-2 text-xs font-bold">
-                <span className="rounded-full border border-[#126356] bg-[#e3f2e9] px-3 py-1">
-                  <Monitor size={12} className="mr-1 inline" />
-                  {productTypeLabel}
-                </span>
-                {item.tags?.map((t) => (
-                  <span
-                    key={t.tagId}
-                    className="rounded-full border border-orange-300 bg-orange-50 px-3 py-1 text-orange-700"
-                  >
-                    #{t.name}
+            {/* ── Center Column: Info & Actions ── */}
+            <div className="flex flex-col justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="border border-black bg-white px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                    {productTypeLabel}
                   </span>
-                ))}
-              </div>
-              <h1 className="mt-3 text-2xl font-black text-gray-900 md:text-3xl">{item.name}</h1>
-              <div className="mt-2 flex items-center gap-2 text-sm">
-                <span className="flex text-amber-400">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star key={star} size={15} fill="currentColor" />
+                  {item.tags?.map((t) => (
+                    <span
+                      key={t.tagId}
+                      className="border border-black bg-primary/20 px-2 py-0.5 text-[10px] font-black uppercase text-black"
+                    >
+                      #{t.name}
+                    </span>
                   ))}
-                </span>
-                <span className="text-gray-600">Chính hãng Lumintra</span>
-              </div>
-              <p className="mt-2 text-2xl font-black text-[#126356]">{formatPrice(item.price)}</p>
-              <p className="mt-2 text-sm leading-relaxed text-gray-600">{item.description}</p>
-              {!isDigital && (
-                <>
-                  <p className="mt-5 text-xs font-bold text-gray-700">Số lượng</p>
-                  <div className="mt-2 flex h-9 w-fit border border-gray-300 bg-white">
-                    <button
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="w-9 border-r border-gray-300"
-                      aria-label="Giảm số lượng"
-                    >
-                      <Minus size={14} className="mx-auto" />
-                    </button>
-                    <span className="grid w-12 place-items-center text-sm">{quantity}</span>
-                    <button
-                      onClick={() => setQuantity(quantity + 1)}
-                      className="w-9 border-l border-gray-300"
-                      aria-label="Tăng số lượng"
-                    >
-                      <Plus size={14} className="mx-auto" />
-                    </button>
+                </div>
+
+                <h1 className="mt-3 text-2xl font-black uppercase leading-tight tracking-tight text-black sm:text-3xl">
+                  {item.name}
+                </h1>
+
+                <p className="mt-1 text-xs font-bold uppercase text-text-muted">
+                  Sản phẩm chính hãng Mirage Ecosystem
+                </p>
+
+                <div className="mt-4 border-b-2 border-dashed border-gray-300 pb-4">
+                  <span className="block text-xs font-bold uppercase text-text-muted">Giá niêm yết</span>
+                  <strong className="text-3xl font-black text-primary-ink">
+                    {formatPrice(item.price)}
+                  </strong>
+                </div>
+
+                <p className="mt-4 text-sm font-medium leading-relaxed text-text-muted">
+                  {item.description || "Chưa có mô tả chi tiết cho sản phẩm này."}
+                </p>
+
+                {/* Quantity selector (physical products only) */}
+                {!isDigital && (
+                  <div className="mt-5">
+                    <label className="mb-2 block text-xs font-black uppercase text-black">
+                      Số lượng
+                    </label>
+                    <div className="flex h-10 w-fit items-center border-2 border-black bg-white shadow-[2px_2px_0_0_#000]">
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                        disabled={quantity <= 1}
+                        className="cursor-pointer disabled:cursor-not-allowed flex h-full w-10 items-center justify-center border-r-2 border-black font-black hover:bg-gray-100 active:bg-gray-200 disabled:opacity-40"
+                        aria-label="Giảm số lượng"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <span className="grid w-14 place-items-center text-sm font-black text-black">
+                        {quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(quantity + 1)}
+                        className="cursor-pointer flex h-full w-10 items-center justify-center border-l-2 border-black font-black hover:bg-gray-100 active:bg-gray-200"
+                        aria-label="Tăng số lượng"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
                   </div>
-                </>
-              )}
-              <div className="mt-4 flex flex-col gap-2">
+                )}
+              </div>
+
+              {/* Purchase Buttons */}
+              <div className="mt-6 border-t-2 border-black pt-5">
                 {isOwned ? (
-                  <div className="rounded border-2 border-amber-500 bg-amber-50 p-4 text-center">
-                    <p className="font-bold text-amber-900">
-                      Bạn đã sở hữu nhân vật này rồi!
-                    </p>
-                    <p className="mt-1 text-xs text-amber-700">
-                      Bạn có thể quản lý và hiển thị nhân vật trong bộ sưu tập của bạn.
+                  <div className="neo-box-no-hover border-amber-600 bg-amber-50 p-4 text-center">
+                    <p className="font-black uppercase text-amber-900">
+                      Bạn đã sở hữu sản phẩm này!
                     </p>
                     <Link
                       href="/profile/gallery"
-                      className="btn-primary mt-3 inline-block w-full py-2.5 text-center text-sm font-bold"
+                      className="btn-primary mt-3 inline-block w-full py-2.5 text-center text-xs font-black uppercase"
                     >
-                      Đi đến Thư viện nhân vật
+                      Mở Thư viện nhân vật
                     </Link>
                   </div>
                 ) : (
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-3 sm:flex-row">
                     <button
+                      type="button"
                       onClick={add}
-                      disabled={!canBuy || isSubmitting}
-                      className="flex flex-1 items-center justify-center gap-2 rounded bg-[#126356] px-4 py-3 text-sm font-bold text-white hover:bg-[#0d4c42] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#126356]"
+                      disabled={isSubmitting}
+                      className="btn-secondary flex flex-1 items-center justify-center gap-2 py-3.5 text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
                     >
-                      <ShoppingBag size={16} />
-                      {isSubmitting
-                        ? "Đang xử lý..."
-                        : added || isAlreadyInCart
-                          ? "Đã có trong giỏ"
-                          : "Thêm vào giỏ hàng"}
+                      <ShoppingCart size={18} className="shrink-0" aria-hidden />
+                      <span>{added || isAlreadyInCart ? "Đã thêm · Thêm tiếp" : "Thêm vào giỏ hàng"}</span>
                     </button>
                     <button
                       type="button"
                       onClick={handleBuyNow}
-                      disabled={!canBuy || isSubmitting}
-                      className="rounded border border-[#126356] px-4 py-3 text-sm font-bold text-[#126356] hover:bg-[#e3f2e9] disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isSubmitting}
+                      className="btn-primary flex flex-1 items-center justify-center gap-2 py-3.5 text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
                     >
-                      <Zap size={16} className="mr-1 inline" />
-                      Mua ngay
+                      <Zap size={16} />
+                      <span>Mua ngay</span>
                     </button>
                   </div>
                 )}
-              </div>
-              {actionError && !isOwned && (
-                <p role="alert" className="mt-2 text-xs font-bold text-red-600">
-                  {actionError}
-                </p>
-              )}
-              {!authLoading && !isAuthenticated && (
-                <p className="mt-2 text-center text-sm text-gray-600">
-                  Vui lòng{" "}
-                  <Link href="/login" className="font-bold text-[#126356] underline">
-                    đăng nhập
-                  </Link>{" "}
-                  để thêm vào giỏ hàng hoặc mua ngay.
-                </p>
-              )}
-              {(added || isAlreadyInCart) && !isOwned && (
-                <Link href="/cart" className="mt-2 text-center text-sm font-bold text-[#126356] underline">
-                  Xem giỏ hàng
-                </Link>
-              )}
-              <div className="mt-5 grid grid-cols-3 gap-3 border-t border-gray-200 pt-4 text-center text-[11px] text-gray-600">
-                <div>
-                  <Download size={17} className="mx-auto mb-1 text-[#126356]" />
-                  <b>Đồng bộ nhanh</b>
-                  <br />
-                  Hỗ trợ OTA & App
-                </div>
-                <div>
-                  <Check size={17} className="mx-auto mb-1 text-[#126356]" />
-                  <b>Sử dụng trọn đời</b>
-                  <br />
-                  Bản quyền chính thức
-                </div>
-                <div>
-                  <Monitor size={17} className="mx-auto mb-1 text-[#126356]" />
-                  <b>Tương thích rộng</b>
-                  <br />
-                  32×32, 64×64, 128×64
-                </div>
+
+                {actionError && (
+                  <p role="alert" className="mt-3 border-2 border-red-600 bg-red-50 p-2.5 text-xs font-bold text-red-700">
+                    {actionError}
+                  </p>
+                )}
+
+                {!authLoading && !isAuthenticated && (
+                  <p className="mt-3 text-center text-xs font-bold text-text-muted">
+                    Vui lòng{" "}
+                    <Link
+                      href={`/login?returnUrl=${encodeURIComponent(`/products/${params.productId}`)}`}
+                      className="cursor-pointer text-primary-ink underline font-black"
+                    >
+                      đăng nhập
+                    </Link>{" "}
+                    để thêm vào giỏ hàng hoặc mua ngay.
+                  </p>
+                )}
               </div>
             </div>
 
-            <aside className="h-fit rounded border border-gray-200 bg-white p-4 text-sm">
-              <h2 className="font-black text-gray-900">
-                <Monitor size={16} className="mr-2 inline text-[#126356]" />
-                Tương thích thiết bị
+            {/* ── Right Column: Guarantees & Compatibility ── */}
+            <aside className="neo-box-no-hover h-fit bg-white p-5">
+              <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 text-xs font-black uppercase tracking-wider text-black">
+                <Monitor size={16} className="text-primary-ink" /> Tương thích thiết bị
               </h2>
-              <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                Hoạt động tốt trên hệ sinh thái phần cứng LED Lumintra.
+              <p className="text-xs font-medium leading-relaxed text-text-muted">
+                Hoạt động đồng bộ 100% trên hệ sinh thái bảng LED và ứng dụng điều khiển Mirage.
               </p>
-              <ul className="mt-3 space-y-2 text-xs font-semibold text-gray-700">
+              <ul className="mt-4 space-y-2.5 text-xs font-bold text-text-main">
                 {[
-                  "Lumintra Matrix Pro 64×64 RGB",
-                  "Lumintra DeskCube Mini 32×32",
-                  "Lumintra WallStudio Panorama 64×32",
+                  "Bảng LED Mirage Matrix 32×32",
+                  "Bảng LED Mirage Panorama 64×32",
+                  "Điều khiển đồng bộ qua App Mirage Mobile",
                 ].map((device) => (
-                  <li key={device}>
-                    <Check size={14} className="mr-2 inline rounded-full bg-[#126356] p-0.5 text-white" />
-                    {device}
+                  <li key={device} className="flex items-center gap-2">
+                    <Check size={14} className="text-primary-ink shrink-0" />
+                    <span>{device}</span>
                   </li>
                 ))}
               </ul>
-            </aside>
-          </section>
 
-          <section className="mt-6 overflow-hidden rounded border border-gray-200 bg-white">
-            <div className="flex flex-wrap border-b border-gray-200 text-sm font-bold">
-              {["Tổng quan", "Thông số kỹ thuật"].map((tab, index) => (
-                <a
-                  key={tab}
-                  href={index === 0 ? "#overview" : "#specifications"}
-                  className={`px-5 py-3 hover:text-[#126356] ${index === 0 ? "border-b-2 border-[#126356] text-[#126356]" : "text-gray-700"}`}
-                >
-                  {tab}
-                </a>
-              ))}
-            </div>
-            <div id="overview" className="grid gap-8 p-5 lg:grid-cols-[1.25fr_0.9fr]">
-              <div>
-                <h2 className="text-lg font-black text-gray-900">
-                  <Sparkles size={18} className="mr-2 inline text-[#126356]" />
-                  Giới thiệu {productTypeLabel}
-                </h2>
-                <p className="mt-3 text-sm leading-7 text-gray-600">{item.description}</p>
-                <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                  {[
-                    ["Đẹp mắt", "Phù hợp mọi không gian"],
-                    ["Hoạt ảnh mượt mà", "Hiển thị êm và sống động"],
-                    ["Tương thích rộng", "Nhiều thiết bị LED"],
-                    ["Kích hoạt ngay", "Sau khi thanh toán"],
-                  ].map(([title, text], index) => (
-                    <div key={title} className="rounded border border-gray-200 p-3 text-xs">
-                      <Heart size={16} className={`mr-2 inline ${index === 0 ? "text-red-500" : "text-[#126356]"}`} />
-                      <b className="text-gray-800">{title}</b>
-                      <p className="mt-1 pl-6 text-gray-500">{text}</p>
-                    </div>
-                  ))}
+              <hr className="my-5 border-t-2 border-black" />
+
+              <div className="space-y-3 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <Download size={16} className="mt-0.5 text-primary-ink shrink-0" />
+                  <div>
+                    <strong className="block font-black uppercase">Đồng bộ OTA tức thì</strong>
+                    <span className="text-text-muted">Tải ảnh động về thiết bị trong tích tắc.</span>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <Sparkles size={16} className="mt-0.5 text-primary-ink shrink-0" />
+                  <div>
+                    <strong className="block font-black uppercase">Bản quyền trọn đời</strong>
+                    <span className="text-text-muted">Sử dụng vĩnh viễn trên tài khoản Mirage.</span>
+                  </div>
                 </div>
               </div>
-              <div id="specifications">
-                <h2 className="text-lg font-black text-gray-900">
-                  <Sparkles size={18} className="mr-2 inline text-[#126356]" />
-                  Thông số kỹ thuật
-                </h2>
-                <dl className="mt-3 divide-y divide-gray-200 rounded border border-gray-200 text-xs">
+            </aside>
+          </div>
+
+          {/* ── Specifications Section ── */}
+          <section className="neo-box-no-hover mt-8 bg-white p-6">
+            <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 text-sm font-black uppercase tracking-wider text-black">
+              <Sparkles size={18} className="text-primary-ink" /> Thông số kỹ thuật &amp; Chi tiết
+            </h2>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-black uppercase text-black mb-2">Giới thiệu sản phẩm</p>
+                <p className="text-xs font-medium leading-relaxed text-text-muted">
+                  {item.description || "Sản phẩm được tối ưu cho hệ thống LED ma trận gắn kính xe hoặc trang trí bàn làm việc."}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase text-black mb-2">Thông số chi tiết</p>
+                <dl className="divide-y-2 divide-dashed divide-gray-200 border-2 border-black text-xs">
                   {specifications.map(([label, value]) => (
-                    <div key={label} className="grid grid-cols-[1fr_1.2fr] gap-3 px-3 py-2">
-                      <dt className="text-gray-500">{label}</dt>
-                      <dd className="font-semibold text-gray-700">{value}</dd>
+                    <div key={label} className="grid grid-cols-2 gap-3 p-2.5">
+                      <dt className="font-bold text-text-muted uppercase">{label}</dt>
+                      <dd className="font-black text-black text-right">{value}</dd>
                     </div>
                   ))}
                 </dl>
@@ -461,41 +457,51 @@ export default function ProductDetailPage() {
             </div>
           </section>
 
+          {/* ── Related Products ── */}
           {relatedProducts.length > 0 && (
-            <section className="mt-6">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-black">Các sản phẩm cùng danh mục</h2>
-                <Link href="/products" className="text-xs font-bold text-[#126356] hover:underline">
-                  Xem tất cả <ChevronRight size={13} className="inline" />
+            <section className="mt-10">
+              <div className="mb-4 flex items-center justify-between border-b-2 border-black pb-3">
+                <h2 className="text-base font-black uppercase tracking-wider text-black">
+                  Sản phẩm tương tự
+                </h2>
+                <Link href="/" className="cursor-pointer text-xs font-black uppercase text-primary-ink hover:underline">
+                  Xem tất cả ›
                 </Link>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                {relatedProducts.map((product) => (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {relatedProducts.map((p) => (
                   <Link
-                    key={product.id}
-                    href={`/products/${product.id}`}
-                    className="rounded border border-gray-200 bg-white p-2 transition hover:-translate-y-1 hover:border-[#126356]"
+                    key={p.id}
+                    href={`/products/${p.id}`}
+                    className="cursor-pointer neo-box group flex flex-col justify-between overflow-hidden bg-white p-3 transition-transform hover:-translate-y-0.5"
                   >
-                    <div className="relative aspect-square rounded bg-[#e4e3c8]">
-                      {product.previewUrl ? (
+                    <div className="relative aspect-square border-2 border-black bg-gray-50 flex items-center justify-center overflow-hidden">
+                      {p.previewUrl ? (
                         <Image
-                          src={product.previewUrl}
-                          alt={product.name}
+                          src={p.previewUrl}
+                          alt={p.name}
                           fill
-                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
-                          className="object-contain p-2"
+                          sizes="(max-width: 640px) 50vw, 25vw"
+                          className="object-contain p-2 [image-rendering:pixelated]"
                         />
                       ) : (
-                        <Monitor size={24} className="absolute inset-0 m-auto text-[#126356]" />
+                        <Monitor size={32} className="text-primary-ink/60" />
                       )}
                     </div>
-                    <p className="mt-2 truncate text-xs font-bold text-gray-800">{product.name}</p>
-                    <p className="text-xs font-black text-[#126356]">{formatPrice(product.price)}</p>
+                    <div className="mt-2.5">
+                      <p className="truncate text-xs font-black uppercase text-black group-hover:text-primary-ink">
+                        {p.name}
+                      </p>
+                      <p className="mt-1 text-xs font-black text-primary-ink">
+                        {formatPrice(p.price)}
+                      </p>
+                    </div>
                   </Link>
                 ))}
               </div>
             </section>
           )}
+
         </div>
       </main>
       <Footer />

@@ -1,7 +1,8 @@
 import { apiDeleteStoreProduct, apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
-import type { CreatedStoreProductResponse } from "@/api_client";
+import { ProductFilterRequest, type CreatedStoreProductResponse } from "@/api_client";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "@/lib/api/client";
+import { fetchCharacterVersions } from "@/lib/api/designerCharacters";
 import type {
   CharacterVersion,
   ListingActor,
@@ -106,48 +107,6 @@ export function updateCreatedStoreProductStatus(
   } catch {}
 }
 
-/** Danh sách Character cơ sở trong hệ cơ sở dữ liệu mẫu */
-const KNOWN_CHARACTERS: Array<{
-  id: string;
-  name: string;
-  price: number;
-  description: string;
-  thumbnailUrl: string;
-}> = [
-  {
-    id: "4",
-    name: "Cyber Kitsune — Cáo Chín Đuôi Neon",
-    price: 199000,
-    description:
-      "Nhân vật Cáo Chín Đuôi phong cách Cyberpunk với hiệu ứng lửa neon chuyển màu mượt mà 60 khung hình, tối ưu hóa cho bảng LED 64x64.",
-    thumbnailUrl: "/images/products/characters/cyber-fox.png",
-  },
-  {
-    id: "5",
-    name: "Mecha Ronin — Chiến Binh Ninja Neon",
-    price: 249000,
-    description:
-      "Hoạt ảnh Pixel Art Ninja giáp máy vung kiếm ánh sáng plasma, gồm 48 frame lặp hoàn hảo không giật nhịp.",
-    thumbnailUrl: "/images/products/characters/neon-ninja.png",
-  },
-  {
-    id: "6",
-    name: "Astro Cat — Mèo Phi Hành Gia Mirage",
-    price: 149000,
-    description:
-      "Chú mèo phi hành gia bồng bềnh giữa không gian sao lấp lánh.",
-    thumbnailUrl: "/images/products/characters/mirage-cat.png",
-  },
-  {
-    id: "7",
-    name: "Retro Arcade Dragon — Rồng Lửa 8-Bit",
-    price: 199000,
-    description:
-      "Rồng phun lửa phong cách arcade hoài niệm.",
-    thumbnailUrl: "/images/products/characters/arcade-dragon.png",
-  },
-];
-
 // In-memory cache cho UI session
 const db = {
   characters: [] as StoreCharacter[],
@@ -192,227 +151,247 @@ function toRow(character: StoreCharacter): StoreCharacterRow {
 
 /** GET /manager/store-listings/characters */
 export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
-  const draftsPromise = request<{ data: {
-    productId: number; productName: string; basePrice: number; description?: string | null;
-    thumbnailUrl?: string | null; galleryUrls: string[]; createdAt: string; updatedAt?: string | null;
-  }[] }>(OpenAPI, {
+  const draftsPromise = request<{
+    data: {
+      productId: number;
+      productName: string;
+      basePrice: number;
+      description?: string | null;
+      thumbnailUrl?: string | null;
+      galleryUrls: string[];
+      createdAt: string;
+      updatedAt?: string | null;
+    }[];
+  }>(OpenAPI, {
     method: "GET",
     url: "/api/management/admin/store/products/drafts",
-  }).then(({ data }) => data).catch((error) => {
-    console.error("Failed to load Store drafts:", error);
-    return [];
-  });
-  try {
-    const { items } = await fetchStoreProducts({ size: 100 });
-    const charactersFromBackend = items.filter((p) => p.productType === "CHARACTER");
-    const publishedIds = new Set(charactersFromBackend.map((p) => String(p.id)));
-    const deletedIds = getDeletedProductIds();
-    const createdProducts = getCreatedStoreProducts().filter(
-      (item) => item.productType === "CHARACTER" && item.productId != null,
-    );
-    const createdById = new Map(createdProducts.map((item) => [String(item.productId), item]));
+  })
+    .then(({ data }) => data || [])
+    .catch((error) => {
+      console.warn("Failed to load Store drafts:", error);
+      return [];
+    });
 
-    // Kết hợp KNOWN_CHARACTERS, các characters từ Backend (PUBLISHED) và các character mới tạo (UNPUBLISHED)
-    const allCharacters = [...KNOWN_CHARACTERS];
-    for (const bChar of charactersFromBackend) {
-      if (!allCharacters.some((c) => c.id === String(bChar.id))) {
-        allCharacters.push({
-          id: String(bChar.id),
-          name: bChar.name,
-          price: bChar.price,
-          description: bChar.description ?? "",
-          thumbnailUrl: bChar.previewUrl || "/images/products/characters/cyber-fox.png",
-        });
-      }
-    }
-    for (const created of createdProducts) {
-      const id = String(created.productId);
-      if (!allCharacters.some((c) => c.id === id)) {
-        allCharacters.unshift({
-          id,
-          name: created.productName ?? `Character #${id}`,
-          price: Number(created.basePrice ?? 0),
-          description: created.description ?? "",
-          thumbnailUrl: created.thumbnailUrl || "/images/products/characters/cyber-fox.png",
-        });
-      }
-    }
+  const backendCharactersPromise = fetchStoreProducts({
+    productType: ProductFilterRequest.productType.CHARACTER,
+    size: 100,
+  })
+    .then((res) => res.items)
+    .catch((error) => {
+      console.warn("Failed to load published store characters:", error);
+      return [];
+    });
 
-    for (const charDef of allCharacters) {
-      const createdRecord = createdById.get(charDef.id);
-      const isDeleted = deletedIds.has(charDef.id) || createdRecord?.status === "DELETED";
-      const isPublished = !isDeleted && (publishedIds.has(charDef.id) || createdRecord?.status === "PUBLISHED");
-      if (isPublished && createdRecord && createdRecord.status !== "PUBLISHED") {
-        updateCreatedStoreProductStatus(charDef.id, "PUBLISHED");
-      }
-      const isArchived = !isDeleted && !isPublished && createdRecord?.status === "ARCHIVED";
-      const currentStatus: ListingStatus = isDeleted
-        ? "Deleted"
-        : isPublished
-        ? "Published"
-        : isArchived
-        ? "Archived"
-        : createdRecord?.status === "UNPUBLISHED"
-        ? "Pending Review"
-        : "Hidden";
+  const [rawDrafts, rawPublished] = await Promise.all([
+    draftsPromise,
+    backendCharactersPromise,
+  ]);
 
-      const listingId = `lst-${charDef.id}`;
-      const existing = db.characters.find((c) => c.characterId === charDef.id);
+  const deletedIds = getDeletedProductIds();
+  const createdProducts = getCreatedStoreProducts().filter(
+    (item) => item.productType === "CHARACTER" && item.productId != null,
+  );
+  const createdById = new Map(createdProducts.map((item) => [String(item.productId), item]));
 
-      if (!existing) {
-        const character: StoreCharacter = {
-          characterId: charDef.id,
-          name: charDef.name,
-          description: charDef.description,
-          thumbnailUrl: charDef.thumbnailUrl,
-          creatorUserId: "usr-designer-1",
-          creatorName: "KuroPixel Studio",
-          listingId,
-          visibility: isPublished ? "Visible" : "Hidden",
-          status: currentStatus,
-          createdAt: "2026-11-10T08:00:00Z",
-          updatedAt: "2026-11-11T10:00:00Z",
-        };
-        const listing: StoreListing = {
-          listingId,
-          publisherUserId: isPublished ? "usr-manager-1" : null,
-          price: charDef.price,
-          isFree: charDef.price === 0,
-          status: currentStatus,
-          publishedAt: isPublished ? "2026-11-10T08:00:00Z" : null,
-          updatedAt: "2026-11-11T10:00:00Z",
-        };
+  const resultRows: StoreCharacterRow[] = [];
+  const processedIds = new Set<string>();
 
-        if (createdRecord?.characterVersionId) {
-          const vNum = (createdRecord as any)?.characterVersionNumber ?? createdRecord.characterVersionId;
-          db.versions.push({
-            versionId: `ver-${charDef.id}-${createdRecord.characterVersionId}`,
-            characterId: charDef.id,
-            storeListingId: isPublished ? listingId : null,
-            versionNumber: vNum,
-            fileUrl: charDef.thumbnailUrl,
-            ledBinaryUrl: "",
-            format: "LED_BINARY",
-            width: 64,
-            height: 64,
-            frameCount: 16,
-            frameDelayMs: 60,
-            byteSize: 1024,
-            changelog: `Phiên bản #${vNum} được liên kết từ Store Product`,
-            isCurrent: true,
-            createdAt: new Date().toISOString(),
-          });
-        } else {
-          const v1: CharacterVersion = {
-            versionId: `ver-${charDef.id}-1`,
-            characterId: charDef.id,
-            storeListingId: currentStatus === "Pending Review" ? null : listingId,
-            versionNumber: 1,
-            fileUrl: charDef.thumbnailUrl,
-            ledBinaryUrl: "",
-            format: "LED_BINARY",
-            width: 64,
-            height: 64,
-            frameCount: 16,
-            frameDelayMs: 60,
-            byteSize: 1024,
-            changelog: "Phiên bản khởi tạo chính thức",
-            isCurrent: false,
-            createdAt: "2026-11-10T08:00:00Z",
-          };
-          const v2: CharacterVersion = {
-            versionId: `ver-${charDef.id}-2`,
-            characterId: charDef.id,
-            storeListingId: currentStatus === "Pending Review" ? null : listingId,
-            versionNumber: 2,
-            fileUrl: charDef.thumbnailUrl,
-            ledBinaryUrl: "",
-            format: "LED_BINARY",
-            width: 64,
-            height: 64,
-            frameCount: 24,
-            frameDelayMs: 50,
-            byteSize: 2048,
-            changelog: "Tối ưu hóa khung hình mượt mà 60 FPS",
-            isCurrent: true,
-            createdAt: "2026-11-11T10:00:00Z",
-          };
-          db.versions.push(v1, v2);
-        }
+  // 1. Process drafts (UNPUBLISHED character products awaiting approval)
+  for (const draft of rawDrafts) {
+    const id = String(draft.productId);
+    if (processedIds.has(id)) continue;
+    processedIds.add(id);
 
-        if (createdRecord) {
-          db.characters.unshift(character);
-        } else {
-          db.characters.push(character);
-        }
-        db.listings.push(listing);
-      } else {
-        // Đồng bộ trạng thái thực tế từ Backend PostgreSQL
-        existing.status = currentStatus;
-        existing.visibility = isPublished ? "Visible" : "Hidden";
-        const listing = db.listings.find((l) => l.listingId === existing.listingId);
-        if (listing) {
-          listing.status = currentStatus;
-        }
-        if (createdRecord?.characterVersionId && !db.versions.some((v) => v.characterId === charDef.id)) {
-          const vNum = (createdRecord as any)?.characterVersionNumber ?? createdRecord.characterVersionId;
-          db.versions.push({
-            versionId: `ver-${charDef.id}-${createdRecord.characterVersionId}`,
-            characterId: charDef.id,
-            storeListingId: isPublished ? listingId : null,
-            versionNumber: vNum,
-            fileUrl: charDef.thumbnailUrl,
-            ledBinaryUrl: "",
-            format: "LED_BINARY",
-            width: 64,
-            height: 64,
-            frameCount: 16,
-            frameDelayMs: 60,
-            byteSize: 1024,
-            changelog: `Phiên bản #${vNum} được liên kết từ Store Product`,
-            isCurrent: true,
-            createdAt: new Date().toISOString(),
-          });
-        }
-        if (isPublished) {
-          const v = db.versions.find((ver) => ver.characterId === existing.characterId);
-          if (v && !v.storeListingId) {
-            v.storeListingId = listingId;
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Failed to fetch characters from backend:", err);
+    const isDeleted = deletedIds.has(id);
+    const createdRecord = createdById.get(id);
+    const isActuallyPublished = createdRecord?.status === "PUBLISHED";
+
+    const status: ListingStatus = isDeleted
+      ? "Deleted"
+      : isActuallyPublished
+      ? "Published"
+      : "Pending Review";
+
+    const row: StoreCharacterRow = {
+      characterId: id,
+      name: draft.productName,
+      description: draft.description ?? "",
+      thumbnailUrl: draft.thumbnailUrl || "/images/products/characters/cyber-fox.png",
+      creatorUserId: "usr-designer",
+      creatorName: "Designer Studio",
+      listingId: `lst-${id}`,
+      visibility: isActuallyPublished ? "Visible" : "Hidden",
+      status,
+      createdAt: draft.createdAt,
+      updatedAt: draft.updatedAt ?? draft.createdAt,
+      activeVersion: null,
+      draft: {
+        basePrice: Number(draft.basePrice ?? 0),
+        thumbnailUrl: draft.thumbnailUrl,
+        galleryUrls: draft.galleryUrls || [],
+      },
+    };
+    resultRows.push(row);
   }
-  const drafts: StoreCharacterRow[] = (await draftsPromise).map((item) => ({
-    characterId: String(item.productId),
-    name: item.productName,
-    description: item.description ?? "",
-    thumbnailUrl: item.thumbnailUrl || "/images/products/characters/cyber-fox.png",
-    creatorUserId: "",
-    creatorName: "—",
-    listingId: `lst-${item.productId}`,
-    visibility: "Hidden",
-    status: "Pending Review",
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt ?? item.createdAt,
-    activeVersion: null,
-    draft: { basePrice: item.basePrice, thumbnailUrl: item.thumbnailUrl, galleryUrls: item.galleryUrls },
+
+  // 2. Process published characters from Store Catalog
+  for (const item of rawPublished) {
+    const id = String(item.productId ?? item.id);
+    if (processedIds.has(id)) continue;
+    processedIds.add(id);
+
+    const createdRecord = createdById.get(id);
+    const isDeleted = deletedIds.has(id) || createdRecord?.status === "DELETED";
+    const isArchived = !isDeleted && createdRecord?.status === "ARCHIVED";
+    const isHidden = !isDeleted && !isArchived && createdRecord?.status === "UNPUBLISHED";
+
+    const status: ListingStatus = isDeleted
+      ? "Deleted"
+      : isArchived
+      ? "Archived"
+      : isHidden
+      ? "Hidden"
+      : "Published";
+
+    const row: StoreCharacterRow = {
+      characterId: id,
+      name: item.name,
+      description: item.description ?? "",
+      thumbnailUrl: item.previewUrl || "/images/products/characters/cyber-fox.png",
+      creatorUserId: "usr-designer",
+      creatorName: "Designer Studio",
+      listingId: `lst-${id}`,
+      visibility: status === "Published" ? "Visible" : "Hidden",
+      status,
+      createdAt: "2026-11-10T08:00:00Z",
+      updatedAt: new Date().toISOString(),
+      activeVersion: { versionId: `ver-${id}-1`, versionNumber: 1 },
+    };
+    resultRows.push(row);
+  }
+
+  // 3. Process any created character products in session that haven't appeared above
+  for (const created of createdProducts) {
+    const id = String(created.productId);
+    if (processedIds.has(id)) continue;
+    processedIds.add(id);
+
+    const isDeleted = deletedIds.has(id) || created.status === "DELETED";
+    const status: ListingStatus = isDeleted
+      ? "Deleted"
+      : created.status === "PUBLISHED"
+      ? "Published"
+      : created.status === "ARCHIVED"
+      ? "Archived"
+      : "Pending Review";
+
+    const vNum = (created as any)?.characterVersionNumber ?? created.characterVersionId ?? 1;
+
+    const row: StoreCharacterRow = {
+      characterId: id,
+      name: created.productName ?? `Character #${id}`,
+      description: created.description ?? "",
+      thumbnailUrl: created.thumbnailUrl || "/images/products/characters/cyber-fox.png",
+      creatorUserId: "usr-designer",
+      creatorName: "Designer Studio",
+      listingId: `lst-${id}`,
+      visibility: status === "Published" ? "Visible" : "Hidden",
+      status,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      activeVersion: status === "Published" ? { versionId: `ver-${id}-${vNum}`, versionNumber: vNum } : null,
+      draft: {
+        basePrice: Number(created.basePrice ?? 0),
+        thumbnailUrl: created.thumbnailUrl,
+        galleryUrls: created.galleryUrls || [],
+      },
+    };
+    resultRows.push(row);
+  }
+
+  // Update in-memory db cache
+  db.characters = resultRows.map((r) => ({ ...r }));
+  db.listings = resultRows.map((r) => ({
+    listingId: r.listingId,
+    publisherUserId: r.status === "Published" ? "usr-manager" : null,
+    price: r.draft?.basePrice ?? 199000,
+    isFree: (r.draft?.basePrice ?? 199000) === 0,
+    status: r.status,
+    publishedAt: r.status === "Published" ? r.createdAt : null,
+    updatedAt: r.updatedAt,
   }));
-  const draftIds = new Set(drafts.map((draft) => draft.characterId));
-  return [...drafts, ...structuredClone(db.characters.filter((row) => !draftIds.has(row.characterId)).map(toRow))];
+
+  // Ensure db.versions has corresponding entries for active versions
+  for (const row of resultRows) {
+    if (!db.versions.some((v) => v.characterId === row.characterId)) {
+      const vNum = row.activeVersion?.versionNumber ?? 1;
+      db.versions.push({
+        versionId: `ver-${row.characterId}-${vNum}`,
+        characterId: row.characterId,
+        storeListingId: row.status === "Published" ? row.listingId : null,
+        versionNumber: vNum,
+        fileUrl: row.thumbnailUrl,
+        ledBinaryUrl: "",
+        format: "LED_BINARY",
+        width: 64,
+        height: 64,
+        frameCount: 16,
+        frameDelayMs: 60,
+        byteSize: 1024,
+        changelog: `Phiên bản #${vNum}`,
+        isCurrent: true,
+        createdAt: row.createdAt,
+      });
+    }
+  }
+
+  return resultRows;
 }
 
 /** GET /manager/store-listings/characters/:characterId/versions — every CHARACTER_VERSION of the character. */
 export async function getCharacterVersions(characterId: string): Promise<CharacterVersion[]> {
-  await delay(150);
-  findCharacter(characterId);
-  return structuredClone(
-    db.versions
-      .filter((item) => item.characterId === characterId)
-      .sort((first, second) => second.versionNumber - first.versionNumber),
-  );
+  await delay(100);
+  const character = db.characters.find((c) => c.characterId === characterId);
+  const numericId = Number(characterId);
+
+  // If we already have multiple versions cached in db.versions for this characterId
+  const cached = db.versions.filter((item) => item.characterId === characterId);
+  if (cached.length > 1) {
+    return structuredClone(cached.sort((a, b) => b.versionNumber - a.versionNumber));
+  }
+
+  // Try fetching actual versions from backend if numericId > 0
+  if (Number.isFinite(numericId) && numericId > 0) {
+    try {
+      const realVersions = await fetchCharacterVersions(numericId);
+      if (realVersions && realVersions.length > 0) {
+        const mapped: CharacterVersion[] = realVersions.map((rv) => ({
+          versionId: String(rv.versionId),
+          characterId,
+          storeListingId: rv.isListedOnStore ? (character?.listingId ?? `lst-${characterId}`) : null,
+          versionNumber: rv.versionNumber,
+          fileUrl: rv.previewGifUrl || character?.thumbnailUrl || "",
+          ledBinaryUrl: "",
+          format: "LED_BINARY",
+          width: 64,
+          height: 64,
+          frameCount: rv.frameCount ?? 16,
+          frameDelayMs: rv.frameDelayMs ?? 60,
+          byteSize: rv.byteSize ?? 1024,
+          changelog: `Phiên bản #${rv.versionNumber} từ Designer`,
+          isCurrent: rv.isCurrent,
+          createdAt: rv.createdAt,
+        }));
+
+        db.versions = db.versions.filter((item) => item.characterId !== characterId).concat(mapped);
+        return structuredClone(mapped.sort((a, b) => b.versionNumber - a.versionNumber));
+      }
+    } catch (err) {
+      console.warn("fetchCharacterVersions backend call failed:", err);
+    }
+  }
+
+  return structuredClone(cached.sort((a, b) => b.versionNumber - a.versionNumber));
 }
 
 export interface PublishCharacterVersionInput {

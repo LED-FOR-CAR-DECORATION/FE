@@ -1,9 +1,8 @@
-import axios from "axios";
 import type { CustomerCommissionDetailResponse } from "@/api_client/models/CustomerCommissionDetailResponse";
 import type { PublicCommissionPricingResponse } from "@/api_client/models/PublicCommissionPricingResponse";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "@/lib/api/client";
-import { buildSignedPutHeaders } from "@/lib/api/media";
+import { uploadMediaFile } from "@/lib/api/media";
 import type { PaymentSessionResponse } from "@/api_client/models/PaymentSessionResponse";
 import type { CommissionMessage } from "@/features/commission-chat/services/commission-messages.api";
 
@@ -32,17 +31,17 @@ export function submitCommission(body: CommissionSubmission) {
   });
 }
 
+export function getCustomerCommission(id: number) {
+  return request<{ data: CustomerCommissionDetailResponse & { estimatedDeliveryAt?: string | null } }>(OpenAPI, {
+    method: "GET", url: "/api/commissions/{id}", path: { id },
+  });
+}
+
 export async function uploadCommissionReference(file: File) {
-  const { data } = await request<{ data: { signedUploadUrl: string; publicUrl: string } }>(OpenAPI, {
-    method: "POST",
-    url: "/api/media/upload-url",
-    mediaType: "application/json",
-    body: { purpose: "COMMISSION_REFERENCE", fileName: file.name, fileSize: file.size, contentType: file.type },
-  });
-  await axios.put(data.signedUploadUrl, file, {
-    headers: buildSignedPutHeaders(data.signedUploadUrl, file.type),
-  });
-  return { imageUrl: data.publicUrl };
+  const uploaded = await uploadMediaFile(file, "COMMISSION_REFERENCE");
+  if (uploaded.localPreviewUrl) URL.revokeObjectURL(uploaded.localPreviewUrl);
+  if (!uploaded.objectKey) throw new Error("Không nhận được mã ảnh tham khảo.");
+  return { imageUrl: uploaded.objectKey };
 }
 
 /** CMS-18: khách chấp nhận bản xem trước mới nhất → COMPLETED. */
@@ -53,7 +52,7 @@ export function approveDeliverableCard(id: number) {
   } }>(OpenAPI, { method: "POST", url: "/api/commissions/{id}/deliverable-card/approve", path: { id } });
 }
 
-/** CMS-20: khách xác nhận thẻ yêu cầu chỉnh sửa mới nhất. Còn lượt miễn phí → CUSTOMER_REVISION_REQUESTED; hết lượt → AWAITING_EXTRA_PAYMENT kèm phiên thanh toán. */
+/** CMS-20: miễn phí → AWAITING_ESTIMATE; có phí → AWAITING_EXTRA_PAYMENT, sau thanh toán mới chờ designer dự kiến thời gian. */
 export function confirmRevisionCard(id: number, messageId: number) {
   return request<{ data: {
     commissionId: number; status: string; revisionsUsed: number; extraRevisionFee: number;

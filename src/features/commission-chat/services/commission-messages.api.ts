@@ -35,7 +35,6 @@ export const CHAT_ACTIVE_STATUSES = new Set([
   "INTERNAL_REVISION_REQUIRED",
   "PREVIEW_DELIVERED",
   "AWAITING_EXTRA_PAYMENT",
-  "CUSTOMER_REVISION_REQUESTED",
   "AWAITING_ESTIMATE",
 ]);
 
@@ -64,8 +63,10 @@ export function sendCommissionMessage(commissionId: number, body: SendCommission
 
 /** Upload ảnh chat qua MED-01 (purpose = COMMISSION_CHAT), trả về publicUrl để gửi kèm messageType IMAGE. */
 export async function uploadCommissionChatImage(commissionId: number, file: File) {
-  const { publicUrl } = await uploadMediaFile(file, "COMMISSION_CHAT", commissionId);
-  return publicUrl;
+  const uploaded = await uploadMediaFile(file, "COMMISSION_CHAT", commissionId);
+  if (uploaded.localPreviewUrl) URL.revokeObjectURL(uploaded.localPreviewUrl);
+  if (!uploaded.objectKey) throw new Error("Không nhận được mã ảnh chat.");
+  return uploaded.objectKey;
 }
 
 /** Gộp + khử trùng lặp theo messageId, sắp xếp createdAt ASC (REST và STOMP có thể trả cùng một tin). */

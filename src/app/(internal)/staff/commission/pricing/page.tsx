@@ -1,5 +1,7 @@
 "use client";
 
+export const instant = false;
+
 import { useEffect, useState, type FormEvent } from "react";
 import { CreatePricingRuleRequest } from "@/api_client/models/CreatePricingRuleRequest";
 import type { ManagementCommissionPricingResponse } from "@/api_client/models/ManagementCommissionPricingResponse";
@@ -10,6 +12,7 @@ import { OpenAPI } from "@/lib/api/client";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { commissionButton } from "@/features/commission/components/FixedCommissionSteps";
 import { formatCommissionMoney } from "@/features/commission/config/fixedPricing";
+import CommissionPresetEditor from "@/features/commission/components/CommissionPresetEditor";
 
 const endpoint = "/api/management/commissions/pricing";
 const panel = "space-y-4 rounded-xl border border-[#cfe3d0] bg-white p-5";
@@ -317,6 +320,7 @@ export default function CommissionPricingConfigPage() {
       ) : !pricing ? <p role="status">Đang tải cấu hình Commission…</p> : (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
           <div className="min-w-0 space-y-5">
+            <CommissionPresetEditor tiers={pricing.tiers} rules={pricing.rules} onSaved={() => setLoadAttempt((value) => value + 1)} />
             {pricing.tiers.length > 0 && <section className={panel}>
               <h2 className="text-lg font-bold text-[#155e59]">Gói thiết kế</h2>
               <ul className="divide-y divide-[#dce8df]">

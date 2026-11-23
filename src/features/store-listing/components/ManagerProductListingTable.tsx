@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  Edit,
   ExternalLink,
   Eye,
   Loader2,
@@ -26,6 +27,7 @@ interface ManagerProductListingTableProps {
   canManage: boolean;
   onApprove: (character: StoreCharacterRow, price?: number) => Promise<void>;
   onRefresh: () => void;
+  onEdit?: (character: StoreCharacterRow) => void;
 }
 
 export default function ManagerProductListingTable({
@@ -34,6 +36,7 @@ export default function ManagerProductListingTable({
   canManage,
   onApprove,
   onRefresh,
+  onEdit,
 }: ManagerProductListingTableProps) {
   const [query, setQuery] = useState("");
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -283,26 +286,18 @@ export default function ManagerProductListingTable({
 
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Status Toggle Simulation */}
-                        <label
-                          className={`relative inline-flex cursor-pointer items-center ${
-                            !canManage || isProcessing ? "cursor-not-allowed opacity-60" : ""
-                          }`}
-                          title={
-                            canManage
-                              ? "Bật chuyển đổi trạng thái sang PUBLISHED"
-                              : "Chỉ Manager mới có quyền duyệt"
-                          }
-                        >
-                          <input
-                            type="checkbox"
-                            checked={false}
+                        {onEdit && (
+                          <button
+                            type="button"
+                            onClick={() => onEdit(row)}
                             disabled={!canManage || isProcessing}
-                            onChange={() => void handleApproveClick(row)}
-                            className="peer sr-only"
-                          />
-                          <div className="peer h-6 w-11 rounded-full bg-slate-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-emerald-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
-                        </label>
+                            title="Chỉnh sửa chi tiết, mô tả hoặc gắn Tags"
+                            className="inline-flex items-center gap-1 rounded-xl border border-[#cfe0d4] bg-white px-2.5 py-1.5 text-xs font-bold text-[#173b28] shadow-sm transition hover:bg-[#eef8f0] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Edit size={13} />
+                            Sửa / Gắn tag
+                          </button>
+                        )}
 
                         {/* Dedicated "Approve" (Duyệt mở bán) button */}
                         <button
@@ -317,7 +312,7 @@ export default function ManagerProductListingTable({
                           ) : (
                             <Check size={13} />
                           )}
-                          {isProcessing ? "Đang duyệt..." : "Duyệt (Approve)"}
+                          {isProcessing ? "Đang duyệt..." : "Duyệt mở bán"}
                         </button>
                       </div>
                     </td>

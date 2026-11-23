@@ -15,6 +15,9 @@ import {
   createCommissionCharacter, findCommissionCharacter, linkedCommissionId, studioMatrixSize,
 } from "@/features/designer/commission-link";
 import { commissionErrorMessage } from "../errors";
+import { uploadMediaFile } from "@/lib/api/media";
+import CommissionRevisionTimeline from "./CommissionRevisionTimeline";
+import CommissionDraftUpload from "./CommissionDraftUpload";
 import {
   getCommissionQueue, getManagementCommission, uploadCommissionDraft,
   type CommissionManagementDetail, type CommissionQueueItem, type CommissionSubmissionItem,
@@ -32,7 +35,7 @@ const STATUS_META: Record<string, { label: string; hint: string; tone: "todo" | 
   INTERNAL_REVISION_REQUIRED: { label: "Staff yêu cầu sửa", hint: "Sửa theo ghi chú của staff, lưu version mới rồi nộp lại.", tone: "todo" },
   INTERNAL_REVIEW: { label: "Chờ staff duyệt", hint: "Bạn đã nộp một version, staff đang duyệt.", tone: "wait" },
   PREVIEW_DELIVERED: { label: "Khách đang xem", hint: "Staff đã gửi bản xem trước cho khách.", tone: "wait" },
-  CUSTOMER_REVISION_REQUESTED: { label: "Khách yêu cầu sửa", hint: "Khách đã yêu cầu chỉnh sửa; chờ commission mở lại cho thiết kế.", tone: "wait" },
+  AWAITING_ESTIMATE: { label: "Cần dự kiến thời gian", hint: "Khách đã xác nhận yêu cầu sửa. Nhập thời gian trước khi nộp bản sửa.", tone: "todo" },
   AWAITING_EXTRA_PAYMENT: { label: "Chờ khách trả phí", hint: "Khách đang thanh toán phí chỉnh sửa bổ sung.", tone: "wait" },
   COMPLETED: { label: "Hoàn thành", hint: "Commission đã hoàn thành.", tone: "done" },
   CANCELLED: { label: "Đã hủy", hint: "Commission đã bị hủy.", tone: "muted" },
@@ -99,9 +102,9 @@ function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void 
 // ---------------------------------------------------------------------------
 
 const TABS: { key: string; label: string; statuses?: string[] }[] = [
-  { key: "todo", label: "Cần làm", statuses: ["IN_PROGRESS", "INTERNAL_REVISION_REQUIRED"] },
+  { key: "todo", label: "Cần làm", statuses: ["IN_PROGRESS", "INTERNAL_REVISION_REQUIRED", "AWAITING_ESTIMATE"] },
   { key: "review", label: "Chờ staff duyệt", statuses: ["INTERNAL_REVIEW"] },
-  { key: "customer", label: "Phía khách", statuses: ["PREVIEW_DELIVERED", "CUSTOMER_REVISION_REQUESTED", "AWAITING_EXTRA_PAYMENT"] },
+  { key: "customer", label: "Phía khách", statuses: ["PREVIEW_DELIVERED", "AWAITING_EXTRA_PAYMENT"] },
   { key: "done", label: "Đã xong", statuses: ["COMPLETED", "CANCELLED"] },
   { key: "all", label: "Tất cả" },
 ];
@@ -295,10 +298,16 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
 
   useEffect(() => {
     let active = true;
-    const query = getManagementCommission(commissionId);
-    query.then(({ data }) => { if (active) { setDetail(data); setDetailError(""); } })
-      .catch((failure) => { if (active) setDetailError(getApiErrorMessage(failure, "Không tải được commission.")); });
-    return () => { active = false; query.cancel(); };
+    let timer: ReturnType<typeof setTimeout>;
+    let query: ReturnType<typeof getManagementCommission>;
+    function refresh() {
+      query = getManagementCommission(commissionId);
+      query.then(({ data }) => { if (active) { setDetail(data); setDetailError(""); } })
+        .catch((failure) => { if (active) setDetailError(getApiErrorMessage(failure, "Không tải được commission.")); })
+        .finally(() => { if (active) timer = setTimeout(refresh, 10000); });
+    }
+    refresh();
+    return () => { active = false; clearTimeout(timer); query?.cancel(); };
   }, [commissionId, revision]);
 
   useEffect(() => {
@@ -363,7 +372,14 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
     setSubmitting(true);
     setSubmitError("");
     try {
-      const { data } = await uploadCommissionDraft(detail.commissionId, { imageUrl: selected.previewGifUrl, designerNote: designerNote || undefined });
+      const response = await fetch(selected.previewGifUrl);
+      if (!response.ok) throw new Error("Không tải được ảnh phiên bản. Hãy mở Studio và lưu lại.");
+      const blob = await response.blob();
+      const file = new File([blob], `commission-${detail.commissionId}-v${selected.versionNumber}`, { type: blob.type });
+      const uploaded = await uploadMediaFile(file, "COMMISSION_DRAFT", detail.commissionId);
+      if (uploaded.localPreviewUrl) URL.revokeObjectURL(uploaded.localPreviewUrl);
+      if (!uploaded.objectKey) throw new Error("Không nhận được mã bản nháp.");
+      const { data } = await uploadCommissionDraft(detail.commissionId, { imageUrl: uploaded.objectKey, designerNote: designerNote || undefined });
       setSubmitted({ versionNumber: selected.versionNumber, draftVersion: data.versionNumber });
       setSelectedId(undefined);
       setNote("");
@@ -421,6 +437,8 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
         </section>
       )}
 
+      <CommissionRevisionTimeline detail={detail} designer onChanged={reload} />
+      {draftable && <CommissionDraftUpload commissionId={commissionId} onUploaded={reload} />}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className={`${shell} p-5`} aria-labelledby="character-heading">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-studio-line pb-4">

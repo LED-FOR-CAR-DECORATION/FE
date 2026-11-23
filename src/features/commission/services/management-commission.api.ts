@@ -12,7 +12,9 @@ export type CommissionQueueItem = {
   targetMatrixDimensions?: string | null;
   totalPrice?: number;
   assignedStaffName?: string | null;
+  assignedStaffId?: number | null;
   assignedDesignerName?: string | null;
+  assignedDesignerId?: number | null;
 };
 
 export type CommissionManagementDetail = CommissionQueueItem & {
@@ -29,6 +31,21 @@ export type CommissionManagementDetail = CommissionQueueItem & {
   createdAt?: string | null;
   autoCompleteAt?: string | null;
   submissions?: CommissionSubmissionItem[];
+  revisionRequests?: CommissionRevisionRequest[];
+};
+
+export type CommissionRevisionRequest = {
+  revisionRequestId: number;
+  messageId: number;
+  revisionNumber: number;
+  description: string;
+  usesFreeQuota: boolean;
+  revisionFee: number;
+  status: string;
+  estimatedHours?: number | null;
+  estimateSource?: string | null;
+  designerDueAt?: string | null;
+  customerDueAt?: string | null;
 };
 
 export type CommissionSubmissionItem = {
@@ -68,9 +85,29 @@ export function approveCommission(id: number) {
   return request(OpenAPI, { method: "POST", url: endpoint + "/{id}/approve", path: { id } });
 }
 
+export function rejectCommission(id: number, rejectionReason: string) {
+  return request(OpenAPI, {
+    method: "POST", url: endpoint + "/{id}/reject", path: { id },
+    mediaType: "application/json", body: { rejectionReason },
+  });
+}
+
 export function assignCommissionDesigner(id: number, designerId: number) {
   return request(OpenAPI, {
     method: "POST", url: endpoint + "/{id}/assign", path: { id }, mediaType: "application/json", body: { designerId },
+  });
+}
+
+export function estimateCommissionRevision(id: number, estimatedHours: number) {
+  return request(OpenAPI, {
+    method: "PATCH", url: endpoint + "/{id}/estimate", path: { id },
+    mediaType: "application/json", body: { estimatedHours },
+  });
+}
+
+export function reassignCommission(id: number, body: { staffId?: number; designerId?: number; reason: string }) {
+  return request(OpenAPI, {
+    method: "PATCH", url: endpoint + "/{id}/reassign", path: { id }, mediaType: "application/json", body,
   });
 }
 

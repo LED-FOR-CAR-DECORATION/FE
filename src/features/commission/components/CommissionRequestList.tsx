@@ -36,27 +36,49 @@ function ServerCommissionRequests() {
   const [page, setPage] = useState(0);
   const [result, setResult] = useState<{ page: number; items: CustomerCommissionSummaryItem[] }>();
   const [failedPage, setFailedPage] = useState<number>();
+  const [retryCount, setRetryCount] = useState(0);
+  const [errorTraceId, setErrorTraceId] = useState<string>();
   const size = 20;
 
   useEffect(() => {
     setFailedPage(undefined);
+    setErrorTraceId(undefined);
     let active = true;
     const request = CustomerCommissionsService.listMyCommissions({ page, size });
     request.then(({ data }) => {
       if (active) setResult({ page, items: data ?? [] });
-    }).catch(() => {
-      if (active) setFailedPage(page);
+    }).catch((error: unknown) => {
+      if (!active) return;
+      setFailedPage(page);
+      if (error && typeof error === "object" && "body" in error) {
+        const body = error.body;
+        if (body && typeof body === "object" && "traceId" in body && typeof body.traceId === "string") {
+          setErrorTraceId(body.traceId);
+        }
+      }
     });
     return () => {
       active = false;
       request.cancel();
     };
-  }, [page]);
+  }, [page, retryCount]);
 
   const items = result?.page === page ? result.items : undefined;
   return (
     <div className="space-y-3">
-      {failedPage === page ? <p role="alert">Không tải được yêu cầu Commission.</p> :
+      {failedPage === page ? (
+        <div role="alert" className="space-y-3 rounded-xl border border-[#cfe3d0] bg-white p-5">
+          <p>Không tải được yêu cầu Commission. Vui lòng thử lại.</p>
+          {errorTraceId && <p className="break-all text-sm text-gray-600">Mã hỗ trợ: {errorTraceId}</p>}
+          <button type="button" onClick={() => {
+            setFailedPage(undefined);
+            setResult(undefined);
+            setRetryCount((count) => count + 1);
+          }} className="min-h-11 rounded-lg bg-[#155e59] px-4 py-2 font-semibold text-white hover:bg-[#0e4b47] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#155e59]">
+            Thử lại
+          </button>
+        </div>
+      ) :
         !items ? <p role="status">Đang tải yêu cầu Commission…</p> :
           items.length === 0 ? <p className="rounded-xl border border-[#cfe3d0] bg-white p-5">Chưa có yêu cầu nào. <Link href="/commission/new" className="font-semibold text-[#155e59] underline">Tạo yêu cầu mới</Link></p> : (
             <ul className="space-y-3">

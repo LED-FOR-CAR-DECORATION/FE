@@ -40,7 +40,7 @@ export const STAFF_FILTERS: InboxFilter[] = [
   { key: "all", label: "Tất cả" },
   { key: "unread", label: "Chưa đọc" },
   { key: "review", label: "Chờ duyệt bản nháp", statuses: ["INTERNAL_REVIEW"] },
-  { key: "design", label: "Đang thiết kế", statuses: ["PAID", "IN_PROGRESS", "INTERNAL_REVISION_REQUIRED", "CUSTOMER_REVISION_REQUESTED"] },
+  { key: "design", label: "Đang thiết kế", statuses: ["PAID", "IN_PROGRESS", "INTERNAL_REVISION_REQUIRED", "AWAITING_ESTIMATE"] },
   { key: "customer", label: "Chờ khách", statuses: ["PREVIEW_DELIVERED", "AWAITING_EXTRA_PAYMENT"] },
   { key: "done", label: "Hoàn thành", statuses: ["COMPLETED"] },
 ];

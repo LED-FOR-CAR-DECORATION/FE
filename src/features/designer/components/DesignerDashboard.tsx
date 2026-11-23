@@ -23,9 +23,9 @@ import {
 import { COMMISSION_STATUS_LABELS } from "@/features/commission-chat/commission-status";
 
 const GROUPS = {
-  todo: ["IN_PROGRESS", "INTERNAL_REVISION_REQUIRED"],
+  todo: ["IN_PROGRESS", "INTERNAL_REVISION_REQUIRED", "AWAITING_ESTIMATE"],
   review: ["INTERNAL_REVIEW"],
-  customer: ["PREVIEW_DELIVERED", "CUSTOMER_REVISION_REQUESTED", "AWAITING_EXTRA_PAYMENT"],
+  customer: ["PREVIEW_DELIVERED", "AWAITING_EXTRA_PAYMENT"],
   done: ["COMPLETED"],
 } as const;
 

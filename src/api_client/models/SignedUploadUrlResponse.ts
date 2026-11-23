@@ -11,13 +11,17 @@ export type SignedUploadUrlResponse = {
      */
     signedUploadUrl?: string;
     /**
-     * Permanent public/CDN URL to reference the uploaded file in downstream endpoints
+     * Permanent public CDN URL. Only set for public purposes (CHARACTER_ASSET, STORE_PRODUCT); null for private purposes (COMMISSION_REFERENCE, COMMISSION_CHAT, COMMISSION_DRAFT, WARRANTY_EVIDENCE), which are only viewable through short-lived signed URLs returned by the owning endpoints.
      */
-    publicUrl?: string;
+    publicUrl?: string | null;
     /**
-     * Bucket object key path under which the asset will reside
+     * Bucket object key of the asset. For private purposes, send this value as the imageUrl / mediaUrl / evidenceMediaUrls item of the downstream endpoint.
      */
     objectKey?: string;
+    /**
+     * Headers the client must send verbatim with the PUT upload (they are part of the signature)
+     */
+    uploadHeaders?: Record<string, string>;
     /**
      * Expiration timestamp of the signed upload URL in ISO-8601 format
      */

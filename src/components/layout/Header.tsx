@@ -12,6 +12,7 @@ import {
   Sparkles,
   LayoutDashboard,
   MessageCircle,
+  Crown,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -79,6 +80,13 @@ function UserDropdown() {
                 className="cursor-pointer flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-xs font-bold uppercase text-black transition-colors hover:bg-primary/20"
               >
                 <ShoppingBag size={15} /> Thư viện nhân vật
+              </Link>
+              <Link
+                href="/subscriptions"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-[#eaf5e8]"
+              >
+                <Crown size={15} /> Gói hội viên
               </Link>
               <Link
                 href="/commission"
@@ -193,11 +201,12 @@ export default function Header() {
             </Link>
             <Link
               href="/commission"
-              className={`cursor-pointer transition-colors hover:text-primary-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+              className={`cursor-pointer inline-flex items-center gap-1.5 transition-colors hover:text-primary-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                 pathname.startsWith("/commission") ? "border-b-2 border-black pb-0.5" : ""
               }`}
             >
-              Thiết kế Commission
+              <Sparkles size={14} aria-hidden="true" />
+              Thiết kế riêng
             </Link>
           </nav>
         </div>
@@ -308,7 +317,7 @@ export default function Header() {
             onClick={() => setMobileOpen(false)}
             className="cursor-pointer border-b-2 border-black pb-2 text-black hover:text-primary-ink"
           >
-            Thiết kế Commission
+            Thiết kế riêng
           </Link>
           {!isLoading && !isAuthenticated && (
             <div className="flex gap-2 border-t-2 border-black pt-3">
@@ -333,11 +342,23 @@ export default function Header() {
 
       {/* Marquee banner */}
       <div className="flex h-8 w-full items-center overflow-hidden border-t-2 border-black bg-white">
-        <div className="flex w-full items-center justify-around gap-6 whitespace-nowrap px-4 text-[11px] font-black uppercase tracking-wider text-black">
-          <span>★ HỆ SINH THÁI BẢNG LED &amp; PIXEL ART</span>
-          <span className="hidden sm:inline">★ MIỄN PHÍ VẬN CHUYỂN TOÀN QUỐC</span>
-          <span className="hidden md:inline">★ BẢO HÀNH CHÍNH HÃNG 12 THÁNG</span>
-          <span className="hidden lg:inline">★ THIẾT KẾ RIÊNG THEO MẪU XE</span>
+        <div className="animate-marquee text-[11px] font-black uppercase tracking-wider text-black">
+          {[0, 1].map((loopIdx) => (
+            <div key={loopIdx} aria-hidden={loopIdx === 1} className="flex shrink-0 items-center gap-8 pr-8 whitespace-nowrap">
+              <span>BỘ SƯU TẬP NHÂN VẬT MỚI</span>
+              <span aria-hidden="true">•</span>
+              <span>BẢNG LED CHÍNH HÃNG</span>
+              <span aria-hidden="true">•</span>
+              <span>NHẬN THIẾT KẾ RIÊNG</span>
+              <span aria-hidden="true">•</span>
+              <span>BỘ SƯU TẬP NHÂN VẬT MỚI</span>
+              <span aria-hidden="true">•</span>
+              <span>BẢNG LED CHÍNH HÃNG</span>
+              <span aria-hidden="true">•</span>
+              <span>NHẬN THIẾT KẾ RIÊNG</span>
+              <span aria-hidden="true">•</span>
+            </div>
+          ))}
         </div>
       </div>
     </header>

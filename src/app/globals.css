@@ -289,6 +289,26 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .profile-enter, .profile-avatar, .profile-pixels { animation: none; }
   .profile-tab, .address-card { transition: none; }
+  .animate-marquee { animation: none; }
+}
+
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 26s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
 }
 
 /* Neo-brutalism/retro utilities for the requested UI style */

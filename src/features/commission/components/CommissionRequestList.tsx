@@ -9,6 +9,21 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { formatCommissionMoney } from "../config/fixedPricing";
 import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
 
+const STATUS_LABELS: Record<string, string> = {
+  PENDING_REVIEW: "Chờ nhân viên duyệt",
+  PENDING_PAYMENT: "Chờ thanh toán",
+  PAID: "Đã thanh toán · Chờ phân công",
+  IN_PROGRESS: "Đang thiết kế",
+  INTERNAL_REVIEW: "Đang kiểm duyệt bản nháp",
+  INTERNAL_REVISION_REQUIRED: "Đang hoàn thiện bản nháp",
+  PREVIEW_DELIVERED: "Đã gửi bản xem trước",
+  AWAITING_EXTRA_PAYMENT: "Chờ thanh toán phí chỉnh sửa",
+  AWAITING_ESTIMATE: "Chờ dự kiến thời gian sửa",
+  COMPLETED: "Hoàn thành",
+  CANCELLED: "Đã hủy",
+  EXPIRED: "Hết hạn thanh toán",
+};
+
 export default function CommissionRequestList() {
   const { user, isLoading } = useAuth();
   const userId = user?.role === "CUSTOMER" ? user.userId : undefined;
@@ -88,13 +103,17 @@ function ServerCommissionRequests() {
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                     <span className="text-text-muted">{item.targetMatrixDimensions}</span>
                     <span className="break-words border border-black bg-primary/15 px-2 py-0.5 font-bold text-primary-ink">
-                      {item.status === "PENDING_REVIEW" ? "Chờ nhân viên duyệt" : item.status}
+                      {(item.status && STATUS_LABELS[item.status]) ?? item.status}
                     </span>
                   </div>
                   {item.totalPrice !== undefined && <p className="mt-3 font-black tabular-nums text-primary-ink">{formatCommissionMoney(item.totalPrice)}</p>}
                   <div className="mt-4 flex flex-wrap gap-2 border-t border-dashed border-black/30 pt-3">
                     <Link href={`/commission/${item.commissionId}/payment`} className="btn-secondary inline-flex min-h-11 items-center text-sm">
-                      {item.status === "PENDING_PAYMENT" || item.status === "AWAITING_EXTRA_PAYMENT" ? "Thanh toán" : "Xem thanh toán"}
+                      {item.status === "PENDING_PAYMENT" || item.status === "AWAITING_EXTRA_PAYMENT"
+                        ? "Thanh toán"
+                        : item.status === "PENDING_REVIEW"
+                          ? "Xem trạng thái duyệt"
+                          : "Xem thanh toán"}
                       <span className="sr-only"> cho {item.title}</span>
                     </Link>
                     {canReadHistory(item.status) && (

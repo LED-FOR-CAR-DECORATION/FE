@@ -3,18 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   Check,
   Crown,
   Image as ImageIcon,
   Infinity as InfinityIcon,
   Loader2,
+  Rocket,
   Sparkles,
-  Tag,
   Upload,
   X,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
-import { fetchStoreTags } from "@/lib/api/products";
+import CategoryTagSelector from "./CategoryTagSelector";
+import { apiUpdateProductStatus, fetchStoreTags } from "@/lib/api/products";
 import { uploadMediaFile } from "@/lib/api/media";
 import {
   apiCreateSubscription,
@@ -26,11 +28,13 @@ import type { TagItem } from "@/api_client";
 interface CreateSubscriptionModalProps {
   onClose: () => void;
   onSuccess: (created: SubscriptionDetailResult) => void;
+  onBackToTypeSelect?: () => void;
 }
 
 export default function CreateSubscriptionModal({
   onClose,
   onSuccess,
+  onBackToTypeSelect,
 }: CreateSubscriptionModalProps) {
   const [planName, setPlanName] = useState("");
   const [planCode, setPlanCode] = useState("");
@@ -38,16 +42,20 @@ export default function CreateSubscriptionModal({
   const [description, setDescription] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState("");
+  const [galleryUrlsText, setGalleryUrlsText] = useState("");
   const [isLifetime, setIsLifetime] = useState(false);
   const [durationDays, setDurationDays] = useState<string>("30");
   const [allAccessCharacters, setAllAccessCharacters] = useState(true);
+  const [publishImmediately, setPublishImmediately] = useState(false);
 
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(true);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,11 +74,21 @@ export default function CreateSubscriptionModal({
     };
   }, []);
 
-  const toggleTag = (tagId?: number) => {
-    if (!tagId) return;
+  const toggleTag = (tagId: number) => {
     setSelectedTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
     );
+  };
+
+  const handleTagCreated = (created: TagItem) => {
+    setAvailableTags((prev) =>
+      prev.some((t) => t.tagId === created.tagId) ? prev : [...prev, created],
+    );
+    if (created.tagId) {
+      setSelectedTagIds((prev) =>
+        prev.includes(created.tagId!) ? prev : [...prev, created.tagId!],
+      );
+    }
   };
 
   const handleThumbnailFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,15 +97,47 @@ export default function CreateSubscriptionModal({
     setIsUploadingThumbnail(true);
     setError(null);
     try {
-      const res = await uploadMediaFile(file, "STORE_PRODUCT");
+      const res = await uploadMediaFile(file, "PRODUCT_SUBSCRIPTION");
       setThumbnailUrl(res.publicUrl);
       setThumbnailPreviewUrl(res.localPreviewUrl || res.publicUrl);
     } catch (err: any) {
-      setError(err?.message || "Không thể tải ảnh thumbnail lên.");
+      setError(err?.message || "Không thể tải ảnh đại diện lên.");
     } finally {
       setIsUploadingThumbnail(false);
       if (thumbnailInputRef.current) thumbnailInputRef.current.value = "";
     }
+  };
+
+  const handleGalleryFilesChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setIsUploadingGallery(true);
+    setError(null);
+    try {
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        const res = await uploadMediaFile(file, "PRODUCT_SUBSCRIPTION");
+        if (res.publicUrl) uploadedUrls.push(res.publicUrl);
+      }
+      setGalleryUrlsText((prev) => {
+        const existing = prev.trim();
+        const joined = uploadedUrls.join("\n");
+        return existing ? `${existing}\n${joined}` : joined;
+      });
+    } catch (err: any) {
+      setError(err?.message || "Không thể tải thư viện ảnh lên.");
+    } finally {
+      setIsUploadingGallery(false);
+      if (galleryInputRef.current) galleryInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveGalleryUrl = (indexToRemove: number) => {
+    const list = galleryUrlsText
+      .split(/[\n,]/)
+      .map((u) => u.trim())
+      .filter((u) => u.length > 0);
+    setGalleryUrlsText(list.filter((_, idx) => idx !== indexToRemove).join("\n"));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,7 +157,7 @@ export default function CreateSubscriptionModal({
 
     const parsedPrice = Number(basePrice);
     if (basePrice.trim() === "" || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      setError("Giá bán phải là số lớn hơn hoặc bằng 0 đ.");
+      setError("Giá bán phải là số lớn hơn hoặc bằng 0 VNĐ.");
       return;
     }
 
@@ -121,27 +171,57 @@ export default function CreateSubscriptionModal({
       parsedDuration = d;
     }
 
-    const trimmedThumb = thumbnailUrl.trim();
-    if (trimmedThumb) {
-      if (trimmedThumb.length > 500 || !/^https?:\/\/\S+$/i.test(trimmedThumb)) {
-        setError("Thumbnail URL phải bắt đầu bằng http:// hoặc https:// và tối đa 500 ký tự.");
+    const rawThumb = thumbnailUrl.trim();
+    const resolvedThumb =
+      rawThumb.startsWith("/") && typeof window !== "undefined"
+        ? `${window.location.origin}${rawThumb}`
+        : rawThumb;
+    if (resolvedThumb) {
+      if (resolvedThumb.length > 500 || !/^https?:\/\/\S+$/i.test(resolvedThumb)) {
+        setError("Ảnh đại diện phải là đường dẫn http://, https:// hoặc /images/... và tối đa 500 ký tự.");
         return;
       }
     }
 
+    const rawGallery = galleryUrlsText
+      .split(/[\n,]/)
+      .map((u) => u.trim())
+      .filter((u) => u.length > 0);
+    const resolvedGallery: string[] = [];
+    for (let i = 0; i < rawGallery.length; i += 1) {
+      const candidate =
+        rawGallery[i].startsWith("/") && typeof window !== "undefined"
+          ? `${window.location.origin}${rawGallery[i]}`
+          : rawGallery[i];
+      if (candidate.length > 500 || !/^https?:\/\/\S+$/i.test(candidate)) {
+        setError(`Ảnh thư viện #${i + 1} phải là đường dẫn http://, https:// hoặc /images/... hợp lệ.`);
+        return;
+      }
+      resolvedGallery.push(candidate);
+    }
+
     setIsSubmitting(true);
     try {
-      const created = await apiCreateSubscription({
+      let created = await apiCreateSubscription({
         planName: trimmedName,
         planCode: trimmedCode,
         basePrice: parsedPrice,
         description: description.trim() || undefined,
-        thumbnailUrl: trimmedThumb || undefined,
+        thumbnailUrl: resolvedThumb || undefined,
+        galleryUrls: resolvedGallery.length > 0 ? resolvedGallery : undefined,
         isLifetime,
         durationDays: parsedDuration,
         allAccessCharacters,
         tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
       });
+      if (publishImmediately && created.productId) {
+        try {
+          await apiUpdateProductStatus(created.productId, "PUBLISHED");
+          created = { ...created, status: "PUBLISHED" };
+        } catch {
+          // Keep UNPUBLISHED if publish call fails
+        }
+      }
       onSuccess(created);
     } catch (err) {
       setError(formatSubscriptionApiError(err));
@@ -153,10 +233,22 @@ export default function CreateSubscriptionModal({
   return (
     <Modal
       onClose={onClose}
-      title="Tạo gói hội viên mới (Subscription)"
+      title="Tạo Gói hội viên & Sản phẩm bày bán"
+      description="Tạo đồng thời Gói hội viên và sản phẩm bày bán trên Cửa hàng."
       size="lg"
       footer={
         <>
+          {onBackToTypeSelect && (
+            <button
+              type="button"
+              onClick={onBackToTypeSelect}
+              disabled={isSubmitting}
+              className="mr-auto inline-flex items-center gap-1.5 rounded-lg border border-[#cfe0d4] bg-white px-3.5 py-2 text-xs font-bold text-[#1f432b] transition hover:bg-[#eef8f0] disabled:opacity-50"
+            >
+              <ArrowLeft size={14} />
+              Đổi loại sản phẩm
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -168,12 +260,16 @@ export default function CreateSubscriptionModal({
           <button
             type="submit"
             form="create-subscription-form"
-            disabled={isSubmitting || isUploadingThumbnail}
+            disabled={isSubmitting || isUploadingThumbnail || isUploadingGallery}
             className="inline-flex items-center gap-2 rounded-lg bg-[#2d6a4f] px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-[#1f432b] disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
                 <Loader2 size={15} className="animate-spin" /> Đang tạo gói...
+              </>
+            ) : publishImmediately ? (
+              <>
+                <Rocket size={15} /> Tạo gói &amp; Mở bán ngay
               </>
             ) : (
               <>
@@ -337,102 +433,168 @@ export default function CreateSubscriptionModal({
           />
         </div>
 
-        {/* Thumbnail Upload */}
-        <div className="rounded-xl border border-[#d8e6dc] bg-[#f9fdfa] p-3">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-[#1f432b]">
-              <ImageIcon size={14} /> Ảnh đại diện gói (Thumbnail)
-            </label>
-            <button
-              type="button"
-              disabled={isUploadingThumbnail}
-              onClick={() => thumbnailInputRef.current?.click()}
-              className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
-            >
-              {isUploadingThumbnail ? (
-                <>
-                  <Loader2 size={12} className="animate-spin" /> Đang tải...
-                </>
-              ) : (
-                <>
-                  <Upload size={12} /> Chọn ảnh từ máy
-                </>
-              )}
-            </button>
+        {/* Hình ảnh sản phẩm (Ảnh đại diện & Thư viện ảnh) */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-[#d8e6dc] bg-[#f9fdfa] p-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-xs font-bold text-[#1f432b]">
+                <ImageIcon size={14} /> Ảnh đại diện
+              </label>
+              <button
+                type="button"
+                disabled={isUploadingThumbnail}
+                onClick={() => thumbnailInputRef.current?.click()}
+                className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
+              >
+                {isUploadingThumbnail ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" /> Đang tải...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={12} /> Chọn ảnh từ máy
+                  </>
+                )}
+              </button>
+              <input
+                ref={thumbnailInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={handleThumbnailFileChosen}
+              />
+            </div>
+
+            {(thumbnailPreviewUrl || thumbnailUrl) && (
+              <div className="mt-2 flex items-center gap-3 rounded-lg border border-[#d8e6dc] bg-white p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={thumbnailPreviewUrl || thumbnailUrl}
+                  alt="Xem trước ảnh đại diện"
+                  className="h-12 w-12 rounded-md border border-[#cbe4d2] object-cover"
+                />
+                <p className="min-w-0 flex-1 truncate text-xs text-[#1f432b]">{thumbnailUrl}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setThumbnailUrl("");
+                    setThumbnailPreviewUrl("");
+                  }}
+                  className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-red-500"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             <input
-              ref={thumbnailInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              className="hidden"
-              onChange={handleThumbnailFileChosen}
+              type="text"
+              value={thumbnailUrl}
+              onChange={(e) => {
+                setThumbnailUrl(e.target.value);
+                setThumbnailPreviewUrl(e.target.value);
+              }}
+              placeholder="Hoặc dán URL https://... hoặc /images/..."
+              className="mt-2 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
             />
           </div>
 
-          {(thumbnailPreviewUrl || thumbnailUrl) && (
-            <div className="mt-2 flex items-center gap-3 rounded-lg border border-[#d8e6dc] bg-white p-2">
-              <img
-                src={thumbnailPreviewUrl || thumbnailUrl}
-                alt="Thumbnail preview"
-                className="h-12 w-12 rounded-md border border-[#cbe4d2] object-cover"
-              />
-              <p className="min-w-0 flex-1 truncate text-xs text-[#1f432b]">{thumbnailUrl}</p>
+          <div className="rounded-xl border border-[#d8e6dc] bg-[#f9fdfa] p-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-xs font-bold text-[#1f432b]">
+                <ImageIcon size={14} /> Thư viện ảnh
+              </label>
               <button
                 type="button"
-                onClick={() => {
-                  setThumbnailUrl("");
-                  setThumbnailPreviewUrl("");
-                }}
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-red-500"
+                disabled={isUploadingGallery}
+                onClick={() => galleryInputRef.current?.click()}
+                className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
               >
-                <X size={14} />
+                {isUploadingGallery ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" /> Đang tải...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={12} /> Tải nhiều ảnh
+                  </>
+                )}
               </button>
+              <input
+                ref={galleryInputRef}
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={handleGalleryFilesChosen}
+              />
             </div>
-          )}
 
-          <input
-            type="text"
-            value={thumbnailUrl}
-            onChange={(e) => {
-              setThumbnailUrl(e.target.value);
-              setThumbnailPreviewUrl(e.target.value);
-            }}
-            placeholder="Hoặc dán URL https://cdn.lumintra.shop/..."
-            className="mt-2 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-          />
+            {(() => {
+              const galleryList = galleryUrlsText
+                .split(/[\n,]/)
+                .map((u) => u.trim())
+                .filter((u) => u.length > 0);
+              if (galleryList.length === 0) return null;
+              return (
+                <div className="mt-2 flex flex-wrap gap-2 rounded-lg border border-[#d8e6dc] bg-white p-2">
+                  {galleryList.map((url, idx) => (
+                    <div
+                      key={idx}
+                      className="relative h-12 w-12 overflow-hidden rounded-md border border-[#cbe4d2]"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Ảnh ${idx + 1}`} className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveGalleryUrl(idx)}
+                        className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-red-600"
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            <textarea
+              rows={2}
+              value={galleryUrlsText}
+              onChange={(e) => setGalleryUrlsText(e.target.value)}
+              placeholder="Hoặc dán danh sách URL (mỗi dòng 1 link)"
+              className="mt-2 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+            />
+          </div>
         </div>
 
         {/* Tags */}
-        <div className="rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
-          <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-[#1f432b]">
-            <Tag size={14} /> Thẻ phân loại (Tags)
-          </label>
-          {isLoadingTags ? (
-            <p className="text-xs text-text-muted">Đang tải danh sách thẻ...</p>
-          ) : availableTags.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {availableTags.map((tag) => {
-                const isSelected = selectedTagIds.includes(tag.tagId ?? -1);
-                return (
-                  <button
-                    key={tag.tagId}
-                    type="button"
-                    onClick={() => toggleTag(tag.tagId)}
-                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold transition ${
-                      isSelected
-                        ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b]"
-                        : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
-                    }`}
-                  >
-                    {isSelected && <Check size={12} />}
-                    {tag.name} (#{tag.tagId})
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-text-muted">Chưa có thẻ nào trên hệ thống.</p>
-          )}
-        </div>
+        <CategoryTagSelector
+          availableTags={availableTags}
+          selectedTagIds={selectedTagIds}
+          isLoading={isLoadingTags}
+          label="Thẻ phân loại sản phẩm"
+          onToggleTag={toggleTag}
+          onTagCreated={handleTagCreated}
+        />
+
+        {/* Trạng thái mở bán */}
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-[#d2e4d7] bg-[#f7fbf8] p-3 text-xs text-[#2e573c]">
+          <div>
+            <span className="block font-bold text-[#1f432b]">
+              Mở bán ngay sau khi tạo
+            </span>
+            <span className="text-text-muted">
+              Mặc định gói hội viên tạo mới ở trạng thái <strong>Chưa mở bán</strong> để kiểm tra trước khi đăng lên Cửa hàng.
+            </span>
+          </div>
+          <input
+            type="checkbox"
+            checked={publishImmediately}
+            onChange={(e) => setPublishImmediately(e.target.checked)}
+            className="h-4 w-4 accent-[#439660]"
+          />
+        </label>
       </form>
     </Modal>
   );

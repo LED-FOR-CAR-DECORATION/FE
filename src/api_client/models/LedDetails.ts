@@ -6,6 +6,7 @@
  * Optional LED model to create with the product
  */
 export type LedDetails = {
+    modelId?: number;
     modelName: string;
     spec?: Record<string, any>;
     stockQuantity: number;

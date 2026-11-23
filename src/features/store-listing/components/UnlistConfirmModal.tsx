@@ -30,8 +30,8 @@ export default function UnlistConfirmModal({ character, onClose, onConfirm }: Un
 
   return (
     <Modal
-      title="Ẩn Character khỏi Store?"
-      description={`${character.name} sẽ ngừng hiển thị công khai trên Store.`}
+      title="Chuyển nhân vật về Chờ duyệt?"
+      description={`${character.name} sẽ chuyển sang trạng thái Chờ duyệt (UNPUBLISHED) và ngừng hiển thị trên cửa hàng.`}
       onClose={onClose}
       busy={isSubmitting}
       footer={
@@ -42,7 +42,7 @@ export default function UnlistConfirmModal({ character, onClose, onConfirm }: Un
             disabled={isSubmitting}
             className="rounded-lg border border-[#cfe0d4] bg-white px-4 py-2 text-sm font-bold hover:bg-[#eef8f0] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Giữ lại trên Store
+            Giữ nguyên Đang bán
           </button>
           <button
             type="button"
@@ -51,14 +51,14 @@ export default function UnlistConfirmModal({ character, onClose, onConfirm }: Un
             className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <EyeOff size={15} />}
-            Ẩn (Unlist)
+            Chuyển về Chờ duyệt
           </button>
         </>
       }
     >
       <p className="text-sm font-medium text-[#3d5a47]">
-        Những khách hàng đã sở hữu Character này trước đó vẫn giữ toàn quyền sử dụng. Sau này nếu muốn mở bán lại, bạn sẽ
-        cần chủ động chọn version khi thực hiện Publish lại.
+        Những khách hàng đã sở hữu nhân vật này trước đó vẫn giữ toàn quyền sử dụng. Sau này nếu muốn mở bán lại, bạn sẽ
+        cần chủ động chọn phiên bản khi thực hiện mở bán lại.
       </p>
       {error && (
         <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">

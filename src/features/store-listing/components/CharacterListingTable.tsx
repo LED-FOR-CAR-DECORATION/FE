@@ -5,12 +5,9 @@ import Image from "next/image";
 import {
   AlertTriangle,
   Archive,
-  ArrowLeftRight,
   CheckCircle2,
   Edit,
   EyeOff,
-  Plus,
-  Rocket,
   RotateCcw,
   Search,
   Sparkles,
@@ -18,10 +15,11 @@ import {
   Undo2,
 } from "lucide-react";
 import { formatDateTime } from "../format";
-import type { ListingStatus, PublishMode, StoreCharacterRow } from "../types";
+import type { PublishMode, StoreCharacterRow, StoreProductStatus } from "../types";
 import StatusBadge, { STATUS_LABEL } from "./StatusBadge";
+import type { StoreStatusFilter } from "./StoreListingToolbar";
 
-type StatusFilter = ListingStatus | "All";
+type StatusFilter = StoreProductStatus | "All";
 
 interface CharacterListingTableProps {
   rows: StoreCharacterRow[];
@@ -36,28 +34,29 @@ interface CharacterListingTableProps {
   onArchive?: (character: StoreCharacterRow) => void;
   onDelete?: (character: StoreCharacterRow) => void;
   onCreateCharacter?: () => void;
+  statusFilter?: StoreStatusFilter;
+  searchQuery?: string;
+  hideControls?: boolean;
 }
 
 const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "All", label: "Tất cả trạng thái" },
-  { value: "Pending Review", label: STATUS_LABEL["Pending Review"] },
-  { value: "Published", label: STATUS_LABEL["Published"] },
-  { value: "Hidden", label: STATUS_LABEL["Hidden"] },
-  { value: "Archived", label: STATUS_LABEL["Archived"] },
-  { value: "Deleted", label: STATUS_LABEL["Deleted"] },
+  { value: "UNPUBLISHED", label: STATUS_LABEL.UNPUBLISHED },
+  { value: "PUBLISHED", label: STATUS_LABEL.PUBLISHED },
+  { value: "ARCHIVED", label: STATUS_LABEL.ARCHIVED },
+  { value: "DELETED", label: STATUS_LABEL.DELETED },
 ];
 
 const HEADINGS = [
-  "Mã Character",
-  "Thumbnail",
-  "Tên Character",
-  "Designer",
-  "Version đang bán",
+  "Mã sản phẩm",
+  "Ảnh đại diện",
+  "Tên nhân vật",
+  "Nhà thiết kế",
   "Trạng thái",
   "Thao tác",
 ];
 
-const FORBIDDEN_HINT = "Chỉ Manager mới có quyền thay đổi trạng thái hiển thị trên Store.";
+const FORBIDDEN_HINT = "Chỉ Quản lý mới có quyền thay đổi trạng thái hiển thị trên cửa hàng.";
 
 export default function CharacterListingTable({
   rows,
@@ -71,20 +70,29 @@ export default function CharacterListingTable({
   onArchive,
   onDelete,
   onCreateCharacter,
+  statusFilter,
+  searchQuery,
+  hideControls = false,
 }: CharacterListingTableProps) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("All");
 
+  const effectiveQuery = searchQuery !== undefined ? searchQuery : query;
+  const effectiveStatus: StatusFilter =
+    statusFilter !== undefined ? (statusFilter === "ALL" ? "All" : statusFilter) : status;
+
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = effectiveQuery.trim().toLowerCase();
     return rows.filter(
       (row) =>
-        (!normalized || row.name.toLowerCase().includes(normalized)) &&
-        (status === "All" || row.status === status),
+        (!normalized ||
+          row.name.toLowerCase().includes(normalized) ||
+          row.characterId.includes(normalized)) &&
+        (effectiveStatus === "All" || row.status === effectiveStatus),
     );
-  }, [query, rows, status]);
+  }, [effectiveQuery, effectiveStatus, rows]);
 
-  const hasFilters = query !== "" || status !== "All";
+  const hasFilters = effectiveQuery !== "" || effectiveStatus !== "All";
   const reset = () => {
     setQuery("");
     setStatus("All");
@@ -92,56 +100,58 @@ export default function CharacterListingTable({
 
   return (
     <>
-      <div className="grid gap-3 border-b border-[#e3efe6] p-4 md:grid-cols-[1fr_220px_auto]">
-        <label className="flex items-center gap-2 rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-sm transition-shadow focus-within:border-[#48a56a] focus-within:shadow-[0_0_0_3px_rgba(72,165,106,.15)]">
-          <Search size={15} className="shrink-0 text-text-muted" />
-          <span className="sr-only">Tìm kiếm Character theo tên</span>
-          <input
-            type="search"
-            id="character-search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tìm kiếm Character theo tên…"
-            className="w-full bg-transparent outline-none"
-          />
-        </label>
-        <label className="flex items-center">
-          <span className="sr-only">Lọc theo trạng thái</span>
-          <select
-            id="character-status-filter"
-            value={status}
-            onChange={(event) => setStatus(event.target.value as StatusFilter)}
-            className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-sm font-medium"
-          >
-            {STATUS_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          onClick={reset}
-          disabled={!hasFilters}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#cfe0d4] px-3 py-2 text-xs font-bold transition-colors hover:bg-[#eef8f0] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <RotateCcw size={14} /> Đặt lại
-        </button>
-        {canManage && onCreateCharacter && (
+      {!hideControls && (
+        <div className="grid gap-3 border-b border-[#e3efe6] p-4 md:grid-cols-[1fr_220px_auto]">
+          <label className="flex items-center gap-2 rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-sm transition-shadow focus-within:border-[#48a56a] focus-within:shadow-[0_0_0_3px_rgba(72,165,106,.15)]">
+            <Search size={15} className="shrink-0 text-text-muted" />
+            <span className="sr-only">Tìm kiếm nhân vật theo tên</span>
+            <input
+              type="search"
+              id="character-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Tìm kiếm nhân vật theo tên…"
+              className="w-full bg-transparent outline-none"
+            />
+          </label>
+          <label className="flex items-center">
+            <span className="sr-only">Lọc theo trạng thái</span>
+            <select
+              id="character-status-filter"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as StatusFilter)}
+              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-sm font-medium"
+            >
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
-            onClick={onCreateCharacter}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#eefaf1] px-3 py-2 text-xs font-black text-[#10351f] shadow-sm transition hover:bg-[#d8f5df]"
+            onClick={reset}
+            disabled={!hasFilters}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#cfe0d4] px-3 py-2 text-xs font-bold transition-colors hover:bg-[#eef8f0] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Sparkles size={14} /> Bày bán Character
+            <RotateCcw size={14} /> Đặt lại
           </button>
-        )}
-      </div>
+          {canManage && onCreateCharacter && (
+            <button
+              type="button"
+              onClick={onCreateCharacter}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#eefaf1] px-3 py-2 text-xs font-black text-[#10351f] shadow-sm transition hover:bg-[#d8f5df]"
+            >
+              <Sparkles size={14} /> Mở bán nhân vật
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[960px] text-sm">
-          <caption className="sr-only">Danh sách Character chờ duyệt hoặc đang niêm yết trên Store</caption>
+          <caption className="sr-only">Danh sách nhân vật chờ duyệt hoặc đang niêm yết trên cửa hàng</caption>
           <thead className="border-b border-[#e3efe6]">
             <tr>
               {HEADINGS.map((heading) => (
@@ -181,19 +191,19 @@ export default function CharacterListingTable({
                 <td colSpan={HEADINGS.length} className="px-4 py-14 text-center text-sm font-semibold text-text-muted">
                   {rows.length === 0 ? (
                     <div className="flex flex-col items-center gap-2">
-                      <p>Chưa có Character nào được niêm yết trên Store.</p>
+                      <p>Chưa có nhân vật nào được niêm yết trên cửa hàng.</p>
                       {canManage && onCreateCharacter && (
                         <button
                           type="button"
                           onClick={onCreateCharacter}
                           className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#eefaf1] px-3.5 py-2 text-xs font-black text-[#10351f] shadow-sm transition hover:bg-[#d8f5df]"
                         >
-                          <Sparkles size={14} /> Bày bán Character mới từ Designer
+                          <Sparkles size={14} /> Mở bán nhân vật từ nhà thiết kế
                         </button>
                       )}
                     </div>
                   ) : (
-                    "Không tìm thấy Character phù hợp với bộ lọc."
+                    "Không tìm thấy nhân vật phù hợp với bộ lọc."
                   )}
                 </td>
               </tr>
@@ -202,7 +212,7 @@ export default function CharacterListingTable({
             {!isLoading &&
               !error &&
               filtered.map((row) => {
-                const isDeleted = row.status === "Deleted";
+                const isDeleted = row.status === "DELETED";
                 return (
                   <tr
                     key={row.characterId}
@@ -212,7 +222,9 @@ export default function CharacterListingTable({
                         : "hover:bg-[#f9fdfa]"
                     }`}
                   >
-                    <td className="whitespace-nowrap px-4 py-3 font-black text-primary-dark">{row.characterId}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
+                      #{row.characterId}
+                    </td>
                     <td className="px-4 py-3">
                       <Image
                         src={row.thumbnailUrl}
@@ -227,9 +239,6 @@ export default function CharacterListingTable({
                       <p className="text-[11px] text-text-muted">Cập nhật lúc {formatDateTime(row.updatedAt)}</p>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium">{row.creatorName}</td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <ActiveVersionCell row={row} />
-                    </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={row.status} />
                     </td>
@@ -253,31 +262,10 @@ export default function CharacterListingTable({
 
       {!isLoading && !error && (
         <p className="border-t border-[#e3efe6] px-4 py-3 text-xs font-medium text-text-muted" aria-live="polite">
-          Hiển thị {filtered.length} / {rows.length} Character
+          Hiển thị {filtered.length} / {rows.length} nhân vật
         </p>
       )}
     </>
-  );
-}
-
-function ActiveVersionCell({ row }: { row: StoreCharacterRow }) {
-  if (row.status === "Deleted") {
-    return <span className="text-xs font-semibold text-neutral-400">—</span>;
-  }
-  if (!row.activeVersion) {
-    return <span className="text-xs font-semibold text-text-muted">— chưa chọn</span>;
-  }
-  if (row.status === "Hidden") {
-    return (
-      <span className="text-xs font-semibold text-text-muted">
-        v{row.activeVersion.versionNumber} <span className="font-medium">(đã publish trước đó)</span>
-      </span>
-    );
-  }
-  return (
-    <span className="rounded-md border border-[#cfe5d6] bg-[#f1faf4] px-2 py-1 text-xs font-black text-[#2c5a3f]">
-      v{row.activeVersion.versionNumber}
-    </span>
   );
 }
 
@@ -302,7 +290,7 @@ function RowActions({
   onDelete,
 }: RowActionsProps) {
   // Khi sản phẩm đã bị xóa mềm: không hiển thị bất kỳ nút nào!
-  if (row.status === "Deleted") {
+  if (row.status === "DELETED") {
     return null;
   }
 
@@ -322,98 +310,53 @@ function RowActions({
         </ActionButton>
       )}
 
-      {row.status === "Pending Review" && (
+      {row.status === "UNPUBLISHED" && (
+        <>
+          <ActionButton
+            variant="primary"
+            disabled={!canManage}
+            title={title}
+            onClick={() => onPublish(row, "review")}
+            icon={<CheckCircle2 size={13} />}
+          >
+            Duyệt mở bán
+          </ActionButton>
+          {onArchive && (
+            <ActionButton
+              variant="secondary"
+              disabled={!canManage}
+              title={title}
+              onClick={() => onArchive(row)}
+              icon={<Archive size={13} />}
+            >
+              Ngừng bán
+            </ActionButton>
+          )}
+        </>
+      )}
+
+      {row.status === "PUBLISHED" && onArchive && (
+        <ActionButton
+          variant="secondary"
+          disabled={!canManage}
+          title={title}
+          onClick={() => onArchive(row)}
+          icon={<Archive size={13} />}
+        >
+          Ngừng bán
+        </ActionButton>
+      )}
+
+      {row.status === "ARCHIVED" && (
         <ActionButton
           variant="primary"
           disabled={!canManage}
           title={title}
-          onClick={() => onPublish(row, "review")}
-          icon={<CheckCircle2 size={13} />}
+          onClick={() => onPublish(row, "republish")}
+          icon={<Undo2 size={13} />}
         >
-          Duyệt mở bán
+          Mở bán lại
         </ActionButton>
-      )}
-
-      {row.status === "Published" && (
-        <>
-          <ActionButton
-            variant="secondary"
-            disabled={!canManage}
-            title={title}
-            onClick={() => onPublish(row, "change")}
-            icon={<ArrowLeftRight size={13} />}
-          >
-            Đổi Version
-          </ActionButton>
-          <ActionButton
-            variant="secondary"
-            disabled={!canManage}
-            title={title}
-            onClick={() => onUnlist(row)}
-            icon={<EyeOff size={13} />}
-          >
-            Ẩn
-          </ActionButton>
-          {onArchive && (
-            <ActionButton
-              variant="secondary"
-              disabled={!canManage}
-              title={title}
-              onClick={() => onArchive(row)}
-              icon={<Archive size={13} />}
-            >
-              Lưu trữ
-            </ActionButton>
-          )}
-        </>
-      )}
-
-      {row.status === "Hidden" && (
-        <>
-          <ActionButton
-            variant="primary"
-            disabled={!canManage}
-            title={title}
-            onClick={() => onPublish(row, "republish")}
-            icon={<Undo2 size={13} />}
-          >
-            Republish
-          </ActionButton>
-          {onArchive && (
-            <ActionButton
-              variant="secondary"
-              disabled={!canManage}
-              title={title}
-              onClick={() => onArchive(row)}
-              icon={<Archive size={13} />}
-            >
-              Lưu trữ
-            </ActionButton>
-          )}
-        </>
-      )}
-
-      {row.status === "Archived" && (
-        <>
-          <ActionButton
-            variant="primary"
-            disabled={!canManage}
-            title={title}
-            onClick={() => onPublish(row, "republish")}
-            icon={<Undo2 size={13} />}
-          >
-            Mở bán lại
-          </ActionButton>
-          <ActionButton
-            variant="secondary"
-            disabled={!canManage}
-            title={title}
-            onClick={() => onUnlist(row)}
-            icon={<EyeOff size={13} />}
-          >
-            Ẩn
-          </ActionButton>
-        </>
       )}
 
       {onDelete && (

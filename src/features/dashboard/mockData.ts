@@ -17,6 +17,8 @@ export const MANAGER_KPI_MOCK: ManagerKpiSummary = {
   revenueGrowthPercent: 0,
   revenuePeriod: "vs. tháng trước",
   pendingCharactersCount: 0,
+  pendingCommissionsCount: 0,
+  pendingWarrantyClaimsCount: 0,
   lowStockModelsCount: 0,
   activeBundlesCount: 0,
   activeSubscriptionsCount: 0,

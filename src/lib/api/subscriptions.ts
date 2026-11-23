@@ -8,10 +8,8 @@ import type { CatalogProduct } from "@/features/cart/catalog";
 export type SubscriptionPlanStatus =
   | "UNPUBLISHED"
   | "PUBLISHED"
-  | "HIDDEN"
   | "ARCHIVED"
-  | "DELETED"
-  | string;
+  | "DELETED";
 
 export interface ManagedSubscriptionPlan {
   subscriptionDetailId: number;
@@ -38,6 +36,7 @@ export interface CreateSubscriptionPayload {
   basePrice: number;
   description?: string;
   thumbnailUrl?: string;
+  galleryUrls?: string[];
   isLifetime: boolean;
   durationDays?: number | null;
   allAccessCharacters: boolean;

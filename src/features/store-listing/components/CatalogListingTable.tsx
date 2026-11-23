@@ -1,28 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { Archive, Edit, EyeOff, Info, Rocket, Trash2 } from "lucide-react";
-import { fetchStoreProducts } from "@/lib/api/products";
+import { Archive, Edit, EyeOff, Rocket, Trash2 } from "lucide-react";
+import { fetchManagedStoreProducts, type BackendProductStatus } from "@/lib/api/products";
 import type { CatalogProduct } from "@/features/cart/catalog";
 import type { ProductType } from "@/features/cart/types";
 import { formatVnd } from "../format";
-import { getDeletedProductIds } from "../services/store-listing.service";
+import StatusBadge from "./StatusBadge";
+import StoreListingToolbar, {
+  computeStatusCounts,
+  type StoreStatusFilter,
+} from "./StoreListingToolbar";
 
 type CatalogKind = Extract<ProductType, "LED_MODEL" | "BUNDLE">;
 
 export interface StoreCatalogItem extends CatalogProduct {
-  status?: "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED" | "DELETED";
+  status?: BackendProductStatus;
 }
 
-const COPY: Record<CatalogKind, { label: string; notice: string }> = {
+const COPY: Record<CatalogKind, { label: string }> = {
   LED_MODEL: {
-    label: "Model LED",
-    notice:
-      "Quản lý thiết bị phần cứng LED: Manager & Admin có quyền tạo mới (mặc định UNPUBLISHED), Publish lên Store, chỉnh sửa giá/mô tả/ảnh, ẩn, lưu trữ và xóa mềm sản phẩm.",
+    label: "Mẫu LED",
   },
   BUNDLE: {
-    label: "Bundle",
-    notice:
-      "Chế độ xem thông tin. Bundle hiện chưa được mô hình hóa độc lập trong ERD; tính năng quản lý duyệt/ẩn hiển thị sẽ được tích hợp khi có đặc tả backend hoàn chỉnh.",
+    label: "Gói sản phẩm",
   },
 };
 
@@ -35,6 +35,7 @@ interface CatalogListingTableProps {
   onArchive?: (product: StoreCatalogItem) => void;
   onUnlist?: (product: StoreCatalogItem) => void;
   onDelete?: (product: StoreCatalogItem) => void;
+  onRefresh?: () => void;
 }
 
 /** Bảng xem thông tin và quản lý các sản phẩm bán trên Store */
@@ -47,8 +48,11 @@ export default function CatalogListingTable({
   onArchive,
   onUnlist,
   onDelete,
+  onRefresh,
 }: CatalogListingTableProps) {
   const [items, setItems] = useState<StoreCatalogItem[]>(initialItems ?? []);
+  const [statusFilter, setStatusFilter] = useState<StoreStatusFilter>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (initialItems) {
@@ -56,39 +60,83 @@ export default function CatalogListingTable({
       return;
     }
     let active = true;
-    fetchStoreProducts({ size: 100 })
+    fetchManagedStoreProducts({
+      productType: kind === "LED_MODEL" ? "LED" : "BUNDLE",
+      size: 200,
+    })
       .then((res) => {
         if (active) {
           setItems(
-            res.items
-              .filter((product) => product.productType === kind)
-              .map((product) => ({ ...product, status: "PUBLISHED" })),
+            res.items.map((item) => ({
+              id: String(item.productId),
+              productId: item.productId,
+              productType: kind,
+              name: item.productName,
+              price: Number(item.basePrice ?? 0),
+              description: item.description ?? "",
+              previewUrl: item.thumbnailUrl || item.galleryUrls?.[0] || undefined,
+              galleryUrls: item.galleryUrls ?? [],
+              tags: item.tags ?? [],
+              status: item.status,
+            })),
           );
         }
       })
-      .catch((err) => console.error("Failed to load catalog products:", err));
+      .catch((err) => console.error("Failed to load managed catalog products:", err));
     return () => {
       active = false;
     };
   }, [initialItems, kind]);
 
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return items.filter((item) => {
+      const currentStatus: BackendProductStatus = item.status ?? "UNPUBLISHED";
+      if (statusFilter !== "ALL" && currentStatus !== statusFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        String(item.id).includes(q) ||
+        (item.description && item.description.toLowerCase().includes(q))
+      );
+    });
+  }, [items, searchQuery, statusFilter]);
+
+  const statusCounts = useMemo(
+    () => computeStatusCounts(items, (item) => item.status),
+    [items],
+  );
+
   const isBundle = kind === "BUNDLE";
   const headings = [
     "Mã sản phẩm",
-    "Thumbnail",
+    "Ảnh đại diện",
     "Tên sản phẩm",
-    isBundle ? "Thành phần Bundle" : "Mô tả",
+    isBundle ? "Thành phần gói" : "Mô tả",
     "Giá bán",
-    "Trạng thái Store",
+    "Trạng thái cửa hàng",
     ...(canManage && !isBundle ? ["Thao tác"] : []),
   ];
 
   return (
     <>
-      <p className="m-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-800">
-        <Info size={15} className="mt-0.5 shrink-0" />
-        {COPY[kind].notice}
-      </p>
+      <StoreListingToolbar
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        counts={statusCounts}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder={`Tìm kiếm ${COPY[kind].label.toLowerCase()} theo tên hoặc mã…`}
+        onRefresh={onRefresh}
+        onReset={() => {
+          setStatusFilter("ALL");
+          setSearchQuery("");
+        }}
+        canReset={statusFilter !== "ALL" || searchQuery !== ""}
+      />
+
       <div className="overflow-x-auto">
         <table className="w-full min-w-[820px] text-sm">
           <caption className="sr-only">
@@ -108,24 +156,21 @@ export default function CatalogListingTable({
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => {
-              const isDeleted =
-                getDeletedProductIds().has(String(item.id)) ||
-                item.status === "DELETED";
-              const isArchived = !isDeleted && item.status === "ARCHIVED";
-              const isUnpublished = !isDeleted && item.status === "UNPUBLISHED";
+            {filteredItems.map((item) => {
+              const status: BackendProductStatus = item.status ?? "UNPUBLISHED";
+              const isDeleted = status === "DELETED";
 
               return (
                 <tr
                   key={item.id}
                   className={`border-b border-[#eef5f0] last:border-0 transition-all ${
                     isDeleted
-                      ? "select-none bg-neutral-100/60 opacity-40 grayscale"
+                      ? "select-none bg-neutral-100/60 opacity-45 grayscale"
                       : "hover:bg-[#f9fdfa]"
                   }`}
                 >
-                  <td className="whitespace-nowrap px-4 py-3 text-xs font-black text-primary-dark">
-                    {item.id}
+                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
+                    #{item.productId ?? item.id}
                   </td>
                   <td className="px-4 py-3">
                     {item.previewUrl ? (
@@ -143,9 +188,7 @@ export default function CatalogListingTable({
                     )}
                   </td>
                   <td className="px-4 py-3 font-bold">
-                    <span
-                      className={isDeleted ? "text-neutral-500 line-through" : ""}
-                    >
+                    <span className={isDeleted ? "text-neutral-500 line-through" : ""}>
                       {item.name}
                     </span>
                   </td>
@@ -160,35 +203,19 @@ export default function CatalogListingTable({
                     {formatVnd(item.price)}
                   </td>
                   <td className="px-4 py-3">
-                    {isDeleted ? (
-                      <span className="inline-flex rounded-full border border-neutral-300 bg-neutral-200 px-2.5 py-1 text-[11px] font-bold text-neutral-700">
-                        Đã xóa
-                      </span>
-                    ) : isArchived ? (
-                      <span className="inline-flex rounded-full border border-blue-300 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-800">
-                        Đã lưu trữ
-                      </span>
-                    ) : isUnpublished ? (
-                      <span className="inline-flex rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">
-                        Chưa mở bán (UNPUBLISHED)
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full border border-green-300 bg-green-50 px-2.5 py-1 text-[11px] font-bold text-green-800">
-                        Hiển thị (PUBLISHED)
-                      </span>
-                    )}
+                    <StatusBadge status={status} />
                   </td>
                   {canManage && !isBundle && (
                     <td className="px-4 py-3">
                       {isDeleted ? null : (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          {isUnpublished && onPublish && (
+                          {(status === "UNPUBLISHED" || status === "ARCHIVED") && onPublish && (
                             <button
                               type="button"
                               onClick={() => onPublish(item)}
                               className="inline-flex items-center gap-1 rounded-md border border-[#3b8555] bg-[#439660] px-2.5 py-1 text-xs font-bold text-white hover:bg-[#387e51]"
                             >
-                              <Rocket size={12} /> Publish
+                              <Rocket size={12} /> {status === "ARCHIVED" ? "Mở bán lại" : "Mở bán"}
                             </button>
                           )}
                           {onEdit && (
@@ -200,22 +227,13 @@ export default function CatalogListingTable({
                               <Edit size={12} /> Sửa
                             </button>
                           )}
-                          {!isUnpublished && !isArchived && onUnlist && (
-                            <button
-                              type="button"
-                              onClick={() => onUnlist(item)}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#cfe0d4] bg-white px-2 py-1 text-xs font-bold text-text-muted hover:bg-neutral-50"
-                            >
-                              <EyeOff size={12} /> Ẩn
-                            </button>
-                          )}
-                          {!isArchived && onArchive && (
+                          {status !== "ARCHIVED" && onArchive && (
                             <button
                               type="button"
                               onClick={() => onArchive(item)}
                               className="inline-flex items-center gap-1 rounded-md border border-[#cfe0d4] bg-white px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-50"
                             >
-                              <Archive size={12} /> Lưu trữ
+                              <Archive size={12} /> Ngừng bán
                             </button>
                           )}
                           {onDelete && (
@@ -234,13 +252,13 @@ export default function CatalogListingTable({
                 </tr>
               );
             })}
-            {items.length === 0 && (
+            {filteredItems.length === 0 && (
               <tr>
                 <td
                   colSpan={headings.length}
                   className="px-4 py-10 text-center text-xs font-semibold text-text-muted"
                 >
-                  Chưa có sản phẩm nào trong danh mục này.
+                  Chưa có sản phẩm nào phù hợp với bộ lọc trong danh mục này.
                 </td>
               </tr>
             )}

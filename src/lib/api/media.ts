@@ -4,6 +4,9 @@ import { getSessionToken } from "../auth/session";
 
 export type MediaPurposeType =
   | "STORE_PRODUCT"
+  | "PRODUCT_LED"
+  | "PRODUCT_BUNDLE"
+  | "PRODUCT_SUBSCRIPTION"
   | "CHARACTER_ASSET"
   | "COMMISSION_REFERENCE"
   | "COMMISSION_CHAT"

@@ -173,7 +173,7 @@ export default function ApiCommissionForm() {
         description,
         tierCode: tier.tierCode,
         attachments,
-        openPaymentImmediately: true,
+        openPaymentImmediately: false,
         selectedOptions,
       });
       router.replace(`/commission/${data.commissionId}/payment`);
@@ -289,8 +289,11 @@ export default function ApiCommissionForm() {
       </section>
       {error && <p role="alert" className="neo-box-no-hover border-l-8 border-l-red-700 p-4">{error}</p>}
       {user?.role !== "CUSTOMER" && <p>Đăng nhập bằng tài khoản khách hàng để gửi yêu cầu.</p>}
+      <p className="text-sm text-[#526159]">
+        Yêu cầu sẽ được nhân viên xem xét và duyệt trước khi mở thanh toán.
+      </p>
       <button className="btn-primary min-h-11 w-full text-sm sm:w-auto" disabled={busy || user?.role !== "CUSTOMER"}>
-        {busy ? "Đang gửi…" : "Gửi yêu cầu và đến trang thanh toán"}
+        {busy ? "Đang gửi…" : "Gửi yêu cầu thiết kế"}
       </button>
     </form>
   );

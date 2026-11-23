@@ -1,20 +1,39 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Check, Image as ImageIcon, Loader2, Tag, Upload, X } from "lucide-react";
+import { AlertCircle, Image as ImageIcon, Loader2, Upload, X } from "lucide-react";
 import Modal from "@/components/ui/Modal";
+import CategoryTagSelector from "./CategoryTagSelector";
 import { apiUpdateStoreProduct, fetchStoreTags } from "@/lib/api/products";
-import { uploadMediaFile } from "@/lib/api/media";
+import { uploadMediaFile, type MediaPurposeType } from "@/lib/api/media";
 import type { TagItem, UpdateStoreProductRequest } from "@/api_client";
 
 export interface EditableProductData {
   id: string | number;
+  productType?: "LED" | "CHARACTER" | "BUNDLE" | "SUBSCRIPTION";
   productName: string;
   basePrice: number;
   description?: string;
   thumbnailUrl?: string;
   galleryUrls?: string[];
   tags?: Array<string | TagItem>;
+}
+
+function resolveProductMediaPurpose(
+  productType?: EditableProductData["productType"],
+): MediaPurposeType {
+  switch (productType) {
+    case "LED":
+      return "PRODUCT_LED";
+    case "BUNDLE":
+      return "PRODUCT_BUNDLE";
+    case "SUBSCRIPTION":
+      return "PRODUCT_SUBSCRIPTION";
+    case "CHARACTER":
+      return "CHARACTER_ASSET";
+    default:
+      return "STORE_PRODUCT";
+  }
 }
 
 interface EditStoreProductModalProps {
@@ -42,13 +61,15 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const mediaPurpose = resolveProductMediaPurpose(product.productType);
+
   const handleThumbnailFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploadingThumbnail(true);
     setError(null);
     try {
-      const res = await uploadMediaFile(file, "STORE_PRODUCT");
+      const res = await uploadMediaFile(file, mediaPurpose);
       setThumbnailUrl(res.publicUrl);
       setThumbnailPreviewUrl(res.localPreviewUrl || res.publicUrl);
     } catch (err: any) {
@@ -69,7 +90,7 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
     try {
       const uploadedUrls: string[] = [];
       for (const file of files) {
-        const res = await uploadMediaFile(file, "STORE_PRODUCT");
+        const res = await uploadMediaFile(file, mediaPurpose);
         if (res.publicUrl) {
           uploadedUrls.push(res.publicUrl);
         }
@@ -118,11 +139,21 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
     };
   }, [product.tags]);
 
-  const toggleTag = (tagId?: number) => {
-    if (!tagId) return;
+  const toggleTag = (tagId: number) => {
     setSelectedTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
     );
+  };
+
+  const handleTagCreated = (created: TagItem) => {
+    setAvailableTags((prev) =>
+      prev.some((t) => t.tagId === created.tagId) ? prev : [...prev, created],
+    );
+    if (created.tagId) {
+      setSelectedTagIds((prev) =>
+        prev.includes(created.tagId!) ? prev : [...prev, created.tagId!],
+      );
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -137,7 +168,7 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
 
     const priceNum = Number(basePrice);
     if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Giá bán cơ bản phải lớn hơn hoặc bằng 0 đ.");
+      setError("Giá bán cơ bản phải lớn hơn hoặc bằng 0 VNĐ.");
       return;
     }
 
@@ -432,33 +463,13 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
         </div>
 
         {/* Tags */}
-        {availableTags.length > 0 && (
-          <div>
-            <label className="mb-1.5 flex items-center gap-1 font-bold text-[#1f432b]">
-              <Tag size={14} /> Thẻ phân loại (Category Tags - AC03)
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {availableTags.map((tag) => {
-                const isSelected = selectedTagIds.includes(tag.tagId ?? -1);
-                return (
-                  <button
-                    key={tag.tagId}
-                    type="button"
-                    onClick={() => toggleTag(tag.tagId)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
-                      isSelected
-                        ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b]"
-                        : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
-                    }`}
-                  >
-                    {isSelected && <Check size={12} />}
-                    {tag.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <CategoryTagSelector
+          availableTags={availableTags}
+          selectedTagIds={selectedTagIds}
+          label="Thẻ phân loại sản phẩm"
+          onToggleTag={toggleTag}
+          onTagCreated={handleTagCreated}
+        />
       </form>
     </Modal>
   );

@@ -18,9 +18,9 @@ interface PublishVersionModalProps {
 }
 
 const COPY: Record<PublishMode, { title: string; confirm: (version: number) => string }> = {
-  review: { title: "Duyệt & Publish Character", confirm: (version) => `Publish version ${version}` },
-  change: { title: "Đổi Version trên Store", confirm: (version) => `Chuyển sang version ${version}` },
-  republish: { title: "Republish lên Store", confirm: (version) => `Republish version ${version}` },
+  review: { title: "Duyệt và mở bán nhân vật", confirm: (version) => `Mở bán phiên bản ${version}` },
+  change: { title: "Đổi phiên bản trên cửa hàng", confirm: (version) => `Chuyển sang phiên bản ${version}` },
+  republish: { title: "Mở bán lại trên cửa hàng", confirm: (version) => `Mở bán lại phiên bản ${version}` },
 };
 
 /**
@@ -78,7 +78,7 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
   return (
     <Modal
       title={copy.title}
-      description="Chọn chính xác version sẽ được kích hoạt để hiển thị và bán cho khách hàng trên Store."
+      description="Chọn chính xác phiên bản sẽ được kích hoạt để hiển thị và bán cho khách hàng trên cửa hàng."
       onClose={onClose}
       busy={isSubmitting}
       size="lg"
@@ -86,10 +86,10 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
         <>
           <p className="mr-auto text-xs font-medium text-text-muted" aria-live="polite">
             {isSameAsLive
-              ? "Version này hiện đang hoạt động trên Store — vui lòng chọn version khác."
+              ? "Phiên bản này hiện đang hoạt động trên cửa hàng — vui lòng chọn phiên bản khác."
               : selectedVersion
-                ? `Đã chọn: Version ${selectedVersion.versionNumber}`
-                : "Chưa chọn version nào"}
+                ? `Đã chọn: Phiên bản ${selectedVersion.versionNumber}`
+                : "Chưa chọn phiên bản nào"}
           </p>
           <button
             type="button"
@@ -194,7 +194,7 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
                       <span className="text-sm font-black">Version {item.versionNumber}</span>
                       {isStoreVersion && (
                         <span className="rounded-full border border-green-300 bg-green-100 px-2 py-0.5 text-[10px] font-black uppercase text-green-800">
-                          {character.status === "Published" ? "Đang bán trên Store" : "Bản publish trước đó"}
+                          {character.status === "PUBLISHED" ? "Đang bán trên Store" : "Bản publish trước đó"}
                         </span>
                       )}
                       {item.isCurrent && (

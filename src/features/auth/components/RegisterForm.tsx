@@ -124,7 +124,7 @@ export default function RegisterForm() {
           <Link href="/login" className="btn-primary mt-1 w-full py-2.5 text-center uppercase tracking-widest">Đến trang đăng nhập</Link>
         ) : (
           <>
-            <AuthField id="reg-otp" label={`Mã OTP gửi tới ${pendingEmail}`} value={otp} onChange={setOtp} placeholder="123456" icon={<KeyRound size={15} />} />
+            <AuthField id="reg-otp" label={`Mã OTP gửi tới ${pendingEmail}`} value={otp} onChange={setOtp} placeholder="Nhập 6 số (vd: 123456)" icon={<KeyRound size={15} />} />
             <button type="submit" disabled={isSubmitting} className="btn-primary mt-1 w-full py-2.5 uppercase tracking-widest disabled:cursor-wait disabled:opacity-60">{isSubmitting ? "Đang xử lý..." : "Xác thực email"}</button>
             <button type="button" onClick={resend} disabled={isSubmitting} className="text-center text-xs font-bold text-text-muted hover:underline disabled:opacity-60">Không nhận được mã? Gửi lại</button>
           </>
@@ -137,7 +137,7 @@ export default function RegisterForm() {
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
       {messageBox}
       {USE_MOCK_AUTH && <AuthField id="reg-name" label="Họ tên hiển thị" value={form.fullName} onChange={update("fullName")} placeholder="Nguyễn Văn A" icon={<User size={15} />} />}
-      <AuthField id="reg-email" label="Email" value={form.email} onChange={update("email")} placeholder="you@example.com" icon={<Mail size={15} />} />
+      <AuthField id="reg-email" label="Địa chỉ Email" value={form.email} onChange={update("email")} placeholder="vd: tenban@gmail.com" icon={<Mail size={15} />} />
       <AuthField id="reg-password" label="Mật khẩu" value={form.password} onChange={update("password")} type={showPassword ? "text" : "password"} placeholder="••••••••" icon={<Lock size={15} />}
         action={<button type="button" onClick={() => setShowPassword((value) => !value)} aria-label="Hiện hoặc ẩn mật khẩu" className="text-text-muted">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>} />
       <AuthField id="reg-confirm" label="Xác nhận mật khẩu" value={form.confirmPassword} onChange={update("confirmPassword")} type={showPassword ? "text" : "password"} placeholder="••••••••" icon={<Lock size={15} />} />

@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CheckCircle2, Clock3, Cpu, Crown, EyeOff, Lock, Package, Plus, Sparkles, Store, X } from "lucide-react";
-import { apiUpdateProductStatus, apiUpdateStoreProduct, fetchStoreProducts } from "@/lib/api/products";
-import { useStoreCharacters } from "../hooks/useStoreCharacters";
+import { CheckCircle2, Lock, Plus, Store, X } from "lucide-react";
 import {
-  getCreatedStoreProducts,
-  updateCreatedStoreProductStatus,
-} from "../services/store-listing.service";
+  apiUpdateProductStatus,
+  apiUpdateStoreProduct,
+  fetchManagedStoreProducts,
+} from "@/lib/api/products";
+import { useStoreCharacters } from "../hooks/useStoreCharacters";
 import type { PublishMode, StoreCharacterRow } from "../types";
 import CatalogListingTable, { type StoreCatalogItem } from "./CatalogListingTable";
 import CharacterListingTable from "./CharacterListingTable";
-import CreateStoreProductModal from "./CreateStoreProductModal";
-import CreateCharacterProductModal from "./CreateCharacterProductModal";
+import SelectProductTypeModal, { type CreatableStoreProductKind } from "./SelectProductTypeModal";
 import EditStoreProductModal, { type EditableProductData } from "./EditStoreProductModal";
 import PublishVersionModal from "./PublishVersionModal";
 import UnlistConfirmModal from "./UnlistConfirmModal";
@@ -26,17 +25,20 @@ import DeleteBundleConfirmModal from "./DeleteBundleConfirmModal";
 import SubscriptionListingTable from "./SubscriptionListingTable";
 import CreateSubscriptionModal from "./CreateSubscriptionModal";
 import EditSubscriptionModal from "./EditSubscriptionModal";
+import StoreListingToolbar, {
+  computeStatusCounts,
+  type StoreStatusFilter,
+} from "./StoreListingToolbar";
 import { fetchManagedBundles, type ManagedBundleItem } from "@/lib/api/bundles";
 import {
   fetchManagedSubscriptions,
   type ManagedSubscriptionPlan,
 } from "@/lib/api/subscriptions";
 
-type TabId = "characters" | "approval-queue" | "led-models" | "bundles" | "subscriptions";
+type TabId = "characters" | "led-models" | "bundles" | "subscriptions";
 
 type ModalState =
-  | { kind: "create" }
-  | { kind: "create-character" }
+  | { kind: "select-product-type" }
   | { kind: "edit"; product: EditableProductData }
   | { kind: "publish"; character: StoreCharacterRow; mode: PublishMode }
   | { kind: "unlist"; character: StoreCharacterRow }
@@ -56,6 +58,8 @@ export default function StoreListingDashboard() {
   const { rows, isLoading, error, retry, canManage, publish, unlist } = useStoreCharacters();
   const [catalogProducts, setCatalogProducts] = useState<StoreCatalogItem[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("characters");
+  const [characterStatusFilter, setCharacterStatusFilter] = useState<StoreStatusFilter>("ALL");
+  const [characterQuery, setCharacterQuery] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [bundleRefreshTrigger, setBundleRefreshTrigger] = useState(0);
@@ -64,7 +68,6 @@ export default function StoreListingDashboard() {
   const [subscriptionCount, setSubscriptionCount] = useState<number | null>(null);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
     characters: null,
-    "approval-queue": null,
     "led-models": null,
     bundles: null,
     subscriptions: null,
@@ -83,45 +86,23 @@ export default function StoreListingDashboard() {
   }, [subscriptionRefreshTrigger]);
 
   const refreshCatalog = () => {
-    fetchStoreProducts({ size: 100 })
+    fetchManagedStoreProducts({ productType: "LED", size: 200 })
       .then((res) => {
-        const publishedItems: StoreCatalogItem[] = res.items.map((item) => ({
-          ...item,
-          status: "PUBLISHED",
+        const ledItems: StoreCatalogItem[] = res.items.map((item) => ({
+          id: String(item.productId),
+          productId: item.productId,
+          productType: "LED_MODEL",
+          name: item.productName,
+          price: Number(item.basePrice ?? 0),
+          description: item.description ?? "",
+          previewUrl: item.thumbnailUrl || item.galleryUrls?.[0] || undefined,
+          galleryUrls: item.galleryUrls ?? [],
+          tags: item.tags ?? [],
+          status: item.status,
         }));
-        const publishedIdSet = new Set(publishedItems.map((item) => String(item.id)));
-
-        const createdLedItems: StoreCatalogItem[] = [];
-        for (const created of getCreatedStoreProducts()) {
-          if (created.productType !== "LED" || created.productId == null) {
-            continue;
-          }
-          const idStr = String(created.productId);
-          if (publishedIdSet.has(idStr)) {
-            if (created.status !== "PUBLISHED") {
-              updateCreatedStoreProductStatus(idStr, "PUBLISHED");
-            }
-            continue;
-          }
-          if (created.status === "DELETED") {
-            continue;
-          }
-          createdLedItems.push({
-            id: idStr,
-            productId: created.productId,
-            productType: "LED_MODEL",
-            name: created.productName ?? `Sản phẩm LED #${idStr}`,
-            price: Number(created.basePrice ?? 0),
-            description: created.description ?? "",
-            previewUrl: created.thumbnailUrl || undefined,
-            galleryUrls: created.galleryUrls ?? [],
-            status: (created.status as StoreCatalogItem["status"]) ?? "UNPUBLISHED",
-          });
-        }
-
-        setCatalogProducts([...createdLedItems, ...publishedItems]);
+        setCatalogProducts(ledItems);
       })
-      .catch((err) => console.error("Failed to load catalog products:", err));
+      .catch((err) => console.error("Failed to load managed LED products:", err));
     retry();
   };
 
@@ -135,35 +116,31 @@ export default function StoreListingDashboard() {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const counts = useMemo(
-    () => ({
-      pending: rows.filter((row) => row.status === "Pending Review").length,
-      published: rows.filter((row) => row.status === "Published").length,
-      hidden: rows.filter((row) => row.status === "Hidden").length,
-    }),
+  const pendingCount = useMemo(
+    () => rows.filter((row) => row.status === "UNPUBLISHED").length,
     [rows],
   );
 
-  const tabs: { id: TabId; label: string; count: number | null }[] = [
-    { id: "characters", label: "Characters", count: isLoading ? null : rows.length },
+  const tabs: { id: TabId; label: string; count: number | null; pendingCount?: number }[] = [
     {
-      id: "approval-queue",
-      label: "Chờ duyệt (UNPUBLISHED)",
-      count: isLoading ? null : counts.pending,
+      id: "characters",
+      label: "Nhân vật",
+      count: isLoading ? null : rows.length,
+      pendingCount: isLoading ? 0 : pendingCount,
     },
     {
       id: "led-models",
-      label: "LED Models",
-      count: catalogProducts.filter((product) => product.productType === "LED_MODEL").length,
+      label: "Mẫu LED",
+      count: catalogProducts.length,
     },
     {
       id: "bundles",
-      label: "Gói Combo (Bundles)",
+      label: "Gói sản phẩm",
       count: bundleCount,
     },
     {
       id: "subscriptions",
-      label: "Gói Hội viên (Subscriptions)",
+      label: "Gói hội viên",
       count: subscriptionCount,
     },
   ];
@@ -184,8 +161,8 @@ export default function StoreListingDashboard() {
     setModal(null);
     setNotice(
       mode === "change"
-        ? `${character.name} đã được chuyển sang version ${updated.activeVersion?.versionNumber} trên Store.`
-        : `${character.name} đã được publish lên Store với version ${updated.activeVersion?.versionNumber}.`,
+        ? `${character.name} đã được chuyển sang phiên bản ${updated.activeVersion?.versionNumber} trên cửa hàng.`
+        : `${character.name} đã được mở bán trên cửa hàng với phiên bản ${updated.activeVersion?.versionNumber}.`,
     );
     refreshCatalog();
   };
@@ -195,7 +172,7 @@ export default function StoreListingDashboard() {
     const { character } = modal;
     await unlist(character.characterId);
     setModal(null);
-    setNotice(`${character.name} đã được ẩn khỏi Store thành công.`);
+    setNotice(`${character.name} đã được ẩn khỏi cửa hàng thành công.`);
     refreshCatalog();
   };
 
@@ -207,10 +184,10 @@ export default function StoreListingDashboard() {
             <span className="grid h-9 w-9 place-items-center rounded-lg border border-[#55a96f] bg-gradient-to-br from-[#bceac8] to-[#8bd49f] shadow-[2px_2px_0_#c6e8cd]">
               <Store size={18} />
             </span>
-            Quản lý Store Listing
+            Quản lý cửa hàng sản phẩm
           </h1>
           <p className="mt-1 text-sm font-medium text-text-muted">
-            Quản lý danh mục sản phẩm, duyệt phiên bản, chỉnh sửa và điều chỉnh trạng thái hiển thị trên Store.
+            Quản lý danh mục sản phẩm, duyệt nhân vật, chỉnh sửa và điều chỉnh trạng thái hiển thị trên cửa hàng.
           </p>
         </div>
 
@@ -218,35 +195,11 @@ export default function StoreListingDashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setModal({ kind: "create-character" })}
+              onClick={() => setModal({ kind: "select-product-type" })}
               className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2.5 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]"
             >
-              <Sparkles size={16} />
-              Mở bán Character
-            </button>
-            <button
-              type="button"
-              onClick={() => setModal({ kind: "create" })}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              <Cpu size={16} />
-              Tạo sản phẩm LED
-            </button>
-            <button
-              type="button"
-              onClick={() => setModal({ kind: "create-bundle" })}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              <Package size={16} className="text-[#2d6a4f]" />
-              Tạo gói Combo
-            </button>
-            <button
-              type="button"
-              onClick={() => setModal({ kind: "create-subscription" })}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-[#1f432b] shadow-sm transition hover:bg-[#f4fbf6]"
-            >
-              <Crown size={16} className="text-[#2d6a4f]" />
-              Tạo gói hội viên
+              <Plus size={16} />
+              Tạo sản phẩm
             </button>
           </div>
         )}
@@ -258,36 +211,9 @@ export default function StoreListingDashboard() {
           className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
         >
           <Lock size={15} className="shrink-0" />
-          Chế độ chỉ xem: Chỉ tài khoản Manager hoặc Admin mới có quyền tạo mới, duyệt publish, đổi version, chỉnh sửa, lưu trữ hoặc xóa mềm các sản phẩm.
+          Chế độ chỉ xem: Chỉ tài khoản Quản lý hoặc Quản trị viên mới có quyền tạo mới, duyệt mở bán, chỉnh sửa, ngừng bán hoặc xóa mềm các sản phẩm.
         </p>
       )}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard
-          icon={<Clock3 size={19} />}
-          label="Chờ duyệt"
-          value={isLoading ? null : counts.pending}
-          helper="Click để xem & duyệt UNPUBLISHED"
-          tone="amber"
-          onClick={() => setActiveTab("approval-queue")}
-        />
-        <SummaryCard
-          icon={<CheckCircle2 size={19} />}
-          label="Đã publish"
-          value={isLoading ? null : counts.published}
-          helper="Đang mở bán trên Store"
-          tone="green"
-          onClick={() => setActiveTab("characters")}
-        />
-        <SummaryCard
-          icon={<EyeOff size={19} />}
-          label="Đã ẩn"
-          value={isLoading ? null : counts.hidden}
-          helper="Tạm ngừng hiển thị trên Store"
-          tone="gray"
-          onClick={() => setActiveTab("characters")}
-        />
-      </div>
 
       {notice && (
         <div
@@ -342,6 +268,11 @@ export default function StoreListingDashboard() {
                     {tab.count}
                   </span>
                 )}
+                {tab.pendingCount !== undefined && tab.pendingCount > 0 && (
+                  <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800">
+                    {tab.pendingCount} chờ duyệt
+                  </span>
+                )}
               </button>
             );
           })}
@@ -349,97 +280,126 @@ export default function StoreListingDashboard() {
 
         <div role="tabpanel" id={`panel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
           {activeTab === "characters" && (
-            <CharacterListingTable
-              rows={rows}
-              isLoading={isLoading}
-              error={error}
-              onRetry={retry}
-              canManage={canManage}
-              onPublish={(character, mode) => setModal({ kind: "publish", character, mode })}
-              onUnlist={(character) => setModal({ kind: "unlist", character })}
-              onEdit={(character) =>
-                setModal({
-                  kind: "edit",
-                  product: {
-                    id: character.characterId,
-                    productName: character.name,
-                    basePrice: 199000,
-                    description: character.description,
-                    thumbnailUrl: character.thumbnailUrl,
-                  },
-                })
-              }
-              onArchive={(character) =>
-                setModal({
-                  kind: "archive",
-                  productId: character.characterId,
-                  productName: character.name,
-                })
-              }
-              onDelete={(character) =>
-                setModal({
-                  kind: "delete",
-                  productId: character.characterId,
-                  productName: character.name,
-                })
-              }
-              onCreateCharacter={() => setModal({ kind: "create-character" })}
-            />
-          )}
-          {activeTab === "approval-queue" && (
-            <ManagerProductListingTable
-              rows={rows}
-              isLoading={isLoading}
-              canManage={canManage}
-              onEdit={(character) =>
-                setModal({
-                  kind: "edit",
-                  product: {
-                    id: character.characterId,
-                    productName: character.name,
-                    basePrice: character.draft?.basePrice ?? 199000,
-                    description: character.description,
-                    thumbnailUrl: character.draft?.thumbnailUrl ?? character.thumbnailUrl,
-                    galleryUrls: character.draft?.galleryUrls ?? [],
-                  },
-                })
-              }
-              onApprove={async (character, price) => {
-                const numericId = Number(character.characterId);
-                if (Number.isSafeInteger(numericId) && numericId > 0) {
-                  if (character.draft && price !== undefined) {
-                    const safeThumb =
-                      character.draft.thumbnailUrl && /^https?:\/\//i.test(character.draft.thumbnailUrl)
-                        ? character.draft.thumbnailUrl
-                        : undefined;
-                    const safeGallery = (character.draft.galleryUrls || []).filter((u) => /^https?:\/\//i.test(u));
-                    await apiUpdateStoreProduct(numericId, {
-                      productName: character.name,
-                      basePrice: price,
-                      description: character.description || undefined,
-                      thumbnailUrl: safeThumb,
-                      galleryUrls: safeGallery,
-                    });
+            <div>
+              <StoreListingToolbar
+                statusFilter={characterStatusFilter}
+                onStatusFilterChange={setCharacterStatusFilter}
+                counts={computeStatusCounts(rows, (row) => row.status)}
+                isLoading={isLoading}
+                searchQuery={characterQuery}
+                onSearchChange={setCharacterQuery}
+                searchPlaceholder="Tìm kiếm nhân vật theo tên hoặc mã…"
+                onRefresh={refreshCatalog}
+                onReset={() => {
+                  setCharacterStatusFilter("ALL");
+                  setCharacterQuery("");
+                }}
+                canReset={characterStatusFilter !== "ALL" || characterQuery !== ""}
+              />
+
+              {characterStatusFilter === "UNPUBLISHED" ? (
+                <ManagerProductListingTable
+                  rows={rows}
+                  isLoading={isLoading}
+                  canManage={canManage}
+                  externalQuery={characterQuery}
+                  hideHeader
+                  onEdit={(character) =>
+                    setModal({
+                      kind: "edit",
+                      product: {
+                        id: character.characterId,
+                        productType: "CHARACTER",
+                        productName: character.name,
+                        basePrice: character.draft?.basePrice ?? character.basePrice ?? 0,
+                        description: character.description,
+                        thumbnailUrl: character.draft?.thumbnailUrl ?? character.thumbnailUrl,
+                        galleryUrls: character.draft?.galleryUrls ?? character.galleryUrls ?? [],
+                        tags: character.tags ?? [],
+                      },
+                    })
                   }
-                  await apiUpdateProductStatus(numericId, "PUBLISHED");
-                }
-                updateCreatedStoreProductStatus(character.characterId, "PUBLISHED");
-                setNotice(`Đã duyệt sản phẩm "${character.name}" và công khai mở bán trên Store!`);
-                refreshCatalog();
-              }}
-              onRefresh={refreshCatalog}
-            />
+                  onApprove={async (character, price) => {
+                    const numericId = Number(character.characterId);
+                    if (Number.isSafeInteger(numericId) && numericId > 0) {
+                      if (character.draft && price !== undefined) {
+                        const safeThumb =
+                          character.draft.thumbnailUrl && /^https?:\/\//i.test(character.draft.thumbnailUrl)
+                            ? character.draft.thumbnailUrl
+                            : undefined;
+                        const safeGallery = (character.draft.galleryUrls || []).filter((u) => /^https?:\/\//i.test(u));
+                        await apiUpdateStoreProduct(numericId, {
+                          productName: character.name,
+                          basePrice: price,
+                          description: character.description || undefined,
+                          thumbnailUrl: safeThumb,
+                          galleryUrls: safeGallery,
+                        });
+                      }
+                      await apiUpdateProductStatus(numericId, "PUBLISHED");
+                    }
+                    setNotice(`Đã duyệt nhân vật "${character.name}" sang trạng thái Đang bán!`);
+                    refreshCatalog();
+                  }}
+                  onRefresh={refreshCatalog}
+                />
+              ) : (
+                <CharacterListingTable
+                  rows={rows}
+                  isLoading={isLoading}
+                  error={error}
+                  onRetry={retry}
+                  canManage={canManage}
+                  statusFilter={characterStatusFilter}
+                  searchQuery={characterQuery}
+                  hideControls
+                  onPublish={(character, mode) => setModal({ kind: "publish", character, mode })}
+                  onUnlist={(character) => setModal({ kind: "unlist", character })}
+                  onEdit={(character) =>
+                    setModal({
+                      kind: "edit",
+                      product: {
+                        id: character.characterId,
+                        productType: "CHARACTER",
+                        productName: character.name,
+                        basePrice: character.basePrice ?? character.draft?.basePrice ?? 0,
+                        description: character.description,
+                        thumbnailUrl: character.thumbnailUrl,
+                        galleryUrls: character.galleryUrls ?? [],
+                        tags: character.tags ?? [],
+                      },
+                    })
+                  }
+                  onArchive={(character) =>
+                    setModal({
+                      kind: "archive",
+                      productId: character.characterId,
+                      productName: character.name,
+                    })
+                  }
+                  onDelete={(character) =>
+                    setModal({
+                      kind: "delete",
+                      productId: character.characterId,
+                      productName: character.name,
+                    })
+                  }
+                />
+              )}
+            </div>
           )}
           {activeTab === "led-models" && (
             <CatalogListingTable
               kind="LED_MODEL"
-              items={catalogProducts.filter((product) => product.productType === "LED_MODEL")}
+              items={catalogProducts}
               canManage={canManage}
+              onRefresh={refreshCatalog}
               onEdit={(product) =>
                 setModal({
                   kind: "edit",
                   product: {
                     id: product.id,
+                    productType: "LED",
                     productName: product.name,
                     basePrice: product.price,
                     description: product.description,
@@ -452,8 +412,7 @@ export default function StoreListingDashboard() {
               onPublish={async (product) => {
                 try {
                   await apiUpdateProductStatus(Number(product.id), "PUBLISHED");
-                  updateCreatedStoreProductStatus(product.id, "PUBLISHED");
-                  setNotice(`Đã mở bán sản phẩm "${product.name}" lên Store.`);
+                  setNotice(`Đã chuyển sản phẩm "${product.name}" sang Đang bán.`);
                   refreshCatalog();
                 } catch {
                   setNotice(`Mở bán sản phẩm thất bại.`);
@@ -462,11 +421,10 @@ export default function StoreListingDashboard() {
               onUnlist={async (product) => {
                 try {
                   await apiUpdateProductStatus(Number(product.id), "UNPUBLISHED");
-                  updateCreatedStoreProductStatus(product.id, "UNPUBLISHED");
-                  setNotice(`Đã ẩn sản phẩm "${product.name}" khỏi Store.`);
+                  setNotice(`Đã chuyển sản phẩm "${product.name}" sang Chờ duyệt.`);
                   refreshCatalog();
                 } catch {
-                  setNotice(`Ẩn sản phẩm thất bại.`);
+                  setNotice(`Cập nhật trạng thái thất bại.`);
                 }
               }}
               onArchive={(product) =>
@@ -495,19 +453,19 @@ export default function StoreListingDashboard() {
               onPublish={async (bundle) => {
                 try {
                   await apiUpdateProductStatus(bundle.productId, "PUBLISHED");
-                  setNotice(`Đã mở bán gói combo "${bundle.bundleName}" lên Store.`);
+                  setNotice(`Đã chuyển gói sản phẩm "${bundle.bundleName}" sang Đang bán.`);
                   setBundleRefreshTrigger((prev) => prev + 1);
                 } catch {
-                  setNotice(`Mở bán gói combo thất bại.`);
+                  setNotice(`Mở bán gói sản phẩm thất bại.`);
                 }
               }}
               onUnlist={async (bundle) => {
                 try {
                   await apiUpdateProductStatus(bundle.productId, "UNPUBLISHED");
-                  setNotice(`Đã ẩn gói combo "${bundle.bundleName}" khỏi Store.`);
+                  setNotice(`Đã chuyển gói sản phẩm "${bundle.bundleName}" sang Chờ duyệt.`);
                   setBundleRefreshTrigger((prev) => prev + 1);
                 } catch {
-                  setNotice(`Ẩn gói combo thất bại.`);
+                  setNotice(`Cập nhật trạng thái gói sản phẩm thất bại.`);
                 }
               }}
             />
@@ -522,7 +480,7 @@ export default function StoreListingDashboard() {
               onPublish={async (plan) => {
                 try {
                   await apiUpdateProductStatus(plan.productId, "PUBLISHED");
-                  setNotice(`Đã mở bán gói hội viên "${plan.planName}" lên Store.`);
+                  setNotice(`Đã chuyển gói hội viên "${plan.planName}" sang Đang bán.`);
                   setSubscriptionRefreshTrigger((prev) => prev + 1);
                 } catch {
                   setNotice(`Mở bán gói hội viên thất bại.`);
@@ -531,41 +489,40 @@ export default function StoreListingDashboard() {
               onUnlist={async (plan) => {
                 try {
                   await apiUpdateProductStatus(plan.productId, "UNPUBLISHED");
-                  setNotice(`Đã ẩn gói hội viên "${plan.planName}" khỏi Store.`);
+                  setNotice(`Đã chuyển gói hội viên "${plan.planName}" sang Chờ duyệt.`);
                   setSubscriptionRefreshTrigger((prev) => prev + 1);
                 } catch {
-                  setNotice(`Ẩn gói hội viên thất bại.`);
+                  setNotice(`Cập nhật trạng thái gói hội viên thất bại.`);
                 }
               }}
+              onArchive={(plan) =>
+                setModal({
+                  kind: "archive",
+                  productId: plan.productId,
+                  productName: plan.planName,
+                })
+              }
+              onDelete={(plan) =>
+                setModal({
+                  kind: "delete",
+                  productId: plan.productId,
+                  productName: plan.planName,
+                })
+              }
             />
           )}
         </div>
       </section>
 
-      {modal?.kind === "create-character" && (
-        <CreateCharacterProductModal
+      {modal?.kind === "select-product-type" && (
+        <SelectProductTypeModal
           onClose={() => setModal(null)}
-          onSuccess={(created) => {
-            setActiveTab("characters");
-            setNotice(
-              `Tạo sản phẩm Character "${created.productName}" (ID #${created.productId}) thành công${
-                created.status === "PUBLISHED" ? " và đã Publish lên Store" : " ở trạng thái Chờ duyệt"
-              }.`
-            );
-            refreshCatalog();
-          }}
-        />
-      )}
-
-      {modal?.kind === "create" && (
-        <CreateStoreProductModal
-          onClose={() => setModal(null)}
-          onSuccess={(created) => {
-            setActiveTab("led-models");
-            setNotice(
-              `Tạo sản phẩm "${created.productName}" (ID #${created.productId}) thành công ở trạng thái ${created.status ?? "UNPUBLISHED"}.`
-            );
-            refreshCatalog();
+          onSelectType={(selectedType: CreatableStoreProductKind) => {
+            if (selectedType === "BUNDLE") {
+              setModal({ kind: "create-bundle" });
+            } else {
+              setModal({ kind: "create-subscription" });
+            }
           }}
         />
       )}
@@ -605,9 +562,9 @@ export default function StoreListingDashboard() {
           productName={modal.productName}
           onClose={() => setModal(null)}
           onSuccess={(productName) => {
-            updateCreatedStoreProductStatus(modal.productId, "ARCHIVED");
-            setNotice(`Đã chuyển sản phẩm "${productName}" sang trạng thái Lưu trữ (ARCHIVED).`);
+            setNotice(`Đã chuyển sản phẩm "${productName}" sang trạng thái Ngừng bán.`);
             refreshCatalog();
+            setSubscriptionRefreshTrigger((prev) => prev + 1);
           }}
         />
       )}
@@ -618,9 +575,9 @@ export default function StoreListingDashboard() {
           productName={modal.productName}
           onClose={() => setModal(null)}
           onSuccess={(productName) => {
-            updateCreatedStoreProductStatus(modal.productId, "DELETED");
             setNotice(`Đã xóa mềm sản phẩm "${productName}" thành công.`);
             refreshCatalog();
+            setSubscriptionRefreshTrigger((prev) => prev + 1);
           }}
         />
       )}
@@ -628,12 +585,15 @@ export default function StoreListingDashboard() {
       {modal?.kind === "create-bundle" && (
         <CreateBundleModal
           onClose={() => setModal(null)}
+          onBackToTypeSelect={() => setModal({ kind: "select-product-type" })}
           onSuccess={(created) => {
             setModal(null);
             setBundleRefreshTrigger((prev) => prev + 1);
             setActiveTab("bundles");
             setNotice(
-              `Tạo gói combo "${created.bundleName}" (#${created.bundleId}) thành công ở trạng thái CHỜ MỞ BÁN.`,
+              `Tạo gói sản phẩm "${created.bundleName}" (#${created.bundleId}) thành công ở trạng thái ${
+                created.status === "PUBLISHED" ? "Đang mở bán" : "Chưa mở bán"
+              }.`,
             );
           }}
         />
@@ -646,7 +606,7 @@ export default function StoreListingDashboard() {
           onSuccess={(updated) => {
             setModal(null);
             setBundleRefreshTrigger((prev) => prev + 1);
-            setNotice(`Cập nhật gói combo "${updated.bundleName}" thành công.`);
+            setNotice(`Cập nhật gói sản phẩm "${updated.bundleName}" thành công.`);
           }}
         />
       )}
@@ -658,7 +618,7 @@ export default function StoreListingDashboard() {
           onSuccess={() => {
             setModal(null);
             setBundleRefreshTrigger((prev) => prev + 1);
-            setNotice(`Đã xóa/lưu trữ gói combo thành công.`);
+            setNotice(`Đã xóa hoặc lưu trữ gói sản phẩm thành công.`);
           }}
         />
       )}
@@ -666,12 +626,15 @@ export default function StoreListingDashboard() {
       {modal?.kind === "create-subscription" && (
         <CreateSubscriptionModal
           onClose={() => setModal(null)}
+          onBackToTypeSelect={() => setModal({ kind: "select-product-type" })}
           onSuccess={(created) => {
             setModal(null);
             setSubscriptionRefreshTrigger((prev) => prev + 1);
             setActiveTab("subscriptions");
             setNotice(
-              `Tạo gói hội viên "${created.planName}" (${created.planCode}) thành công ở trạng thái ${created.status}.`,
+              `Tạo gói hội viên "${created.planName}" (${created.planCode}) thành công ở trạng thái ${
+                created.status === "PUBLISHED" ? "Đang mở bán" : "Chưa mở bán"
+              }.`,
             );
           }}
         />
@@ -688,56 +651,6 @@ export default function StoreListingDashboard() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-const TONE: Record<"amber" | "green" | "gray", string> = {
-  amber: "bg-amber-100 text-amber-700 border-amber-300",
-  green: "bg-green-100 text-green-700 border-green-300",
-  gray: "bg-gray-100 text-gray-600 border-gray-300",
-};
-
-function SummaryCard({
-  icon,
-  label,
-  value,
-  helper,
-  tone,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number | null;
-  helper: string;
-  tone: keyof typeof TONE;
-  onClick?: () => void;
-}) {
-  return (
-    <div
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={(e) => {
-        if (onClick && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-      className={`neo-box-no-hover bg-white p-4 transition-all ${
-        onClick
-          ? "cursor-pointer hover:border-[#198653] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#198653]"
-          : ""
-      }`}
-    >
-      <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg border ${TONE[tone]}`}>{icon}</div>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-text-muted">{label}</p>
-      {value === null ? (
-        <div className="mt-2 h-8 w-12 animate-pulse rounded bg-[#e7f3ea]" />
-      ) : (
-        <p className="mt-1 text-3xl font-black">{value}</p>
-      )}
-      <p className="mt-1 text-[11px] font-medium text-text-muted">{helper}</p>
     </div>
   );
 }

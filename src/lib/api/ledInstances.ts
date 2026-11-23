@@ -152,7 +152,10 @@ export async function fetchLedInstanceDetail(
   return res.data;
 }
 
-export async function fetchManagedLedModels(): Promise<LedModelItem[]> {
+export async function fetchManagedLedModels(params?: {
+  unlinkedToProductOnly?: boolean;
+  keyword?: string;
+}): Promise<LedModelItem[]> {
   try {
     const res = await request<ApiResponseListLedModelItem>(OpenAPI, {
       method: "GET",
@@ -160,6 +163,8 @@ export async function fetchManagedLedModels(): Promise<LedModelItem[]> {
       query: {
         page: 0,
         size: 100,
+        unlinkedToProductOnly: params?.unlinkedToProductOnly,
+        keyword: params?.keyword?.trim() || undefined,
       },
     });
     return res.data ?? [];

@@ -1,28 +1,27 @@
-import { apiDeleteStoreProduct, apiUpdateProductStatus, fetchStoreProducts } from "@/lib/api/products";
-import { ProductFilterRequest, type CreatedStoreProductResponse } from "@/api_client";
-import { request } from "@/api_client/core/request";
-import { OpenAPI } from "@/lib/api/client";
+import {
+  apiDeleteStoreProduct,
+  apiUpdateProductStatus,
+  fetchManagedStoreProducts,
+} from "@/lib/api/products";
+import { type CreatedStoreProductResponse } from "@/api_client";
 import { fetchCharacterVersions } from "@/lib/api/designerCharacters";
 import type {
   CharacterVersion,
   ListingActor,
-  ListingStatus,
   StoreCharacter,
   StoreCharacterRow,
   StoreListing,
+  StoreProductStatus,
 } from "../types";
 
 /**
  * Store Listing Service.
  *
- * Đồng bộ hai chiều với Backend API:
- * - BR-14: Chỉ Manager mới có quyền publish / unlist (ẩn).
- * - BR-10: Publish/Republish yêu cầu chọn chính xác versionId.
- * - Trạng thái PUBLISHED / UNPUBLISHED được gửi trực tiếp lên Backend:
- *   PATCH /api/management/admin/store/products/{id}/status
- * - Khách hàng (Customer) duyệt Store qua GET /api/store/products (BE chỉ trả về PUBLISHED).
- * - Khi sản phẩm bị ẩn (UNPUBLISHED), BE sẽ không trả về ở Storefront, và Manager
- *   vẫn quản lý được với trạng thái "Đã ẩn" (Hidden) kèm nút "Republish".
+ * Đồng bộ trực tiếp với Backend API theo `ProductStatus`:
+ * - UNPUBLISHED (Chờ duyệt)
+ * - PUBLISHED (Đang bán)
+ * - ARCHIVED (Ngừng bán)
+ * - DELETED (Đã xóa)
  */
 
 export class StoreListingError extends Error {
@@ -37,7 +36,7 @@ const LATENCY_MS = 250;
 const DELETED_KEY = "mirage_deleted_product_ids";
 
 export function getDeletedProductIds(): Set<string> {
-  const set = new Set<string>(["4"]);
+  const set = new Set<string>();
   if (typeof window === "undefined") return set;
   try {
     const raw = localStorage.getItem(DELETED_KEY);
@@ -149,175 +148,57 @@ function toRow(character: StoreCharacter): StoreCharacterRow {
   };
 }
 
-/** GET /manager/store-listings/characters */
+/** GET /api/management/admin/store/products?productType=CHARACTER */
 export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
-  const draftsPromise = request<{
-    data: {
-      productId: number;
-      productName: string;
-      basePrice: number;
-      description?: string | null;
-      thumbnailUrl?: string | null;
-      galleryUrls: string[];
-      createdAt: string;
-      updatedAt?: string | null;
-    }[];
-  }>(OpenAPI, {
-    method: "GET",
-    url: "/api/management/admin/store/products/drafts",
-  })
-    .then(({ data }) => data || [])
-    .catch((error) => {
-      console.warn("Failed to load Store drafts:", error);
-      return [];
-    });
+  const res = await fetchManagedStoreProducts({
+    productType: "CHARACTER",
+    size: 200,
+  });
 
-  const backendCharactersPromise = fetchStoreProducts({
-    productType: ProductFilterRequest.productType.CHARACTER,
-    size: 100,
-  })
-    .then((res) => res.items)
-    .catch((error) => {
-      console.warn("Failed to load published store characters:", error);
-      return [];
-    });
+  const now = new Date().toISOString();
+  const resultRows: StoreCharacterRow[] = res.items.map((item) => {
+    const id = String(item.productId);
+    const status: StoreProductStatus = item.status;
+    const isPublished = status === "PUBLISHED";
+    const basePrice = Number(item.basePrice ?? 0);
+    const galleryUrls = item.galleryUrls ?? [];
 
-  const [rawDrafts, rawPublished] = await Promise.all([
-    draftsPromise,
-    backendCharactersPromise,
-  ]);
-
-  const deletedIds = getDeletedProductIds();
-  const createdProducts = getCreatedStoreProducts().filter(
-    (item) => item.productType === "CHARACTER" && item.productId != null,
-  );
-  const createdById = new Map(createdProducts.map((item) => [String(item.productId), item]));
-
-  const resultRows: StoreCharacterRow[] = [];
-  const processedIds = new Set<string>();
-
-  // 1. Process drafts (UNPUBLISHED character products awaiting approval)
-  for (const draft of rawDrafts) {
-    const id = String(draft.productId);
-    if (processedIds.has(id)) continue;
-    processedIds.add(id);
-
-    const isDeleted = deletedIds.has(id);
-    const createdRecord = createdById.get(id);
-    const isActuallyPublished = createdRecord?.status === "PUBLISHED";
-
-    const status: ListingStatus = isDeleted
-      ? "Deleted"
-      : isActuallyPublished
-      ? "Published"
-      : "Pending Review";
-
-    const row: StoreCharacterRow = {
+    return {
       characterId: id,
-      name: draft.productName,
-      description: draft.description ?? "",
-      thumbnailUrl: draft.thumbnailUrl || "/images/products/characters/cyber-fox.png",
-      creatorUserId: "usr-designer",
-      creatorName: "Designer Studio",
-      listingId: `lst-${id}`,
-      visibility: isActuallyPublished ? "Visible" : "Hidden",
-      status,
-      createdAt: draft.createdAt,
-      updatedAt: draft.updatedAt ?? draft.createdAt,
-      activeVersion: null,
-      draft: {
-        basePrice: Number(draft.basePrice ?? 0),
-        thumbnailUrl: draft.thumbnailUrl,
-        galleryUrls: draft.galleryUrls || [],
-      },
-    };
-    resultRows.push(row);
-  }
-
-  // 2. Process published characters from Store Catalog
-  for (const item of rawPublished) {
-    const id = String(item.productId ?? item.id);
-    if (processedIds.has(id)) continue;
-    processedIds.add(id);
-
-    const createdRecord = createdById.get(id);
-    const isDeleted = deletedIds.has(id) || createdRecord?.status === "DELETED";
-    const isArchived = !isDeleted && createdRecord?.status === "ARCHIVED";
-    const isHidden = !isDeleted && !isArchived && createdRecord?.status === "UNPUBLISHED";
-
-    const status: ListingStatus = isDeleted
-      ? "Deleted"
-      : isArchived
-      ? "Archived"
-      : isHidden
-      ? "Hidden"
-      : "Published";
-
-    const row: StoreCharacterRow = {
-      characterId: id,
-      name: item.name,
+      name: item.productName,
       description: item.description ?? "",
-      thumbnailUrl: item.previewUrl || "/images/products/characters/cyber-fox.png",
+      thumbnailUrl: item.thumbnailUrl || "/images/products/characters/cyber-fox.png",
       creatorUserId: "usr-designer",
       creatorName: "Designer Studio",
       listingId: `lst-${id}`,
-      visibility: status === "Published" ? "Visible" : "Hidden",
+      visibility: isPublished ? "Visible" : "Hidden",
       status,
-      createdAt: "2026-11-10T08:00:00Z",
-      updatedAt: new Date().toISOString(),
-      activeVersion: { versionId: `ver-${id}-1`, versionNumber: 1 },
-    };
-    resultRows.push(row);
-  }
-
-  // 3. Process any created character products in session that haven't appeared above
-  for (const created of createdProducts) {
-    const id = String(created.productId);
-    if (processedIds.has(id)) continue;
-    processedIds.add(id);
-
-    const isDeleted = deletedIds.has(id) || created.status === "DELETED";
-    const status: ListingStatus = isDeleted
-      ? "Deleted"
-      : created.status === "PUBLISHED"
-      ? "Published"
-      : created.status === "ARCHIVED"
-      ? "Archived"
-      : "Pending Review";
-
-    const vNum = (created as any)?.characterVersionNumber ?? created.characterVersionId ?? 1;
-
-    const row: StoreCharacterRow = {
-      characterId: id,
-      name: created.productName ?? `Character #${id}`,
-      description: created.description ?? "",
-      thumbnailUrl: created.thumbnailUrl || "/images/products/characters/cyber-fox.png",
-      creatorUserId: "usr-designer",
-      creatorName: "Designer Studio",
-      listingId: `lst-${id}`,
-      visibility: status === "Published" ? "Visible" : "Hidden",
-      status,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      activeVersion: status === "Published" ? { versionId: `ver-${id}-${vNum}`, versionNumber: vNum } : null,
+      basePrice,
+      galleryUrls,
+      tags: item.tags ?? [],
+      createdAt: item.createdAt ?? now,
+      updatedAt: item.updatedAt ?? item.createdAt ?? now,
+      activeVersion: isPublished || status === "ARCHIVED"
+        ? { versionId: `ver-${id}-1`, versionNumber: 1 }
+        : null,
       draft: {
-        basePrice: Number(created.basePrice ?? 0),
-        thumbnailUrl: created.thumbnailUrl,
-        galleryUrls: created.galleryUrls || [],
+        basePrice,
+        thumbnailUrl: item.thumbnailUrl,
+        galleryUrls,
       },
+      rawProduct: item,
     };
-    resultRows.push(row);
-  }
+  });
 
   // Update in-memory db cache
   db.characters = resultRows.map((r) => ({ ...r }));
   db.listings = resultRows.map((r) => ({
     listingId: r.listingId,
-    publisherUserId: r.status === "Published" ? "usr-manager" : null,
-    price: r.draft?.basePrice ?? 199000,
-    isFree: (r.draft?.basePrice ?? 199000) === 0,
+    publisherUserId: r.status === "PUBLISHED" ? "usr-manager" : null,
+    price: r.basePrice ?? 199000,
+    isFree: (r.basePrice ?? 199000) === 0,
     status: r.status,
-    publishedAt: r.status === "Published" ? r.createdAt : null,
+    publishedAt: r.status === "PUBLISHED" ? r.createdAt : null,
     updatedAt: r.updatedAt,
   }));
 
@@ -328,7 +209,7 @@ export async function getStoreCharacters(): Promise<StoreCharacterRow[]> {
       db.versions.push({
         versionId: `ver-${row.characterId}-${vNum}`,
         characterId: row.characterId,
-        storeListingId: row.status === "Published" ? row.listingId : null,
+        storeListingId: row.status === "PUBLISHED" ? row.listingId : null,
         versionNumber: vNum,
         fileUrl: row.thumbnailUrl,
         ledBinaryUrl: "",
@@ -426,7 +307,7 @@ export async function publishCharacterVersion({ characterId, versionId, actor }:
   updateCreatedStoreProductStatus(characterId, "PUBLISHED");
 
   const now = new Date().toISOString();
-  const wasPublished = character.status === "Published";
+  const wasPublished = character.status === "PUBLISHED";
 
   // The Store references exactly one version: unlink siblings, link the chosen one.
   for (const item of db.versions) {
@@ -435,10 +316,10 @@ export async function publishCharacterVersion({ characterId, versionId, actor }:
     }
   }
 
-  character.status = "Published";
+  character.status = "PUBLISHED";
   character.visibility = "Visible";
   character.updatedAt = now;
-  listing.status = "Published";
+  listing.status = "PUBLISHED";
   listing.publisherUserId = actor!.userId;
   listing.publishedAt = wasPublished ? listing.publishedAt : now;
   listing.updatedAt = now;
@@ -452,15 +333,14 @@ export interface UnlistCharacterInput {
 }
 
 /**
- * POST /manager/store-listings/characters/:characterId/unlist
- * Hides the character from the Store.
+ * Hides the character from the Store (UNPUBLISHED).
  */
 export async function unlistCharacter({ characterId, actor }: UnlistCharacterInput) {
   assertManager(actor);
 
   const character = findCharacter(characterId);
-  if (character.status !== "Published") {
-    throw new StoreListingError("Chỉ có thể ẩn Character đang được publish.", "VALIDATION");
+  if (character.status !== "PUBLISHED") {
+    throw new StoreListingError("Chỉ có thể chuyển về Chờ duyệt khi nhân vật Đang bán.", "VALIDATION");
   }
 
   // Cập nhật trạng thái UNPUBLISHED lên Backend database
@@ -473,17 +353,17 @@ export async function unlistCharacter({ characterId, actor }: UnlistCharacterInp
   const listing = findListing(character.listingId);
   const now = new Date().toISOString();
 
-  character.status = "Hidden";
+  character.status = "UNPUBLISHED";
   character.visibility = "Hidden";
   character.updatedAt = now;
-  listing.status = "Hidden";
+  listing.status = "UNPUBLISHED";
   listing.updatedAt = now;
 
   return structuredClone(toRow(character));
 }
 
 /**
- * Lưu trữ sản phẩm (ARCHIVED) per Story 3.
+ * Ngừng bán / Lưu trữ sản phẩm (ARCHIVED).
  */
 export async function archiveCharacter({ characterId, actor }: UnlistCharacterInput) {
   assertManager(actor);
@@ -498,17 +378,17 @@ export async function archiveCharacter({ characterId, actor }: UnlistCharacterIn
   const listing = findListing(character.listingId);
   const now = new Date().toISOString();
 
-  character.status = "Archived";
+  character.status = "ARCHIVED";
   character.visibility = "Hidden";
   character.updatedAt = now;
-  listing.status = "Archived";
+  listing.status = "ARCHIVED";
   listing.updatedAt = now;
 
   return structuredClone(toRow(character));
 }
 
 /**
- * Xóa mềm sản phẩm (DELETED) per Story 4.
+ * Xóa mềm sản phẩm (DELETED).
  */
 export async function deleteCharacter({ characterId, actor }: UnlistCharacterInput) {
   assertManager(actor);
@@ -523,11 +403,11 @@ export async function deleteCharacter({ characterId, actor }: UnlistCharacterInp
 
   const character = db.characters.find((c) => c.characterId === characterId);
   if (character) {
-    character.status = "Deleted";
+    character.status = "DELETED";
     character.visibility = "Hidden";
     const listing = db.listings.find((l) => l.listingId === character.listingId);
     if (listing) {
-      listing.status = "Deleted";
+      listing.status = "DELETED";
     }
   }
 }

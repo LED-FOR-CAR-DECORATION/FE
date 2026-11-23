@@ -242,7 +242,7 @@ function QuoteCard({ onPay }: { onPay: () => void }) {
         <div>
           <p className="text-sm font-bold text-gray-900">Staff đã gửi một báo giá</p>
           <p className="mt-1 text-xs text-gray-600">Báo giá cho thiết kế Rồng Lửa Pixel</p>
-          <p className="mt-2 text-xl font-black text-amber-700">500.000đ</p>
+          <p className="mt-2 text-xl font-black text-amber-700">500.000 VNĐ</p>
         </div>
       </div>
       <button onClick={onPay} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2.5 text-sm font-bold text-white hover:bg-emerald-800">
@@ -406,7 +406,7 @@ function RevisionModal({ onClose }: { onClose: () => void }) {
         <p className="mt-1 text-xs text-orange-700/80">10% của 500.000 VNĐ</p>
       </div>
       <button disabled={!request.trim() || loading} onClick={submit} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">
-        {loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> Đang xử lý...</> : "Thanh toán 50.000đ để Gửi yêu cầu"}
+        {loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> Đang xử lý...</> : "Thanh toán 50.000 VNĐ để Gửi yêu cầu"}
       </button>
     </ModalShell>
   );

@@ -36,8 +36,8 @@ const HERO_SLIDES = [
   {
     id: "mirage",
     tag: "BỘ SƯU TẬP MIRAGE",
-    title: "Nhân vật Pixel cho không gian xe của bạn",
-    desc: "Khám phá bộ sưu tập Character và thiết bị LED matrix để tạo nên phong cách độc bản, sống động trên mọi cung đường.",
+    title: "Nhân vật sống động cho không gian xe của bạn",
+    desc: "Khám phá bộ sưu tập Nhân vật và bảng LED ma trận để tạo nên phong cách độc bản, sống động trên mọi cung đường.",
     badgeBg: "bg-primary",
     accentBg: "bg-primary/20",
     emoji: "🐱",
@@ -45,9 +45,9 @@ const HERO_SLIDES = [
   },
   {
     id: "led",
-    tag: "BẢNG LED MATRIX",
+    tag: "BẢNG LED MA TRẬN",
     title: "Bảng LED hiển thị sắc nét mọi góc nhìn",
-    desc: "Kích thước 32x32 và 64x32 chuẩn chống nước, gắn kính xe dễ dàng, điều khiển animation mượt mà chỉ với một chạm.",
+    desc: "Kích thước đa dạng chuẩn chống nước, gắn kính xe dễ dàng, điều khiển hoạt ảnh mượt mà chỉ với một chạm.",
     badgeBg: "bg-white",
     accentBg: "bg-[#6eb782]/20",
     emoji: "⚡",
@@ -56,8 +56,8 @@ const HERO_SLIDES = [
   {
     id: "commission",
     tag: "THIẾT KẾ THEO YÊU CẦU",
-    title: "Hiện thực hóa ý tưởng Pixel Art độc quyền",
-    desc: "Làm việc trực tiếp cùng Designer chuyên nghiệp để tạo ra nhân vật pixel độc bản theo đúng ý tưởng và mẫu xe của bạn.",
+    title: "Hiện thực hóa ý tưởng nhân vật độc quyền",
+    desc: "Làm việc trực tiếp cùng nhà thiết kế chuyên nghiệp để tạo ra nhân vật độc bản theo đúng ý tưởng và mẫu xe của bạn.",
     badgeBg: "bg-primary",
     accentBg: "bg-amber-100",
     emoji: "✨",
@@ -225,7 +225,7 @@ function ProductCard({
   const typeLabel = isSubscription
     ? "Gói thành viên"
     : isBundle
-      ? "Gói Combo"
+      ? "Gói sản phẩm"
       : isCharacter
         ? "Nhân vật"
         : "Thiết bị LED";
@@ -410,6 +410,16 @@ function HomeContent() {
     setPage(1);
   }, [activeCategory, maxPrice, minPrice, selectedStatuses, selectedTypes, sort, activeSearchQuery]);
 
+  const handlePageChange = (nextPage: number) => {
+    const clampedPage = Math.min(pageCount, Math.max(1, nextPage));
+    setPage(clampedPage);
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+  };
+
   const addProduct = async (product: CatalogProduct) => {
     try {
       await addItem(product);
@@ -439,7 +449,6 @@ function HomeContent() {
       <Header />
       <main className="flex-1 bg-background py-8 text-text-main">
         <div className="mx-auto w-full max-w-[1320px] px-4 lg:px-8">
-
           {/* Breadcrumb */}
           <div className="mb-6 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text-muted">
             <Link href="/" className="cursor-pointer hover:text-primary-ink hover:underline">
@@ -483,14 +492,19 @@ function HomeContent() {
                       value: "LED_MODEL" as const,
                     },
                     {
-                      label: "Nhân vật Pixel",
+                      label: "Nhân vật",
                       count: products.filter((p) => p.productType === "CHARACTER").length,
                       value: "CHARACTER" as const,
                     },
                     {
-                      label: "Gói Combo",
+                      label: "Gói sản phẩm",
                       count: products.filter((p) => p.productType === "BUNDLE").length,
                       value: "BUNDLE" as const,
+                    },
+                    {
+                      label: "Gói thành viên",
+                      count: products.filter((p) => p.productType === "SUBSCRIPTION").length,
+                      value: "SUBSCRIPTION" as const,
                     },
                   ].map((category) => {
                     const isActive = activeCategory === category.value;
@@ -575,8 +589,8 @@ function HomeContent() {
                   {[
                     ["Thiết bị LED", "LED_MODEL"],
                     ["Nhân vật", "CHARACTER"],
-                    ["Combo ưu đãi", "BUNDLE"],
-                    ["Gói hội viên", "SUBSCRIPTION"],
+                    ["Gói sản phẩm", "BUNDLE"],
+                    ["Gói thành viên", "SUBSCRIPTION"],
                   ].map(([label, type]) => {
                     const count = products.filter((p) => p.productType === type).length;
                     return (
@@ -717,7 +731,7 @@ function HomeContent() {
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setPage((c) => Math.max(1, c - 1))}
+                        onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
                         className="cursor-pointer border-2 border-black bg-white p-1.5 text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
                         aria-label="Trang trước"
@@ -729,7 +743,7 @@ function HomeContent() {
                         <button
                           key={pageNumber}
                           type="button"
-                          onClick={() => setPage(pageNumber)}
+                          onClick={() => handlePageChange(pageNumber)}
                           className={`cursor-pointer min-w-8 border-2 border-black px-2.5 py-1 text-xs font-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 ${
                             currentPage === pageNumber
                               ? "bg-primary text-black"
@@ -743,7 +757,7 @@ function HomeContent() {
 
                       <button
                         type="button"
-                        onClick={() => setPage((c) => Math.min(pageCount, c + 1))}
+                        onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === pageCount}
                         className="cursor-pointer border-2 border-black bg-white p-1.5 text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
                         aria-label="Trang sau"

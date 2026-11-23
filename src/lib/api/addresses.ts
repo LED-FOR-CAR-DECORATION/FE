@@ -1,6 +1,7 @@
 import { UserAddressesService, UserProfileService } from "@/api_client";
 import type { Address, AddressFormData } from "@/features/address/types";
 import "./client";
+import { normalizeVnMobile } from "@/lib/validation/contact";
 
 export interface BackendUserAddress {
   addressId: number;
@@ -43,13 +44,15 @@ export async function apiAddAddress(form: AddressFormData): Promise<Address> {
     [form.streetNumber, form.streetName, form.ward, form.district, form.province]
       .filter(Boolean)
       .join(", ");
-  const normalizedPhone = form.phoneNumber.replace(/\s+/g, "");
+  if (form.latitude == null || form.longitude == null) {
+    throw new Error("Hãy tìm hoặc bấm chọn vị trí trên bản đồ.");
+  }
   const res = await UserAddressesService.addAddress({
-    recipientName: form.fullName.trim(),
-    recipientPhone: normalizedPhone,
+    recipientName: form.fullName.trim().replace(/\s+/g, " "),
+    recipientPhone: normalizeVnMobile(form.phoneNumber) ?? form.phoneNumber.replace(/[\s.\-()]/g, ""),
     fullAddress,
-    latitude: form.latitude ?? 10.7769,
-    longitude: form.longitude ?? 106.7009,
+    latitude: form.latitude,
+    longitude: form.longitude,
     isDefault: false,
   });
   return mapBackendAddress(res.data as BackendUserAddress);

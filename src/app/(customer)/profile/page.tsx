@@ -5,6 +5,9 @@ import CustomerSidebar from "@/components/layout/CustomerSidebar";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import AddAddressModal from "@/components/ui/AddAddressModal";
+import UndoToast from "@/components/ui/UndoToast";
+import { useUndoableDelete } from "@/lib/hooks/useUndoableDelete";
+import { formatVnMobile } from "@/lib/validation/contact";
 import { useAddresses } from "@/features/address/context/AddressContext";
 import Link from "next/link";
 import {
@@ -201,6 +204,9 @@ function AccountInfoTab() {
   const [profileMessage, setProfileMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const { addresses, isLoading, addAddress, removeAddress, setDefaultAddress } = useAddresses();
+  const [addressError, setAddressError] = useState("");
+  const addressUndo = useUndoableDelete({ onCommit: removeAddress });
+  const visibleAddresses = addresses.filter((entry) => !addressUndo.isPending(entry.id));
   const { user, updateProfile } = useAuth();
   const [form, setForm] = useState({
     fullName: user?.fullName ?? "",
@@ -225,7 +231,11 @@ function AccountInfoTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <AddAddressModal isOpen={isAddressModalOpen} onClose={() => setIsAddressModalOpen(false)} onSave={(address) => { addAddress(address); setIsAddressModalOpen(false); }} />
+      <AddAddressModal isOpen={isAddressModalOpen} onClose={() => setIsAddressModalOpen(false)} onSave={addAddress} />
+      <UndoToast
+        message={addressUndo.pending ? `Đã xóa địa chỉ của ${addressUndo.pending.label}` : null}
+        onUndo={addressUndo.undo}
+      />
       {/* Personal Info */}
       <div className="profile-card profile-enter profile-enter-delay-1">
         <div className="flex items-center justify-between mb-5 border-b border-primary-light pb-3">
@@ -303,7 +313,12 @@ function AccountInfoTab() {
         </div>
 
         <div className="flex flex-col gap-3">
-          {isLoading ? <p className="text-sm text-text-muted">Đang tải địa chỉ...</p> : addresses.length === 0 ? <p className="text-sm text-text-muted">Bạn chưa có địa chỉ nào.</p> : addresses.map((addr) => (
+          {(addressError || addressUndo.error) && (
+            <p role="alert" className="border-2 border-red-600 bg-red-50 p-3 text-xs font-bold text-red-700">
+              {addressError || addressUndo.error}
+            </p>
+          )}
+          {isLoading ? <p className="text-sm text-text-muted">Đang tải địa chỉ...</p> : visibleAddresses.length === 0 ? <p className="text-sm text-text-muted">Bạn chưa có địa chỉ nào.</p> : visibleAddresses.map((addr) => (
             <div key={addr.id} className={`address-card ${addr.isDefault ? "address-card-default" : ""}`}>
               {addr.isDefault && (
                 <span className="absolute top-2 right-2 bg-primary border border-black text-[10px] font-black px-2 py-0.5 uppercase">Mặc định</span>
@@ -312,15 +327,15 @@ function AccountInfoTab() {
                 <span className="address-icon"><MapPin size={16} /></span>
                 <div>
                   <p className="font-black">{addr.fullName}</p>
-              <p className="text-sm text-text-muted">{addr.phoneNumber}</p>
+              <p className="text-sm text-text-muted">{formatVnMobile(addr.phoneNumber)}</p>
               <p className="text-sm mt-1">{addr.fullAddress}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 mt-3">
                 <>
-                    <button onClick={() => removeAddress(addr.id)} className="text-xs font-bold text-text-muted hover:underline flex items-center gap-1"><Trash2 size={11} /> Xóa</button>
+                    <button onClick={() => { setAddressError(""); addressUndo.schedule(addr.id, addr.fullName); }} className="text-xs font-bold text-text-muted hover:underline flex items-center gap-1"><Trash2 size={11} /> Xóa</button>
                     {!addr.isDefault && (
-                    <button onClick={() => setDefaultAddress(addr.id)} className="text-xs font-bold hover:underline">Đặt làm mặc định</button>
+                    <button onClick={() => { setAddressError(""); setDefaultAddress(addr.id).catch((err: unknown) => setAddressError(err instanceof Error ? err.message : "Không thể đặt địa chỉ mặc định.")); }} className="text-xs font-bold hover:underline">Đặt làm mặc định</button>
                     )}
                 </>
               </div>

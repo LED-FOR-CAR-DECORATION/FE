@@ -1,21 +1,17 @@
 /** Menu entries and role helpers for the internal (back-office) shell. */
 import {
   Boxes,
-  ChartNoAxesCombined,
   ClipboardList,
-  Image,
+  Cpu,
   LayoutDashboard,
   MessageCircle,
-  RotateCcw,
   Settings2,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
   Store,
   Tag,
-  Truck,
   Users,
-  UserCog,
   type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/features/auth/types";
@@ -101,13 +97,6 @@ export const menuItems: MenuItem[] = [
     roles: ["MANAGER", "STAFF", "ADMIN"],
   },
   {
-    label: "Quản lý trả thiết bị",
-    description: "Tiếp nhận và cập nhật tình trạng trả",
-    href: "/staff/returns",
-    icon: RotateCcw,
-    roles: ["MANAGER"],
-  },
-  {
     label: "Cấu hình giá Yêu cầu thiết kế",
     description: "Thiết lập tiêu chí, tùy chọn và phụ thu",
     href: "/staff/commission/pricing",
@@ -122,31 +111,10 @@ export const menuItems: MenuItem[] = [
     roles: ["ADMIN", "MANAGER"],
   },
   {
-    label: "Quản lý vai trò",
-    description: "Quản lý khách hàng, nhân viên, quản lý và nhà thiết kế",
-    href: "/admin/roles",
-    icon: UserCog,
-    roles: ["ADMIN"],
-  },
-  {
-    label: "Quản lý quyền hạn",
-    description: "Thiết lập quyền truy cập chức năng",
-    href: "/admin/permissions",
-    icon: ShieldCheck,
-    roles: ["ADMIN"],
-  },
-  {
-    label: "Gán vai trò và quyền",
-    description: "Gán role và cấu hình quyền cho role",
-    href: "/admin/assignments",
-    icon: Settings2,
-    roles: ["ADMIN"],
-  },
-  {
-    label: "Báo cáo và thống kê",
-    description: "Số liệu đơn hàng, doanh thu và Commission",
-    href: "/admin/reports",
-    icon: ChartNoAxesCombined,
+    label: "Quản lý firmware",
+    description: "Phát hành, theo dõi và thu hồi firmware OTA cho mẫu LED",
+    href: "/admin/firmware",
+    icon: Cpu,
     roles: ["ADMIN"],
   },
 ];

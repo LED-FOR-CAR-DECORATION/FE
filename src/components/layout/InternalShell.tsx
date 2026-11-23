@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, PanelLeftClose, PanelLeftOpen, User } from "lucide-react";
+import { LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { UserRole } from "@/features/auth/types";
 import { getRoleHome, menuItems, roleLabels, type MenuItem } from "@/components/layout/internal-nav";
@@ -20,10 +20,8 @@ function buildNav(role: UserRole | undefined) {
     ...(overview ? [{ ...overview, href: getRoleHome(role) }] : []),
     ...visible.filter((item) => item !== overview),
   ];
-  const account: MenuItem[] =
-    role === "ADMIN"
-      ? [{ label: "Hồ sơ cá nhân", description: "Thông tin tài khoản của bạn", href: `${getRoleHome(role)}/profile`, icon: User, roles: [role] }]
-      : [];
+  // No account entries for now: there is no admin profile page yet.
+  const account: MenuItem[] = [];
   return { main, account };
 }
 

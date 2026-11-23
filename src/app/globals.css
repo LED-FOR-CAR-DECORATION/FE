@@ -206,7 +206,9 @@ body {
     #f5faf6;
 }
 .manager-main > * {
-  animation: manager-content-enter .45s cubic-bezier(.2,.8,.2,1) both;
+  /* `backwards`, not `both`: a retained transform would turn every page root into the
+     containing block of its `position: fixed` modals and trap them inside the page. */
+  animation: manager-content-enter .45s cubic-bezier(.2,.8,.2,1) backwards;
 }
 .manager-main .neo-box-no-hover {
   border: 1px solid var(--manager-border);

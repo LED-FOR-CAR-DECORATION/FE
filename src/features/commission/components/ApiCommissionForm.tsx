@@ -9,13 +9,13 @@ import type { PricingOptionResponse } from "@/api_client/models/PricingOptionRes
 import { loadSession } from "@/lib/auth/session";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getCommissionPricing, submitCommission, uploadCommissionReference } from "../services/customer-commission.api";
-import { CommissionBrief, commissionButton } from "./FixedCommissionSteps";
+import { CommissionBrief } from "./FixedCommissionSteps";
 
 type Rule = PricingRuleResponse & {
   configId: number;
 };
 
-const control = "mt-1 w-full rounded-lg border border-[#86a795] bg-white p-2.5";
+const control = "mt-1 min-h-11 w-full p-2.5 border-2 border-black bg-white text-text-main focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60";
 const referenceTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 function optionLabel(option: PricingOptionResponse) {
@@ -185,15 +185,15 @@ export default function ApiCommissionForm() {
     }
   }
 
-  if (pricingError || (pricing && !tier?.tierCode)) return <p role="alert">Không tải được cấu hình giá Commission.</p>;
-  if (!pricing) return <p role="status">Đang tải cấu hình Commission…</p>;
+  if (pricingError || (pricing && !tier?.tierCode)) return <p role="alert" className="neo-box-no-hover border-l-8 border-l-red-700 p-4">Không tải được cấu hình giá Commission.</p>;
+  if (!pricing) return <p role="status" className="neo-box-no-hover p-4 text-text-muted">Đang tải cấu hình Commission…</p>;
 
   return (
-    <form onSubmit={submit} className="space-y-5 rounded-xl border border-[#cfe3d0] bg-[#eaf5e8] p-5 sm:p-7">
-      <h1 className="text-2xl font-black text-[#155e59]">Yêu cầu thiết kế Pixel Art</h1>
+    <form onSubmit={submit} className="neo-box-no-hover space-y-6 p-4 sm:p-7">
+      <h1 className="border-b-2 border-black pb-4 text-2xl font-black uppercase tracking-tight sm:text-3xl">Yêu cầu thiết kế Pixel Art</h1>
       {(pricing.tiers?.length ?? 0) > 1 && (
         <label className="block font-semibold">Gói thiết kế
-          <select className={control} value={tier?.tierCode} disabled={busy} onChange={(event) => selectTier(event.target.value)}>
+          <select className={`${control} cursor-pointer`} value={tier?.tierCode} disabled={busy} onChange={(event) => selectTier(event.target.value)}>
             {pricing.tiers?.map((item) => <option key={item.tierId} value={item.tierCode}>{item.tierName}</option>)}
           </select>
           {tier?.description && <span className="mt-1 block text-sm font-normal">{tier.description}</span>}
@@ -209,14 +209,14 @@ export default function ApiCommissionForm() {
           if (rule.selectionType === "MULTI_SELECT") return (
             <fieldset key={id} aria-describedby={descriptionId}>
               <legend>{rule.configName}</legend>
-              {rule.description && <p id={descriptionId} className="text-sm text-[#526159]">{rule.description}</p>}
+              {rule.description && <p id={descriptionId} className="text-sm text-text-muted">{rule.description}</p>}
               {(rule.options ?? []).map((option) => {
                 const optionId = option.optionId;
                 if (optionId === undefined) return null;
                 return (
-                  <label key={optionId} className="flex items-center justify-between gap-3 py-1">
+                  <label key={optionId} className="flex min-h-11 items-center justify-between gap-3 border border-black/30 px-2 py-1 has-[:checked]:border-black has-[:checked]:bg-primary/15 has-[:enabled]:cursor-pointer has-[:disabled]:cursor-not-allowed">
                     <span className="flex items-center gap-2">
-                    <input type="checkbox" disabled={bundledIds.has(optionId)} checked={selected.includes(optionId)} onChange={(event) =>
+                    <input type="checkbox" className="size-4 shrink-0 accent-primary-ink enabled:cursor-pointer disabled:cursor-not-allowed" disabled={bundledIds.has(optionId)} checked={selected.includes(optionId)} onChange={(event) =>
                       setChoices({ ...choices, [id]: event.target.checked ? [...selected, optionId] : selected.filter((item) => item !== optionId) })} />
                     {optionLabel(option)}
                     </span>
@@ -235,7 +235,7 @@ export default function ApiCommissionForm() {
                   min={rule.minQuantity ?? undefined} max={rule.maxQuantity ?? undefined} maxLength={500}
                   value={values[id] ?? ""} onChange={(event) => setValues({ ...values, [id]: event.target.value })} />
               ) : (
-                <select className={control} required={rule.isRequired} aria-describedby={descriptionId}
+                <select className={`${control} cursor-pointer`} required={rule.isRequired} aria-describedby={descriptionId}
                   disabled={selected.some((optionId) => bundledIds.has(optionId))}
                   value={selected[0] ?? ""} onChange={(event) => setChoices({ ...choices, [id]: event.target.value ? [Number(event.target.value)] : [] })}>
                   <option value="">Chọn {rule.configName}</option>
@@ -244,16 +244,16 @@ export default function ApiCommissionForm() {
                   ))}
                 </select>
               )}
-              {rule.description && <span id={descriptionId} className="mt-1 block text-sm text-[#526159]">{rule.description}</span>}
+              {rule.description && <span id={descriptionId} className="mt-1 block text-sm text-text-muted">{rule.description}</span>}
               </label>
               {rule.selectionType === "QUANTITY" || rule.selectionType === "TEXT_INPUT" ? (
-                <p className="mt-2 text-sm text-[#526159]">
+                <p className="mt-2 text-sm text-text-muted">
                   {rule.selectionType === "QUANTITY" && rule.options?.[0]
                     ? `${optionPrice(rule.options[0])} / đơn vị · ${formatPrice(selectedPrice / 100)}`
                     : "Không tính thêm phí"}
                 </p>
               ) : (
-                <ul className="mt-2 divide-y divide-[#cfe3d0] text-sm">
+                <ul className="mt-2 divide-y divide-black/20 text-sm">
                   {(rule.options ?? []).filter((option) => option.optionId !== undefined).map((option) => (
                     <li key={option.optionId} className="flex justify-between gap-3 py-1">
                       <span>{optionLabel(option)}</span>
@@ -274,8 +274,8 @@ export default function ApiCommissionForm() {
             }} error={referenceError} maxNoteLength={2000} />
         </div>
       </fieldset>
-      <section aria-labelledby="commission-price-heading" className="space-y-3 rounded-xl border border-[#cfe3d0] bg-white p-4">
-        <h2 id="commission-price-heading" className="font-bold text-[#155e59]">Chi tiết giá</h2>
+      <section aria-labelledby="commission-price-heading" className="space-y-3 border-2 border-black bg-primary/15 p-4">
+        <h2 id="commission-price-heading" className="font-black text-primary-ink">Chi tiết giá</h2>
         <dl className="space-y-1 text-sm">
           <div className="flex justify-between gap-3"><dt>Giá cơ bản</dt><dd>{formatPrice(basePrice)}</dd></div>
           {!tier?.isCustom && <p className="text-sm">Giá gói đã bao gồm các phương án được chọn sẵn trong gói.</p>}
@@ -283,13 +283,13 @@ export default function ApiCommissionForm() {
             <div key={line.id} className="flex justify-between gap-3"><dt>{line.label}</dt><dd>{formatPrice(line.cents / 100)}</dd></div>
           ))}
         </dl>
-        <p aria-live="polite" className="flex flex-wrap justify-between gap-2 border-t border-[#cfe3d0] pt-3 font-bold text-[#155e59]">
+        <p aria-live="polite" className="flex flex-wrap justify-between gap-2 border-t-2 border-black pt-3 tabular-nums font-black text-primary-ink">
           <span>Tổng thanh toán dự kiến</span><span>{formatPrice(total)}</span>
         </p>
       </section>
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert" className="neo-box-no-hover border-l-8 border-l-red-700 p-4">{error}</p>}
       {user?.role !== "CUSTOMER" && <p>Đăng nhập bằng tài khoản khách hàng để gửi yêu cầu.</p>}
-      <button className={commissionButton} disabled={busy || user?.role !== "CUSTOMER"}>
+      <button className="btn-primary min-h-11 w-full text-sm sm:w-auto" disabled={busy || user?.role !== "CUSTOMER"}>
         {busy ? "Đang gửi…" : "Gửi yêu cầu và đến trang thanh toán"}
       </button>
     </form>

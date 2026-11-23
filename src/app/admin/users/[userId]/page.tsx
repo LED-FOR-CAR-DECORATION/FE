@@ -1,6 +1,8 @@
 import ManagementShell from "@/components/layout/ManagementShell";
 import UserDetailPage from "@/features/managed-users/components/UserDetailPage";
 
+export const instant = false;
+
 export default async function UserDetailRoute({
   params,
 }: {

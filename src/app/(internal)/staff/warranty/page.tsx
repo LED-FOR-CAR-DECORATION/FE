@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -111,6 +111,19 @@ export default function StaffWarrantyManagementPage() {
   useEffect(() => {
     fetchClaims();
   }, [fetchClaims]);
+
+  const autoOpenedTicketRef = useRef<string | null>(null);
+
+  // Auto-open ticket detail once if navigated from Manager Dashboard with ?ticketId=
+  useEffect(() => {
+    const ticketIdParam = new URLSearchParams(window.location.search).get("ticketId");
+    if (!ticketIdParam || autoOpenedTicketRef.current === ticketIdParam || claims.length === 0) return;
+    const match = claims.find((c) => String(c.ticketId) === ticketIdParam);
+    if (match) {
+      autoOpenedTicketRef.current = ticketIdParam;
+      setDetailClaim(match);
+    }
+  }, [claims]);
 
   // Sync with global change events
   useEffect(() => {
@@ -414,7 +427,7 @@ export default function StaffWarrantyManagementPage() {
                 <tr>
                   <th className="px-3.5 sm:px-4 py-3.5">Mã phiếu</th>
                   <th className="px-3.5 sm:px-4 py-3.5">Khách hàng</th>
-                  <th className="px-3.5 sm:px-4 py-3.5">Thiết bị &amp; Serial</th>
+                  <th className="px-3.5 sm:px-4 py-3.5">Thiết bị</th>
                   <th className="px-3.5 sm:px-4 py-3.5">Mô tả sự cố</th>
                   <th className="px-3.5 sm:px-4 py-3.5">Trạng thái</th>
                   <th className="px-3.5 sm:px-4 py-3.5">Ngày tạo</th>

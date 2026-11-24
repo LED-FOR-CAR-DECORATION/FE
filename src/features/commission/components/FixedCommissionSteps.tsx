@@ -51,7 +51,7 @@ function ReferenceThumbnail({ file }: { file: File }) {
   }, [file]);
 
   return (
-    <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#eaf5e8]">
+    <div className="grid size-16 shrink-0 place-items-center overflow-hidden border-2 border-black bg-primary/15">
       {src && <img src={src} alt="" className="size-full object-contain" />}
     </div>
   );
@@ -74,24 +74,24 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
     <div className="space-y-4">
       <label className="block">
         Brief thiết kế (bắt buộc)
-        <textarea className={field} rows={5} maxLength={maxNoteLength} required value={note}
+        <textarea className="mt-1 block w-full p-2.5 border-2 border-black bg-white text-text-main focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60" rows={5} maxLength={maxNoteLength} required value={note}
           onChange={(event) => onNote(event.target.value)}
           placeholder="Ghi tên đối tượng, biểu cảm (vui, giận, ngạc nhiên), tư thế (vẫy tay, giơ ngón cái), màu chủ đạo và đặc điểm phải giữ như kính, tóc hoặc mũ. Với ma trận 32×32, ghi rõ chi tiết nhỏ có thể lược bỏ." />
       </label>
       <label className="block">
         Ảnh tham khảo (không bắt buộc, tối đa 5 ảnh, 5 MB mỗi ảnh)
         <span className="mt-1 block text-sm">Chọn ảnh gốc của đối tượng hoặc mẫu pixel art thể hiện nét vẽ và cách đổ bóng bạn muốn.</span>
-        <input className={field} type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif"
+        <input className="mt-1 block min-h-11 w-full cursor-pointer text-sm border-2 border-black bg-white text-text-main focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60 file:mr-3 file:min-h-11 file:cursor-pointer file:border-0 file:border-r-2 file:border-black file:bg-primary file:px-3 file:font-bold" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif"
           onChange={chooseFiles} disabled={references.length >= 5} />
       </label>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       {references.length > 0 && (
         <ul className="space-y-2">
           {references.map((file, index) => (
-            <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-white p-3">
+            <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3">
               <ReferenceThumbnail file={file} />
               <span className="min-w-0 flex-1 break-all">{file.name}</span>
-              <button type="button" className="shrink-0 font-semibold text-red-700"
+              <button type="button" className="min-h-11 shrink-0 cursor-pointer px-2 font-bold text-red-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
                 aria-label={`Xóa ${file.name}`} onClick={() => onRemove(index)}>Xóa</button>
             </li>
           ))}

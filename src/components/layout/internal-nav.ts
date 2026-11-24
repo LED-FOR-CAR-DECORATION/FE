@@ -6,7 +6,6 @@ import {
   Image,
   LayoutDashboard,
   MessageCircle,
-  RotateCcw,
   Settings2,
   ShieldCheck,
   ShoppingCart,
@@ -87,7 +86,7 @@ export const menuItems: MenuItem[] = [
     roles: ["MANAGER"],
   },
   {
-    label: "Quản lý tag sản phẩm",
+    label: "Quản lý thẻ sản phẩm",
     description: "Tạo, sửa và xóa thẻ danh mục phân loại",
     href: "/staff/tags",
     icon: Tag,
@@ -99,13 +98,6 @@ export const menuItems: MenuItem[] = [
     href: "/staff/warranty",
     icon: ShieldCheck,
     roles: ["MANAGER", "STAFF", "ADMIN"],
-  },
-  {
-    label: "Quản lý trả thiết bị",
-    description: "Tiếp nhận và cập nhật tình trạng trả",
-    href: "/staff/returns",
-    icon: RotateCcw,
-    roles: ["MANAGER"],
   },
   {
     label: "Cấu hình giá Yêu cầu thiết kế",

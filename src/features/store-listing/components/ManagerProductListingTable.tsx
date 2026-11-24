@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import {
   AlertCircle,
   Check,
   CheckCircle2,
   Clock,
+  Edit,
   ExternalLink,
   Eye,
   Loader2,
@@ -26,6 +28,9 @@ interface ManagerProductListingTableProps {
   canManage: boolean;
   onApprove: (character: StoreCharacterRow, price?: number) => Promise<void>;
   onRefresh: () => void;
+  onEdit?: (character: StoreCharacterRow) => void;
+  externalQuery?: string;
+  hideHeader?: boolean;
 }
 
 export default function ManagerProductListingTable({
@@ -34,6 +39,9 @@ export default function ManagerProductListingTable({
   canManage,
   onApprove,
   onRefresh,
+  onEdit,
+  externalQuery,
+  hideHeader = false,
 }: ManagerProductListingTableProps) {
   const [query, setQuery] = useState("");
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -42,13 +50,15 @@ export default function ManagerProductListingTable({
   const [actionError, setActionError] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
 
-  // Filter ONLY UNPUBLISHED ("Pending Review") store listings
+  // Filter ONLY UNPUBLISHED ("Chờ duyệt") character products
   const unpublishedRows = useMemo(() => {
-    return rows.filter((row) => row.status === "Pending Review");
+    return rows.filter((row) => row.status === "UNPUBLISHED");
   }, [rows]);
 
+  const activeQuery = externalQuery !== undefined ? externalQuery : query;
+
   const filteredRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = activeQuery.trim().toLowerCase();
     if (!q) return unpublishedRows;
     return unpublishedRows.filter(
       (row) =>
@@ -56,7 +66,7 @@ export default function ManagerProductListingTable({
         row.creatorName.toLowerCase().includes(q) ||
         row.characterId.includes(q),
     );
-  }, [query, unpublishedRows]);
+  }, [activeQuery, unpublishedRows]);
 
   const handleApproveClick = async (row: StoreCharacterRow) => {
     if (approvingId !== null || !canManage) return;
@@ -72,13 +82,13 @@ export default function ManagerProductListingTable({
     try {
       await onApprove(row, row.draft ? price : undefined);
       setActionNotice(
-        `Đã phê duyệt sản phẩm "${row.name}" (#${row.characterId}) và mở bán PUBLISHED trên Store!`,
+        `Đã phê duyệt nhân vật "${row.name}" (#${row.characterId}) và mở bán PUBLISHED trên Store!`,
       );
     } catch (err) {
       setActionError(
         err instanceof Error
           ? err.message
-          : "Phê duyệt sản phẩm thất bại. Vui lòng thử lại.",
+          : "Phê duyệt nhân vật thất bại. Vui lòng thử lại.",
       );
     } finally {
       setApprovingId(null);
@@ -88,43 +98,45 @@ export default function ManagerProductListingTable({
   return (
     <div className="flex flex-col">
       {/* Header bar */}
-      <div className="flex flex-col gap-3 border-b border-[#e3efe6] bg-[#fbfdfb] p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
-            <Clock size={16} />
-          </span>
-          <div>
-            <h3 className="text-sm font-black text-[#173b28]">
-              Hàng đợi Phê duyệt Store Listing (Chưa công khai - UNPUBLISHED)
-            </h3>
-            <p className="text-xs text-[#66736b]">
-              Các sản phẩm do Designer đăng tải đang chờ Manager thẩm định nghệ thuật và duyệt mở bán.
-            </p>
+      {!hideHeader && (
+        <div className="flex flex-col gap-3 border-b border-[#e3efe6] bg-[#fbfdfb] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
+              <Clock size={16} />
+            </span>
+            <div>
+              <h3 className="text-sm font-black text-[#173b28]">
+                Hàng đợi phê duyệt nhân vật (Chưa mở bán)
+              </h3>
+              <p className="text-xs text-[#66736b]">
+                Các nhân vật do nhà thiết kế đăng tải đang chờ Quản lý thẩm định và duyệt mở bán.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 rounded-xl border border-[#d8e6dc] bg-white px-3 py-1.5 text-xs focus-within:border-[#48a56a]">
+              <Search size={14} className="text-[#66736b]" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Tìm theo tên hoặc nhà thiết kế..."
+                className="w-44 bg-transparent outline-none sm:w-56"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isLoading}
+              title="Làm mới hàng đợi"
+              className="rounded-xl border border-[#d8e6dc] bg-white p-2 text-[#66736b] hover:bg-[#f6fbf7] hover:text-[#173b28]"
+            >
+              <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+            </button>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 rounded-xl border border-[#d8e6dc] bg-white px-3 py-1.5 text-xs focus-within:border-[#48a56a]">
-            <Search size={14} className="text-[#66736b]" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Tìm theo tên hoặc Designer..."
-              className="w-44 bg-transparent outline-none sm:w-56"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={isLoading}
-            title="Làm mới hàng đợi"
-            className="rounded-xl border border-[#d8e6dc] bg-white p-2 text-[#66736b] hover:bg-[#f6fbf7] hover:text-[#173b28]"
-          >
-            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
-          </button>
-        </div>
-      </div>
+      )}
 
       {actionNotice && (
         <div
@@ -169,14 +181,14 @@ export default function ManagerProductListingTable({
         <table className="w-full text-left text-xs text-[#26352f]">
           <thead className="border-b border-[#e3efe6] bg-[#f7fbf8] font-bold text-[#173b28]">
             <tr>
-              <th className="px-4 py-3">Mã</th>
+              <th className="whitespace-nowrap px-4 py-3 text-[11px] font-black uppercase tracking-wide">Mã sản phẩm</th>
               <th className="px-4 py-3">Tác phẩm</th>
-              <th className="px-4 py-3">Tên sản phẩm</th>
-              <th className="px-4 py-3">Designer</th>
+              <th className="px-4 py-3">Tên nhân vật</th>
+              <th className="px-4 py-3">Nhà thiết kế</th>
               <th className="px-4 py-3">Phiên bản</th>
               <th className="px-4 py-3">Giá đề xuất</th>
               <th className="px-4 py-3">Trạng thái</th>
-              <th className="px-4 py-3 text-right">Phê duyệt (Approval)</th>
+              <th className="px-4 py-3 text-right">Phê duyệt</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#eef5f0]">
@@ -194,14 +206,14 @@ export default function ManagerProductListingTable({
                     <ShieldCheck size={24} />
                   </div>
                   <p className="mt-3 text-sm font-bold text-[#173b28]">
-                    {query
-                      ? "Không có sản phẩm nào khớp với từ khóa tìm kiếm."
-                      : "Không có sản phẩm nào đang chờ duyệt!"}
+                    {activeQuery
+                      ? "Không có nhân vật nào khớp với từ khóa tìm kiếm."
+                      : "Không có nhân vật nào đang chờ duyệt!"}
                   </p>
                   <p className="mt-1 text-xs text-[#66736b]">
-                    {query
+                    {activeQuery
                       ? "Hãy kiểm tra lại từ khóa hoặc xóa ô tìm kiếm."
-                      : "Tất cả các sản phẩm Store Listing đều đã được duyệt (PUBLISHED) hoặc đã ẩn."}
+                      : "Tất cả nhân vật trên cửa hàng đều đã được duyệt hoặc đã ẩn."}
                   </p>
                 </td>
               </tr>
@@ -213,7 +225,7 @@ export default function ManagerProductListingTable({
                     key={row.characterId}
                     className="transition-colors hover:bg-[#f8fcf9]"
                   >
-                    <td className="whitespace-nowrap px-4 py-3 font-mono font-bold text-[#155e59]">
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
                       #{row.characterId}
                     </td>
 
@@ -267,7 +279,7 @@ export default function ManagerProductListingTable({
                         <input type="number" min={0} max={9999999999.99} step={0.01}
                           aria-label={`Giá bán của ${row.name}`}
                           className="w-32 rounded-lg border border-[#cfe5d6] bg-white px-2 py-2"
-                          placeholder="Nhập giá (₫)"
+                          placeholder="Nhập giá (VNĐ)"
                           disabled={!canManage || isProcessing}
                           value={prices[row.characterId] ?? (row.draft.basePrice ? String(row.draft.basePrice) : "")}
                           onChange={(event) => setPrices((current) => ({ ...current, [row.characterId]: event.target.value }))} />
@@ -275,41 +287,30 @@ export default function ManagerProductListingTable({
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
-                        <Clock size={11} />
-                        UNPUBLISHED (Chờ duyệt)
-                      </span>
+                      <StatusBadge status={row.status} />
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Status Toggle Simulation */}
-                        <label
-                          className={`relative inline-flex cursor-pointer items-center ${
-                            !canManage || isProcessing ? "cursor-not-allowed opacity-60" : ""
-                          }`}
-                          title={
-                            canManage
-                              ? "Bật chuyển đổi trạng thái sang PUBLISHED"
-                              : "Chỉ Manager mới có quyền duyệt"
-                          }
-                        >
-                          <input
-                            type="checkbox"
-                            checked={false}
+                        {onEdit && (
+                          <button
+                            type="button"
+                            onClick={() => onEdit(row)}
                             disabled={!canManage || isProcessing}
-                            onChange={() => void handleApproveClick(row)}
-                            className="peer sr-only"
-                          />
-                          <div className="peer h-6 w-11 rounded-full bg-slate-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-emerald-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
-                        </label>
+                            title="Chỉnh sửa chi tiết, mô tả hoặc gắn thẻ"
+                            className="inline-flex items-center gap-1 rounded-xl border border-[#cfe0d4] bg-white px-2.5 py-1.5 text-xs font-bold text-[#173b28] shadow-sm transition hover:bg-[#eef8f0] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Edit size={13} />
+                            Sửa / Gắn thẻ
+                          </button>
+                        )}
 
                         {/* Dedicated "Approve" (Duyệt mở bán) button */}
                         <button
                           type="button"
                           onClick={() => void handleApproveClick(row)}
                           disabled={!canManage || isProcessing}
-                          title="Phê duyệt Store Listing và chuyển trạng thái sang PUBLISHED"
+                          title="Phê duyệt và chuyển sang trạng thái Đang mở bán"
                           className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isProcessing ? (
@@ -317,7 +318,7 @@ export default function ManagerProductListingTable({
                           ) : (
                             <Check size={13} />
                           )}
-                          {isProcessing ? "Đang duyệt..." : "Duyệt (Approve)"}
+                          {isProcessing ? "Đang duyệt..." : "Duyệt mở bán"}
                         </button>
                       </div>
                     </td>
@@ -330,53 +331,55 @@ export default function ManagerProductListingTable({
       </div>
 
       {/* Zoom Artwork Modal */}
-      {zoomedRow && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
-          onClick={() => setZoomedRow(null)}
-        >
+      {zoomedRow &&
+        createPortal(
           <div
-            className="relative flex max-w-md flex-col items-center rounded-2xl border border-slate-700 bg-[#090d14] p-5 text-white shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+            onClick={() => setZoomedRow(null)}
           >
-            <button
-              type="button"
-              onClick={() => setZoomedRow(null)}
-              className="absolute right-3 top-3 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+            <div
+              className="relative flex max-w-md flex-col items-center rounded-2xl border border-slate-700 bg-[#090d14] p-5 text-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             >
-              <X size={16} />
-            </button>
-            <h4 className="text-sm font-black text-white">{zoomedRow.name}</h4>
-            <p className="text-xs text-slate-400">Bản vẽ Pixel Art kiểm duyệt bởi Manager</p>
-            <div className="my-4 flex h-64 w-64 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-black">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={zoomedRow.thumbnailUrl}
-                alt={zoomedRow.name}
-                className="h-full w-full object-contain"
-                style={{ imageRendering: "pixelated" }}
-              />
-            </div>
-            <div className="w-full text-center">
               <button
                 type="button"
-                onClick={() => {
-                  const target = zoomedRow;
-                  setZoomedRow(null);
-                  void handleApproveClick(target);
-                }}
-                disabled={!canManage}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"
+                onClick={() => setZoomedRow(null)}
+                className="absolute right-3 top-3 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
               >
-                <Check size={14} />
-                Duyệt mở bán sản phẩm này (PUBLISHED)
+                <X size={16} />
               </button>
+              <h4 className="text-sm font-black text-white">{zoomedRow.name}</h4>
+              <p className="text-xs text-slate-400">Bản vẽ Pixel Art kiểm duyệt bởi Quản lý</p>
+              <div className="my-4 flex h-64 w-64 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-black">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={zoomedRow.thumbnailUrl}
+                  alt={zoomedRow.name}
+                  className="h-full w-full object-contain"
+                  style={{ imageRendering: "pixelated" }}
+                />
+              </div>
+              <div className="w-full text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = zoomedRow;
+                    setZoomedRow(null);
+                    void handleApproveClick(target);
+                  }}
+                  disabled={!canManage}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"
+                >
+                  <Check size={14} />
+                  Duyệt mở bán sản phẩm này
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

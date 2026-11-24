@@ -52,7 +52,7 @@ const STATUS_CLASS: Record<OrderStatus, string> = {
 };
 
 function formatMoney(value: number) {
-  return `${value.toLocaleString("vi-VN")} đ`;
+  return `${value.toLocaleString("vi-VN")} VNĐ`;
 }
 
 function formatDate(value: string) {

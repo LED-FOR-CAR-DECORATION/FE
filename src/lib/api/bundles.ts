@@ -1,6 +1,128 @@
 import axios from "axios";
 import { getApiBaseUrl, OpenAPI } from "./client";
 import { getSessionToken } from "../auth/session";
+import {
+  fetchAdminCharacters,
+  fetchManagedStoreProducts,
+  fetchStoreProducts,
+} from "./products";
+import { fetchManagedLedModels } from "./ledInstances";
+import { fetchCharacterVersions, type CharacterVersionItem } from "./designerCharacters";
+
+export interface BundleSelectableItem {
+  productId: number;
+  targetId: number; // modelId for LED, versionId for CHARACTER
+  itemType: "LED" | "CHARACTER";
+  name: string;
+  subtitle?: string;
+  price: number;
+  previewUrl?: string;
+}
+
+export function normalizeBundleHttpUrl(raw?: string): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("/") && typeof window !== "undefined") {
+    return `${window.location.origin}${trimmed}`;
+  }
+  return trimmed;
+}
+
+export async function fetchBundleSelectableItems(): Promise<{
+  ledOptions: BundleSelectableItem[];
+  characterOptions: BundleSelectableItem[];
+}> {
+  const managedProductsPromise = fetchManagedStoreProducts({ size: 200 }).catch(async () => {
+    const publicRes = await fetchStoreProducts({ size: 100 }).catch(() => ({ items: [] }));
+    return {
+      items: publicRes.items.map((p) => ({
+        productId: p.productId ?? Number(p.id),
+        productName: p.name,
+        description: p.description,
+        productType: (p.productType === "LED_MODEL" ? "LED" : p.productType) as
+          | "LED"
+          | "CHARACTER"
+          | "BUNDLE"
+          | "SUBSCRIPTION",
+        status: "PUBLISHED" as const,
+        basePrice: p.price,
+        thumbnailUrl: p.previewUrl,
+        galleryUrls: p.galleryUrls ?? [],
+        tags: [],
+      })),
+    };
+  });
+
+  const [productsRes, ledModels, characters] = await Promise.all([
+    managedProductsPromise,
+    fetchManagedLedModels().catch(() => []),
+    fetchAdminCharacters({ size: 100 }).catch(() => []),
+  ]);
+
+  const ledModelByProductId = new Map<number, (typeof ledModels)[number]>();
+  for (const model of ledModels) {
+    if (model.productId != null) {
+      ledModelByProductId.set(model.productId, model);
+    }
+  }
+
+  const versionLists = await Promise.all(
+    characters
+      .filter((c) => (c.totalVersions ?? 0) > 0)
+      .map((c) => fetchCharacterVersions(c.characterId).catch(() => [] as CharacterVersionItem[])),
+  );
+  const versionByProductId = new Map<number, CharacterVersionItem>();
+  for (const list of versionLists) {
+    for (const v of list) {
+      if (v.productId != null) {
+        versionByProductId.set(v.productId, v);
+      }
+    }
+  }
+
+  const ledOptions: BundleSelectableItem[] = [];
+  const characterOptions: BundleSelectableItem[] = [];
+
+  for (const p of productsRes.items) {
+    if (p.productId == null || p.status === "DELETED") continue;
+    const statusSuffix =
+      p.status === "UNPUBLISHED"
+        ? " • Chờ duyệt"
+        : p.status === "ARCHIVED"
+          ? " • Ngừng bán"
+          : "";
+
+    if (p.productType === "LED") {
+      const matchedModel = ledModelByProductId.get(p.productId);
+      if (matchedModel?.modelId != null) {
+        ledOptions.push({
+          productId: p.productId,
+          targetId: matchedModel.modelId,
+          itemType: "LED",
+          name: p.productName,
+          subtitle: `Mẫu LED #${matchedModel.modelId} • Tồn kho ${matchedModel.stockQuantity}${statusSuffix}`,
+          price: Number(p.basePrice ?? 0),
+          previewUrl: p.thumbnailUrl || undefined,
+        });
+      }
+    } else if (p.productType === "CHARACTER") {
+      const matchedVersion = versionByProductId.get(p.productId);
+      if (matchedVersion?.versionId != null) {
+        characterOptions.push({
+          productId: p.productId,
+          targetId: matchedVersion.versionId,
+          itemType: "CHARACTER",
+          name: p.productName,
+          subtitle: `Phiên bản v${matchedVersion.versionNumber} • ID #${matchedVersion.versionId}${statusSuffix}`,
+          price: Number(p.basePrice ?? 0),
+          previewUrl: matchedVersion.previewGifUrl || p.thumbnailUrl || undefined,
+        });
+      }
+    }
+  }
+
+  return { ledOptions, characterOptions };
+}
 
 export interface BundleConstituentItem {
   modelId?: number | null;

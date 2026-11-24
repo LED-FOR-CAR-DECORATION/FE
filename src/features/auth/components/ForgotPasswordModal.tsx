@@ -220,7 +220,7 @@ export default function ForgotPasswordModal({
                 setEmail(val);
                 if (error) setError(null);
               }}
-              placeholder="vd: your-email@gmail.com"
+              placeholder="vd: tenban@gmail.com"
               icon={<Mail size={15} />}
               required
             />
@@ -330,7 +330,7 @@ export default function ForgotPasswordModal({
                 className="flex items-center gap-1 font-bold text-[#165d3a] hover:underline disabled:text-text-muted disabled:no-underline"
               >
                 <RefreshCw size={12} className={isResending ? "animate-spin" : ""} />
-                {resendCooldown > 0 ? `Gửi lại sau ${resendCooldown}s` : "Gửi lại mã OTP"}
+                {resendCooldown > 0 ? `Gửi lại sau ${resendCooldown} giây` : "Gửi lại mã OTP"}
               </button>
             </div>
 

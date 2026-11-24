@@ -312,7 +312,7 @@ export default function PublishToStoreModal({
           <div>
             <p className="font-bold">Chờ manager duyệt</p>
             <p className="mt-0.5 text-sky-800">
-              Yêu cầu được tạo với giá tạm 0 ₫. Manager sẽ đặt giá trước khi đăng bán.
+              Yêu cầu được tạo với giá tạm 0 VNĐ. Manager sẽ đặt giá trước khi đăng bán.
             </p>
           </div>
         </div>

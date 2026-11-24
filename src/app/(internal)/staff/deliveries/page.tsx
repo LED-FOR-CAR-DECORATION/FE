@@ -55,7 +55,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function formatMoney(value: number) {
-  return `${value.toLocaleString("vi-VN")} đ`;
+  return `${value.toLocaleString("vi-VN")} VNĐ`;
 }
 
 function ActivityTimeline({ delivery }: { delivery: Delivery }) {

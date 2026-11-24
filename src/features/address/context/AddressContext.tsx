@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Address, AddressFormData } from "@/features/address/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { getApiErrorMessage } from "@/lib/api/auth";
 import {
   apiAddAddress,
   apiDeleteAddress,
@@ -13,9 +14,10 @@ import {
 interface AddressContextValue {
   addresses: Address[];
   isLoading: boolean;
-  addAddress: (address: AddressFormData) => Promise<void> | void;
-  removeAddress: (id: string) => Promise<void> | void;
-  setDefaultAddress: (id: string) => Promise<void> | void;
+  /** Rejects with a user-facing message when the backend refuses the address. */
+  addAddress: (address: AddressFormData) => Promise<void>;
+  removeAddress: (id: string) => Promise<void>;
+  setDefaultAddress: (id: string) => Promise<void>;
   refreshAddresses: () => Promise<void>;
 }
 
@@ -52,12 +54,13 @@ export function AddressProvider({ children }: { children: ReactNode }) {
 
   const addAddress = useCallback(
     async (form: AddressFormData) => {
-      if (!isCustomer) return;
+      if (!isCustomer) throw new Error("Vui lòng đăng nhập bằng tài khoản khách hàng để lưu địa chỉ.");
       try {
         await apiAddAddress(form);
         await refreshAddresses();
       } catch (err) {
-        console.error("Failed to add address:", err);
+        // Surface the failure so callers can keep the form open and show the reason.
+        throw new Error(getApiErrorMessage(err, "Không thể lưu địa chỉ. Vui lòng thử lại."));
       }
     },
     [isCustomer, refreshAddresses],
@@ -70,7 +73,8 @@ export function AddressProvider({ children }: { children: ReactNode }) {
         await apiDeleteAddress(id);
         await refreshAddresses();
       } catch (err) {
-        console.error("Failed to delete address:", err);
+        // Surface the failure so callers can keep the form open and show the reason.
+        throw new Error(getApiErrorMessage(err, "Không thể xóa địa chỉ. Vui lòng thử lại."));
       }
     },
     [isCustomer, refreshAddresses],
@@ -83,7 +87,8 @@ export function AddressProvider({ children }: { children: ReactNode }) {
         await apiSetDefaultAddress(id);
         await refreshAddresses();
       } catch (err) {
-        console.error("Failed to set default address:", err);
+        // Surface the failure so callers can keep the form open and show the reason.
+        throw new Error(getApiErrorMessage(err, "Không thể đặt địa chỉ mặc định. Vui lòng thử lại."));
       }
     },
     [isCustomer, refreshAddresses],

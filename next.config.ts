@@ -5,7 +5,11 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: false,
   reactCompiler: true,
+  experimental: {
+    agentUpgrade: "security",
+  },
   images: {
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "**" },
       { protocol: "http", hostname: "**" },

@@ -104,16 +104,25 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
   return (
     <div className="space-y-5">
       <section className="space-y-3 rounded-xl border border-[#cfe3d0] bg-white p-5">
-        <h1 className="text-2xl font-black text-[#155e59]">
-          {detail.status === "AWAITING_EXTRA_PAYMENT" ? "Thanh toán phí chỉnh sửa" : "Thanh toán Commission"}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-2xl font-black text-[#155e59]">
+            {detail.status === "PENDING_REVIEW"
+              ? "Yêu cầu thiết kế chờ duyệt"
+              : detail.status === "AWAITING_EXTRA_PAYMENT"
+                ? "Thanh toán phí chỉnh sửa"
+                : "Thanh toán Commission"}
+          </h1>
+          <Link href="/commission" className="text-sm font-semibold text-[#155e59] underline">
+            Quay lại danh sách yêu cầu
+          </Link>
+        </div>
         <p className="break-words font-semibold">{detail.title} · #{detail.commissionId}</p>
         <dl className="flex flex-wrap justify-between gap-2 border-t border-[#cfe3d0] pt-3">
           <dt>Tổng giá trị Commission</dt>
           <dd className="font-bold text-[#155e59]">{formatPrice(detail.totalPrice)}</dd>
         </dl>
         <div role="status" className="text-sm text-[#526159]">
-          {detail.status === "PENDING_REVIEW" && "Yêu cầu đang chờ nhân viên duyệt. Mã QR sẽ tự hiện khi có thể thanh toán."}
+          {detail.status === "PENDING_REVIEW" && "Yêu cầu đã được gửi và đang chờ nhân viên duyệt. Sau khi nhân viên duyệt, mã QR thanh toán sẽ tự động hiển thị tại đây."}
           {detail.status === "EXPIRED" && "Phiên thanh toán đã hết hạn."}
           {detail.status === "CANCELLED" && "Yêu cầu đã bị hủy."}
           {(detail.status === "PENDING_PAYMENT" || detail.status === "AWAITING_EXTRA_PAYMENT") && !detail.activePaymentCode && pendingPaymentMessage}

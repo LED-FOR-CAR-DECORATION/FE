@@ -183,6 +183,51 @@ export async function apiDeleteStoreTag(id: number): Promise<void> {
   });
 }
 
+export type BackendProductStatus = "UNPUBLISHED" | "PUBLISHED" | "ARCHIVED" | "DELETED";
+
+export interface ManagedStoreProductItem {
+  productId: number;
+  productName: string;
+  description?: string | null;
+  productType: "LED" | "CHARACTER" | "BUNDLE" | "SUBSCRIPTION";
+  status: BackendProductStatus;
+  basePrice: number;
+  thumbnailUrl?: string | null;
+  galleryUrls: string[];
+  tags: TagItem[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export async function fetchManagedStoreProducts(params?: {
+  productType?: "LED" | "CHARACTER" | "BUNDLE" | "SUBSCRIPTION";
+  status?: BackendProductStatus;
+  page?: number;
+  size?: number;
+}): Promise<{ items: ManagedStoreProductItem[]; totalElements: number; totalPages: number }> {
+  const token = await getSessionToken();
+  const { data: envelope } = await axios.get<{
+    data?: ManagedStoreProductItem[];
+    meta?: { totalElements?: number; totalPages?: number };
+  }>("/api/management/admin/store/products", {
+    baseURL: getApiBaseUrl(),
+    withCredentials: OpenAPI.WITH_CREDENTIALS,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    params: {
+      productType: params?.productType,
+      status: params?.status,
+      page: params?.page ?? 0,
+      size: params?.size ?? 200,
+    },
+  });
+  const items = Array.isArray(envelope?.data) ? envelope.data : [];
+  return {
+    items,
+    totalElements: envelope?.meta?.totalElements ?? items.length,
+    totalPages: envelope?.meta?.totalPages ?? 1,
+  };
+}
+
 export async function apiUpdateProductStatus(
   productId: number,
   status: "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED",

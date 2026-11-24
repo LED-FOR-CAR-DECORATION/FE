@@ -3,11 +3,11 @@ import { Clock, Mail, MapPin, Phone } from "lucide-react";
 import { SiGooglemaps } from "react-icons/si";
 import { INFO_LINKS, MAP_EMBED_URL, MAP_LINK_URL, SHOP_LINKS, SITE } from "@/config/site";
 import SocialLinks from "./SocialLinks";
+import CopyrightYear from "./CopyrightYear";
 
 const linkClass = "inline-flex min-h-8 items-center hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black";
 
 export default function Footer() {
-  const year = new Date().getFullYear();
   return (
     <footer className="border-t-2 border-black bg-primary pt-12 pb-8 text-black">
       <div className="container mx-auto grid grid-cols-1 gap-10 px-4 md:grid-cols-2 lg:grid-cols-12">
@@ -64,7 +64,7 @@ export default function Footer() {
       </div>
 
       <div className="container mx-auto mt-8 flex flex-col items-center justify-between gap-3 border-t-2 border-black px-4 pt-6 md:flex-row">
-        <p className="text-xs font-bold uppercase tracking-wider">© {year} {SITE.team}. Bảo lưu mọi quyền.</p>
+        <p className="text-xs font-bold uppercase tracking-wider">© <CopyrightYear /> {SITE.team}. Bảo lưu mọi quyền.</p>
         <p className="text-xs font-semibold">Thanh toán bằng mã QR chuyển khoản</p>
       </div>
     </footer>

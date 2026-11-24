@@ -183,10 +183,10 @@ export async function createWarrantyClaim(
   const baseUrl = getApiBaseUrl();
   const headers = await getAuthHeader();
 
-  // Filter out any invalid or non-empty strings from media list
-  const validEvidence = (payload.evidenceMediaUrls || []).filter(
-    (u) => typeof u === "string" && u.trim().startsWith("http")
-  );
+  // Evidence là objectKey trả về từ POST /api/media/upload-url (purpose WARRANTY_EVIDENCE), không phải URL
+  const validEvidence = (payload.evidenceMediaUrls || [])
+    .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+    .map((u) => u.trim());
 
   const requestBody = {
     issueDescription: payload.issueDescription.trim(),

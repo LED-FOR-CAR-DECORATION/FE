@@ -33,8 +33,11 @@ export interface ManagerKpiSummary {
   revenueGrowthPercent: number;
   revenuePeriod: string;
   pendingCharactersCount: number;
+  pendingCommissionsCount: number;
+  pendingWarrantyClaimsCount: number;
   lowStockModelsCount: number;
   activeBundlesCount: number;
+  activeSubscriptionsCount: number;
   activePriceConfigsCount: number;
 }
 
@@ -49,11 +52,12 @@ export interface RevenueCategoryItem {
 export interface TopProductItem {
   id: string;
   name: string;
-  category: "HARDWARE" | "CHARACTER" | "BUNDLE";
+  category: "HARDWARE" | "CHARACTER" | "BUNDLE" | "SUBSCRIPTION";
   unitsSold: number;
   revenue: number;
   rank: number;
-  thumbnail: string;
+  /** Thumbnail image URL */
+  thumbnail: string | null;
   trend: "up" | "down" | "stable";
   stockStatus?: "In stock" | "Low stock" | "Out of stock";
 }
@@ -92,14 +96,14 @@ export interface LowStockLedItem {
 
 export interface WarrantyAlertItem {
   ticketId: string;
-  customerName: string;
-  customerEmail: string;
-  deviceModel: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  deviceModel: string | null;
   deviceSerial: string;
   issueDescription: string;
-  reportedDate: string;
-  status: "Under Inspection" | "Replacement Approved" | "Pending RMA" | "Resolved";
-  priority: "High" | "Medium" | "Low";
+  /** ISO-8601 UTC timestamp. */
+  reportedDate: string | null;
+  status: "PENDING" | "APPROVED";
 }
 
 // -------------------------------------------------------------

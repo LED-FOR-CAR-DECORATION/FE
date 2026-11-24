@@ -1,31 +1,41 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import {
+  ArrowLeft,
   Boxes,
-  Check,
   ChevronDown,
   Image as ImageIcon,
   Loader2,
   Minus,
   Package,
   Plus,
+  Rocket,
   Sparkles,
   Trash2,
   Upload,
   X,
 } from "lucide-react";
-import { fetchStoreProducts, fetchStoreTags } from "@/lib/api/products";
-import { apiCreateBundle, type BundleConstituentItem, type ManagedBundleDetail } from "@/lib/api/bundles";
+import CategoryTagSelector from "./CategoryTagSelector";
+import { apiUpdateProductStatus, fetchStoreTags } from "@/lib/api/products";
+import {
+  apiCreateBundle,
+  fetchBundleSelectableItems,
+  normalizeBundleHttpUrl,
+  type BundleConstituentItem,
+  type BundleSelectableItem,
+  type ManagedBundleDetail,
+} from "@/lib/api/bundles";
 import { uploadMediaFile } from "@/lib/api/media";
 import type { TagItem } from "@/api_client";
-import type { CatalogProduct } from "@/features/cart/catalog";
 import { formatVnd } from "../format";
 
 interface CreateBundleModalProps {
   onClose: () => void;
   onSuccess: (bundle: ManagedBundleDetail) => void;
+  onBackToTypeSelect?: () => void;
 }
 
 interface SelectedBundleItem {
@@ -39,7 +49,11 @@ interface SelectedBundleItem {
   previewUrl?: string;
 }
 
-export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleModalProps) {
+export default function CreateBundleModal({
+  onClose,
+  onSuccess,
+  onBackToTypeSelect,
+}: CreateBundleModalProps) {
   const modalTitleId = useId();
 
   // Form states
@@ -51,11 +65,12 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [items, setItems] = useState<SelectedBundleItem[]>([]);
+  const [publishImmediately, setPublishImmediately] = useState(false);
 
   // Async data states
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
-  const [availableLedProducts, setAvailableLedProducts] = useState<CatalogProduct[]>([]);
-  const [availableCharacterProducts, setAvailableCharacterProducts] = useState<CatalogProduct[]>([]);
+  const [availableLedProducts, setAvailableLedProducts] = useState<BundleSelectableItem[]>([]);
+  const [availableCharacterProducts, setAvailableCharacterProducts] = useState<BundleSelectableItem[]>([]);
   const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(true);
 
   // UI state
@@ -71,19 +86,22 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
   // Load catalogs on mount
   useEffect(() => {
     let active = true;
-    Promise.all([
+    Promise.allSettled([
       fetchStoreTags(),
-      fetchStoreProducts({ size: 100 }),
+      fetchBundleSelectableItems(),
     ])
-      .then(([tags, productsRes]) => {
+      .then(([tagsRes, selectableRes]) => {
         if (!active) return;
-        setAvailableTags(tags);
-        const leds = productsRes.items.filter((p) => p.productType === "LED_MODEL");
-        const chars = productsRes.items.filter((p) => p.productType === "CHARACTER");
-        setAvailableLedProducts(leds);
-        setAvailableCharacterProducts(chars);
+        if (tagsRes.status === "fulfilled") {
+          setAvailableTags(tagsRes.value);
+        }
+        if (selectableRes.status === "fulfilled") {
+          setAvailableLedProducts(selectableRes.value.ledOptions);
+          setAvailableCharacterProducts(selectableRes.value.characterOptions);
+        } else {
+          console.error("Failed to load selectable items for bundle:", selectableRes.reason);
+        }
       })
-      .catch((err) => console.error("Failed to load options for bundle:", err))
       .finally(() => {
         if (active) setIsLoadingCatalogs(false);
       });
@@ -110,7 +128,7 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
     setIsUploadingThumb(true);
     setErrorMessage(null);
     try {
-      const res = await uploadMediaFile(file, "STORE_PRODUCT");
+      const res = await uploadMediaFile(file, "PRODUCT_BUNDLE");
       setThumbnailUrl(res.publicUrl);
       setPreviewThumbUrl(res.localPreviewUrl || res.publicUrl);
     } catch (err: any) {
@@ -129,7 +147,7 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
     setErrorMessage(null);
     try {
       const uploadPromises = Array.from(files).map((f) =>
-        uploadMediaFile(f, "STORE_PRODUCT"),
+        uploadMediaFile(f, "PRODUCT_BUNDLE"),
       );
       const results = await Promise.all(uploadPromises);
       const newUrls = results.map((r) => r.publicUrl);
@@ -152,12 +170,23 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
     );
   };
 
+  const handleTagCreated = (created: TagItem) => {
+    setAvailableTags((prev) =>
+      prev.some((t) => t.tagId === created.tagId) ? prev : [...prev, created],
+    );
+    if (created.tagId) {
+      setSelectedTagIds((prev) =>
+        prev.includes(created.tagId!) ? prev : [...prev, created.tagId!],
+      );
+    }
+  };
+
   // Add Item to bundle
-  const handleAddItem = (product: CatalogProduct, type: "LED" | "CHARACTER") => {
+  const handleAddItem = (option: BundleSelectableItem) => {
     const existing = items.find(
       (it) =>
-        (type === "LED" && it.modelId === product.productId) ||
-        (type === "CHARACTER" && it.versionId === product.productId),
+        (option.itemType === "LED" && it.modelId === option.targetId) ||
+        (option.itemType === "CHARACTER" && it.versionId === option.targetId),
     );
 
     if (existing) {
@@ -168,14 +197,14 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
       );
     } else {
       const newItem: SelectedBundleItem = {
-        id: `${type}-${product.productId}-${Date.now()}`,
-        modelId: type === "LED" ? product.productId : undefined,
-        versionId: type === "CHARACTER" ? product.productId : undefined,
-        name: product.name,
-        itemType: type,
-        unitPrice: product.price,
+        id: `${option.itemType}-${option.targetId}-${Date.now()}`,
+        modelId: option.itemType === "LED" ? option.targetId : undefined,
+        versionId: option.itemType === "CHARACTER" ? option.targetId : undefined,
+        name: option.name,
+        itemType: option.itemType,
+        unitPrice: option.price,
         quantity: 1,
-        previewUrl: product.previewUrl,
+        previewUrl: option.previewUrl,
       };
       setItems((prev) => [...prev, newItem]);
     }
@@ -230,15 +259,28 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
         quantity: it.quantity,
       }));
 
-      const created = await apiCreateBundle({
+      const normalizedGalleryUrls = galleryUrls
+        .map((url) => normalizeBundleHttpUrl(url))
+        .filter((url): url is string => Boolean(url));
+
+      let created = await apiCreateBundle({
         bundleName: bundleName.trim(),
         description: description.trim() || undefined,
-        thumbnailUrl: thumbnailUrl || undefined,
-        galleryUrls: galleryUrls.length > 0 ? galleryUrls : undefined,
+        thumbnailUrl: normalizeBundleHttpUrl(thumbnailUrl),
+        galleryUrls: normalizedGalleryUrls.length > 0 ? normalizedGalleryUrls : undefined,
         bundlePrice,
         tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
         items: payloadItems,
       });
+
+      if (publishImmediately && created.productId) {
+        try {
+          await apiUpdateProductStatus(created.productId, "PUBLISHED");
+          created = { ...created, status: "PUBLISHED" };
+        } catch {
+          // Bundle + product remain UNPUBLISHED if publish call fails
+        }
+      }
 
       onSuccess(created);
     } catch (err: any) {
@@ -251,7 +293,7 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
     }
   };
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -507,15 +549,17 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
                             Không có thiết bị LED nào
                           </div>
                         ) : (
-                          availableLedProducts.map((p) => (
+                          availableLedProducts.map((opt) => (
                             <div
-                              key={p.id}
-                              onClick={() => handleAddItem(p, "LED")}
+                              key={`${opt.itemType}-${opt.targetId}`}
+                              onClick={() => handleAddItem(opt)}
                               className="flex cursor-pointer items-center justify-between p-2 hover:bg-emerald-50 rounded-lg transition"
                             >
                               <div className="text-left">
-                                <p className="text-xs font-black text-gray-900">{p.name}</p>
-                                <p className="text-[10px] text-gray-500">Đơn giá: {formatVnd(p.price)}</p>
+                                <p className="text-xs font-black text-gray-900">{opt.name}</p>
+                                <p className="text-[10px] text-gray-500">
+                                  {opt.subtitle ? `${opt.subtitle} • ` : ""}Đơn giá: {formatVnd(opt.price)}
+                                </p>
                               </div>
                               <Plus size={14} className="text-emerald-700" />
                             </div>
@@ -523,18 +567,20 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
                         )
                       ) : availableCharacterProducts.length === 0 ? (
                         <div className="py-4 text-center text-xs text-gray-400">
-                          Không có hoạt ảnh nào
+                          Không có nhân vật nào
                         </div>
                       ) : (
-                        availableCharacterProducts.map((p) => (
+                        availableCharacterProducts.map((opt) => (
                           <div
-                            key={p.id}
-                            onClick={() => handleAddItem(p, "CHARACTER")}
+                            key={`${opt.itemType}-${opt.targetId}`}
+                            onClick={() => handleAddItem(opt)}
                             className="flex cursor-pointer items-center justify-between p-2 hover:bg-emerald-50 rounded-lg transition"
                           >
                             <div className="text-left">
-                              <p className="text-xs font-black text-gray-900">{p.name}</p>
-                              <p className="text-[10px] text-gray-500">Đơn giá: {formatVnd(p.price)}</p>
+                              <p className="text-xs font-black text-gray-900">{opt.name}</p>
+                              <p className="text-[10px] text-gray-500">
+                                {opt.subtitle ? `${opt.subtitle} • ` : ""}Đơn giá: {formatVnd(opt.price)}
+                              </p>
                             </div>
                             <Plus size={14} className="text-emerald-700" />
                           </div>
@@ -664,35 +710,47 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
           </div>
 
           {/* 5. Category Tags */}
-          <div className="space-y-2">
-            <label className="block text-xs font-black uppercase text-gray-700">
-              Gán thẻ danh mục (Tags)
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {availableTags.map((tag) => {
-                const isSelected = selectedTagIds.includes(Number(tag.tagId));
-                return (
-                  <button
-                    key={tag.tagId}
-                    type="button"
-                    onClick={() => handleToggleTag(Number(tag.tagId))}
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold transition-all ${
-                      isSelected
-                        ? "border border-[#3f9660] bg-[#8bd49f] text-[#10351f] shadow-sm"
-                        : "border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
-                    }`}
-                  >
-                    {isSelected && <Check size={12} />}
-                    {tag.name}
-                  </button>
-                );
-              })}
+          <CategoryTagSelector
+            availableTags={availableTags}
+            selectedTagIds={selectedTagIds}
+            isLoading={isLoadingCatalogs}
+            label="Thẻ phân loại sản phẩm"
+            onToggleTag={handleToggleTag}
+            onTagCreated={handleTagCreated}
+          />
+
+          {/* 6. Trạng thái mở bán */}
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-[#d2e4d7] bg-[#f7fbf8] p-3 text-xs text-[#2e573c]">
+            <div>
+              <span className="block font-bold text-[#1f432b]">
+                Mở bán ngay sau khi tạo
+              </span>
+              <span className="text-text-muted">
+                Hệ thống tạo đồng thời Gói sản phẩm và Sản phẩm bày bán (mặc định ở trạng thái <strong>Chưa mở bán</strong>).
+              </span>
             </div>
-          </div>
+            <input
+              type="checkbox"
+              checked={publishImmediately}
+              onChange={(e) => setPublishImmediately(e.target.checked)}
+              className="h-4 w-4 accent-[#439660]"
+            />
+          </label>
         </div>
 
         {/* Footer Action - Fixed & Pinned */}
           <div className="flex shrink-0 items-center justify-end gap-3 border-t-2 border-[#e3efe6] bg-gray-50/95 px-5 sm:px-6 py-3 sm:py-3.5">
+            {onBackToTypeSelect && (
+              <button
+                type="button"
+                onClick={onBackToTypeSelect}
+                disabled={isSubmitting}
+                className="mr-auto inline-flex items-center gap-1.5 rounded-lg border border-[#cfe0d4] bg-white px-3.5 py-2 text-xs font-bold text-[#1f432b] transition hover:bg-[#eef8f0] disabled:opacity-50"
+              >
+                <ArrowLeft size={14} />
+                Đổi loại sản phẩm
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -712,17 +770,23 @@ export default function CreateBundleModal({ onClose, onSuccess }: CreateBundleMo
                   <Loader2 size={14} className="animate-spin" />
                   Đang khởi tạo gói...
                 </>
+              ) : publishImmediately ? (
+                <>
+                  <Rocket size={14} />
+                  Tạo gói &amp; Mở bán ngay
+                </>
               ) : (
                 <>
                   <Package size={14} />
-                  Tạo gói Combo (Chờ mở bán)
+                  Tạo gói sản phẩm
                 </>
               )}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

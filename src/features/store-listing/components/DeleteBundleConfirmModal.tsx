@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Loader2, Trash2, X } from "lucide-react";
 import { apiDeleteBundle, type ManagedBundleItem } from "@/lib/api/bundles";
 
@@ -35,7 +36,7 @@ export default function DeleteBundleConfirmModal({
     }
   };
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -116,7 +117,8 @@ export default function DeleteBundleConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

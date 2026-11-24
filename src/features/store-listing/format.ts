@@ -22,5 +22,5 @@ export function formatBytes(bytes: number) {
 }
 
 export function formatVnd(amount: number) {
-  return `${amount.toLocaleString(LOCALE)} ₫`;
+  return `${amount.toLocaleString(LOCALE)} VNĐ`;
 }

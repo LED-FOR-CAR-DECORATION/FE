@@ -76,7 +76,7 @@ export default function EditSubscriptionModal({
     setIsUploadingThumbnail(true);
     setError(null);
     try {
-      const res = await uploadMediaFile(file, "STORE_PRODUCT");
+      const res = await uploadMediaFile(file, "PRODUCT_SUBSCRIPTION");
       setThumbnailUrl(res.publicUrl);
       setThumbnailPreviewUrl(res.localPreviewUrl || res.publicUrl);
     } catch (err: any) {
@@ -99,7 +99,7 @@ export default function EditSubscriptionModal({
 
     const parsedPrice = Number(basePrice);
     if (basePrice.trim() === "" || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      setError("Giá bán phải là số lớn hơn hoặc bằng 0 đ.");
+      setError("Giá bán phải là số lớn hơn hoặc bằng 0 VNĐ.");
       return;
     }
 

@@ -103,7 +103,7 @@ export default function InternalShell({ children }: { children: React.ReactNode 
     setLogoutError("");
     try {
       await logout();
-      window.location.assign("/login");
+      window.location.assign("/");
     } catch (error) {
       setLogoutError(error instanceof Error ? error.message : "Không thể đăng xuất. Vui lòng thử lại.");
       setLoggingOut(false);

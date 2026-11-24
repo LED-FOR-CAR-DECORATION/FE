@@ -16,6 +16,7 @@ export type CreateStoreProductRequest = {
     tagIds?: Array<number>;
     characterVersionId?: number;
     ledDetails?: LedDetails;
+    ledModelId?: number;
 };
 export namespace CreateStoreProductRequest {
     export enum productType {

@@ -83,7 +83,7 @@ export const menuItems: MenuItem[] = [
     roles: ["MANAGER"],
   },
   {
-    label: "Quản lý tag sản phẩm",
+    label: "Quản lý thẻ sản phẩm",
     description: "Tạo, sửa và xóa thẻ danh mục phân loại",
     href: "/staff/tags",
     icon: Tag,

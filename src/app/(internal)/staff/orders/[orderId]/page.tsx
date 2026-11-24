@@ -13,26 +13,36 @@ import {
   Loader2,
   MapPin,
   Package,
+  Pencil,
   Phone,
   Printer,
   QrCode,
   RefreshCw,
+  RotateCcw,
   Trash2,
   Truck,
   User,
   X,
   XCircle,
 } from "lucide-react";
+import EditOrderDeliveryAddressModal from "@/components/ui/EditOrderDeliveryAddressModal";
 import { useOrders } from "@/features/order/context/OrderContext";
 import { getOrderKind } from "@/features/order/fulfillment";
 import type { OrderKind } from "@/features/order/types";
-import { fetchLedInstances, LedInstanceItem } from "@/lib/api/ledInstances";
+import {
+  fetchLedInstances,
+  fetchManagedLedModels,
+  LedInstanceFilterRequest,
+  LedInstanceItem,
+} from "@/lib/api/ledInstances";
+import { fetchStoreProductDetail } from "@/lib/api/products";
 import {
   apiLinkOrderFulfillmentDevice,
   apiUnlinkOrderFulfillmentDevice,
   fetchStaffOrderDetail,
   type BackendStaffOrderDetail,
   type LinkOrderFulfillmentDeviceResponse,
+  type UpdateStaffDeliveryAddressRequest,
 } from "@/lib/api/orders";
 
 function getOrderSteps(orderKind: OrderKind, status: string) {
@@ -65,6 +75,34 @@ const AHAMOVE_SERVICES = [
     name: "SGN-BIKE — Xe máy nội thành TP.HCM (Khuyên dùng cho đơn LED lẻ)",
   },
   {
+    id: "SGN-EXPRESS",
+    name: "SGN-EXPRESS — Giao hỏa tốc nội thành TP.HCM (Lấy & giao ngay)",
+  },
+  {
+    id: "SGN-SAMEDAY",
+    name: "SGN-SAMEDAY — Giao trong ngày nội thành TP.HCM (Tiết kiệm)",
+  },
+  {
+    id: "SGN-SUPER",
+    name: "SGN-SUPER — Siêu tốc TP.HCM (Ưu tiên tài xế gần nhất)",
+  },
+  {
+    id: "SGN-BULKY",
+    name: "SGN-BULKY — Xe máy chở hàng cồng kềnh TP.HCM (Nhiều bảng LED)",
+  },
+  {
+    id: "SGN-VAN-500",
+    name: "SGN-VAN-500 — Xe Van 500kg (Nội thành không cấm tải)",
+  },
+  {
+    id: "SGN-TRUCK-500",
+    name: "SGN-TRUCK-500 — Xe tải 500kg (Đơn sỉ số lượng lớn)",
+  },
+  {
+    id: "SGN-TRUCK-1000",
+    name: "SGN-TRUCK-1000 — Xe tải 1 tấn (Đơn đại lý / sự kiện)",
+  },
+  {
     id: "BIKE",
     name: "BIKE — Xe máy tiêu chuẩn ngoại thành / tỉnh lân cận",
   },
@@ -73,8 +111,12 @@ const AHAMOVE_SERVICES = [
     name: "2H — Giao hàng siêu tốc trong 2 giờ",
   },
   {
-    id: "SGN-TRUCK-500",
-    name: "SGN-TRUCK-500 — Xe tải 500kg (Đơn sỉ số lượng lớn)",
+    id: "HAN-BIKE",
+    name: "HAN-BIKE — Xe máy nội thành Hà Nội",
+  },
+  {
+    id: "HAN-EXPRESS",
+    name: "HAN-EXPRESS — Giao hỏa tốc nội thành Hà Nội",
   },
 ];
 
@@ -145,7 +187,7 @@ const ORDER_KIND_BADGE: Record<OrderKind, { label: string; className: string }> 
 };
 
 function formatMoney(value: number) {
-  return `${value.toLocaleString("vi-VN")} đ`;
+  return `${value.toLocaleString("vi-VN")} VNĐ`;
 }
 
 function formatDate(isoDate?: string) {
@@ -170,10 +212,14 @@ export default function OrderDetailPage({
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = use(params);
-  const { orders, refreshOrders, updateOrderStatus, dispatchOrder } = useOrders();
+  const { orders, refreshOrders, updateOrderStatus, updateOrderDeliveryAddress, dispatchOrder } = useOrders();
 
   const [isPrepareModalOpen, setIsPrepareModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState("");
+  const [isEditAddressModalOpen, setIsEditAddressModalOpen] = useState(false);
+  const [actionSuccessBanner, setActionSuccessBanner] = useState("");
   const [serviceId, setServiceId] = useState("SGN-BIKE");
   const [weight, setWeight] = useState("1.5");
   const [remarks, setRemarks] = useState("Handle fragile LED package with care");
@@ -187,6 +233,8 @@ export default function OrderDetailPage({
   // Fulfillment LED device scanning/linking state
   const [staffDetail, setStaffDetail] = useState<BackendStaffOrderDetail | null>(null);
   const [warehouseInstances, setWarehouseInstances] = useState<LedInstanceItem[]>([]);
+  const [inStockByModelId, setInStockByModelId] = useState<Record<number, LedInstanceItem[]>>({});
+  const [itemModelIdsMap, setItemModelIdsMap] = useState<Record<number, number[]>>({});
   const [loadingFulfillment, setLoadingFulfillment] = useState(false);
   const [serialByItem, setSerialByItem] = useState<Record<number, string>>({});
   const [linkingItemId, setLinkingItemId] = useState<number | null>(null);
@@ -202,15 +250,103 @@ export default function OrderDetailPage({
 
     setLoadingFulfillment(true);
     try {
-      const [detailRes, instancesRes] = await Promise.allSettled([
+      const [detailRes, modelsRes] = await Promise.allSettled([
         fetchStaffOrderDetail(numericOrderId),
-        fetchLedInstances({ page: 0, size: 100 }),
+        fetchManagedLedModels(),
       ]);
-      if (detailRes.status === "fulfilled" && detailRes.value) {
-        setStaffDetail(detailRes.value);
+
+      const detail = detailRes.status === "fulfilled" ? detailRes.value : null;
+      if (detail) {
+        setStaffDetail(detail);
       }
-      if (instancesRes.status === "fulfilled") {
-        setWarehouseInstances(instancesRes.value.items);
+
+      const managedModels = modelsRes.status === "fulfilled" ? modelsRes.value : [];
+      const modelIdByProductId = new Map<number, number>();
+      const modelIdByName = new Map<string, number>();
+      for (const m of managedModels) {
+        if (m.productId != null && m.modelId != null) {
+          modelIdByProductId.set(Number(m.productId), Number(m.modelId));
+        }
+        if (m.modelName && m.modelId != null) {
+          modelIdByName.set(m.modelName.trim().toLowerCase(), Number(m.modelId));
+        }
+      }
+
+      const nextItemModelIds: Record<number, number[]> = {};
+      const physicalDetailItems = (detail?.items ?? []).filter(
+        (item) => item.productType !== "CHARACTER" && item.productType !== "SUBSCRIPTION",
+      );
+
+      await Promise.all(
+        physicalDetailItems.map(async (item) => {
+          const typeUpper = (item.productType ?? "LED").toUpperCase();
+          if (typeUpper === "BUNDLE") {
+            const productDetail = await fetchStoreProductDetail(item.productId).catch(() => null);
+            const bundleModelIds = Array.from(
+              new Set(
+                (productDetail?.bundleDetails?.items ?? [])
+                  .filter((bi) => bi.itemType === "LED" && bi.modelId != null)
+                  .map((bi) => Number(bi.modelId)),
+              ),
+            );
+            nextItemModelIds[item.orderItemId] = bundleModelIds;
+          } else {
+            const resolvedModelId =
+              modelIdByProductId.get(Number(item.productId)) ??
+              modelIdByName.get(item.productName.trim().toLowerCase());
+            nextItemModelIds[item.orderItemId] =
+              resolvedModelId != null ? [resolvedModelId] : [];
+          }
+        }),
+      );
+
+      setItemModelIdsMap(nextItemModelIds);
+
+      const uniqueModelIds = Array.from(
+        new Set(Object.values(nextItemModelIds).flat()),
+      );
+
+      if (uniqueModelIds.length > 0) {
+        const [inStockEntries, allModelEntries] = await Promise.all([
+          Promise.all(
+            uniqueModelIds.map(async (modelId) => {
+              const res = await fetchLedInstances({
+                page: 0,
+                size: 100,
+                modelId,
+                status: LedInstanceFilterRequest.status.IN_STOCK,
+              }).catch(() => ({ items: [] as LedInstanceItem[] }));
+              return [modelId, res.items] as const;
+            }),
+          ),
+          Promise.all(
+            uniqueModelIds.map((modelId) =>
+              fetchLedInstances({ page: 0, size: 100, modelId })
+                .then((res) => res.items)
+                .catch(() => [] as LedInstanceItem[]),
+            ),
+          ),
+        ]);
+
+        const nextInStockByModel: Record<number, LedInstanceItem[]> = {};
+        for (const [mId, list] of inStockEntries) {
+          nextInStockByModel[mId] = list;
+        }
+        setInStockByModelId(nextInStockByModel);
+
+        const dedupedInstances = new Map<number, LedInstanceItem>();
+        for (const list of allModelEntries) {
+          for (const inst of list) {
+            dedupedInstances.set(inst.instanceId, inst);
+          }
+        }
+        setWarehouseInstances(Array.from(dedupedInstances.values()));
+      } else {
+        setInStockByModelId({});
+        const fallbackRes = await fetchLedInstances({ page: 0, size: 100 }).catch(() => ({
+          items: [] as LedInstanceItem[],
+        }));
+        setWarehouseInstances(fallbackRes.items);
       }
     } finally {
       setLoadingFulfillment(false);
@@ -263,6 +399,25 @@ export default function OrderDetailPage({
 
   const canPrepareOrder = isReadyStatus && hasPhysicalItem && isDeliveryNotDispatched;
 
+  const isDeliveryFailedOrder = order.status === "DELIVERY_FAILED";
+  const deliveryAttemptCount =
+    staffDetail?.delivery?.deliveryAttemptCount ?? order.delivery?.attemptCount ?? 0;
+  const maxDeliveryAttempts =
+    staffDetail?.delivery?.maxDeliveryAttempts ?? order.delivery?.maxAttempts ?? 3;
+  const maxRedeliveryAttempts = Math.max(0, maxDeliveryAttempts - 1);
+  const remainingRedeliveries = Math.max(0, maxDeliveryAttempts - deliveryAttemptCount);
+  const canRedeliver = isDeliveryFailedOrder && remainingRedeliveries > 0;
+  const deliveryFailureReason =
+    staffDetail?.delivery?.failureReason || order.delivery?.failureReason || null;
+  const canStaffCancelUnpaid =
+    order.status === "PENDING_PAYMENT" ||
+    order.status === "PendingPayment" ||
+    order.status === "Pending";
+  const canEditDeliveryAddress =
+    hasPhysicalItem &&
+    isDeliveryNotDispatched &&
+    (canStaffCancelUnpaid || isReadyStatus || isDeliveryFailedOrder);
+
   const canLinkDevices =
     hasPhysicalItem &&
     (order.status === "PROCESSING" ||
@@ -295,9 +450,21 @@ export default function OrderDetailPage({
   const linkedInstancesForOrder = warehouseInstances.filter(
     (inst) => inst.fulfillment?.orderId === numericOrderId,
   );
-  const inStockInstances = warehouseInstances.filter(
-    (inst) => inst.status === LedInstanceItem.status.IN_STOCK,
-  );
+  const inStockByItemMap = new Map<number, LedInstanceItem[]>();
+  for (const line of physicalLineItems) {
+    const modelIds = itemModelIdsMap[line.orderItemId] ?? [];
+    const seen = new Set<number>();
+    const matching: LedInstanceItem[] = [];
+    for (const mId of modelIds) {
+      for (const inst of inStockByModelId[mId] ?? []) {
+        if (inst.status === LedInstanceItem.status.IN_STOCK && !seen.has(inst.instanceId)) {
+          seen.add(inst.instanceId);
+          matching.push(inst);
+        }
+      }
+    }
+    inStockByItemMap.set(line.orderItemId, matching);
+  }
   const linkedByItemMap = new Map<number, LedInstanceItem[]>();
   for (const inst of linkedInstancesForOrder) {
     const itemId = inst.fulfillment?.orderItemId;
@@ -438,13 +605,64 @@ export default function OrderDetailPage({
     setIsSubmitting(true);
     setErrorMessage("");
     try {
-      await updateOrderStatus(order.id, "Cancelled");
+      await updateOrderStatus(order.id, "CANCELED");
+      await loadFulfillmentData();
       setIsCancelModalOpen(false);
+      setActionSuccessBanner("Đã hủy đơn hàng chưa thanh toán và hoàn lại tồn kho LED.");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Hủy đơn hàng thất bại.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handlePrepareRedelivery = async () => {
+    if (isSubmitting || !canRedeliver) return;
+    setIsSubmitting(true);
+    setErrorMessage("");
+    setActionSuccessBanner("");
+    try {
+      await updateOrderStatus(order.id, "PROCESSING");
+      await loadFulfillmentData();
+      setActionSuccessBanner(
+        "Đã chuyển đơn sang Chờ đóng hàng để giao lại. Bạn có thể kiểm tra thiết bị LED và bấm \"Chuẩn bị hàng\" để tạo vận đơn AhaMove mới.",
+      );
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Không thể chuyển đơn sang trạng thái giao lại.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmRefund = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setErrorMessage("");
+    setActionSuccessBanner("");
+    try {
+      await updateOrderStatus(order.id, "REFUNDED", refundReason.trim() || undefined);
+      await loadFulfillmentData();
+      setIsRefundModalOpen(false);
+      setRefundReason("");
+      setActionSuccessBanner(
+        "Đã chuyển đơn sang Hoàn tiền (REFUNDED), nhập lại tồn kho & thiết bị LED về kho và thu hồi nhân vật đi kèm (nếu có).",
+      );
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Hoàn tiền đơn hàng thất bại.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenEditAddressModal = () => {
+    setErrorMessage("");
+    setIsEditAddressModalOpen(true);
+  };
+
+  const handleSaveDeliveryAddress = async (payload: UpdateStaffDeliveryAddressRequest) => {
+    await updateOrderDeliveryAddress(order.id, payload);
+    await loadFulfillmentData();
+    setActionSuccessBanner("Đã cập nhật thông tin người nhận, địa chỉ và tọa độ giao hàng.");
   };
 
   const getTimelineMilestones = () => {
@@ -640,6 +858,94 @@ export default function OrderDetailPage({
         </div>
       )}
 
+      {/* Action Success Notification Banner */}
+      {actionSuccessBanner && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+            <span className="font-medium">{actionSuccessBanner}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionSuccessBanner("")}
+            className="text-emerald-700 hover:text-emerald-950"
+            aria-label="Đóng thông báo"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Delivery Failed Alert & Action Panel */}
+      {isDeliveryFailedOrder && (
+        <div
+          role="alert"
+          className="rounded-xl border border-orange-300 bg-orange-50/90 p-4 shadow-sm"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={20} className="mt-0.5 shrink-0 text-orange-600" />
+              <div className="space-y-1 text-sm text-orange-950">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-black">Đơn hàng giao thất bại — Cần nhân viên xử lý</p>
+                  <span className="rounded-full border border-orange-300 bg-white px-2.5 py-0.5 text-[11px] font-bold text-orange-800">
+                    Số lần giao: {deliveryAttemptCount}/{maxDeliveryAttempts}
+                    {remainingRedeliveries > 0
+                      ? ` (Còn ${remainingRedeliveries}/${maxRedeliveryAttempts} lần giao lại)`
+                      : " (Đã hết lượt giao lại)"}
+                  </span>
+                </div>
+                {deliveryFailureReason && (
+                  <p className="text-xs text-orange-900">
+                    <strong>Lý do từ đơn vị vận chuyển:</strong> {deliveryFailureReason}
+                  </p>
+                )}
+                <p className="text-xs text-orange-800">
+                  {canRedeliver
+                    ? "Bạn có thể sửa thông tin người nhận (nếu cần) rồi chọn \"Chuẩn bị giao lại\" để tạo vận đơn AhaMove mới, hoặc chọn \"Hoàn hàng & Hoàn tiền\" nếu khách không nhận nữa."
+                    : `Đơn hàng đã đạt giới hạn tối đa ${maxRedeliveryAttempts} lần giao lại. Vui lòng thực hiện \"Hoàn hàng & Hoàn tiền\" để nhập lại kho thiết bị LED và thu hồi nhân vật số đi kèm.`}
+                </p>
+                {errorMessage && !isRefundModalOpen && !isEditAddressModalOpen && (
+                  <p className="pt-1 text-xs font-bold text-red-700">{errorMessage}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handlePrepareRedelivery()}
+                disabled={isSubmitting || !canRedeliver}
+                title={
+                  canRedeliver
+                    ? "Chuyển đơn về Chờ đóng hàng để tạo vận đơn giao lại"
+                    : `Đã đạt tối đa ${maxRedeliveryAttempts} lần giao lại`
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F5B38] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#0c4a2d] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw size={13} className={isSubmitting ? "animate-spin" : ""} />
+                Chuẩn bị giao lại
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMessage("");
+                  setRefundReason(deliveryFailureReason || "");
+                  setIsRefundModalOpen(true);
+                }}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50"
+              >
+                <RotateCcw size={13} /> Hoàn hàng &amp; Hoàn tiền
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Order Header: ID, Badge, Date & Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2.5">
@@ -675,21 +981,18 @@ export default function OrderDetailPage({
             </button>
           )}
 
-          {order.status !== "CANCELED" &&
-            order.status !== "Cancelled" &&
-            order.status !== "COMPLETED" &&
-            order.status !== "Completed" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMessage("");
-                  setIsCancelModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#9AE6B4] px-3.5 py-1.5 text-xs font-bold text-[#1A4731] transition hover:bg-[#68D391]"
-              >
-                <XCircle size={14} /> Hủy đơn
-              </button>
-            )}
+          {canStaffCancelUnpaid && (
+            <button
+              type="button"
+              onClick={() => {
+                setErrorMessage("");
+                setIsCancelModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3.5 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100"
+            >
+              <XCircle size={14} /> Hủy đơn
+            </button>
+          )}
         </div>
       </div>
 
@@ -801,49 +1104,42 @@ export default function OrderDetailPage({
             </div>
           </div>
         </div>
-
-        {hasPhysicalItem && (
-          <FulfillmentDevicesPanel
-            orderId={order.id}
-            physicalLineItems={physicalLineItems}
-            linkedByItemMap={linkedByItemMap}
-            inStockInstances={inStockInstances}
-            totalLinked={totalLinkedLedUnits}
-            totalRequired={totalRequiredLedUnits}
-            canLink={canLinkDevices}
-            isLoading={loadingFulfillment}
-            serialByItem={serialByItem}
-            onSerialChange={(itemId, value) =>
-              setSerialByItem((prev) => ({ ...prev, [itemId]: value }))
-            }
-            linkingItemId={linkingItemId}
-            unlinkingInstanceId={unlinkingInstanceId}
-            errorMessage={fulfillmentError}
-            successMessage={fulfillmentSuccess}
-            onRefresh={() => void loadFulfillmentData()}
-            onLink={(itemId) => void handleLinkDevice(itemId)}
-            onUnlink={(instance) => void handleUnlinkDevice(instance)}
-          />
-        )}
         </div>
 
         {/* Right Column: 2 Cards */}
         <div className="flex flex-col gap-6">
           {/* Card 1: Thông tin giao hàng */}
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-base font-black text-gray-900">Thông tin giao hàng</h2>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h2 className="text-base font-black text-gray-900">Thông tin giao hàng</h2>
+              {canEditDeliveryAddress && (
+                <button
+                  type="button"
+                  onClick={handleOpenEditAddressModal}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-[#0F5B38] transition hover:bg-emerald-100"
+                >
+                  <Pencil size={12} /> Cập nhật địa chỉ
+                </button>
+              )}
+            </div>
             <div className="flex flex-col gap-2.5 text-sm">
               <p>
                 <strong className="text-gray-900">Khách hàng: </strong>
-                <span className="text-gray-700">{order.address.fullName || order.customer.fullName}</span>
+                <span className="text-gray-700">
+                  {staffDetail?.delivery?.recipientName || order.address.fullName || order.customer.fullName}
+                </span>
               </p>
               <p>
                 <strong className="text-gray-900">Điện thoại: </strong>
-                <span className="text-gray-700">{order.address.phoneNumber || "—"}</span>
+                <span className="text-gray-700">
+                  {staffDetail?.delivery?.recipientPhone || order.address.phoneNumber || "—"}
+                </span>
               </p>
               <p>
                 <strong className="text-gray-900">Địa chỉ: </strong>
-                <span className="text-gray-700">{order.address.fullAddress}</span>
+                <span className="text-gray-700">
+                  {staffDetail?.delivery?.fullAddress || order.address.fullAddress}
+                </span>
               </p>
               <p>
                 <strong className="text-gray-900">Ghi chú: </strong>
@@ -863,6 +1159,19 @@ export default function OrderDetailPage({
                       : "Chưa tạo vận đơn"}
                   </span>
                 </div>
+                {hasPhysicalItem && (
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-500">Lượt giao hàng:</span>
+                    <span className="text-xs font-bold text-gray-900">
+                      {deliveryAttemptCount}/{maxDeliveryAttempts} (tối đa {maxRedeliveryAttempts} lần giao lại)
+                    </span>
+                  </div>
+                )}
+                {deliveryFailureReason && (
+                  <div className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs text-orange-900">
+                    <strong>Ghi chú sự cố:</strong> {deliveryFailureReason}
+                  </div>
+                )}
                 {typeof order.delivery?.carrierFee === "number" && (
                   <div className="mt-1 flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-500">Cước AhaMove:</span>
@@ -978,7 +1287,7 @@ export default function OrderDetailPage({
         >
           <form
             onSubmit={handleDispatchPackage}
-            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
           >
             {/* Header Pop-up */}
             <div className="flex items-center justify-between border-b border-gray-200 bg-[#f8faf9] px-6 py-4">
@@ -988,10 +1297,10 @@ export default function OrderDetailPage({
                 </div>
                 <div>
                   <h3 id="prepare-order-title" className="text-base font-black text-gray-900">
-                    Chuẩn bị hàng & Bàn giao vận chuyển AhaMove
+                    Chuẩn bị hàng &amp; Bàn giao vận chuyển AhaMove
                   </h3>
                   <p className="text-xs text-gray-500">
-                    Đơn hàng #ORD-{order.id} · Truy xuất thông tin khách hàng & kiện hàng trước khi xuất kho
+                    Đơn hàng #ORD-{order.id} · Truy xuất thông tin khách hàng &amp; kiện hàng trước khi xuất kho
                   </p>
                 </div>
               </div>
@@ -1006,190 +1315,200 @@ export default function OrderDetailPage({
               </button>
             </div>
 
-            {/* Body Pop-up (Scrollable) */}
-            <div className="flex flex-col gap-5 overflow-y-auto px-6 py-5">
-              {/* 1. Thông tin khách hàng & Địa chỉ giao hàng truy xuất từ đơn hàng */}
-              <section className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
-                <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
-                  <User size={14} /> Thông tin khách hàng nhận hàng
-                </h4>
-                <div className="grid grid-cols-1 gap-2.5 text-xs sm:grid-cols-2">
-                  <div>
-                    <span className="text-gray-500">Người nhận:</span>
-                    <p className="mt-0.5 font-bold text-gray-900">
-                      {order.address.fullName || order.customer.fullName}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="flex items-center gap-1 text-gray-500">
-                      <Phone size={11} /> Số điện thoại:
-                    </span>
-                    <p className="mt-0.5 font-bold text-gray-900">
-                      {order.address.phoneNumber || "Chưa có số điện thoại"}
-                    </p>
-                  </div>
-                  {order.customer.email && (
-                    <div className="sm:col-span-2">
-                      <span className="text-gray-500">Email khách hàng:</span>
-                      <p className="mt-0.5 font-semibold text-gray-800">{order.customer.email}</p>
-                    </div>
-                  )}
-                  <div className="sm:col-span-2">
-                    <span className="flex items-center gap-1 text-gray-500">
-                      <MapPin size={11} /> Địa chỉ giao hàng:
-                    </span>
-                    <p className="mt-0.5 font-bold text-gray-900">{order.address.fullAddress}</p>
-                  </div>
-                </div>
-              </section>
-
-              {/* 2. Danh sách sản phẩm trong đơn hàng cần đóng gói */}
-              <section className="rounded-xl border border-gray-200 bg-white p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-gray-700">
-                    Sản phẩm cần đóng gói ({order.items.length} mặt hàng)
-                  </h4>
-                  <span className="text-xs font-black text-[#0F5B38]">
-                    Tổng giá trị: {formatMoney(order.total)}
-                  </span>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {order.items.map((item, idx) => (
-                    <div
-                      key={`${item.id}-${idx}`}
-                      className="flex items-center justify-between gap-3 py-2 text-xs"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-100">
-                          {item.previewUrl ? (
-                            <img
-                              src={item.previewUrl}
-                              alt={item.name}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="grid h-full w-full place-items-center text-sm">📦</div>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-bold text-gray-900">{item.name}</p>
-                          <p className="text-[11px] text-gray-500">
-                            {item.productType === "CHARACTER"
-                              ? "Vật phẩm ảo (Đã cấp trực tiếp)"
-                              : item.productType === "LED_MODEL"
-                              ? "Bảng LED (Cần đóng gói vật lý)"
-                              : "Gói Combo"}
-                          </p>
-                        </div>
+            {/* Body Pop-up (Scrollable, 2-column spacious layout) */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+                {/* Cột trái: Thông tin nhận hàng + Quét/Gán thiết bị LED */}
+                <div className="flex flex-col gap-5 lg:col-span-7">
+                  {/* 1. Thông tin khách hàng & Địa chỉ giao hàng truy xuất từ đơn hàng */}
+                  <section className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+                    <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
+                      <User size={14} /> Thông tin khách hàng nhận hàng
+                    </h4>
+                    <div className="grid grid-cols-1 gap-2.5 text-xs sm:grid-cols-2">
+                      <div>
+                        <span className="text-gray-500">Người nhận:</span>
+                        <p className="mt-0.5 font-bold text-gray-900">
+                          {staffDetail?.delivery?.recipientName || order.address.fullName || order.customer.fullName}
+                        </p>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="font-bold text-gray-900">× {item.quantity}</p>
-                        <p className="text-[11px] text-gray-500">
-                          {formatMoney(item.price * item.quantity)}
+                      <div>
+                        <span className="flex items-center gap-1 text-gray-500">
+                          <Phone size={11} /> Số điện thoại:
+                        </span>
+                        <p className="mt-0.5 font-bold text-gray-900">
+                          {staffDetail?.delivery?.recipientPhone || order.address.phoneNumber || "Chưa có số điện thoại"}
+                        </p>
+                      </div>
+                      {order.customer.email && (
+                        <div className="sm:col-span-2">
+                          <span className="text-gray-500">Email khách hàng:</span>
+                          <p className="mt-0.5 font-semibold text-gray-800">{order.customer.email}</p>
+                        </div>
+                      )}
+                      <div className="sm:col-span-2">
+                        <span className="flex items-center gap-1 text-gray-500">
+                          <MapPin size={11} /> Địa chỉ giao hàng:
+                        </span>
+                        <p className="mt-0.5 font-bold text-gray-900">
+                          {staffDetail?.delivery?.fullAddress || order.address.fullAddress}
                         </p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </section>
+                  </section>
 
-              {/* 2b. Quét QR / Gán Serial Number thiết bị LED thực tế */}
-              {hasPhysicalItem && (
-                <FulfillmentDevicesPanel
-                  compact
-                  orderId={order.id}
-                  physicalLineItems={physicalLineItems}
-                  linkedByItemMap={linkedByItemMap}
-                  inStockInstances={inStockInstances}
-                  totalLinked={totalLinkedLedUnits}
-                  totalRequired={totalRequiredLedUnits}
-                  canLink={canLinkDevices}
-                  isLoading={loadingFulfillment}
-                  serialByItem={serialByItem}
-                  onSerialChange={(itemId, value) =>
-                    setSerialByItem((prev) => ({ ...prev, [itemId]: value }))
-                  }
-                  linkingItemId={linkingItemId}
-                  unlinkingInstanceId={unlinkingInstanceId}
-                  errorMessage={fulfillmentError}
-                  successMessage={fulfillmentSuccess}
-                  onRefresh={() => void loadFulfillmentData()}
-                  onLink={(itemId) => void handleLinkDevice(itemId)}
-                  onUnlink={(instance) => void handleUnlinkDevice(instance)}
-                />
-              )}
-
-              {/* 3. Thông số bàn giao AhaMove */}
-              <section className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-                <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
-                  <Truck size={14} /> Thông số điều phối AhaMove
-                </h4>
-
-                <div>
-                  <label htmlFor="dispatch-service-id" className="text-xs font-bold text-gray-700">
-                    Gói dịch vụ vận chuyển (serviceId) <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    id="dispatch-service-id"
-                    value={serviceId}
-                    onChange={(e) => setServiceId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 outline-none focus:border-[#0F5B38]"
-                  >
-                    {AHAMOVE_SERVICES.map((svc) => (
-                      <option key={svc.id} value={svc.id}>
-                        {svc.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="dispatch-weight" className="text-xs font-bold text-gray-700">
-                      Khối lượng kiện hàng (kg)
-                    </label>
-                    <input
-                      id="dispatch-weight"
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      max="10000"
-                      value={weight}
-                      onChange={(e) => setWeight(e.target.value)}
-                      placeholder="1.5"
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 outline-none focus:border-[#0F5B38]"
+                  {/* 2b. Quét QR / Gán Serial Number thiết bị LED thực tế */}
+                  {hasPhysicalItem && (
+                    <FulfillmentDevicesPanel
+                      compact
+                      orderId={order.id}
+                      physicalLineItems={physicalLineItems}
+                      linkedByItemMap={linkedByItemMap}
+                      inStockByItemMap={inStockByItemMap}
+                      totalLinked={totalLinkedLedUnits}
+                      totalRequired={totalRequiredLedUnits}
+                      canLink={canLinkDevices}
+                      isLoading={loadingFulfillment}
+                      serialByItem={serialByItem}
+                      onSerialChange={(itemId, value) =>
+                        setSerialByItem((prev) => ({ ...prev, [itemId]: value }))
+                      }
+                      linkingItemId={linkingItemId}
+                      unlinkingInstanceId={unlinkingInstanceId}
+                      errorMessage={fulfillmentError}
+                      successMessage={fulfillmentSuccess}
+                      onRefresh={() => void loadFulfillmentData()}
+                      onLink={(itemId) => void handleLinkDevice(itemId)}
+                      onUnlink={(instance) => void handleUnlinkDevice(instance)}
                     />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-gray-700">Đơn vị giao vận</label>
-                    <input
-                      readOnly
-                      value="AhaMove Partner v3"
-                      className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-bold text-gray-600"
-                    />
-                  </div>
+                  )}
                 </div>
 
-                <div>
-                  <label htmlFor="dispatch-remarks" className="text-xs font-bold text-gray-700">
-                    Ghi chú dặn dò tài xế (remarks)
-                  </label>
-                  <textarea
-                    id="dispatch-remarks"
-                    rows={2}
-                    maxLength={500}
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="Ví dụ: Linh kiện LED dễ vỡ, gọi trước khi giao..."
-                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 outline-none focus:border-[#0F5B38]"
-                  />
-                </div>
-              </section>
+                {/* Cột phải: Sản phẩm cần đóng gói + Thông số AhaMove */}
+                <div className="flex flex-col gap-5 lg:col-span-5">
+                  {/* 2. Danh sách sản phẩm trong đơn hàng cần đóng gói */}
+                  <section className="rounded-xl border border-gray-200 bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-gray-700">
+                        Sản phẩm cần đóng gói ({order.items.length} mặt hàng)
+                      </h4>
+                      <span className="text-xs font-black text-[#0F5B38]">
+                        Tổng giá trị: {formatMoney(order.total)}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {order.items.map((item, idx) => (
+                        <div
+                          key={`${item.id}-${idx}`}
+                          className="flex items-center justify-between gap-3 py-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-100">
+                              {item.previewUrl ? (
+                                <img
+                                  src={item.previewUrl}
+                                  alt={item.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="grid h-full w-full place-items-center text-sm">📦</div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-gray-900">{item.name}</p>
+                              <p className="text-[11px] text-gray-500">
+                                {item.productType === "CHARACTER"
+                                  ? "Vật phẩm ảo (Đã cấp trực tiếp)"
+                                  : item.productType === "LED_MODEL"
+                                  ? "Bảng LED (Cần đóng gói vật lý)"
+                                  : "Gói Combo"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="font-bold text-gray-900">× {item.quantity}</p>
+                            <p className="text-[11px] text-gray-500">
+                              {formatMoney(item.price * item.quantity)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
 
-              {errorMessage && (
+                  {/* 3. Thông số bàn giao AhaMove */}
+                  <section className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                    <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
+                      <Truck size={14} /> Thông số điều phối AhaMove
+                    </h4>
+
+                    <div>
+                      <label htmlFor="dispatch-service-id" className="text-xs font-bold text-gray-700">
+                        Gói dịch vụ vận chuyển (serviceId) <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="dispatch-service-id"
+                        value={serviceId}
+                        onChange={(e) => setServiceId(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 outline-none focus:border-[#0F5B38]"
+                      >
+                        {AHAMOVE_SERVICES.map((svc) => (
+                          <option key={svc.id} value={svc.id}>
+                            {svc.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="dispatch-weight" className="text-xs font-bold text-gray-700">
+                          Khối lượng kiện hàng (kg)
+                        </label>
+                        <input
+                          id="dispatch-weight"
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          max="10000"
+                          value={weight}
+                          onChange={(e) => setWeight(e.target.value)}
+                          placeholder="1.5"
+                          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 outline-none focus:border-[#0F5B38]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-gray-700">Đơn vị giao vận</label>
+                        <input
+                          readOnly
+                          value="AhaMove Partner v3"
+                          className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-bold text-gray-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="dispatch-remarks" className="text-xs font-bold text-gray-700">
+                        Ghi chú dặn dò tài xế (remarks)
+                      </label>
+                      <textarea
+                        id="dispatch-remarks"
+                        rows={3}
+                        maxLength={500}
+                        value={remarks}
+                        onChange={(e) => setRemarks(e.target.value)}
+                        placeholder="Ví dụ: Linh kiện LED dễ vỡ, gọi trước khi giao..."
+                        className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 outline-none focus:border-[#0F5B38]"
+                      />
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              {errorMessage && !isEditAddressModalOpen && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-700"
+                  className="mt-4 flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-700"
                 >
                   <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                   <span>{errorMessage}</span>
@@ -1258,6 +1577,83 @@ export default function OrderDetailPage({
           </div>
         </div>
       )}
+
+      {/* Modal Xác nhận Hoàn hàng & Hoàn tiền (DELIVERY_FAILED -> REFUNDED) */}
+      {isRefundModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center gap-2 text-red-600">
+              <RotateCcw size={20} />
+              <h3 className="text-lg font-black">Xác nhận hoàn hàng &amp; hoàn tiền</h3>
+            </div>
+            <p className="mt-2 text-xs text-gray-600">
+              Đơn hàng <strong>#ORD-{order.id}</strong> sẽ được chuyển sang trạng thái{" "}
+              <strong>REFUNDED (Đã hoàn tiền)</strong>. Hệ thống sẽ tự động thực hiện:
+            </p>
+            <ul className="mt-2.5 list-disc space-y-1 pl-5 text-xs text-gray-700">
+              <li>Cộng trả lại tồn kho <strong>mẫu LED</strong> trong hệ thống.</li>
+              <li>Gỡ liên kết serial thiết bị LED đã đóng gói và trả về trạng thái <strong>Trong kho (IN_STOCK)</strong>.</li>
+              <li>Thu hồi toàn bộ <strong>quyền sở hữu nhân vật số</strong> đi kèm đơn hàng này (nếu là đơn kết hợp).</li>
+              <li>Chuyển trạng thái vận đơn sang <strong>Hoàn hàng (RETURNED)</strong>.</li>
+            </ul>
+
+            <div className="mt-4">
+              <label htmlFor="refund-reason-input" className="text-xs font-bold text-gray-700">
+                Lý do hoàn hàng / hoàn tiền
+              </label>
+              <textarea
+                id="refund-reason-input"
+                rows={3}
+                maxLength={500}
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Ví dụ: Khách từ chối nhận hàng sau 2 lần giao lại, xác nhận nhập kho và hoàn tiền..."
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 outline-none focus:border-red-500"
+              />
+            </div>
+
+            {errorMessage && (
+              <p className="mt-3 text-xs font-semibold text-red-600">{errorMessage}</p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsRefundModalOpen(false)}
+                disabled={isSubmitting}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmRefund()}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+              >
+                <RotateCcw size={14} />
+                {isSubmitting ? "Đang xử lý hoàn tiền..." : "Xác nhận hoàn tiền"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cập nhật địa chỉ giao hàng (trình bày đồng bộ với Customer Address + Goong Map) */}
+      <EditOrderDeliveryAddressModal
+        isOpen={isEditAddressModalOpen}
+        orderId={order.id}
+        initialData={{
+          recipientName:
+            staffDetail?.delivery?.recipientName || order.address.fullName || order.customer.fullName || "",
+          recipientPhone: staffDetail?.delivery?.recipientPhone || order.address.phoneNumber || "",
+          fullAddress: staffDetail?.delivery?.fullAddress || order.address.fullAddress || "",
+          latitude: staffDetail?.delivery?.latitude ?? order.delivery?.latitude,
+          longitude: staffDetail?.delivery?.longitude ?? order.delivery?.longitude,
+        }}
+        onClose={() => setIsEditAddressModalOpen(false)}
+        onSave={handleSaveDeliveryAddress}
+      />
     </div>
   );
 }
@@ -1272,7 +1668,7 @@ interface FulfillmentDevicesPanelProps {
     quantity: number;
   }>;
   linkedByItemMap: Map<number, LedInstanceItem[]>;
-  inStockInstances: LedInstanceItem[];
+  inStockByItemMap: Map<number, LedInstanceItem[]>;
   totalLinked: number;
   totalRequired: number;
   canLink: boolean;
@@ -1292,7 +1688,7 @@ function FulfillmentDevicesPanel({
   compact = false,
   physicalLineItems,
   linkedByItemMap,
-  inStockInstances,
+  inStockByItemMap,
   totalLinked,
   totalRequired,
   canLink,
@@ -1384,6 +1780,7 @@ function FulfillmentDevicesPanel({
         <div className="flex flex-col gap-3">
           {physicalLineItems.map((line) => {
             const linkedList = linkedByItemMap.get(line.orderItemId) ?? [];
+            const matchingInStock = inStockByItemMap.get(line.orderItemId) ?? [];
             const currentSerial = serialByItem[line.orderItemId] ?? "";
             const isLinkingThis = linkingItemId === line.orderItemId;
 
@@ -1451,11 +1848,11 @@ function FulfillmentDevicesPanel({
                 {/* Scan / Quick-pick IN_STOCK LED Form */}
                 {canLink ? (
                   <div className="mt-3 flex flex-col gap-2">
-                    {inStockInstances.length > 0 && (
+                    {matchingInStock.length > 0 ? (
                       <select
                         aria-label={`Chọn nhanh thiết bị trong kho cho mục ${line.orderItemId}`}
                         value={
-                          inStockInstances.some(
+                          matchingInStock.some(
                             (inst) => inst.serialNumber === currentSerial,
                           )
                             ? currentSerial
@@ -1467,14 +1864,20 @@ function FulfillmentDevicesPanel({
                         className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-800 outline-none focus:border-blue-600"
                       >
                         <option value="">
-                          -- Chọn nhanh thiết bị IN_STOCK trong kho ({inStockInstances.length}) --
+                          -- Chọn nhanh thiết bị IN_STOCK của mẫu này ({matchingInStock.length}) --
                         </option>
-                        {inStockInstances.map((inst) => (
+                        {matchingInStock.map((inst) => (
                           <option key={inst.instanceId} value={inst.serialNumber}>
                             {inst.serialNumber} — {inst.modelName || `Model #${inst.modelId}`} (MAC: {inst.macAddress})
                           </option>
                         ))}
                       </select>
+                    ) : (
+                      !isLoading && (
+                        <p className="rounded-lg border border-dashed border-amber-200 bg-amber-50/70 px-3 py-1.5 text-[11px] font-medium text-amber-800">
+                          Không còn thiết bị IN_STOCK thuộc mẫu LED này trong kho.
+                        </p>
+                      )
                     )}
 
                     <div className="flex flex-col gap-2 sm:flex-row">

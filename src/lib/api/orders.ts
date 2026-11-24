@@ -209,6 +209,10 @@ export interface BackendStaffOrderDetail {
     longitude?: number;
     deliveryStatus?: string;
     estimatedDeliveryAt?: string;
+    deliveredAt?: string;
+    failureReason?: string | null;
+    deliveryAttemptCount?: number;
+    maxDeliveryAttempts?: number;
   };
   payment?: {
     paymentId: number;
@@ -312,15 +316,87 @@ export async function fetchStaffOrderDetail(orderId: number | string): Promise<B
   return res.data ?? null;
 }
 
-export async function apiUpdateStaffOrderStatus(orderId: number | string, status: string): Promise<void> {
+export interface UpdateStaffDeliveryAddressRequest {
+  recipientName: string;
+  recipientPhone: string;
+  fullAddress: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export function getStaffOrderActionErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    const body = error.body as ErrorResponse | undefined;
+    const code = (body as { code?: string } | undefined)?.code;
+    if (code === "INVALID_ORDER_STATUS_TRANSITION" && body?.message) {
+      if (body.message.includes("maximum number of redelivery attempts")) {
+        return "Đơn hàng đã hết lượt giao lại tối đa (2 lần). Vui lòng chọn Hoàn hàng & Hoàn tiền.";
+      }
+      return body.message;
+    }
+    const detail = body?.details?.find((d) => d.message)?.message;
+    if (body?.message) return body.message;
+    if (detail) return detail;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+
+export async function apiUpdateStaffOrderStatus(
+  orderId: number | string,
+  status: string,
+  reason?: string,
+): Promise<void> {
   const numericId = Number(orderId);
-  if (!Number.isFinite(numericId) || numericId <= 0) return;
-  await request(OpenAPI, {
-    method: "PATCH",
-    url: "/api/management/staff/orders/{id}/status",
-    path: { id: numericId },
-    body: { status },
-  });
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    throw new Error("Mã đơn hàng không hợp lệ.");
+  }
+  try {
+    await request(OpenAPI, {
+      method: "PATCH",
+      url: "/api/management/staff/orders/{id}/status",
+      path: { id: numericId },
+      body: {
+        status,
+        ...(reason && reason.trim() ? { reason: reason.trim() } : {}),
+      },
+      mediaType: "application/json",
+    });
+  } catch (error) {
+    throw new Error(getStaffOrderActionErrorMessage(error, "Không thể cập nhật trạng thái đơn hàng."));
+  }
+}
+
+export async function apiUpdateStaffOrderDeliveryAddress(
+  orderId: number | string,
+  payload: UpdateStaffDeliveryAddressRequest,
+): Promise<BackendStaffOrderDetail["delivery"]> {
+  const numericId = Number(orderId);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    throw new Error("Mã đơn hàng không hợp lệ.");
+  }
+  try {
+    const res = await request<{ data: BackendStaffOrderDetail["delivery"] }>(OpenAPI, {
+      method: "PATCH",
+      url: "/api/management/staff/orders/{id}/delivery-address",
+      path: { id: numericId },
+      body: {
+        recipientName: payload.recipientName.trim(),
+        recipientPhone: payload.recipientPhone.trim(),
+        fullAddress: payload.fullAddress.trim(),
+        ...(payload.latitude != null ? { latitude: payload.latitude } : {}),
+        ...(payload.longitude != null ? { longitude: payload.longitude } : {}),
+      },
+      mediaType: "application/json",
+    });
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      getStaffOrderActionErrorMessage(error, "Không thể cập nhật thông tin người nhận giao hàng."),
+    );
+  }
 }
 
 export interface DispatchOrderRequest {

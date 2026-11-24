@@ -29,10 +29,6 @@ export type LedInstanceItem = {
      */
     macAddress: string;
     /**
-     * PCB hardware revision stamped at provisioning
-     */
-    hardwareRevision?: string | null;
-    /**
      * Customer-assigned display name once claimed
      */
     deviceName?: string | null;

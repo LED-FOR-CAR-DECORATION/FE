@@ -1,34 +1,55 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
-import { Archive, Edit, EyeOff, Rocket, Trash2 } from "lucide-react";
+import { Archive, CheckCircle2, Cpu, Edit, Trash2, Undo2 } from "lucide-react";
 import { fetchManagedStoreProducts, type BackendProductStatus } from "@/lib/api/products";
 import type { CatalogProduct } from "@/features/cart/catalog";
 import type { ProductType } from "@/features/cart/types";
-import { formatVnd } from "../format";
+import { formatDateTime, formatVnd } from "../format";
 import StatusBadge from "./StatusBadge";
 import StoreListingToolbar, {
   computeStatusCounts,
   type StoreStatusFilter,
 } from "./StoreListingToolbar";
+import {
+  STORE_FORBIDDEN_HINT,
+  STORE_TABLE_CLASS,
+  STORE_THEAD_CLASS,
+  STORE_TH_CLASS,
+  StoreActionButton,
+  StoreEmptyRow,
+  StoreErrorRow,
+  StoreSkeletonRows,
+  StoreTableFooter,
+  StoreThumbnail,
+  storeRowClass,
+} from "./StoreTablePrimitives";
 
 type CatalogKind = Extract<ProductType, "LED_MODEL" | "BUNDLE">;
 
 export interface StoreCatalogItem extends CatalogProduct {
   status?: BackendProductStatus;
+  updatedAt?: string;
 }
 
-const COPY: Record<CatalogKind, { label: string }> = {
+const COPY: Record<CatalogKind, { label: string; unitLabel: string; nameHeading: string }> = {
   LED_MODEL: {
     label: "Mẫu LED",
+    unitLabel: "mẫu LED",
+    nameHeading: "Tên mẫu LED",
   },
   BUNDLE: {
     label: "Gói sản phẩm",
+    unitLabel: "gói sản phẩm",
+    nameHeading: "Tên gói sản phẩm",
   },
 };
 
 interface CatalogListingTableProps {
   kind: CatalogKind;
   items?: StoreCatalogItem[];
+  isLoading?: boolean;
+  error?: string | null;
   canManage?: boolean;
   onPublish?: (product: StoreCatalogItem) => void;
   onEdit?: (product: StoreCatalogItem) => void;
@@ -38,55 +59,72 @@ interface CatalogListingTableProps {
   onRefresh?: () => void;
 }
 
-/** Bảng xem thông tin và quản lý các sản phẩm bán trên Store */
+/** Bảng xem thông tin và quản lý các sản phẩm bán trên cửa hàng — đồng bộ thiết kế với bảng Nhân vật. */
 export default function CatalogListingTable({
   kind,
   items: initialItems,
+  isLoading: externalLoading,
+  error: externalError,
   canManage = false,
   onPublish,
   onEdit,
   onArchive,
-  onUnlist,
   onDelete,
   onRefresh,
 }: CatalogListingTableProps) {
   const [items, setItems] = useState<StoreCatalogItem[]>(initialItems ?? []);
+  const [internalLoading, setInternalLoading] = useState(!initialItems);
+  const [internalError, setInternalError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StoreStatusFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (initialItems) {
       setItems(initialItems);
+      setInternalLoading(false);
       return;
     }
     let active = true;
+    setInternalLoading(true);
+    setInternalError(null);
     fetchManagedStoreProducts({
       productType: kind === "LED_MODEL" ? "LED" : "BUNDLE",
       size: 200,
     })
       .then((res) => {
+        if (!active) return;
+        setItems(
+          res.items.map((item) => ({
+            id: String(item.productId),
+            productId: item.productId,
+            productType: kind,
+            name: item.productName,
+            price: Number(item.basePrice ?? 0),
+            description: item.description ?? "",
+            previewUrl: item.thumbnailUrl || item.galleryUrls?.[0] || undefined,
+            galleryUrls: item.galleryUrls ?? [],
+            tags: item.tags ?? [],
+            status: item.status,
+            updatedAt: item.updatedAt ?? item.createdAt ?? undefined,
+          })),
+        );
+      })
+      .catch((err) => {
+        console.error("Failed to load managed catalog products:", err);
         if (active) {
-          setItems(
-            res.items.map((item) => ({
-              id: String(item.productId),
-              productId: item.productId,
-              productType: kind,
-              name: item.productName,
-              price: Number(item.basePrice ?? 0),
-              description: item.description ?? "",
-              previewUrl: item.thumbnailUrl || item.galleryUrls?.[0] || undefined,
-              galleryUrls: item.galleryUrls ?? [],
-              tags: item.tags ?? [],
-              status: item.status,
-            })),
-          );
+          setInternalError("Không thể tải danh sách mẫu LED. Vui lòng thử lại.");
         }
       })
-      .catch((err) => console.error("Failed to load managed catalog products:", err));
+      .finally(() => {
+        if (active) setInternalLoading(false);
+      });
     return () => {
       active = false;
     };
   }, [initialItems, kind]);
+
+  const isLoading = externalLoading ?? internalLoading;
+  const error = externalError ?? internalError;
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -109,16 +147,24 @@ export default function CatalogListingTable({
     [items],
   );
 
+  const hasFilters = statusFilter !== "ALL" || searchQuery !== "";
+  const resetFilters = () => {
+    setStatusFilter("ALL");
+    setSearchQuery("");
+  };
+
   const isBundle = kind === "BUNDLE";
   const headings = [
     "Mã sản phẩm",
     "Ảnh đại diện",
-    "Tên sản phẩm",
+    COPY[kind].nameHeading,
     isBundle ? "Thành phần gói" : "Mô tả",
     "Giá bán",
-    "Trạng thái cửa hàng",
-    ...(canManage && !isBundle ? ["Thao tác"] : []),
+    "Trạng thái",
+    ...(!isBundle ? ["Thao tác"] : []),
   ];
+
+  const actionTitle = canManage ? undefined : STORE_FORBIDDEN_HINT;
 
   return (
     <>
@@ -126,145 +172,169 @@ export default function CatalogListingTable({
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         counts={statusCounts}
+        isLoading={isLoading}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder={`Tìm kiếm ${COPY[kind].label.toLowerCase()} theo tên hoặc mã…`}
+        searchPlaceholder={`Tìm kiếm ${COPY[kind].unitLabel} theo tên hoặc mã…`}
         onRefresh={onRefresh}
-        onReset={() => {
-          setStatusFilter("ALL");
-          setSearchQuery("");
-        }}
-        canReset={statusFilter !== "ALL" || searchQuery !== ""}
+        onReset={resetFilters}
+        canReset={hasFilters}
       />
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className={STORE_TABLE_CLASS}>
           <caption className="sr-only">
-            Danh sách {COPY[kind].label} đang quản lý trên Store
+            Danh sách {COPY[kind].label} đang quản lý trên cửa hàng
           </caption>
-          <thead className="border-b border-[#e3efe6]">
+          <thead className={STORE_THEAD_CLASS}>
             <tr>
               {headings.map((heading) => (
-                <th
-                  key={heading}
-                  scope="col"
-                  className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide"
-                >
+                <th key={heading} scope="col" className={STORE_TH_CLASS}>
                   {heading}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filteredItems.map((item) => {
-              const status: BackendProductStatus = item.status ?? "UNPUBLISHED";
-              const isDeleted = status === "DELETED";
+            {isLoading && <StoreSkeletonRows columns={headings.length} />}
 
-              return (
-                <tr
-                  key={item.id}
-                  className={`border-b border-[#eef5f0] last:border-0 transition-all ${
-                    isDeleted
-                      ? "select-none bg-neutral-100/60 opacity-45 grayscale"
-                      : "hover:bg-[#f9fdfa]"
-                  }`}
-                >
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
-                    #{item.productId ?? item.id}
-                  </td>
-                  <td className="px-4 py-3">
-                    {item.previewUrl ? (
-                      <Image
-                        src={item.previewUrl}
-                        alt={`Thumbnail của ${item.name}`}
-                        width={44}
-                        height={44}
-                        className="h-11 w-11 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] object-contain"
-                      />
-                    ) : (
-                      <div className="grid h-11 w-11 place-items-center rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] text-[10px] font-bold text-text-muted">
-                        LED
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 font-bold">
-                    <span className={isDeleted ? "text-neutral-500 line-through" : ""}>
-                      {item.name}
-                    </span>
-                  </td>
-                  <td className="max-w-xs px-4 py-3 text-xs font-medium text-text-muted">
-                    {isBundle
-                      ? `${item.components?.length ?? 0} sản phẩm: ${(item.components ?? [])
-                          .map((component) => component.name)
-                          .join(", ")}`
-                      : item.description || "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-black">
-                    {formatVnd(item.price)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={status} />
-                  </td>
-                  {canManage && !isBundle && (
+            {!isLoading && error && (
+              <StoreErrorRow colSpan={headings.length} message={error} onRetry={onRefresh} />
+            )}
+
+            {!isLoading && !error && filteredItems.length === 0 && (
+              <StoreEmptyRow
+                colSpan={headings.length}
+                message={
+                  items.length === 0
+                    ? `Chưa có ${COPY[kind].unitLabel} nào được niêm yết trên cửa hàng.`
+                    : `Không tìm thấy ${COPY[kind].unitLabel} phù hợp với bộ lọc.`
+                }
+                hasActiveFilters={items.length > 0 && hasFilters}
+                onResetFilters={resetFilters}
+              />
+            )}
+
+            {!isLoading &&
+              !error &&
+              filteredItems.map((item) => {
+                const status: BackendProductStatus = item.status ?? "UNPUBLISHED";
+                const isDeleted = status === "DELETED";
+
+                return (
+                  <tr key={item.id} className={storeRowClass(isDeleted)}>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
+                      #{item.productId ?? item.id}
+                    </td>
                     <td className="px-4 py-3">
-                      {isDeleted ? null : (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {(status === "UNPUBLISHED" || status === "ARCHIVED") && onPublish && (
-                            <button
-                              type="button"
-                              onClick={() => onPublish(item)}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#3b8555] bg-[#439660] px-2.5 py-1 text-xs font-bold text-white hover:bg-[#387e51]"
-                            >
-                              <Rocket size={12} /> {status === "ARCHIVED" ? "Mở bán lại" : "Mở bán"}
-                            </button>
-                          )}
-                          {onEdit && (
-                            <button
-                              type="button"
-                              onClick={() => onEdit(item)}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#cfe0d4] bg-white px-2 py-1 text-xs font-bold text-[#173b28] hover:bg-[#eef8f0]"
-                            >
-                              <Edit size={12} /> Sửa
-                            </button>
-                          )}
-                          {status !== "ARCHIVED" && onArchive && (
-                            <button
-                              type="button"
-                              onClick={() => onArchive(item)}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#cfe0d4] bg-white px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-50"
-                            >
-                              <Archive size={12} /> Ngừng bán
-                            </button>
-                          )}
-                          {onDelete && (
-                            <button
-                              type="button"
-                              onClick={() => onDelete(item)}
-                              className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-bold text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 size={12} /> Xóa
-                            </button>
-                          )}
-                        </div>
+                      <StoreThumbnail
+                        src={item.previewUrl}
+                        alt={`Ảnh đại diện của ${item.name}`}
+                        fallback={<Cpu size={18} />}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className={`font-bold ${isDeleted ? "text-neutral-500 line-through" : ""}`}>
+                        {item.name}
+                      </p>
+                      {item.updatedAt && (
+                        <p className="text-[11px] text-text-muted">
+                          Cập nhật lúc {formatDateTime(item.updatedAt)}
+                        </p>
                       )}
                     </td>
-                  )}
-                </tr>
-              );
-            })}
-            {filteredItems.length === 0 && (
-              <tr>
-                <td
-                  colSpan={headings.length}
-                  className="px-4 py-10 text-center text-xs font-semibold text-text-muted"
-                >
-                  Chưa có sản phẩm nào phù hợp với bộ lọc trong danh mục này.
-                </td>
-              </tr>
-            )}
+                    <td className="max-w-xs px-4 py-3 text-xs font-medium text-text-muted">
+                      <span className="line-clamp-2">
+                        {isBundle
+                          ? `${item.components?.length ?? 0} sản phẩm: ${(item.components ?? [])
+                              .map((component) => component.name)
+                              .join(", ")}`
+                          : item.description || "—"}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-bold tabular-nums text-[#173b28]">
+                      {formatVnd(item.price)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={status} />
+                    </td>
+                    {!isBundle && (
+                      <td className="px-4 py-3">
+                        {isDeleted ? null : (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {onEdit && (
+                              <StoreActionButton
+                                variant="secondary"
+                                disabled={!canManage}
+                                title={actionTitle}
+                                onClick={() => onEdit(item)}
+                                icon={<Edit size={13} />}
+                              >
+                                Sửa
+                              </StoreActionButton>
+                            )}
+                            {status === "UNPUBLISHED" && onPublish && (
+                              <StoreActionButton
+                                variant="primary"
+                                disabled={!canManage}
+                                title={actionTitle}
+                                onClick={() => onPublish(item)}
+                                icon={<CheckCircle2 size={13} />}
+                              >
+                                Mở bán
+                              </StoreActionButton>
+                            )}
+                            {status === "ARCHIVED" && onPublish && (
+                              <StoreActionButton
+                                variant="primary"
+                                disabled={!canManage}
+                                title={actionTitle}
+                                onClick={() => onPublish(item)}
+                                icon={<Undo2 size={13} />}
+                              >
+                                Mở bán lại
+                              </StoreActionButton>
+                            )}
+                            {status !== "ARCHIVED" && onArchive && (
+                              <StoreActionButton
+                                variant="secondary"
+                                disabled={!canManage}
+                                title={actionTitle}
+                                onClick={() => onArchive(item)}
+                                icon={<Archive size={13} />}
+                              >
+                                Ngừng bán
+                              </StoreActionButton>
+                            )}
+                            {onDelete && (
+                              <StoreActionButton
+                                variant="danger"
+                                disabled={!canManage}
+                                title={actionTitle}
+                                onClick={() => onDelete(item)}
+                                icon={<Trash2 size={13} />}
+                              >
+                                Xóa
+                              </StoreActionButton>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
+
+      {!isLoading && !error && (
+        <StoreTableFooter
+          filteredCount={filteredItems.length}
+          totalCount={items.length}
+          unitLabel={COPY[kind].unitLabel}
+        />
+      )}
     </>
   );
 }

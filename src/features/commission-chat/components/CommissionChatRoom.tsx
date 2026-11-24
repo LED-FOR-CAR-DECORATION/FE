@@ -191,7 +191,7 @@ function ChatPanel({ room, info, viewer, cardCtx, variant = "page", onBack }: {
   const stickToBottom = useRef(true);
 
   const counterpart = viewer === "CUSTOMER"
-    ? info.assignedStaffName || "Nhân viên MIRAGE"
+    ? info.assignedStaffName || "Nhân viên LUMINTRA"
     : info.customerName || "Khách hàng";
 
   useLayoutEffect(() => {
@@ -264,7 +264,7 @@ function ChatPanel({ room, info, viewer, cardCtx, variant = "page", onBack }: {
             {messages.length === 0 && pending.length === 0 && !historyError && (
               <p className="py-8 text-center text-sm text-[#526159]">
                 {viewer === "CUSTOMER"
-                  ? "Phòng chat đã mở. Hãy gửi lời chào và mô tả thêm ý tưởng cho nhân viên MIRAGE nhé!"
+                  ? "Phòng chat đã mở. Hãy gửi lời chào và mô tả thêm ý tưởng cho nhân viên LUMINTRA nhé!"
                   : "Chưa có tin nhắn. Hãy chào khách và xác nhận yêu cầu."}
               </p>
             )}
@@ -339,7 +339,7 @@ function ChatNotReady({ info, viewer }: { info: CommissionRoomInfo; viewer: Chat
 
 function senderLabel(message: CommissionMessage, viewer: ChatViewer, info: CommissionRoomInfo) {
   if (message.senderRole === "CUSTOMER") return viewer === "CUSTOMER" ? "Bạn" : info.customerName || "Khách hàng";
-  if (viewer === "CUSTOMER") return info.assignedStaffName || "Nhân viên MIRAGE";
+  if (viewer === "CUSTOMER") return info.assignedStaffName || "Nhân viên LUMINTRA";
   const role = message.senderRole === "MANAGER" ? "Manager" : message.senderRole === "ADMIN" ? "Admin" : "Staff";
   return message.senderId ? `${role} #${message.senderId}` : role;
 }

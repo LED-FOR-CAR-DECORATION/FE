@@ -5,6 +5,7 @@ import { OpenAPI } from "@/lib/api/client";
 import { uploadMediaFile } from "@/lib/api/media";
 import type { PaymentSessionResponse } from "@/api_client/models/PaymentSessionResponse";
 import type { CommissionMessage } from "@/features/commission-chat/services/commission-messages.api";
+import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
 
 type CommissionSubmission = {
   title: string;
@@ -45,11 +46,15 @@ export async function uploadCommissionReference(file: File) {
 }
 
 /** CMS-18: khách chấp nhận bản xem trước mới nhất → COMPLETED. */
-export function approveDeliverableCard(id: number) {
-  return request<{ data: {
+export async function approveDeliverableCard(id: number) {
+  const response = await request<{ data: {
     commissionId: number; commissionStatus: string; approvedSubmissionId: number; versionNumber: number;
     completedAt?: string | null; systemMessage?: CommissionMessage | null;
   } }>(OpenAPI, { method: "POST", url: "/api/commissions/{id}/deliverable-card/approve", path: { id } });
+  if (response.data.commissionStatus === "COMPLETED" && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(ENTITLEMENTS_CHANGED_EVENT));
+  }
+  return response;
 }
 
 /** CMS-20: miễn phí → AWAITING_ESTIMATE; có phí → AWAITING_EXTRA_PAYMENT, sau thanh toán mới chờ designer dự kiến thời gian. */

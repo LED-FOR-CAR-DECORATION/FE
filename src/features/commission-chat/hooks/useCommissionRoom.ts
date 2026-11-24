@@ -215,8 +215,12 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
       onError: async () => {
         errors += 1;
         if (errors >= MAX_STOMP_ERRORS) return false;
-        await refreshAccessToken(); // lỗi phổ biến nhất là token hết hạn
-        return true;
+        try {
+          return Boolean(await refreshAccessToken());
+        } catch {
+          // Keep the existing bounded reconnect policy for temporary refresh outages.
+          return true;
+        }
       },
       onMessage: (body) => {
         try {

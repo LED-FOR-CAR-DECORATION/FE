@@ -23,7 +23,7 @@ const STEPS = [
 export default function AboutPage() {
   return (
     <InfoPage title="Về chúng tôi" currentHref="/about" intro={SITE.description}>
-      <InfoSection title="Mirage làm gì?">
+      <InfoSection title="Lumintra làm gì?">
         <ul className="!ml-0 grid !list-none gap-4 sm:grid-cols-3">
           {OFFERINGS.map(({ Icon, title, text }) => (
             <li key={title} className="!ml-0 border-2 border-black bg-[#f7faf6] p-4">
@@ -41,7 +41,7 @@ export default function AboutPage() {
       </InfoSection>
 
       <InfoSection title="Đội ngũ">
-        <p>{SITE.team} là nhóm sinh viên phát triển Mirage — từ thiết bị LED, ứng dụng điều khiển đến cửa hàng và dịch vụ thiết kế nhân vật.</p>
+        <p>{SITE.team} là nhóm sinh viên phát triển Lumintra — từ thiết bị LED, ứng dụng điều khiển đến cửa hàng và dịch vụ thiết kế nhân vật.</p>
       </InfoSection>
 
       <div className="flex flex-wrap gap-3">

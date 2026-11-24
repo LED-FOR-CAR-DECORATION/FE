@@ -54,7 +54,7 @@ export default function ProductsPage() {
       <main className="flex-1 bg-background py-10">
         <div className="container mx-auto max-w-6xl px-4">
           <div className="mb-8">
-            <p className="text-sm font-bold text-primary-dark">MIRAGE STORE</p>
+            <p className="text-sm font-bold text-primary-dark">LUMINTRA STORE</p>
             <h1 className="text-3xl font-black uppercase">Sản phẩm</h1>
             <p className="mt-2 text-text-muted">Chọn bảng LED và sprite phù hợp cho thiết kế của bạn.</p>
           </div>

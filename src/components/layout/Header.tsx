@@ -12,19 +12,65 @@ import {
   Sparkles,
   LayoutDashboard,
   MessageCircle,
-  Crown,
+  ClipboardList,
+  Image as ImageIcon,
+  ShieldCheck,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getRoleHomePath } from "@/features/auth/services/auth.service";
 import { useCart } from "@/features/cart/context/CartContext";
+import { SITE } from "@/config/site";
 
 /* ── User dropdown (shown when logged in) ── */
 function UserDropdown() {
   const { user, logout } = useAuth();
+  const pathname = usePathname() ?? "";
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const isInternalRole = Boolean(user?.role) && user?.role !== "CUSTOMER";
+
+  const customerMenuItems = [
+    {
+      href: "/profile",
+      label: "Tài khoản của tôi",
+      icon: User,
+      active:
+        pathname === "/profile" ||
+        pathname.startsWith("/profile/account") ||
+        pathname.startsWith("/profile/addresses"),
+    },
+    {
+      href: "/profile/orders",
+      label: "Lịch sử đơn mua",
+      icon: ClipboardList,
+      active: pathname.startsWith("/profile/orders"),
+    },
+    {
+      href: "/profile/gallery",
+      label: "Thư viện nhân vật",
+      icon: ImageIcon,
+      active: pathname.startsWith("/profile/gallery"),
+    },
+    {
+      href: "/profile/warranty",
+      label: "Bảo hành thiết bị",
+      icon: ShieldCheck,
+      active: pathname.startsWith("/profile/warranty"),
+    },
+    {
+      href: "/commission",
+      label: "Yêu cầu thiết kế",
+      icon: Sparkles,
+      active: pathname.startsWith("/commission"),
+    },
+    {
+      href: "/messages",
+      label: "Hộp thư tin nhắn",
+      icon: MessageCircle,
+      active: pathname.startsWith("/messages"),
+    },
+  ];
 
   /* Close when clicking outside */
   useEffect(() => {
@@ -60,48 +106,25 @@ function UserDropdown() {
             </Link>
           ) : (
             <>
-              <Link
-                href="/profile"
-                onClick={() => setOpen(false)}
-                className="cursor-pointer flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-xs font-bold uppercase text-black transition-colors hover:bg-primary/20"
-              >
-                <User size={15} /> Hồ sơ của tôi
-              </Link>
-              <Link
-                href="/profile/orders"
-                onClick={() => setOpen(false)}
-                className="cursor-pointer flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-xs font-bold uppercase text-black transition-colors hover:bg-primary/20"
-              >
-                <ShoppingBag size={15} /> Lịch sử đơn hàng
-              </Link>
-              <Link
-                href="/profile/gallery"
-                onClick={() => setOpen(false)}
-                className="cursor-pointer flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-xs font-bold uppercase text-black transition-colors hover:bg-primary/20"
-              >
-                <ShoppingBag size={15} /> Thư viện nhân vật
-              </Link>
-              <Link
-                href="/subscriptions"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-sm font-semibold hover:bg-[#eaf5e8]"
-              >
-                <Crown size={15} /> Gói hội viên
-              </Link>
-              <Link
-                href="/commission"
-                onClick={() => setOpen(false)}
-                className="cursor-pointer flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-xs font-bold uppercase text-black transition-colors hover:bg-primary/20"
-              >
-                <Sparkles size={15} className="text-primary-ink" /> Yêu cầu thiết kế
-              </Link>
-              <Link
-                href="/messages"
-                onClick={() => setOpen(false)}
-                className="cursor-pointer flex items-center gap-2 border-b-2 border-black px-4 py-2.5 text-xs font-bold uppercase text-black transition-colors hover:bg-primary/20"
-              >
-                <MessageCircle size={15} /> Tin nhắn
-              </Link>
+              {customerMenuItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={`cursor-pointer flex items-center gap-2.5 border-b-2 border-black px-4 py-2.5 text-xs font-black uppercase tracking-wider text-black transition-colors ${
+                      item.active ? "bg-primary" : "hover:bg-primary/20"
+                    }`}
+                  >
+                    <Icon
+                      size={15}
+                      className={item.active ? "text-black" : "text-primary-ink"}
+                    />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
             </>
           )}
           <button
@@ -111,7 +134,7 @@ function UserDropdown() {
               setOpen(false);
               window.location.assign(isInternalRole ? "/login" : "/");
             }}
-            className="cursor-pointer flex w-full items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase text-red-600 transition-colors hover:bg-red-50"
+            className="cursor-pointer flex w-full items-center gap-2.5 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-red-600 transition-colors hover:bg-red-50"
           >
             <LogOut size={15} /> Đăng xuất
           </button>
@@ -169,9 +192,9 @@ export default function Header() {
         <div className="flex items-center gap-7">
           <Link
             href="/"
-            className="cursor-pointer border-2 border-black bg-white px-4 py-1.5 text-xl font-black uppercase tracking-wider text-black shadow-[3px_3px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            className="cursor-pointer whitespace-nowrap border-2 border-black bg-white px-3 py-1.5 text-lg font-black uppercase tracking-wider text-black shadow-[3px_3px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 sm:px-4 sm:text-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
           >
-            MIRAGE
+            {SITE.name}
           </Link>
 
           <nav className="hidden items-center gap-6 text-xs font-black uppercase tracking-wider text-black md:flex">

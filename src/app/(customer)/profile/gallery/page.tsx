@@ -18,7 +18,7 @@ import CustomerSidebar from "@/components/layout/CustomerSidebar";
 import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import { useGallery } from "@/features/character/context/GalleryContext";
-import type { CustomerOwnedCharacterItem } from "@/lib/api/customerCharacters";
+import type { CustomerGalleryItem } from "@/lib/api/customerCharacters";
 import { formatPrice } from "@/lib/currency";
 
 function formatPurchasedDate(value: string): string {
@@ -37,7 +37,7 @@ function formatPurchasedDate(value: string): string {
 export default function GalleryPage() {
   const { ownedCharacters, isLoading, error, refresh } = useGallery();
   const [previewItem, setPreviewItem] =
-    useState<CustomerOwnedCharacterItem | null>(null);
+    useState<CustomerGalleryItem | null>(null);
 
   useEffect(() => {
     refresh();
@@ -60,7 +60,7 @@ export default function GalleryPage() {
                     Thư viện nhân vật ({ownedCharacters.length})
                   </h1>
                   <p className="text-xs text-text-muted">
-                    Các Character bạn đã mua và sở hữu từ cửa hàng Mirage.
+                    Nhân vật đã mua và thiết kế Commission đã chấp nhận của bạn.
                   </p>
                 </div>
               </div>
@@ -116,8 +116,7 @@ export default function GalleryPage() {
                 />
                 <h2 className="text-xl font-black">Gallery đang trống</h2>
                 <p className="mt-2 text-sm text-text-muted">
-                  Character bạn mua sẽ xuất hiện ở đây sau khi thanh toán thành
-                  công.
+                  Nhân vật đã thanh toán và bản thiết kế Commission đã chấp nhận sẽ xuất hiện ở đây.
                 </p>
                 <Link href="/products" className="btn-primary mt-5 inline-block">
                   Khám phá Character
@@ -127,7 +126,7 @@ export default function GalleryPage() {
               <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                 {ownedCharacters.map((item, idx) => (
                   <article
-                    key={`${item.orderId}-${item.storeProductId}-${item.characterId}-${idx}`}
+                    key={item.sourceType === "COMMISSION" ? `commission-${item.commissionId}-${item.submissionId}` : `${item.orderId}-${item.storeProductId}-${item.characterId}-${idx}`}
                     className="profile-card flex flex-col overflow-hidden p-0"
                   >
                     <div className="relative grid aspect-square place-items-center border-b-2 border-black bg-[#090d14] p-4">
@@ -162,32 +161,34 @@ export default function GalleryPage() {
                             {item.characterName}
                           </h2>
                           <span className="shrink-0 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
-                            Đã sở hữu
+                            {item.sourceType === "COMMISSION" ? "Commission đã duyệt" : "Đã sở hữu"}
                           </span>
                         </div>
                         <p className="mt-0.5 text-xs font-medium text-text-muted">
-                          Gói: {item.productName}
+                          {item.productName}
                         </p>
 
                         <div className="mt-3 space-y-1 rounded-lg border border-gray-100 bg-gray-50 p-2.5 text-xs">
                           <div className="flex items-center justify-between">
-                            <span className="text-gray-500">Đơn hàng</span>
-                            <Link
-                              href={`/profile/orders/${item.orderId}`}
-                              className="inline-flex items-center gap-1 font-bold text-primary-dark hover:underline"
-                            >
-                              #{item.orderId}
-                              <ExternalLink size={11} />
-                            </Link>
+                            <span className="text-gray-500">{item.sourceType === "COMMISSION" ? "Yêu cầu" : "Nguồn"}</span>
+                            {item.sourceType === "COMMISSION" ? (
+                              <Link href={`/messages?commissionId=${item.commissionId}`} className="inline-flex items-center gap-1 font-bold text-primary-dark hover:underline">
+                                Commission #{item.commissionId}<ExternalLink size={11} />
+                              </Link>
+                            ) : item.orderId !== null ? (
+                              <Link href={`/profile/orders/${item.orderId}`} className="inline-flex items-center gap-1 font-bold text-primary-dark hover:underline">
+                                Đơn #{item.orderId}<ExternalLink size={11} />
+                              </Link>
+                            ) : <span>Được cấp</span>}
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-gray-500">Giá mua</span>
+                            <span className="text-gray-500">{item.sourceType === "COMMISSION" ? "Tổng chi phí" : "Giá mua"}</span>
                             <span className="font-bold text-gray-900">
-                              {formatPrice(item.purchasedPrice)}
+                              {item.purchasedPrice === null ? "—" : formatPrice(item.purchasedPrice)}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-gray-500">Ngày sở hữu</span>
+                            <span className="text-gray-500">{item.sourceType === "COMMISSION" ? "Ngày hoàn tất" : "Ngày sở hữu"}</span>
                             <span className="font-medium text-gray-700">
                               {formatPurchasedDate(item.purchasedAt)}
                             </span>
@@ -202,16 +203,16 @@ export default function GalleryPage() {
                           className="btn-primary flex flex-1 items-center justify-center gap-1.5 text-xs"
                         >
                           <Eye size={14} />
-                          Xem LED
+                          Xem ảnh
                         </button>
-                        <Link
+                        {item.storeProductId !== null && <Link
                           href={`/products/${item.storeProductId}`}
                           className="inline-flex items-center justify-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
                           title="Xem sản phẩm trên Store"
                         >
                           <ShoppingBag size={14} />
                           Store
-                        </Link>
+                        </Link>}
                       </div>
                     </div>
                   </article>
@@ -244,7 +245,8 @@ export default function GalleryPage() {
                   {previewItem.characterName}
                 </h2>
                 <p className="text-xs text-text-muted">
-                  {previewItem.productName} · Đơn #{previewItem.orderId}
+                  {previewItem.productName}
+                  {previewItem.sourceType === "COMMISSION" ? ` · Yêu cầu #${previewItem.commissionId}` : previewItem.orderId !== null ? ` · Đơn #${previewItem.orderId}` : ""}
                 </p>
               </div>
               <button

@@ -17,13 +17,13 @@ import type { UserEntitlement } from "@/features/character/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import {
-  fetchCustomerOwnedCharacters,
+  fetchCustomerGallery,
   formatOwnedCharactersError,
-  type CustomerOwnedCharacterItem,
+  type CustomerGalleryItem,
 } from "@/lib/api/customerCharacters";
 
 interface GalleryContextValue {
-  ownedCharacters: CustomerOwnedCharacterItem[];
+  ownedCharacters: CustomerGalleryItem[];
   entitlements: UserEntitlement[];
   isLoading: boolean;
   error: string | null;
@@ -35,7 +35,7 @@ const GalleryContext = createContext<GalleryContextValue | null>(null);
 export function GalleryProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [ownedCharacters, setOwnedCharacters] = useState<
-    CustomerOwnedCharacterItem[]
+    CustomerGalleryItem[]
   >([]);
   const [entitlements, setEntitlements] = useState<UserEntitlement[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -62,12 +62,13 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
 
-    fetchCustomerOwnedCharacters()
+    fetchCustomerGallery()
       .then((items) => {
         if (requestIdRef.current !== requestId) return;
         setOwnedCharacters(items);
 
-        const apiEntitlements: UserEntitlement[] = items.map((item) => ({
+        // An accepted image is not a CharacterVersion and cannot grant LED/store access.
+        const apiEntitlements: UserEntitlement[] = items.filter((item) => item.characterId !== null).map((item) => ({
           entitlementId: `OWNED-${item.orderId}-${item.characterId}`,
           userId: currentUser.userId,
           characterId: String(item.characterId),

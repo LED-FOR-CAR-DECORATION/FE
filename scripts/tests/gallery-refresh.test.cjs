@@ -55,7 +55,7 @@ function createGallery() {
       if (name.includes("entitlement.service")) return { ENTITLEMENTS_CHANGED_EVENT: "entitlements", entitlementService: { listByUser: () => [] } };
       if (name.includes("order.service")) return { ORDERS_CHANGED_EVENT: "orders" };
       if (name.includes("customerCharacters")) return {
-        fetchCustomerOwnedCharacters: () => new Promise((resolve, reject) => requests.push({ resolve, reject })),
+        fetchCustomerGallery: () => new Promise((resolve, reject) => requests.push({ resolve, reject })),
         formatOwnedCharactersError: () => "Load failed",
       };
       throw new Error(`Unexpected dependency: ${name}`);
@@ -105,4 +105,13 @@ test("returning to a visible tab refetches; a hidden tab does not", () => {
   gallery.document.visibilityState = "visible";
   gallery.document.dispatchEvent(new Event("visibilitychange"));
   assert.equal(gallery.requests.length, 2);
+});
+
+test("accepted artwork is displayed without granting a fictitious Character entitlement", async () => {
+  const gallery = createGallery();
+  gallery.render();
+  gallery.requests[0].resolve([{ ...purchased, sourceType: "COMMISSION", characterId: null, commissionId: 1 }]);
+  await settle();
+  assert.equal(gallery.render().ownedCharacters.length, 1);
+  assert.equal(gallery.render().entitlements.length, 0);
 });

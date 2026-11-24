@@ -60,4 +60,4 @@ export function commissionTotal(design: CommissionDesign): number | null {
 }
 
 export const formatCommissionMoney = (amount: number) =>
-  new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount);
+  `${amount.toLocaleString("vi-VN")} VNĐ`;

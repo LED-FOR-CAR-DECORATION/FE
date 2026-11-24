@@ -48,7 +48,7 @@ export default function StoreTagsPage() {
       const data = await fetchStoreTags();
       setTags(data);
     } catch (err: any) {
-      setErrorMessage(err?.message || "Không thể tải danh sách tag sản phẩm.");
+      setErrorMessage(err?.message || "Không thể tải danh sách thẻ sản phẩm.");
     } finally {
       setIsLoading(false);
     }
@@ -78,11 +78,11 @@ export default function StoreTagsPage() {
     e.preventDefault();
     const trimmedName = tagName.trim();
     if (!trimmedName) {
-      setFormError("Tên tag không được để trống.");
+      setFormError("Tên thẻ không được để trống.");
       return;
     }
     if (trimmedName.length > 100) {
-      setFormError("Tên tag không được vượt quá 100 ký tự.");
+      setFormError("Tên thẻ không được vượt quá 100 ký tự.");
       return;
     }
 
@@ -94,24 +94,24 @@ export default function StoreTagsPage() {
           name: trimmedName,
           description: tagDescription.trim() || undefined,
         });
-        setSuccessMessage(`Đã cập nhật tag "${trimmedName}" thành công.`);
+        setSuccessMessage(`Đã cập nhật thẻ "${trimmedName}" thành công.`);
       } else {
         await apiCreateStoreTag({
           name: trimmedName,
           description: tagDescription.trim() || undefined,
         });
-        setSuccessMessage(`Đã tạo tag "${trimmedName}" thành công.`);
+        setSuccessMessage(`Đã tạo thẻ "${trimmedName}" thành công.`);
       }
       setIsModalOpen(false);
       await loadTags();
     } catch (err: any) {
       const resData = err?.response?.data;
       if (err?.response?.status === 409 || resData?.code === "TAG_ALREADY_EXISTS") {
-        setFormError("Tên tag này đã tồn tại trong hệ thống (không phân biệt hoa thường).");
+        setFormError("Tên thẻ này đã tồn tại trong hệ thống (không phân biệt chữ hoa, chữ thường).");
       } else if (err?.response?.status === 404) {
-        setFormError("Không tìm thấy tag để cập nhật (404).");
+        setFormError("Không tìm thấy thẻ để cập nhật (404).");
       } else {
-        setFormError(resData?.message || err?.message || "Đã xảy ra lỗi khi lưu tag.");
+        setFormError(resData?.message || err?.message || "Đã xảy ra lỗi khi lưu thẻ.");
       }
     } finally {
       setIsSubmitting(false);
@@ -124,11 +124,11 @@ export default function StoreTagsPage() {
     setIsDeleting(true);
     try {
       await apiDeleteStoreTag(deletingTag.tagId);
-      setSuccessMessage(`Đã xóa tag "${deletingTag.name}". Các sản phẩm liên kết đã được tách tag.`);
+      setSuccessMessage(`Đã xóa thẻ "${deletingTag.name}". Các sản phẩm liên kết đã được gỡ thẻ.`);
       setDeletingTag(null);
       await loadTags();
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.message || err?.message || "Xóa tag thất bại.");
+      setErrorMessage(err?.response?.data?.message || err?.message || "Xóa thẻ thất bại.");
       setDeletingTag(null);
     } finally {
       setIsDeleting(false);
@@ -155,9 +155,9 @@ export default function StoreTagsPage() {
               <TagIcon size={22} />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-gray-900">Quản lý tag sản phẩm</h1>
+              <h1 className="text-2xl font-black text-gray-900">Quản lý thẻ sản phẩm</h1>
               <p className="text-xs text-gray-500">
-                Tạo, chỉnh sửa và quản lý các thẻ danh mục phân loại (Category Tags) cho Cửa hàng
+                Tạo, chỉnh sửa và quản lý các thẻ danh mục phân loại cho Cửa hàng
               </p>
             </div>
           </div>
@@ -179,7 +179,7 @@ export default function StoreTagsPage() {
             className="flex items-center gap-1.5 rounded-lg bg-[#0F5B38] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#0c4a2d]"
           >
             <Plus size={16} />
-            Tạo tag mới
+            Tạo thẻ mới
           </button>
         </div>
       </div>
@@ -217,30 +217,30 @@ export default function StoreTagsPage() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Tìm theo tên tag, ID hoặc mô tả..."
+            placeholder="Tìm theo tên thẻ, mã thẻ hoặc mô tả..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded-lg border border-gray-200 py-1.5 pl-9 pr-3 text-xs outline-none focus:border-[#0F5B38]"
           />
         </div>
         <span className="text-xs font-bold text-gray-500">
-          Tổng cộng: <strong className="text-gray-900">{filteredTags.length}</strong> tag
+          Tổng cộng: <strong className="text-gray-900">{filteredTags.length}</strong> thẻ
         </span>
       </div>
 
-      {/* Danh sách Tag Table */}
+      {/* Danh sách Thẻ Table */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         {isLoading ? (
           <div className="flex items-center justify-center p-12 text-xs font-semibold text-gray-500">
             <Loader2 size={18} className="mr-2 animate-spin text-[#0F5B38]" />
-            Đang tải danh sách tag từ máy chủ...
+            Đang tải danh sách thẻ từ máy chủ...
           </div>
         ) : filteredTags.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center">
             <FolderTree size={36} className="mb-2 text-gray-300" />
-            <p className="text-sm font-bold text-gray-700">Không tìm thấy tag nào</p>
+            <p className="text-sm font-bold text-gray-700">Không tìm thấy thẻ nào</p>
             <p className="text-xs text-gray-500">
-              {searchQuery ? "Thử tìm kiếm với từ khóa khác." : "Hệ thống chưa có tag nào. Hãy tạo tag đầu tiên!"}
+              {searchQuery ? "Thử tìm kiếm với từ khóa khác." : "Hệ thống chưa có thẻ nào. Hãy tạo thẻ đầu tiên!"}
             </p>
           </div>
         ) : (
@@ -248,8 +248,8 @@ export default function StoreTagsPage() {
             <table className="w-full text-left text-xs">
               <thead className="border-b border-gray-100 bg-gray-50 text-[11px] font-black uppercase tracking-wider text-gray-500">
                 <tr>
-                  <th className="py-3 pl-4 pr-3">Mã Tag</th>
-                  <th className="py-3 px-3">Tên Tag (Category)</th>
+                  <th className="py-3 pl-4 pr-3">Mã thẻ</th>
+                  <th className="py-3 px-3">Tên thẻ phân loại</th>
                   <th className="py-3 px-3">Mô tả</th>
                   <th className="py-3 pl-3 pr-4 text-right">Thao tác</th>
                 </tr>
@@ -295,13 +295,13 @@ export default function StoreTagsPage() {
         )}
       </div>
 
-      {/* Modal Tạo / Sửa Tag */}
+      {/* Modal Tạo / Sửa Thẻ */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-black text-gray-900">
-                {editingTag ? "Chỉnh sửa tag sản phẩm" : "Tạo tag sản phẩm mới"}
+                {editingTag ? "Chỉnh sửa thẻ sản phẩm" : "Tạo thẻ sản phẩm mới"}
               </h3>
               <button
                 type="button"
@@ -322,26 +322,26 @@ export default function StoreTagsPage() {
 
               <div>
                 <label htmlFor="tag-name" className="text-xs font-bold text-gray-700">
-                  Tên tag <span className="text-red-500">*</span>
+                  Tên thẻ <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="tag-name"
                   type="text"
                   maxLength={100}
-                  placeholder="Ví dụ: Cyberpunk, Neon, Matrix, Animals..."
+                  placeholder="Ví dụ: Hoạt hình, Xe cộ, Đèn LED, Nghệ thuật..."
                   value={tagName}
                   onChange={(e) => setTagName(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-900 outline-none focus:border-[#0F5B38]"
                   required
                 />
                 <p className="mt-1 text-[11px] text-gray-400">
-                  Tối đa 100 ký tự. Không được trùng lặp tên với các tag khác (không phân biệt hoa thường).
+                  Tối đa 100 ký tự. Không được trùng lặp tên với các thẻ khác (không phân biệt chữ hoa, chữ thường).
                 </p>
               </div>
 
               <div>
                 <label htmlFor="tag-desc" className="text-xs font-bold text-gray-700">
-                  Mô tả tag (tùy chọn)
+                  Mô tả thẻ (tùy chọn)
                 </label>
                 <textarea
                   id="tag-desc"
@@ -368,7 +368,7 @@ export default function StoreTagsPage() {
                   className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F5B38] px-4 py-2 text-xs font-bold text-white hover:bg-[#0c4a2d] disabled:opacity-50"
                 >
                   {isSubmitting && <Loader2 size={13} className="animate-spin" />}
-                  {editingTag ? "Lưu thay đổi" : "Tạo tag"}
+                  {editingTag ? "Lưu thay đổi" : "Tạo thẻ"}
                 </button>
               </div>
             </form>
@@ -376,17 +376,17 @@ export default function StoreTagsPage() {
         </div>
       )}
 
-      {/* Modal Xác nhận Xóa Tag */}
+      {/* Modal Xác nhận Xóa Thẻ */}
       {deletingTag && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <h3 className="text-base font-black text-gray-900">Xác nhận xóa tag?</h3>
+            <h3 className="text-base font-black text-gray-900">Xác nhận xóa thẻ?</h3>
             <p className="mt-2 text-xs text-gray-600">
-              Bạn có chắc chắn muốn xóa tag{" "}
-              <strong className="text-gray-900">"{deletingTag.name}"</strong> (ID: #{deletingTag.tagId})?
+              Bạn có chắc chắn muốn xóa thẻ{" "}
+              <strong className="text-gray-900">"{deletingTag.name}"</strong> (Mã: #{deletingTag.tagId})?
             </p>
             <p className="mt-1 text-[11px] text-gray-500">
-              Hệ thống sẽ tự động tách tag này khỏi tất cả các sản phẩm đang liên kết mà không làm mất sản phẩm.
+              Hệ thống sẽ tự động gỡ thẻ này khỏi tất cả các sản phẩm đang liên kết mà không làm mất sản phẩm.
             </p>
 
             <div className="mt-5 flex items-center justify-end gap-2">

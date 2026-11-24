@@ -23,7 +23,7 @@ export function RevenueCategoryBarChart({
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const formatVnd = (val: number) => {
-    return `${(val / 1000000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tr đ`;
+    return `${(val / 1000000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tr VNĐ`;
   };
 
   return (
@@ -114,7 +114,7 @@ export function RevenueCategoryBarChart({
 
 export function TopSellingProductsList({ items }: { items: TopProductItem[] }) {
   const formatMoney = (val: number) => {
-    return `${(val / 1000).toLocaleString("vi-VN")}k đ`;
+    return `${(val / 1000).toLocaleString("vi-VN")}k VNĐ`;
   };
 
   const getRankBadge = (rank: number) => {

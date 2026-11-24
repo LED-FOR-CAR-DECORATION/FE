@@ -22,7 +22,7 @@ import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchPublicSubscriptionPlans } from "@/lib/api/subscriptions";
 import type { CatalogProduct } from "@/features/cart/catalog";
 
-const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} đ`;
+const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} VNĐ`;
 
 export default function SubscriptionsStorePage() {
   const router = useRouter();

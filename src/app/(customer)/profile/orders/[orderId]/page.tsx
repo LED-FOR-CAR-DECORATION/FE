@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { use, useState } from "react";
+import { CancelOrderDialog, ConfirmReceivedDialog } from "@/features/order/components/OrderActionDialogs";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING_PAYMENT: "Chờ thanh toán",
@@ -714,144 +715,27 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
         </div>
       </main>
 
-      {/* Confirm Delivery Modal */}
       {isConfirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2 text-base font-black uppercase text-gray-900">
-                <CheckCircle2 size={20} className="text-emerald-600" />
-                <span>Xác nhận đã nhận hàng</span>
-              </div>
-              <button
-                type="button"
-                disabled={isConfirming}
-                onClick={() => setIsConfirmModalOpen(false)}
-                className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-700">
-              Bạn xác nhận đã nhận đầy đủ sản phẩm cho đơn hàng{" "}
-              <strong className="font-bold text-gray-900">#{order.id}</strong>?
-            </p>
-            <p className="mt-2 text-xs text-gray-500">
-              Sau khi xác nhận, đơn hàng sẽ được chuyển sang trạng thái{" "}
-              <strong className="text-gray-700">Đã hoàn thành</strong>.
-            </p>
-
-            {confirmError && (
-              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
-                {confirmError}
-              </p>
-            )}
-
-            <div className="mt-6 flex justify-end gap-2.5">
-              <button
-                type="button"
-                disabled={isConfirming}
-                onClick={() => setIsConfirmModalOpen(false)}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                disabled={isConfirming}
-                onClick={handleConfirmDelivery}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#155e59] px-4 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-60"
-              >
-                {isConfirming ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
-                {isConfirming ? "Đang xử lý..." : "Xác nhận nhận hàng"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmReceivedDialog
+          orderId={order.id}
+          error={confirmError}
+          busy={isConfirming}
+          onClose={() => setIsConfirmModalOpen(false)}
+          onConfirm={() => void handleConfirmDelivery()}
+        />
       )}
 
-      {/* Cancel Order Modal */}
       {isCancelModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2 text-base font-black uppercase text-red-600">
-                <X size={20} />
-                <span>Hủy đơn hàng #{order.id}</span>
-              </div>
-              <button
-                type="button"
-                disabled={isCancelling}
-                onClick={() => setIsCancelModalOpen(false)}
-                className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-700">
-              {order.status === "PROCESSING" || order.status === "Preparing" || order.status === "Confirmed"
-                ? "Đơn hàng đã thanh toán và đang chờ đóng gói. Khi hủy, trạng thái đơn sẽ chuyển sang Đã hoàn tiền và tồn kho sẽ được hoàn lại."
-                : "Bạn có chắc chắn muốn hủy đơn hàng này? Tồn kho sản phẩm sẽ được hoàn lại."}
-            </p>
-
-            <div className="mt-4">
-              <label htmlFor="cancel-reason-detail" className="block text-xs font-bold uppercase text-gray-700">
-                Lý do hủy đơn (tùy chọn)
-              </label>
-              <textarea
-                id="cancel-reason-detail"
-                rows={3}
-                maxLength={500}
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Ví dụ: Đổi ý, muốn chọn sản phẩm khác hoặc cập nhật địa chỉ giao hàng..."
-                className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#155e59] focus:outline-none focus:ring-1 focus:ring-[#155e59]"
-              />
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {["Đổi ý trước khi giao hàng", "Muốn đổi sản phẩm / số lượng", "Thay đổi địa chỉ nhận hàng"].map(
-                  (preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setCancelReason(preset)}
-                      className="rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:border-[#155e59] hover:bg-gray-100"
-                    >
-                      {preset}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
-
-            {cancelError && (
-              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
-                {cancelError}
-              </p>
-            )}
-
-            <div className="mt-6 flex justify-end gap-2.5">
-              <button
-                type="button"
-                disabled={isCancelling}
-                onClick={() => setIsCancelModalOpen(false)}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                disabled={isCancelling}
-                onClick={handleCancelOrder}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-60"
-              >
-                {isCancelling ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
-                {isCancelling ? "Đang hủy đơn..." : "Xác nhận hủy đơn"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CancelOrderDialog
+          orderId={order.id}
+          isPaid={order.status === "PROCESSING" || order.status === "Preparing" || order.status === "Confirmed"}
+          reason={cancelReason}
+          onReasonChange={setCancelReason}
+          error={cancelError}
+          busy={isCancelling}
+          onClose={() => setIsCancelModalOpen(false)}
+          onConfirm={() => void handleCancelOrder()}
+        />
       )}
 
       <Footer />

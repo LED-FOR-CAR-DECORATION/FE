@@ -55,7 +55,7 @@ export default function DeleteProductConfirmModal({
 
   return (
     <Modal
-      title="Xóa sản phẩm khỏi Store?"
+      title="Xóa sản phẩm khỏi cửa hàng?"
       description={`Bạn đang thực hiện xóa mềm sản phẩm #${productId} - ${productName}.`}
       onClose={onClose}
       busy={isSubmitting}
@@ -91,9 +91,9 @@ export default function DeleteProductConfirmModal({
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
           <div className="flex items-center gap-2 font-bold text-amber-950 mb-1">
             <AlertTriangle size={15} className="shrink-0 text-amber-700" />
-            Cơ chế Xóa mềm (Soft Delete - AC02)
+            Lưu ý khi xóa mềm sản phẩm
           </div>
-          Sản phẩm sẽ được chuyển sang trạng thái <code className="bg-amber-100 px-1 py-0.5 rounded font-bold">DELETED</code>. Sản phẩm sẽ bị ẩn hoàn toàn khỏi Store công khai và không thể đặt mua, nhưng toàn bộ lịch sử đơn hàng trước đây của khách hàng vẫn được bảo lưu nguyên vẹn.
+          Sản phẩm sẽ được chuyển sang trạng thái Đã xóa, ẩn hoàn toàn khỏi cửa hàng công khai và không thể đặt mua, nhưng toàn bộ lịch sử đơn hàng trước đây của khách hàng vẫn được bảo lưu nguyên vẹn.
         </div>
       </div>
     </Modal>

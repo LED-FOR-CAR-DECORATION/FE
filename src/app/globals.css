@@ -7,6 +7,8 @@
   --color-primary: #89c89b;
   --color-primary-dark: #6eb782;
   --color-primary-light: #a3d7b2;
+  /* Deep green for text accents (prices, links, radio/checkbox accent). 10:1 on white. */
+  --color-primary-ink: #1f432b;
   
   --color-background: #fdfdfd;
   --color-surface: #ffffff;
@@ -287,6 +289,26 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .profile-enter, .profile-avatar, .profile-pixels { animation: none; }
   .profile-tab, .address-card { transition: none; }
+  .animate-marquee { animation: none; }
+}
+
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 26s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
 }
 
 /* Neo-brutalism/retro utilities for the requested UI style */
@@ -296,6 +318,17 @@ body {
 
 .btn-secondary {
   @apply bg-white text-black font-semibold border-2 border-black px-4 py-2 transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none;
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white font-semibold border-2 border-black px-4 py-2 transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none;
+}
+
+/* Shared states for neo buttons (UI standard §3.3) */
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  @apply cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none;
 }
 
 .neo-box {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import {
   Boxes,
@@ -15,16 +16,17 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { fetchStoreProducts } from "@/lib/api/products";
 import {
   apiUpdateBundle,
+  fetchBundleSelectableItems,
   fetchManagedBundleDetail,
+  normalizeBundleHttpUrl,
   type BundleConstituentItem,
+  type BundleSelectableItem,
   type ManagedBundleDetail,
   type ManagedBundleItem,
 } from "@/lib/api/bundles";
 import { uploadMediaFile } from "@/lib/api/media";
-import type { CatalogProduct } from "@/features/cart/catalog";
 import { formatVnd } from "../format";
 
 interface EditBundleModalProps {
@@ -60,8 +62,8 @@ export default function EditBundleModal({
   const [items, setItems] = useState<SelectedBundleItem[]>([]);
 
   // Async data states
-  const [availableLedProducts, setAvailableLedProducts] = useState<CatalogProduct[]>([]);
-  const [availableCharacterProducts, setAvailableCharacterProducts] = useState<CatalogProduct[]>([]);
+  const [availableLedProducts, setAvailableLedProducts] = useState<BundleSelectableItem[]>([]);
+  const [availableCharacterProducts, setAvailableCharacterProducts] = useState<BundleSelectableItem[]>([]);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
 
   // UI state
@@ -78,14 +80,14 @@ export default function EditBundleModal({
     let active = true;
 
     async function loadData() {
-      // 1. Fetch catalog products so item picker is always available
-      let leds: CatalogProduct[] = [];
-      let chars: CatalogProduct[] = [];
+      // 1. Fetch catalog products so item picker & existing items resolve exact modelId / versionId
+      let leds: BundleSelectableItem[] = [];
+      let chars: BundleSelectableItem[] = [];
       try {
-        const productsRes = await fetchStoreProducts({ size: 100 });
+        const selectable = await fetchBundleSelectableItems();
         if (!active) return;
-        leds = productsRes.items.filter((p) => p.productType === "LED_MODEL");
-        chars = productsRes.items.filter((p) => p.productType === "CHARACTER");
+        leds = selectable.ledOptions;
+        chars = selectable.characterOptions;
         setAvailableLedProducts(leds);
         setAvailableCharacterProducts(chars);
       } catch (err) {
@@ -119,23 +121,23 @@ export default function EditBundleModal({
         // Map initial constituent items
         const mappedItems: SelectedBundleItem[] = (detail.items ?? []).map((rawItem, idx) => {
           const isLed = rawItem.modelId != null;
-          const foundProduct = isLed
-            ? leds.find((p) => p.productId === rawItem.modelId)
-            : chars.find((p) => p.productId === rawItem.versionId);
+          const foundOption = isLed
+            ? leds.find((o) => o.targetId === rawItem.modelId)
+            : chars.find((o) => o.targetId === rawItem.versionId);
 
           return {
             id: `init-${idx}-${Date.now()}`,
             modelId: rawItem.modelId ?? undefined,
             versionId: rawItem.versionId ?? undefined,
             name:
-              foundProduct?.name ??
-              (isLed ? `Mẫu LED #${rawItem.modelId}` : `Hoạt ảnh #${rawItem.versionId}`),
+              foundOption?.name ??
+              (isLed ? `Mẫu LED #${rawItem.modelId}` : `Nhân vật #${rawItem.versionId}`),
             itemType: isLed ? "LED" : "CHARACTER",
             unitPrice:
-              foundProduct?.price ??
+              foundOption?.price ??
               (detail!.originalPrice / Math.max(1, (detail!.items ?? []).length)),
             quantity: rawItem.quantity,
-            previewUrl: foundProduct?.previewUrl,
+            previewUrl: foundOption?.previewUrl,
           };
         });
 
@@ -176,7 +178,7 @@ export default function EditBundleModal({
     setIsUploadingThumb(true);
     setErrorMessage(null);
     try {
-      const res = await uploadMediaFile(file, "STORE_PRODUCT");
+      const res = await uploadMediaFile(file, "PRODUCT_BUNDLE");
       setThumbnailUrl(res.publicUrl);
       setPreviewThumbUrl(res.localPreviewUrl || res.publicUrl);
     } catch (err: any) {
@@ -188,11 +190,11 @@ export default function EditBundleModal({
   };
 
   // Add Item to bundle
-  const handleAddItem = (product: CatalogProduct, type: "LED" | "CHARACTER") => {
+  const handleAddItem = (option: BundleSelectableItem) => {
     const existing = items.find(
       (it) =>
-        (type === "LED" && it.modelId === product.productId) ||
-        (type === "CHARACTER" && it.versionId === product.productId),
+        (option.itemType === "LED" && it.modelId === option.targetId) ||
+        (option.itemType === "CHARACTER" && it.versionId === option.targetId),
     );
 
     if (existing) {
@@ -203,14 +205,14 @@ export default function EditBundleModal({
       );
     } else {
       const newItem: SelectedBundleItem = {
-        id: `${type}-${product.productId}-${Date.now()}`,
-        modelId: type === "LED" ? product.productId : undefined,
-        versionId: type === "CHARACTER" ? product.productId : undefined,
-        name: product.name,
-        itemType: type,
-        unitPrice: product.price,
+        id: `${option.itemType}-${option.targetId}-${Date.now()}`,
+        modelId: option.itemType === "LED" ? option.targetId : undefined,
+        versionId: option.itemType === "CHARACTER" ? option.targetId : undefined,
+        name: option.name,
+        itemType: option.itemType,
+        unitPrice: option.price,
         quantity: 1,
-        previewUrl: product.previewUrl,
+        previewUrl: option.previewUrl,
       };
       setItems((prev) => [...prev, newItem]);
     }
@@ -271,7 +273,7 @@ export default function EditBundleModal({
       const updated = await apiUpdateBundle(bundle.bundleId, {
         bundleName: bundleName.trim(),
         description: description.trim() || undefined,
-        thumbnailUrl: thumbnailUrl || undefined,
+        thumbnailUrl: normalizeBundleHttpUrl(thumbnailUrl),
         bundlePrice,
         items: payloadItems,
       });
@@ -287,7 +289,7 @@ export default function EditBundleModal({
     }
   };
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -487,31 +489,31 @@ export default function EditBundleModal({
 
                       <div className="max-h-60 overflow-y-auto divide-y divide-gray-100 p-1">
                         {pickerTab === "LED"
-                          ? availableLedProducts.map((p) => (
+                          ? availableLedProducts.map((opt) => (
                               <div
-                                key={p.id}
-                                onClick={() => handleAddItem(p, "LED")}
+                                key={`${opt.itemType}-${opt.targetId}`}
+                                onClick={() => handleAddItem(opt)}
                                 className="flex cursor-pointer items-center justify-between p-2 hover:bg-emerald-50 rounded-lg transition"
                               >
                                 <div className="text-left">
-                                  <p className="text-xs font-black text-gray-900">{p.name}</p>
+                                  <p className="text-xs font-black text-gray-900">{opt.name}</p>
                                   <p className="text-[10px] text-gray-500">
-                                    Đơn giá: {formatVnd(p.price)}
+                                    {opt.subtitle ? `${opt.subtitle} • ` : ""}Đơn giá: {formatVnd(opt.price)}
                                   </p>
                                 </div>
                                 <Plus size={14} className="text-emerald-700" />
                               </div>
                             ))
-                          : availableCharacterProducts.map((p) => (
+                          : availableCharacterProducts.map((opt) => (
                               <div
-                                key={p.id}
-                                onClick={() => handleAddItem(p, "CHARACTER")}
+                                key={`${opt.itemType}-${opt.targetId}`}
+                                onClick={() => handleAddItem(opt)}
                                 className="flex cursor-pointer items-center justify-between p-2 hover:bg-emerald-50 rounded-lg transition"
                               >
                                 <div className="text-left">
-                                  <p className="text-xs font-black text-gray-900">{p.name}</p>
+                                  <p className="text-xs font-black text-gray-900">{opt.name}</p>
                                   <p className="text-[10px] text-gray-500">
-                                    Đơn giá: {formatVnd(p.price)}
+                                    {opt.subtitle ? `${opt.subtitle} • ` : ""}Đơn giá: {formatVnd(opt.price)}
                                   </p>
                                 </div>
                                 <Plus size={14} className="text-emerald-700" />
@@ -674,7 +676,8 @@ export default function EditBundleModal({
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

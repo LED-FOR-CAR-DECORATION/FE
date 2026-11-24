@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     agentUpgrade: "security",
   },
   images: {
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "**" },
       { protocol: "http", hostname: "**" },

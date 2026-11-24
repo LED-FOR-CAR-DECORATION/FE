@@ -4,7 +4,7 @@ import React from "react";
 import { Check } from "lucide-react";
 import type { CommissionFieldConfig } from "../config/commissionConfigs";
 
-const formatMoney = (value: number) => `${value.toLocaleString("vi-VN")}đ`;
+const formatMoney = (value: number) => `${value.toLocaleString("vi-VN")} VNĐ`;
 
 interface DynamicCommissionFormFieldsProps {
   /** Mảng cấu hình các trường truyền vào (mặc định lấy từ commissionConfigs) */
@@ -79,7 +79,7 @@ export default function DynamicCommissionFormFields({
                     option.price === null
                       ? "Báo giá riêng"
                       : option.price === 0
-                      ? "Miễn phí (+0đ)"
+                      ? "Miễn phí (+0 VNĐ)"
                       : `+${formatMoney(option.price)}`;
 
                   return (
@@ -152,7 +152,7 @@ export default function DynamicCommissionFormFields({
                         ? "(Báo giá sau)"
                         : option.price > 0
                         ? `(+${formatMoney(option.price)})`
-                        : "(+0đ)"}
+                        : "(+0 VNĐ)"}
                     </option>
                   ))}
                 </select>

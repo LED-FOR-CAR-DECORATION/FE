@@ -361,7 +361,7 @@ export default function StaffOrdersPage() {
                       {/* Total Amount (Right-aligned, slightly larger, font-semibold) */}
                       <td className="px-4 py-4 text-right whitespace-nowrap">
                         <span className="text-[15px] font-semibold text-gray-900 tabular-nums">
-                          {order.total.toLocaleString("vi-VN")} ₫
+                          {order.total.toLocaleString("vi-VN")} VNĐ
                         </span>
                       </td>
 

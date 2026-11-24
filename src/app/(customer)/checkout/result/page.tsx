@@ -31,11 +31,8 @@ function ResultContent() {
       <main className="flex flex-1 items-center justify-center bg-background px-4 py-10">
         {isPaid || !orderId ? (
           <div className="neo-box-no-hover w-full max-w-lg bg-white p-8 text-center">
-            <div className="relative mx-auto mb-4 flex h-20 w-20 items-center justify-center">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-50" />
-              <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full border-2 border-black bg-primary text-black">
-                <CheckCircle size={36} />
-              </span>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center border-2 border-black bg-primary text-black shadow-[3px_3px_0_0_#000]">
+              <CheckCircle size={32} />
             </div>
             <h1 className="text-2xl font-black uppercase">
               {isPaid ? "Thanh toán & Đặt hàng thành công!" : "Đặt hàng thành công!"}

@@ -37,6 +37,26 @@ export interface FetchLedInstancesParams {
   search?: string;
 }
 
+export interface StockInLedInstanceItemInput {
+  serialNumber: string;
+  macAddress: string;
+  manufacturedAt?: string;
+}
+
+export interface StockInLedInstancesPayload {
+  modelId: number;
+  items: StockInLedInstanceItemInput[];
+}
+
+export interface StockInLedInstancesResult {
+  modelId: number;
+  modelName: string;
+  importedCount: number;
+  stockQuantity: number;
+  modelStatus: LedModelItem.status;
+  items: LedInstanceItem[];
+}
+
 function normalizePaginationMeta(
   rawMeta: unknown,
   fallbackPage: number,
@@ -81,15 +101,33 @@ export function formatLedInventoryError(
       return "Bạn không có quyền truy cập chức năng này (chỉ dành cho Quản lý hoặc Quản trị viên).";
     }
     if (error.status === 404) {
-      return "Không tìm thấy thiết bị LED yêu cầu.";
+      return "Không tìm thấy thiết bị hoặc mẫu LED yêu cầu.";
     }
-    const serverMessage =
-      error.body &&
-      typeof error.body === "object" &&
-      typeof error.body.message === "string"
-        ? error.body.message
+    const body =
+      error.body && typeof error.body === "object"
+        ? (error.body as {
+            code?: string;
+            message?: string;
+            details?: Array<{ field?: string; message?: string }>;
+          })
         : null;
-    if (serverMessage) return serverMessage;
+    if (body?.code === "DUPLICATE_LED_INSTANCE") {
+      return body.message
+        ? `Trùng mã thiết bị: ${body.message}`
+        : "Serial Number hoặc địa chỉ MAC đã tồn tại trong hệ thống.";
+    }
+    if (body?.code === "LED_MODEL_DEPRECATED") {
+      return "Mẫu LED này đã ngừng kinh doanh nên không thể nhập thêm thiết bị vào kho.";
+    }
+    if (error.status === 400 && Array.isArray(body?.details) && body.details.length > 0) {
+      return body.details
+        .map((d) => (d.field ? `${d.field}: ${d.message ?? "không hợp lệ"}` : d.message ?? ""))
+        .filter(Boolean)
+        .join(" · ");
+    }
+    if (body && typeof body.message === "string" && body.message) {
+      return body.message;
+    }
   }
   if (error instanceof Error && error.message) {
     return error.message;
@@ -147,6 +185,31 @@ export async function fetchLedInstanceDetail(
 
   if (!res.data) {
     throw new Error("Không tìm thấy dữ liệu chi tiết thiết bị LED.");
+  }
+
+  return res.data;
+}
+
+export async function apiStockInLedInstances(
+  payload: StockInLedInstancesPayload,
+): Promise<StockInLedInstancesResult> {
+  const res = await request<{ data?: StockInLedInstancesResult }>(OpenAPI, {
+    method: "POST",
+    url: "/api/management/admin/led-instances",
+    body: payload,
+    mediaType: "application/json",
+    errors: {
+      400: "Dữ liệu thiết bị nhập kho không hợp lệ.",
+      401: "Vui lòng đăng nhập lại.",
+      403: "Chỉ Quản lý hoặc Quản trị viên mới được nhập kho thiết bị LED.",
+      404: "Không tìm thấy mẫu LED.",
+      409: "Serial Number hoặc địa chỉ MAC đã tồn tại, hoặc mẫu LED đã ngừng kinh doanh.",
+      500: "Lỗi máy chủ khi nhập kho thiết bị LED.",
+    },
+  });
+
+  if (!res.data) {
+    throw new Error("Máy chủ không trả về kết quả nhập kho.");
   }
 
   return res.data;

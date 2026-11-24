@@ -17,13 +17,16 @@ import type { UserEntitlement } from "@/features/character/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import {
+  fetchActiveCustomerSubscription,
   fetchCustomerGallery,
   formatOwnedCharactersError,
+  type CustomerActiveSubscription,
   type CustomerGalleryItem,
 } from "@/lib/api/customerCharacters";
 
 interface GalleryContextValue {
   ownedCharacters: CustomerGalleryItem[];
+  activeSubscription: CustomerActiveSubscription | null;
   entitlements: UserEntitlement[];
   isLoading: boolean;
   error: string | null;
@@ -37,6 +40,8 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
   const [ownedCharacters, setOwnedCharacters] = useState<
     CustomerGalleryItem[]
   >([]);
+  const [activeSubscription, setActiveSubscription] =
+    useState<CustomerActiveSubscription | null>(null);
   const [entitlements, setEntitlements] = useState<UserEntitlement[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +58,7 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
 
     if (!isAuthenticated || !currentUser || currentUser.role !== "CUSTOMER") {
       setOwnedCharacters([]);
+      setActiveSubscription(null);
       setEntitlements(localEntitlements);
       setError(null);
       setIsLoading(false);
@@ -62,10 +68,14 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
 
-    fetchCustomerGallery()
-      .then((items) => {
+    Promise.all([
+      fetchCustomerGallery(),
+      fetchActiveCustomerSubscription().catch(() => null),
+    ])
+      .then(([items, subscription]) => {
         if (requestIdRef.current !== requestId) return;
         setOwnedCharacters(items);
+        setActiveSubscription(subscription);
 
         // An accepted image is not a CharacterVersion and cannot grant LED/store access.
         const apiEntitlements: UserEntitlement[] = items.filter((item) => item.characterId !== null).map((item) => ({
@@ -94,6 +104,7 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         if (requestIdRef.current !== requestId) return;
         setOwnedCharacters([]);
+        setActiveSubscription(null);
         setEntitlements(localEntitlements);
         setError(formatOwnedCharactersError(err));
       })
@@ -126,6 +137,7 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
     <GalleryContext.Provider
       value={{
         ownedCharacters,
+        activeSubscription,
         entitlements,
         isLoading,
         error,

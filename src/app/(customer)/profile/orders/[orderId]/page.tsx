@@ -3,6 +3,7 @@
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
 import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useGallery } from "@/features/character/context/GalleryContext";
 import SePayOrderPaymentCard from "@/features/order/components/SePayOrderPaymentCard";
 import { useOrders } from "@/features/order/context/OrderContext";
@@ -137,7 +138,19 @@ function getActiveStepIndex(status: OrderStatus, orderKind: OrderKind): number {
   }
 }
 
-function OrderStatusStepper({ status, orderKind }: { status: OrderStatus; orderKind: OrderKind }) {
+function OrderStatusStepper({
+  status,
+  orderKind,
+  failureReason,
+  attemptCount,
+  maxAttempts,
+}: {
+  status: OrderStatus;
+  orderKind: OrderKind;
+  failureReason?: string;
+  attemptCount?: number;
+  maxAttempts?: number;
+}) {
   const isTerminalNegative =
     status === "CANCELED" ||
     status === "Cancelled" ||
@@ -146,6 +159,9 @@ function OrderStatusStepper({ status, orderKind }: { status: OrderStatus; orderK
 
   const steps = getOrderSteps(orderKind);
   const currentIdx = getActiveStepIndex(status, orderKind);
+  const resolvedMaxAttempts = maxAttempts ?? 3;
+  const resolvedAttempts = attemptCount ?? 0;
+  const remainingRedeliveries = Math.max(0, resolvedMaxAttempts - resolvedAttempts);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
@@ -166,16 +182,28 @@ function OrderStatusStepper({ status, orderKind }: { status: OrderStatus; orderK
       {isTerminalNegative ? (
         <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50/80 p-4 text-sm text-red-900">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600" />
-          <div>
+          <div className="space-y-1">
             <p className="font-bold">
               {status === "REFUNDED"
-                ? "Đơn hàng đã được hủy và chuyển sang trạng thái hoàn tiền."
+                ? "Đơn hàng đã được hoàn tiền và thu hồi quyền lợi sản phẩm liên quan."
                 : status === "DELIVERY_FAILED"
-                  ? "Đơn hàng gặp sự cố khi giao hàng. Vui lòng liên hệ bộ phận hỗ trợ."
+                  ? "Đơn hàng gặp sự cố khi giao hàng."
                   : "Đơn hàng này đã bị hủy."}
             </p>
-            <p className="mt-1 text-xs text-red-700">
-              Nếu bạn cần hỗ trợ thêm, hãy nhắn tin trực tiếp qua mục Chat ngay.
+            {failureReason && (
+              <p className="text-xs text-red-800">
+                <strong>Lý do:</strong> {failureReason}
+              </p>
+            )}
+            {status === "DELIVERY_FAILED" && (
+              <p className="text-xs text-red-700">
+                {remainingRedeliveries > 0
+                  ? `Cửa hàng sẽ liên hệ với bạn để xác nhận thông tin và hỗ trợ giao lại (còn ${remainingRedeliveries} lần giao lại) hoặc hoàn tiền.`
+                  : "Đơn hàng đã vượt quá số lần giao lại tối đa (2 lần). Cửa hàng sẽ tiến hành hoàn tiền cho đơn hàng này."}
+              </p>
+            )}
+            <p className="text-xs text-red-700">
+              Nếu bạn cần hỗ trợ thêm hoặc muốn cập nhật SĐT/địa chỉ nhận hàng, hãy nhắn tin trực tiếp qua mục Chat ngay.
             </p>
           </div>
         </div>
@@ -275,7 +303,8 @@ function getProductBadge(productType: string) {
 
 export default function CustomerOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
-  const { orders, refreshOrders, confirmOrderDelivery, cancelCustomerOrder } = useOrders();
+  const { isLoading: isAuthLoading } = useAuth();
+  const { orders, isLoading: isOrdersLoading, refreshOrders, confirmOrderDelivery, cancelCustomerOrder } = useOrders();
   const { entitlements } = useGallery();
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState("");
@@ -287,7 +316,34 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
-  const order = orders.find((entry) => entry.id === orderId);
+  const order = orders.find((entry) => String(entry.id) === String(orderId));
+
+  if (!order && (isAuthLoading || isOrdersLoading)) {
+    return (
+      <>
+        <Header />
+        <main className="flex-1 bg-[#f5f5f5] py-10">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 lg:flex-row lg:items-start">
+            <CustomerSidebar />
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex flex-1 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-14 text-center shadow-xs"
+            >
+              <Loader2 size={28} className="animate-spin text-[#155e59]" />
+              <p className="mt-4 text-base font-bold text-gray-900">
+                Đang tải chi tiết đơn hàng #{orderId}...
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Vui lòng chờ trong giây lát.
+              </p>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   if (!order) {
     return (
@@ -482,7 +538,13 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
             )}
 
             {/* Full-width Horizontal Order Status Stepper */}
-            <OrderStatusStepper status={order.status} orderKind={orderKind} />
+            <OrderStatusStepper
+              status={order.status}
+              orderKind={orderKind}
+              failureReason={order.delivery?.failureReason}
+              attemptCount={order.delivery?.attemptCount}
+              maxAttempts={order.delivery?.maxAttempts}
+            />
 
             {/* SePay Payment Section if still pending payment */}
             {isPendingPayment && (

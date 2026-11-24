@@ -87,9 +87,7 @@ export default function LedModelFormModal({
 
   // LED Model fields (DEV-02 / DEV-03)
   const [modelName, setModelName] = useState(initialModel?.modelName ?? "");
-  const [stockQuantity, setStockQuantity] = useState(
-    String(initialModel?.stockQuantity ?? 25),
-  );
+  const resolvedStockQuantity = isEdit ? (initialModel?.stockQuantity ?? 0) : 0;
   const [widthPx, setWidthPx] = useState(
     String(initialModel?.spec?.widthPx ?? 64),
   );
@@ -250,13 +248,6 @@ export default function LedModelFormModal({
     }
   };
 
-  const applyStockDelta = (delta: number) => {
-    const current = Number(stockQuantity);
-    const base = Number.isInteger(current) ? current : initialModel?.stockQuantity ?? 0;
-    setStockQuantity(String(Math.max(0, base + delta)));
-    setError(null);
-  };
-
   const handleThumbUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -319,15 +310,7 @@ export default function LedModelFormModal({
       return;
     }
 
-    const parsedStock = Number(stockQuantity);
-    if (
-      stockQuantity.trim() === "" ||
-      !Number.isInteger(parsedStock) ||
-      parsedStock < 0
-    ) {
-      setError("Số lượng tồn kho phải là số nguyên lớn hơn hoặc bằng 0.");
-      return;
-    }
+    const parsedStock = resolvedStockQuantity;
 
     const parsedWidth = Number(widthPx);
     const parsedHeight = Number(heightPx);
@@ -611,31 +594,21 @@ export default function LedModelFormModal({
 
           <div>
             <label className="mb-1 block text-xs font-bold text-gray-800">
-              Số lượng tồn kho <span className="text-red-500">*</span>
+              Số lượng tồn kho (theo thiết bị thực tế)
             </label>
-            <input
-              type="number"
-              min={0}
-              step={1}
-              required
-              value={stockQuantity}
-              onChange={(e) => setStockQuantity(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-[#439660]"
-            />
-            {isEdit && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {[-5, -1, 1, 5, 10].map((delta) => (
-                  <button
-                    key={delta}
-                    type="button"
-                    onClick={() => applyStockDelta(delta)}
-                    className="rounded border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-bold hover:bg-primary/20"
-                  >
-                    {delta > 0 ? `+${delta}` : delta}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+              <span className="font-black text-gray-900">
+                {resolvedStockQuantity} thiết bị
+              </span>
+              <span className="rounded bg-white px-2 py-0.5 text-[11px] font-semibold text-text-muted border border-gray-200">
+                Chỉ tăng qua nhập kho Serial
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-text-muted">
+              {isEdit
+                ? "Để nhập thêm hàng vào kho, hãy bấm vào mẫu LED và chọn \"Nhập kho thiết bị\" kèm Serial/MAC."
+                : "Mẫu mới bắt đầu từ 0 thiết bị. Sau khi tạo, mở mẫu LED để nhập kho theo từng Serial & MAC."}
+            </p>
           </div>
         </div>
 

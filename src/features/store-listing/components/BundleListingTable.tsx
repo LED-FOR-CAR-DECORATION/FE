@@ -1,46 +1,76 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import {
+  Archive,
   Boxes,
   CheckCircle2,
   Edit,
-  EyeOff,
-  Package,
   Plus,
-  RefreshCw,
-  Trash2,
   Sparkles,
+  Trash2,
+  Undo2,
 } from "lucide-react";
 import { fetchManagedBundles, type ManagedBundleItem } from "@/lib/api/bundles";
-import { formatVnd } from "../format";
+import { fetchManagedStoreProducts } from "@/lib/api/products";
+import { formatDateTime, formatVnd } from "../format";
 import StatusBadge from "./StatusBadge";
 import StoreListingToolbar, {
   computeStatusCounts,
   type StoreStatusFilter,
 } from "./StoreListingToolbar";
+import {
+  STORE_FORBIDDEN_HINT,
+  STORE_TABLE_CLASS,
+  STORE_THEAD_CLASS,
+  STORE_TH_CLASS,
+  StoreActionButton,
+  StoreEmptyRow,
+  StoreErrorRow,
+  StoreSkeletonRows,
+  StoreTableFooter,
+  StoreThumbnail,
+  storeRowClass,
+} from "./StoreTablePrimitives";
+
+interface EnrichedBundleItem extends ManagedBundleItem {
+  thumbnailUrl?: string;
+  updatedAt?: string;
+}
 
 interface BundleListingTableProps {
   canManage?: boolean;
   onEdit?: (bundle: ManagedBundleItem) => void;
   onPublish?: (bundle: ManagedBundleItem) => void;
+  onArchive?: (bundle: ManagedBundleItem) => void;
   onUnlist?: (bundle: ManagedBundleItem) => void;
   onDelete?: (bundle: ManagedBundleItem) => void;
   onCreate?: () => void;
+  onCountChange?: (count: number) => void;
   refreshTrigger?: number;
 }
+
+const HEADINGS = [
+  "Mã sản phẩm",
+  "Ảnh đại diện",
+  "Tên gói sản phẩm",
+  "Thành phần",
+  "Giá bán",
+  "Trạng thái",
+  "Thao tác",
+];
 
 export default function BundleListingTable({
   canManage = false,
   onEdit,
   onPublish,
-  onUnlist,
+  onArchive,
   onDelete,
   onCreate,
+  onCountChange,
   refreshTrigger = 0,
 }: BundleListingTableProps) {
-  const [bundles, setBundles] = useState<ManagedBundleItem[]>([]);
+  const [bundles, setBundles] = useState<EnrichedBundleItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StoreStatusFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -50,8 +80,30 @@ export default function BundleListingTable({
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetchManagedBundles({ size: 100 });
-      setBundles(res.items);
+      const [bundlesRes, productsRes] = await Promise.all([
+        fetchManagedBundles({ size: 100 }),
+        fetchManagedStoreProducts({ productType: "BUNDLE", size: 200 }).catch(() => ({
+          items: [],
+          totalElements: 0,
+          totalPages: 0,
+        })),
+      ]);
+
+      const productById = new Map(
+        productsRes.items.map((product) => [product.productId, product]),
+      );
+
+      const enriched: EnrichedBundleItem[] = bundlesRes.items.map((bundle) => {
+        const linked = productById.get(bundle.productId);
+        return {
+          ...bundle,
+          thumbnailUrl: linked?.thumbnailUrl || linked?.galleryUrls?.[0] || undefined,
+          updatedAt: linked?.updatedAt ?? linked?.createdAt ?? undefined,
+        };
+      });
+
+      setBundles(enriched);
+      onCountChange?.(bundlesRes.totalElements);
     } catch (err) {
       console.error("Failed to load managed bundles:", err);
       setError("Không thể tải danh sách gói sản phẩm. Vui lòng thử lại.");
@@ -62,6 +114,7 @@ export default function BundleListingTable({
 
   useEffect(() => {
     void loadBundles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTrigger]);
 
   const statusCounts = useMemo(
@@ -85,8 +138,16 @@ export default function BundleListingTable({
     });
   }, [bundles, searchQuery, statusFilter]);
 
+  const hasFilters = statusFilter !== "ALL" || searchQuery !== "";
+  const resetFilters = () => {
+    setStatusFilter("ALL");
+    setSearchQuery("");
+  };
+
+  const actionTitle = canManage ? undefined : STORE_FORBIDDEN_HINT;
+
   return (
-    <div className="flex flex-col">
+    <>
       <StoreListingToolbar
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
@@ -96,80 +157,57 @@ export default function BundleListingTable({
         onSearchChange={setSearchQuery}
         searchPlaceholder="Tìm kiếm gói sản phẩm theo tên hoặc mã…"
         onRefresh={loadBundles}
-        onReset={() => {
-          setStatusFilter("ALL");
-          setSearchQuery("");
-        }}
-        canReset={statusFilter !== "ALL" || searchQuery !== ""}
-        rightAction={
-          canManage &&
-          onCreate && (
-            <button
-              type="button"
-              onClick={onCreate}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#5fb97d] px-3 py-2 text-xs font-black text-white shadow-[1px_1px_0_#10351f] transition hover:-translate-y-0.5"
-            >
-              <Plus size={14} />
-              Tạo gói sản phẩm
-            </button>
-          )
-        }
+        onReset={resetFilters}
+        canReset={hasFilters}
       />
 
-      {error && (
-        <div className="m-4 rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
-          {error}
-        </div>
-      )}
-
-      {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="border-b border-[#e3efe6] text-left text-[11px] font-black uppercase tracking-wide">
+        <table className={STORE_TABLE_CLASS}>
+          <caption className="sr-only">
+            Danh sách gói sản phẩm đang quản lý trên cửa hàng
+          </caption>
+          <thead className={STORE_THEAD_CLASS}>
             <tr>
-              <th className="whitespace-nowrap px-4 py-3">Mã sản phẩm</th>
-              <th className="whitespace-nowrap px-4 py-3">Hình ảnh</th>
-              <th className="whitespace-nowrap px-4 py-3">Tên gói Combo</th>
-              <th className="whitespace-nowrap px-4 py-3">Mô tả</th>
-              <th className="whitespace-nowrap px-4 py-3">Thành phần</th>
-              <th className="whitespace-nowrap px-4 py-3">Giá gốc</th>
-              <th className="whitespace-nowrap px-4 py-3">Giá ưu đãi</th>
-              <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
-              {canManage && <th className="whitespace-nowrap px-4 py-3 text-right">Thao tác</th>}
+              {HEADINGS.map((heading) => (
+                <th key={heading} scope="col" className={STORE_TH_CLASS}>
+                  {heading}
+                </th>
+              ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {isLoading ? (
-              <tr>
-                <td colSpan={canManage ? 9 : 8} className="py-12 text-center text-sm text-gray-500">
-                  <div className="inline-flex items-center gap-2 font-medium">
-                    <RefreshCw size={16} className="animate-spin text-primary-dark" />
-                    Đang tải danh sách gói sản phẩm...
-                  </div>
-                </td>
-              </tr>
-            ) : filteredBundles.length === 0 ? (
-              <tr>
-                <td colSpan={canManage ? 9 : 8} className="py-12 text-center text-sm text-gray-500">
-                  <div className="flex flex-col items-center gap-2">
-                    <Package size={32} className="text-gray-300" />
-                    <p className="font-semibold text-gray-600">
-                      Không tìm thấy gói Combo nào phù hợp bộ lọc.
-                    </p>
-                    {canManage && onCreate && (
-                      <button
-                        type="button"
-                        onClick={onCreate}
-                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-primary-dark underline hover:text-[#10351f]"
-                      >
-                        <Plus size={13} />
-                        Tạo gói Combo mới ngay
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : (
+          <tbody>
+            {isLoading && <StoreSkeletonRows columns={HEADINGS.length} />}
+
+            {!isLoading && error && (
+              <StoreErrorRow colSpan={HEADINGS.length} message={error} onRetry={loadBundles} />
+            )}
+
+            {!isLoading && !error && filteredBundles.length === 0 && (
+              <StoreEmptyRow
+                colSpan={HEADINGS.length}
+                message={
+                  bundles.length === 0
+                    ? "Chưa có gói sản phẩm nào được niêm yết trên cửa hàng."
+                    : "Không tìm thấy gói sản phẩm phù hợp với bộ lọc."
+                }
+                hasActiveFilters={bundles.length > 0 && hasFilters}
+                onResetFilters={resetFilters}
+                action={
+                  canManage && onCreate ? (
+                    <StoreActionButton
+                      variant="primary"
+                      onClick={onCreate}
+                      icon={<Plus size={13} />}
+                    >
+                      Tạo gói sản phẩm
+                    </StoreActionButton>
+                  ) : undefined
+                }
+              />
+            )}
+
+            {!isLoading &&
+              !error &&
               filteredBundles.map((bundle) => {
                 const discount =
                   bundle.originalPrice && bundle.originalPrice > bundle.bundlePrice
@@ -178,100 +216,126 @@ export default function BundleListingTable({
                 const isDeleted = bundle.status === "DELETED";
 
                 return (
-                  <tr
-                    key={bundle.bundleId}
-                    className={`transition-colors ${
-                      isDeleted ? "bg-neutral-100/60 opacity-45 grayscale" : "hover:bg-gray-50/60"
-                    }`}
-                  >
+                  <tr key={bundle.bundleId} className={storeRowClass(isDeleted)}>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
                       #{bundle.productId}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="relative h-12 w-12 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 shadow-sm">
-                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-100 text-emerald-700">
-                          <Boxes size={22} />
-                        </div>
-                      </div>
+                      <StoreThumbnail
+                        src={bundle.thumbnailUrl}
+                        alt={`Ảnh đại diện của ${bundle.bundleName}`}
+                        fallback={<Boxes size={18} />}
+                      />
                     </td>
                     <td className="px-4 py-3">
-                      <div className={`font-black text-gray-900 ${isDeleted ? "line-through text-neutral-500" : ""}`}>
+                      <p className={`font-bold ${isDeleted ? "line-through text-neutral-500" : ""}`}>
                         {bundle.bundleName}
-                      </div>
+                      </p>
+                      <p className="max-w-xs truncate text-[11px] text-text-muted">
+                        {bundle.updatedAt
+                          ? `Cập nhật lúc ${formatDateTime(bundle.updatedAt)}`
+                          : bundle.description || "Chưa có mô tả"}
+                      </p>
                     </td>
-                    <td className="max-w-[220px] px-4 py-3 text-xs text-gray-600 truncate">
-                      {bundle.description || (
-                        <span className="italic text-gray-400">Không có mô tả</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800">
-                        <Sparkles size={11} />
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-[#cfe5d6] bg-[#f1faf4] px-2.5 py-0.5 text-xs font-bold text-[#173b28]">
+                        <Sparkles size={11} className="text-[#3f9660]" />
                         {bundle.itemCount} mục
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs font-medium text-gray-500 line-through">
-                      {formatVnd(bundle.originalPrice)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-black text-primary-dark">
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <p className="font-bold tabular-nums text-[#173b28]">
                         {formatVnd(bundle.bundlePrice)}
-                      </div>
+                      </p>
                       {discount > 0 && (
-                        <span className="inline-block rounded bg-rose-100 px-1.5 py-0.2 text-[10px] font-black text-rose-700">
-                          Tiết kiệm {discount}%
-                        </span>
+                        <div className="mt-0.5 flex items-center gap-1.5">
+                          <span className="text-[11px] text-text-muted line-through tabular-nums">
+                            {formatVnd(bundle.originalPrice)}
+                          </span>
+                          <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
+                            -{discount}%
+                          </span>
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={bundle.status} />
                     </td>
-                    {canManage && (
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {(bundle.status === "UNPUBLISHED" || bundle.status === "ARCHIVED") && onPublish && (
-                            <button
-                              type="button"
-                              onClick={() => onPublish(bundle)}
-                              title={bundle.status === "ARCHIVED" ? "Mở bán lại gói Combo" : "Mở bán gói Combo lên Store"}
-                              className="rounded p-1.5 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900"
-                            >
-                              <CheckCircle2 size={16} />
-                            </button>
-                          )}
-
-                          {bundle.status !== "DELETED" && onEdit && (
-                            <button
-                              type="button"
+                    <td className="px-4 py-3">
+                      {isDeleted ? null : (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {onEdit && (
+                            <StoreActionButton
+                              variant="secondary"
+                              disabled={!canManage}
+                              title={actionTitle}
                               onClick={() => onEdit(bundle)}
-                              title="Chỉnh sửa chi tiết gói Combo"
-                              className="rounded p-1.5 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                              icon={<Edit size={13} />}
                             >
-                              <Edit size={16} />
-                            </button>
+                              Sửa
+                            </StoreActionButton>
                           )}
-
-                          {bundle.status !== "DELETED" && onDelete && (
-                            <button
-                              type="button"
-                              onClick={() => onDelete(bundle)}
-                              title="Lưu trữ hoặc xóa gói Combo"
-                              className="rounded p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-800"
+                          {bundle.status === "UNPUBLISHED" && onPublish && (
+                            <StoreActionButton
+                              variant="primary"
+                              disabled={!canManage}
+                              title={actionTitle}
+                              onClick={() => onPublish(bundle)}
+                              icon={<CheckCircle2 size={13} />}
                             >
-                              <Trash2 size={16} />
-                            </button>
+                              Mở bán
+                            </StoreActionButton>
+                          )}
+                          {bundle.status === "ARCHIVED" && onPublish && (
+                            <StoreActionButton
+                              variant="primary"
+                              disabled={!canManage}
+                              title={actionTitle}
+                              onClick={() => onPublish(bundle)}
+                              icon={<Undo2 size={13} />}
+                            >
+                              Mở bán lại
+                            </StoreActionButton>
+                          )}
+                          {bundle.status !== "ARCHIVED" && onArchive && (
+                            <StoreActionButton
+                              variant="secondary"
+                              disabled={!canManage}
+                              title={actionTitle}
+                              onClick={() => onArchive(bundle)}
+                              icon={<Archive size={13} />}
+                            >
+                              Ngừng bán
+                            </StoreActionButton>
+                          )}
+                          {onDelete && (
+                            <StoreActionButton
+                              variant="danger"
+                              disabled={!canManage}
+                              title={actionTitle}
+                              onClick={() => onDelete(bundle)}
+                              icon={<Trash2 size={13} />}
+                            >
+                              Xóa
+                            </StoreActionButton>
                           )}
                         </div>
-                      </td>
-                    )}
+                      )}
+                    </td>
                   </tr>
                 );
-              })
-            )}
+              })}
           </tbody>
         </table>
       </div>
-    </div>
+
+      {!isLoading && !error && (
+        <StoreTableFooter
+          filteredCount={filteredBundles.length}
+          totalCount={bundles.length}
+          unitLabel="gói sản phẩm"
+        />
+      )}
+    </>
   );
 }
-

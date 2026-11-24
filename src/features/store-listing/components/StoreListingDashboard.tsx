@@ -57,6 +57,8 @@ const NOTICE_DURATION_MS = 6000;
 export default function StoreListingDashboard() {
   const { rows, isLoading, error, retry, canManage, publish, unlist } = useStoreCharacters();
   const [catalogProducts, setCatalogProducts] = useState<StoreCatalogItem[]>([]);
+  const [ledLoading, setLedLoading] = useState(true);
+  const [ledError, setLedError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("characters");
   const [characterStatusFilter, setCharacterStatusFilter] = useState<StoreStatusFilter>("ALL");
   const [characterQuery, setCharacterQuery] = useState("");
@@ -86,6 +88,8 @@ export default function StoreListingDashboard() {
   }, [subscriptionRefreshTrigger]);
 
   const refreshCatalog = () => {
+    setLedLoading(true);
+    setLedError(null);
     fetchManagedStoreProducts({ productType: "LED", size: 200 })
       .then((res) => {
         const ledItems: StoreCatalogItem[] = res.items.map((item) => ({
@@ -99,10 +103,17 @@ export default function StoreListingDashboard() {
           galleryUrls: item.galleryUrls ?? [],
           tags: item.tags ?? [],
           status: item.status,
+          updatedAt: item.updatedAt ?? item.createdAt ?? undefined,
         }));
         setCatalogProducts(ledItems);
       })
-      .catch((err) => console.error("Failed to load managed LED products:", err));
+      .catch((err) => {
+        console.error("Failed to load managed LED products:", err);
+        setLedError("Không thể tải danh sách mẫu LED. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        setLedLoading(false);
+      });
     retry();
   };
 
@@ -131,7 +142,7 @@ export default function StoreListingDashboard() {
     {
       id: "led-models",
       label: "Mẫu LED",
-      count: catalogProducts.length,
+      count: ledLoading ? null : catalogProducts.length,
     },
     {
       id: "bundles",
@@ -352,6 +363,10 @@ export default function StoreListingDashboard() {
                   canManage={canManage}
                   statusFilter={characterStatusFilter}
                   searchQuery={characterQuery}
+                  onResetFilters={() => {
+                    setCharacterStatusFilter("ALL");
+                    setCharacterQuery("");
+                  }}
                   hideControls
                   onPublish={(character, mode) => setModal({ kind: "publish", character, mode })}
                   onUnlist={(character) => setModal({ kind: "unlist", character })}
@@ -392,6 +407,8 @@ export default function StoreListingDashboard() {
             <CatalogListingTable
               kind="LED_MODEL"
               items={catalogProducts}
+              isLoading={ledLoading}
+              error={ledError}
               canManage={canManage}
               onRefresh={refreshCatalog}
               onEdit={(product) =>
@@ -447,8 +464,16 @@ export default function StoreListingDashboard() {
             <BundleListingTable
               canManage={canManage}
               refreshTrigger={bundleRefreshTrigger}
+              onCountChange={setBundleCount}
               onCreate={() => setModal({ kind: "create-bundle" })}
               onEdit={(bundle) => setModal({ kind: "edit-bundle", bundle })}
+              onArchive={(bundle) =>
+                setModal({
+                  kind: "archive",
+                  productId: bundle.productId,
+                  productName: bundle.bundleName,
+                })
+              }
               onDelete={(bundle) => setModal({ kind: "delete-bundle", bundle })}
               onPublish={async (bundle) => {
                 try {
@@ -564,6 +589,7 @@ export default function StoreListingDashboard() {
           onSuccess={(productName) => {
             setNotice(`Đã chuyển sản phẩm "${productName}" sang trạng thái Ngừng bán.`);
             refreshCatalog();
+            setBundleRefreshTrigger((prev) => prev + 1);
             setSubscriptionRefreshTrigger((prev) => prev + 1);
           }}
         />
@@ -577,6 +603,7 @@ export default function StoreListingDashboard() {
           onSuccess={(productName) => {
             setNotice(`Đã xóa mềm sản phẩm "${productName}" thành công.`);
             refreshCatalog();
+            setBundleRefreshTrigger((prev) => prev + 1);
             setSubscriptionRefreshTrigger((prev) => prev + 1);
           }}
         />

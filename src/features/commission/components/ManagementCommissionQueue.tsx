@@ -12,6 +12,7 @@ import StaffDraftReview from "./StaffDraftReview";
 import CommissionRevisionTimeline from "./CommissionRevisionTimeline";
 import CommissionReassignment from "./CommissionReassignment";
 import CommissionRequestRejection from "./CommissionRequestRejection";
+import CommissionReferenceImages from "./CommissionReferenceImages";
 import Link from "next/link";
 import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
 
@@ -192,11 +193,7 @@ function CommissionDetails({ item, assigned, onChange }: {
       {detail?.description && <p className="whitespace-pre-wrap break-words">{detail.description}</p>}
       {detail && <CommissionRevisionTimeline detail={detail} onChanged={() => { onChange(); reload((value) => value + 1); }} />}
       {detail && !assigned && <CommissionReassignment detail={detail} onChanged={() => { onChange(); reload((value) => value + 1); }} />}
-      {detail?.attachments?.map(({ attachmentId, imageUrl, caption }) => /^https?:\/\//i.test(imageUrl) && (
-        <a key={attachmentId} href={imageUrl} target="_blank" rel="noreferrer" className="block text-[#155e59] underline">
-          {caption || "Ảnh tham khảo"}
-        </a>
-      ))}
+      {detail?.attachments && <CommissionReferenceImages items={detail.attachments} onReload={() => reload((value) => value + 1)} />}
       {error && <div role="alert">
         <p className="text-red-700">{error}</p>
         <button type="button" className="min-h-11 underline" onClick={() => { setError(""); reload((value) => value + 1); }}>Tải lại chi tiết</button>

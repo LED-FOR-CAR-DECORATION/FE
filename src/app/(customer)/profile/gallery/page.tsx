@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   ExternalLink,
@@ -38,6 +38,10 @@ export default function GalleryPage() {
   const { ownedCharacters, isLoading, error, refresh } = useGallery();
   const [previewItem, setPreviewItem] =
     useState<CustomerOwnedCharacterItem | null>(null);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   return (
     <>

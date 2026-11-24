@@ -15,6 +15,7 @@ import {
 } from "@/features/character/services/entitlement.service";
 import type { UserEntitlement } from "@/features/character/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import {
   fetchCustomerOwnedCharacters,
   formatOwnedCharactersError,
@@ -42,6 +43,7 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
   const requestIdRef = useRef(0);
 
   const refresh = useCallback(() => {
+    const requestId = ++requestIdRef.current;
     if (isAuthLoading) return;
 
     const currentUser = user;
@@ -57,7 +59,6 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -105,7 +106,19 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
     window.addEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
+    window.addEventListener(ORDERS_CHANGED_EVENT, refresh);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      ++requestIdRef.current;
+      window.removeEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
+      window.removeEventListener(ORDERS_CHANGED_EVENT, refresh);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [refresh]);
 
   return (

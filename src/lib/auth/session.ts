@@ -36,6 +36,7 @@ export function clearSession(): void {
 // ---------------------------------------------------------------------------
 const ACCESS_TOKEN_COOKIE = "access_token";
 const REFRESH_TOKEN_KEY = "led_controller_refresh_token";
+export const SESSION_EXPIRED_EVENT = "led-controller-session-expired";
 
 /** Lưu cặp token trả về từ login / refresh / google login. */
 export function saveTokens(accessToken: string, refreshToken?: string, expiresInSeconds?: number): void {
@@ -58,14 +59,41 @@ export function clearTokens(): void {
     localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
-export const getSessionToken = async (): Promise<string> => {
-    // Kỹ thuật Isomorphic: Kiểm tra xem code đang chạy trên trình duyệt hay trên Server Node.js
-    if (typeof window !== 'undefined') {
-        // Đang chạy ở Client Component: Tiến hành gắp token từ Cookie
-        const match = document.cookie.match(new RegExp('(^| )access_token=([^;]+)'));
-        return match ? decodeURIComponent(match[2]) : '';
-    }
+export function expireSession(): void {
+    clearTokens();
+    clearSession();
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+}
 
-    // Đang chạy ở Server Component: Trả về rỗng (sẽ lấy token thủ công từ cookies() ở chỗ khác)
-    return '';
+/** Read without triggering refresh, particularly for the refresh/logout requests themselves. */
+export function readAccessToken(): string {
+    if (typeof window === "undefined") return "";
+    const match = document.cookie.match(/(?:^|;\s*)access_token=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+}
+
+export function accessTokenNeedsRefresh(token: string, bufferMs = 30_000): boolean {
+    if (!token) return true;
+    try {
+        const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        const { exp } = JSON.parse(atob(payload));
+        return typeof exp === "number" && exp * 1000 <= Date.now() + bufferMs;
+    } catch {
+        // Let the backend validate tokens whose expiry cannot be read locally.
+        return false;
+    }
+}
+
+export const getSessionToken = async (): Promise<string> => {
+    if (typeof window === "undefined") return "";
+    const token = readAccessToken();
+    if (!accessTokenNeedsRefresh(token)) return token;
+    if (getRefreshToken()) {
+        // The refresh transport bypasses OpenAPI.TOKEN to avoid recursive refresh.
+        const { refreshAccessToken } = await import("../api/client");
+        return (await refreshAccessToken()) ?? "";
+    }
+    if (token && !accessTokenNeedsRefresh(token, 0)) return token;
+    if (token || loadSession()) expireSession();
+    return "";
 };

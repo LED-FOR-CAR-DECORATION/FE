@@ -3,7 +3,7 @@ import Link from "next/link";
 import InfoPage, { InfoSection } from "@/components/layout/InfoPage";
 import { SITE } from "@/config/site";
 
-export const metadata: Metadata = { title: `Vận chuyển & đổi trả | ${SITE.name}`, description: "Thanh toán, giao hàng, bảo hành và đổi trả tại Mirage." };
+export const metadata: Metadata = { title: `Vận chuyển & đổi trả | ${SITE.name}`, description: "Thanh toán, giao hàng, bảo hành và đổi trả tại Lumintra." };
 
 export default function ShippingReturnsPage() {
   return (

@@ -285,7 +285,7 @@ export default function ProductDetailPage() {
                 </h1>
 
                 <p className="mt-1 text-xs font-bold uppercase text-text-muted">
-                  Sản phẩm chính hãng Mirage Ecosystem
+                  Sản phẩm chính hãng Lumintra Ecosystem
                 </p>
 
                 <div className="mt-4 border-b-2 border-dashed border-gray-300 pb-4">
@@ -395,13 +395,13 @@ export default function ProductDetailPage() {
                 <Monitor size={16} className="text-primary-ink" /> Tương thích thiết bị
               </h2>
               <p className="text-xs font-medium leading-relaxed text-text-muted">
-                Hoạt động đồng bộ 100% trên hệ sinh thái bảng LED và ứng dụng điều khiển Mirage.
+                Hoạt động đồng bộ 100% trên hệ sinh thái bảng LED và ứng dụng điều khiển Lumintra.
               </p>
               <ul className="mt-4 space-y-2.5 text-xs font-bold text-text-main">
                 {[
-                  "Bảng LED Mirage Matrix 32×32",
-                  "Bảng LED Mirage Panorama 64×32",
-                  "Điều khiển đồng bộ qua App Mirage Mobile",
+                  "Bảng LED Lumintra Matrix 32×32",
+                  "Bảng LED Lumintra Panorama 64×32",
+                  "Điều khiển đồng bộ qua App Lumintra Mobile",
                 ].map((device) => (
                   <li key={device} className="flex items-center gap-2">
                     <Check size={14} className="text-primary-ink shrink-0" />
@@ -424,7 +424,7 @@ export default function ProductDetailPage() {
                   <Sparkles size={16} className="mt-0.5 text-primary-ink shrink-0" />
                   <div>
                     <strong className="block font-black uppercase">Bản quyền trọn đời</strong>
-                    <span className="text-text-muted">Sử dụng vĩnh viễn trên tài khoản Mirage.</span>
+                    <span className="text-text-muted">Sử dụng vĩnh viễn trên tài khoản Lumintra.</span>
                   </div>
                 </div>
               </div>

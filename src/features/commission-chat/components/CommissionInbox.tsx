@@ -60,7 +60,7 @@ function isOwn(message: CommissionMessage, viewer: ChatViewer) {
 function previewText(viewer: ChatViewer, message?: CommissionMessage) {
   if (!message) return "Chưa có tin nhắn";
   const own = isOwn(message, viewer);
-  const other = message.senderRole === "SYSTEM" ? "" : viewer === "CUSTOMER" ? "MIRAGE: " : "Khách: ";
+  const other = message.senderRole === "SYSTEM" ? "" : viewer === "CUSTOMER" ? "LUMINTRA: " : "Khách: ";
   const prefix = own ? "Bạn: " : other;
   switch (message.messageType) {
     case "IMAGE": return `${prefix}Đã gửi một ảnh${message.content ? ` · ${message.content}` : ""}`;
@@ -280,7 +280,7 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
             {conversations ? <MessageCircle size={44} className="text-[#88b998]" /> : <Loader2 size={28} className="animate-spin text-[#2d6a4f]" />}
             <p className="font-bold text-[#1f432b]">Chọn một cuộc trò chuyện</p>
             <p className="max-w-xs text-sm">{viewer === "CUSTOMER"
-              ? "Trao đổi với nhân viên MIRAGE, xem bản xem trước và xác nhận chỉnh sửa cho từng commission."
+              ? "Trao đổi với nhân viên LUMINTRA, xem bản xem trước và xác nhận chỉnh sửa cho từng commission."
               : "Tin nhắn với khách, bản nháp chờ duyệt và thẻ chỉnh sửa của từng commission nằm ở đây."}</p>
           </div>
         )}

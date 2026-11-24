@@ -18,6 +18,7 @@ import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getRoleHomePath } from "@/features/auth/services/auth.service";
 import { useCart } from "@/features/cart/context/CartContext";
+import { SITE } from "@/config/site";
 
 /* ── User dropdown (shown when logged in) ── */
 function UserDropdown() {
@@ -169,9 +170,9 @@ export default function Header() {
         <div className="flex items-center gap-7">
           <Link
             href="/"
-            className="cursor-pointer border-2 border-black bg-white px-4 py-1.5 text-xl font-black uppercase tracking-wider text-black shadow-[3px_3px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            className="cursor-pointer whitespace-nowrap border-2 border-black bg-white px-3 py-1.5 text-lg font-black uppercase tracking-wider text-black shadow-[3px_3px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 sm:px-4 sm:text-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
           >
-            MIRAGE
+            {SITE.name}
           </Link>
 
           <nav className="hidden items-center gap-6 text-xs font-black uppercase tracking-wider text-black md:flex">

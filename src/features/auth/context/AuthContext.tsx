@@ -1,10 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { authService, normalizeUserRole, USE_MOCK_AUTH } from "@/features/auth/services/auth.service";
 import type { AuthUser } from "@/features/auth/types";
 import { apiGetMyProfile, apiUpdateMyProfile } from "@/lib/api/addresses";
-import { clearSession, getRefreshToken, getSessionToken, loadSession, saveSession } from "@/lib/auth/session";
+import { clearSession, clearTokens, getSessionToken, loadSession, saveSession, SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -34,26 +34,33 @@ function mergeRemoteProfile(
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const sessionVersion = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
+    const version = sessionVersion.current;
+    const isStale = () => cancelled || sessionVersion.current !== version;
+    const handleExpired = () => {
+      ++sessionVersion.current;
+      setUser(null);
+      setIsLoading(false);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired);
     (async () => {
       const saved = loadSession();
-      if (saved && !USE_MOCK_AUTH && !(await getSessionToken()) && !getRefreshToken()) {
-        clearSession();
-        if (!cancelled) {
-          setUser(null);
-          setIsLoading(false);
-        }
-        return;
-      }
       if (saved && !USE_MOCK_AUTH) {
-        if (!cancelled) {
-          setUser(saved);
-        }
         try {
+          const token = await getSessionToken();
+          if (isStale()) return;
+          if (!token) {
+            clearSession();
+            setUser(null);
+            setIsLoading(false);
+            return;
+          }
+          setUser(saved);
           const remoteProfile = await apiGetMyProfile();
-          if (remoteProfile && !cancelled) {
+          if (remoteProfile && !isStale()) {
             const hydrated = mergeRemoteProfile(saved, remoteProfile);
             saveSession(hydrated);
             setUser(hydrated);
@@ -64,23 +71,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Fallback to saved session if profile fetch fails temporarily
         }
       }
-      if (!cancelled) {
-        setUser(saved);
+      if (!isStale()) {
+        setUser(loadSession());
         setIsLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired);
     };
   }, []);
 
   const login = useCallback((nextUser: AuthUser) => {
+    const version = ++sessionVersion.current;
     saveSession(nextUser);
     setUser(nextUser);
+    setIsLoading(false);
     if (!USE_MOCK_AUTH) {
       void apiGetMyProfile()
         .then((remoteProfile) => {
-          if (!remoteProfile) return;
+          if (!remoteProfile || sessionVersion.current !== version) return;
           const hydrated = mergeRemoteProfile(nextUser, remoteProfile);
           saveSession(hydrated);
           setUser(hydrated);
@@ -124,9 +134,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await authService.logout();
+    ++sessionVersion.current;
+    const pending = authService.logout();
+    clearTokens();
     clearSession();
     setUser(null);
+    setIsLoading(false);
+    await pending;
   }, []);
 
   return (

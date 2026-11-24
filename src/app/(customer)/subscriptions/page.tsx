@@ -101,7 +101,7 @@ export default function SubscriptionsStorePage() {
           {/* Hero */}
           <div className="mb-10 text-center">
             <span className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#155e59] bg-[#e3f5e9] px-3.5 py-1 text-xs font-black uppercase tracking-wider text-[#155e59]">
-              <Crown size={14} /> MIRAGE MEMBERSHIP
+              <Crown size={14} /> LUMINTRA MEMBERSHIP
             </span>
             <h1 className="mt-4 text-3xl font-black uppercase tracking-tight text-[#155e59] sm:text-4xl">
               Gói Hội Viên Pixel Art
@@ -224,7 +224,7 @@ export default function SubscriptionsStorePage() {
                         )}
                         <li className="flex items-start gap-2">
                           <Check size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />
-                          <span>Đồng bộ không giới hạn lên thiết bị LED Mirage</span>
+                          <span>Đồng bộ không giới hạn lên thiết bị LED Lumintra</span>
                         </li>
                         <li className="flex items-start gap-2">
                           <Check size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />

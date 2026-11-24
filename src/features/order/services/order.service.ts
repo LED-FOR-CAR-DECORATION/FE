@@ -9,6 +9,7 @@ import {
   apiCheckoutOrder,
   apiConfirmOrderDelivery,
   apiDispatchOrder,
+  apiUpdateStaffOrderDeliveryAddress,
   apiUpdateStaffOrderStatus,
   fetchMyOrders,
   fetchOrderDetail,
@@ -18,6 +19,7 @@ import {
   type BackendStaffOrderSummary,
   type DispatchOrderRequest,
   type DispatchOrderResponse,
+  type UpdateStaffDeliveryAddressRequest,
 } from "@/lib/api/orders";
 import { mapBackendProductType } from "@/lib/api/products";
 
@@ -213,6 +215,11 @@ export function mapOrderSummaryAndDetailToOrder(
           rawStatus: detail.delivery.deliveryStatus,
           trackingUrl: detail.delivery.trackingUrl || undefined,
           carrierFee: (detail.delivery as any)?.carrierFee,
+          failureReason: (detail.delivery as any)?.failureReason || undefined,
+          attemptCount: (detail.delivery as any)?.deliveryAttemptCount ?? undefined,
+          maxAttempts: (detail.delivery as any)?.maxDeliveryAttempts ?? undefined,
+          latitude: detail.delivery.latitude,
+          longitude: detail.delivery.longitude,
           createdAt: detail.createdAt,
           expectedAt: detail.delivery.estimatedDeliveryAt || detail.createdAt,
         }
@@ -289,6 +296,11 @@ export function mapStaffOrderSummaryAndDetailToOrder(
           rawStatus: detail?.delivery?.deliveryStatus ?? summary.deliveryStatus,
           trackingUrl: detail?.delivery?.trackingUrl || undefined,
           carrierFee: detail?.delivery?.carrierFee,
+          failureReason: detail?.delivery?.failureReason || undefined,
+          attemptCount: detail?.delivery?.deliveryAttemptCount ?? undefined,
+          maxAttempts: detail?.delivery?.maxDeliveryAttempts ?? undefined,
+          latitude: detail?.delivery?.latitude,
+          longitude: detail?.delivery?.longitude,
           createdAt: detail?.createdAt ?? summary.createdAt,
           expectedAt: detail?.delivery?.estimatedDeliveryAt || summary.createdAt,
         }
@@ -325,15 +337,26 @@ export const orderService = {
       return [];
     }
   },
-  async updateStaffStatus(orderId: number | string, status: string): Promise<void> {
+  async updateStaffStatus(orderId: number | string, status: string, reason?: string): Promise<void> {
     let backendStatus = status;
     if (status === "Completed" || status === "COMPLETED" || status === "Confirmed") backendStatus = "COMPLETED";
     else if (status === "Preparing" || status === "PROCESSING") backendStatus = "PROCESSING";
+    else if (status === "REFUNDED") backendStatus = "REFUNDED";
     else if (status === "Cancelled" || status === "CANCELED") backendStatus = "CANCELED";
-    await apiUpdateStaffOrderStatus(orderId, backendStatus);
+    await apiUpdateStaffOrderStatus(orderId, backendStatus, reason);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
     }
+  },
+  async updateStaffDeliveryAddress(
+    orderId: number | string,
+    payload: UpdateStaffDeliveryAddressRequest,
+  ) {
+    const result = await apiUpdateStaffOrderDeliveryAddress(orderId, payload);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+    }
+    return result;
   },
   async dispatchOrderToAhamove(
     orderId: number | string,

@@ -49,6 +49,13 @@ export interface RevenueCategoryItem {
   unitCount: number;
 }
 
+export interface DailyRevenuePoint {
+  day: number;
+  date: string;
+  revenue: number;
+  orderCount: number;
+}
+
 export interface TopProductItem {
   id: string;
   name: string;

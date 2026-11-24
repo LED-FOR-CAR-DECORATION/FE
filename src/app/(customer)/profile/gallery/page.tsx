@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   AlertCircle,
+  Crown,
   ExternalLink,
   Eye,
   Film,
@@ -35,9 +36,13 @@ function formatPurchasedDate(value: string): string {
 }
 
 export default function GalleryPage() {
-  const { ownedCharacters, isLoading, error, refresh } = useGallery();
+  const { ownedCharacters, activeSubscription, isLoading, error, refresh } = useGallery();
   const [previewItem, setPreviewItem] =
     useState<CustomerGalleryItem | null>(null);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   useEffect(() => {
     refresh();
@@ -78,6 +83,25 @@ export default function GalleryPage() {
                 Làm mới
               </button>
             </div>
+
+            {activeSubscription?.allAccessCharacters && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xs border-2 border-[#155e59] bg-[#e3f5e9] px-5 py-3.5 text-sm text-[#155e59] shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <Crown size={18} className="shrink-0" />
+                  <div>
+                    <p className="font-black">
+                      Đang kích hoạt: {activeSubscription.planName || activeSubscription.planCode || "All-Access VIP Pass"}
+                    </p>
+                    <p className="text-xs font-medium text-[#2d6a4f]">
+                      Toàn bộ nhân vật đang mở bán trên cửa hàng đã được mở khóa vào thư viện của bạn.
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-[#155e59] px-3 py-1 text-[11px] font-black uppercase text-white">
+                  {activeSubscription.isLifetime ? "Trọn đời" : `${activeSubscription.durationDays ?? 30} ngày`}
+                </span>
+              </div>
+            )}
 
             {isLoading ? (
               <section className="flex flex-col items-center justify-center rounded-xs bg-white py-16 text-center shadow-xs">
@@ -145,13 +169,6 @@ export default function GalleryPage() {
                           </span>
                         </div>
                       )}
-
-                      {(item.frameCount || item.frameDelayMs) && (
-                        <span className="absolute right-2.5 top-2.5 rounded-md border border-white/15 bg-black/75 px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-300">
-                          {item.frameCount ?? "—"} frames ·{" "}
-                          {item.frameDelayMs ?? "—"} ms
-                        </span>
-                      )}
                     </div>
 
                     <div className="flex flex-1 flex-col justify-between p-4">
@@ -161,7 +178,11 @@ export default function GalleryPage() {
                             {item.characterName}
                           </h2>
                           <span className="shrink-0 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
-                            {item.sourceType === "COMMISSION" ? "Commission đã duyệt" : "Đã sở hữu"}
+                            {item.sourceType === "COMMISSION"
+                              ? "Commission đã duyệt"
+                              : item.unlockedBySubscription
+                                ? "VIP All-Access"
+                                : "Đã sở hữu"}
                           </span>
                         </div>
                         <p className="mt-0.5 text-xs font-medium text-text-muted">
@@ -175,16 +196,24 @@ export default function GalleryPage() {
                               <Link href={`/messages?commissionId=${item.commissionId}`} className="inline-flex items-center gap-1 font-bold text-primary-dark hover:underline">
                                 Commission #{item.commissionId}<ExternalLink size={11} />
                               </Link>
-                            ) : item.orderId !== null ? (
+                            ) : item.orderId !== null && item.orderId > 0 ? (
                               <Link href={`/profile/orders/${item.orderId}`} className="inline-flex items-center gap-1 font-bold text-primary-dark hover:underline">
                                 Đơn #{item.orderId}<ExternalLink size={11} />
                               </Link>
-                            ) : <span>Được cấp</span>}
+                            ) : (
+                              <span className="font-bold text-[#155e59]">
+                                {item.unlockedBySubscription ? "Gói All-Access VIP" : "Được cấp"}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-gray-500">{item.sourceType === "COMMISSION" ? "Tổng chi phí" : "Giá mua"}</span>
                             <span className="font-bold text-gray-900">
-                              {item.purchasedPrice === null ? "—" : formatPrice(item.purchasedPrice)}
+                              {item.unlockedBySubscription
+                                ? "Miễn phí (VIP Pass)"
+                                : item.purchasedPrice === null
+                                  ? "—"
+                                  : formatPrice(item.purchasedPrice)}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">

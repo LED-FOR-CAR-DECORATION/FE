@@ -16,6 +16,22 @@ export interface CustomerOwnedCharacterItem {
   productName: string;
   purchasedPrice: number | null;
   purchasedAt: string;
+  unlockedBySubscription: boolean;
+}
+
+export interface CustomerActiveSubscription {
+  subscriptionId: number;
+  productId: number;
+  orderId: number | null;
+  planCode: string | null;
+  planName: string | null;
+  isLifetime: boolean;
+  durationDays: number | null;
+  allAccessCharacters: boolean;
+  maxCommissionRevisions: number;
+  maxMobileProfiles: number;
+  activatedAt: string;
+  expiresAt: string | null;
 }
 
 export interface CustomerAcceptedCommissionItem extends Omit<CustomerOwnedCharacterItem, "sourceType" | "characterId"> {
@@ -82,6 +98,7 @@ export async function fetchCustomerOwnedCharacters(): Promise<
     productName: item.productName ?? item.characterName ?? "Sản phẩm nhân vật",
     purchasedPrice: item.purchasedPrice == null ? null : Number(item.purchasedPrice),
     purchasedAt: item.purchasedAt ?? "",
+    unlockedBySubscription: Boolean(item.unlockedBySubscription),
   }));
 }
 
@@ -114,6 +131,7 @@ async function fetchAcceptedCommissionArtwork(): Promise<CustomerAcceptedCommiss
         frameCount: null, frameDelayMs: null, orderId: null, storeProductId: null,
         productName: data.targetMatrixDimensions ? `Commission · ${data.targetMatrixDimensions}` : "Commission",
         purchasedPrice: data.totalPrice, purchasedAt: data.updatedAt ?? accepted.deliveredAt ?? accepted.createdAt,
+        unlockedBySubscription: false,
       });
     }
   }
@@ -125,5 +143,32 @@ export async function fetchCustomerGallery(): Promise<CustomerGalleryItem[]> {
   return [...purchases, ...commissions].sort((a, b) =>
     (Date.parse(b.purchasedAt) || 0) - (Date.parse(a.purchasedAt) || 0),
   );
+}
+
+export async function fetchActiveCustomerSubscription(): Promise<CustomerActiveSubscription | null> {
+  const res = await request<ApiEnvelope<CustomerActiveSubscription | null>>(OpenAPI, {
+    method: "GET",
+    url: "/api/customer/subscriptions/active",
+    errors: {
+      401: "Authentication is required.",
+      403: "Access is denied.",
+    },
+  });
+
+  if (!res.data) return null;
+  return {
+    subscriptionId: Number(res.data.subscriptionId),
+    productId: Number(res.data.productId),
+    orderId: res.data.orderId != null ? Number(res.data.orderId) : null,
+    planCode: res.data.planCode ?? null,
+    planName: res.data.planName ?? null,
+    isLifetime: Boolean(res.data.isLifetime),
+    durationDays: res.data.durationDays ?? null,
+    allAccessCharacters: Boolean(res.data.allAccessCharacters),
+    maxCommissionRevisions: Number(res.data.maxCommissionRevisions ?? 0),
+    maxMobileProfiles: Number(res.data.maxMobileProfiles ?? 3),
+    activatedAt: res.data.activatedAt ?? "",
+    expiresAt: res.data.expiresAt ?? null,
+  };
 }
 

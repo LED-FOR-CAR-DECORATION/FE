@@ -8,6 +8,7 @@ import type { AddressFormData } from "@/features/address/types";
 import {
   FULL_ADDRESS_MAX,
   composeFullAddress,
+  extractHouseDetailFromMapAddress,
   normalizeVnMobile,
   validateHouseDetail,
   validateRecipientName,
@@ -27,12 +28,19 @@ interface DraftState {
   fullName: string;
   phoneNumber: string;
   houseDetail: string;
+  lastAutoHouseDetail: string;
   mapAddress: string;
   latitude?: number;
   longitude?: number;
 }
 
-const EMPTY_DRAFT: DraftState = { fullName: "", phoneNumber: "", houseDetail: "", mapAddress: "" };
+const EMPTY_DRAFT: DraftState = {
+  fullName: "",
+  phoneNumber: "",
+  houseDetail: "",
+  lastAutoHouseDetail: "",
+  mapAddress: "",
+};
 const FIELD_ORDER: FieldKey[] = ["fullName", "phoneNumber", "houseDetail", "location"];
 const FIELD_ID: Record<FieldKey, string> = {
   fullName: "add-addr-fullName",
@@ -272,9 +280,28 @@ export default function AddAddressModal({ isOpen, onClose, onSave }: AddAddressM
         <div className="min-h-[360px]">
           <GoongMapAddress
             onLocationSelect={(lng, lat, address) => {
+              const suggestedHouse = extractHouseDetailFromMapAddress(address);
               setSubmitError("");
-              setTouched((prev) => ({ ...prev, location: true }));
-              setDraft((prev) => ({ ...prev, latitude: lat, longitude: lng, mapAddress: address }));
+              setTouched((prev) => ({
+                ...prev,
+                location: true,
+                ...(suggestedHouse ? { houseDetail: true } : {}),
+              }));
+              setDraft((prev) => {
+                const shouldAutoFillHouse =
+                  Boolean(suggestedHouse) &&
+                  (!prev.houseDetail.trim() || prev.houseDetail === prev.lastAutoHouseDetail);
+                return {
+                  ...prev,
+                  latitude: lat,
+                  longitude: lng,
+                  mapAddress: address,
+                  houseDetail: shouldAutoFillHouse ? suggestedHouse : prev.houseDetail,
+                  lastAutoHouseDetail: shouldAutoFillHouse
+                    ? suggestedHouse
+                    : prev.lastAutoHouseDetail,
+                };
+              });
             }}
           />
         </div>

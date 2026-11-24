@@ -17,6 +17,7 @@ import {
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/features/cart/context/CartContext";
+import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchPublicSubscriptionPlans } from "@/lib/api/subscriptions";
@@ -27,6 +28,7 @@ const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} VNĐ`;
 export default function SubscriptionsStorePage() {
   const router = useRouter();
   const { items: cartItems, addItem } = useCart();
+  const { activeSubscription } = useGallery();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [plans, setPlans] = useState<CatalogProduct[]>([]);
@@ -112,6 +114,33 @@ export default function SubscriptionsStorePage() {
             </p>
           </div>
 
+          {activeSubscription && (
+            <div className="mx-auto mb-6 flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-[#155e59] bg-[#e3f5e9] p-4 text-sm text-[#155e59]">
+              <div className="flex items-start gap-2.5">
+                <Crown size={18} className="mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-black">
+                    Bạn đang kích hoạt gói:{" "}
+                    {activeSubscription.planName || activeSubscription.planCode || "Hội viên VIP"}
+                  </p>
+                  <p className="text-xs font-medium text-[#2d6a4f]">
+                    {activeSubscription.allAccessCharacters
+                      ? "Toàn bộ nhân vật trên cửa hàng đã được mở khóa trong Thư viện nhân vật của bạn."
+                      : "Gói hội viên hiện tại đang có hiệu lực."}
+                  </p>
+                </div>
+              </div>
+              {activeSubscription.allAccessCharacters && (
+                <Link
+                  href="/profile/gallery"
+                  className="btn-primary px-4 py-2 text-xs font-black uppercase"
+                >
+                  Mở thư viện nhân vật
+                </Link>
+              )}
+            </div>
+          )}
+
           {actionError && (
             <div className="mx-auto mb-6 flex max-w-2xl items-start gap-2.5 rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-700">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -151,6 +180,11 @@ export default function SubscriptionsStorePage() {
                 const inCart = cartItems.some(
                   (c) => c.productId === Number(plan.id) || String(c.id) === String(plan.id),
                 );
+                const isCurrentActivePlan =
+                  activeSubscription != null &&
+                  (activeSubscription.productId === Number(plan.id) ||
+                    (sub?.planCode != null && activeSubscription.planCode === sub.planCode));
+                const hasAnyActivePlan = activeSubscription != null;
 
                 return (
                   <article
@@ -238,32 +272,52 @@ export default function SubscriptionsStorePage() {
                     </div>
 
                     <div className="mt-6 space-y-2.5 pt-2">
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => handleBuyOrAdd(plan, true)}
-                        className="btn-primary flex w-full items-center justify-center gap-2 py-2.5 text-sm font-black disabled:opacity-50"
-                      >
-                        {isBusy ? (
-                          <>
-                            <Loader2 size={16} className="animate-spin" /> Đang xử lý...
-                          </>
-                        ) : (
-                          <>
-                            <Zap size={16} /> {inCart ? "Thanh toán ngay" : "Mua gói ngay"}
-                          </>
-                        )}
-                      </button>
+                      {hasAnyActivePlan ? (
+                        <Link
+                          href={activeSubscription?.allAccessCharacters ? "/profile/gallery" : `/products/${plan.id}`}
+                          className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 border-black py-2.5 text-sm font-black ${
+                            isCurrentActivePlan
+                              ? "bg-[#e3f5e9] text-[#155e59]"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          <Check size={16} />
+                          {isCurrentActivePlan ? "Đang sử dụng gói này" : "Tài khoản đã có gói hội viên"}
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => handleBuyOrAdd(plan, true)}
+                          className="btn-primary flex w-full items-center justify-center gap-2 py-2.5 text-sm font-black disabled:opacity-50"
+                        >
+                          {isBusy ? (
+                            <>
+                              <Loader2 size={16} className="animate-spin" /> Đang xử lý...
+                            </>
+                          ) : (
+                            <>
+                              <Zap size={16} /> {inCart ? "Thanh toán ngay" : "Mua gói ngay"}
+                            </>
+                          )}
+                        </button>
+                      )}
 
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          disabled={isBusy || inCart}
+                          disabled={isBusy || inCart || hasAnyActivePlan}
                           onClick={() => handleBuyOrAdd(plan, false)}
                           className="btn-secondary flex items-center justify-center gap-1.5 py-2 text-xs font-bold disabled:opacity-60"
                         >
                           <ShoppingBag size={14} />
-                          {inCart || isAdded ? "Đã trong giỏ" : "Thêm vào giỏ"}
+                          {hasAnyActivePlan
+                            ? isCurrentActivePlan
+                              ? "Đã kích hoạt"
+                              : "Đã có gói"
+                            : inCart || isAdded
+                              ? "Đã trong giỏ"
+                              : "Thêm vào giỏ"}
                         </button>
                         <Link
                           href={`/products/${plan.id}`}

@@ -26,10 +26,6 @@ export type LedInstanceDetailResponse = {
      */
     macAddress: string;
     /**
-     * PCB hardware revision stamped at provisioning
-     */
-    hardwareRevision?: string | null;
-    /**
      * Identifier of the firmware version currently installed on this LED instance, if reported
      */
     currentFirmwareId?: number | null;

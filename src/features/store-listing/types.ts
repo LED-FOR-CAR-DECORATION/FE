@@ -36,7 +36,6 @@ export interface CharacterVersion {
   storeListingId: string | null;
   versionNumber: number;
   fileUrl: string;
-  ledBinaryUrl: string;
   format: string;
   width: number;
   height: number;

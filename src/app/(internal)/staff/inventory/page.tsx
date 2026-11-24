@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowLeft,
   Boxes,
   Check,
   CheckCircle,
@@ -19,6 +20,7 @@ import {
   Loader2,
   Lock,
   PackageCheck,
+  PackagePlus,
   Plus,
   Printer,
   QrCode,
@@ -39,7 +41,6 @@ import StatusBadge from "@/features/store-listing/components/StatusBadge";
 import {
   fetchLedInstanceDetail,
   fetchLedInstances,
-  fetchManagedLedModels,
   formatLedInventoryError,
   LedInstanceDetailResponse,
   LedInstanceFilterRequest,
@@ -55,6 +56,7 @@ import {
 } from "@/lib/api/ledModels";
 import LedModelFormModal from "@/features/product/components/LedModelFormModal";
 import DeprecateLedModelModal from "@/features/product/components/DeprecateLedModelModal";
+import StockInLedInstancesModal from "@/features/product/components/StockInLedInstancesModal";
 
 type InstanceStatusValue =
   | LedInstanceItem.status
@@ -172,7 +174,9 @@ export default function InventoryPage() {
   const { user } = useAuth();
   const canManageCatalog = user?.role === "ADMIN" || user?.role === "MANAGER";
 
-  const [activeTab, setActiveTab] = useState<"models" | "instances">("models");
+  // Unified Master -> Detail state: null = LED models list, non-null = instances of that LED model
+  const [selectedModel, setSelectedModel] = useState<ManagedLedModelItem | null>(null);
+  const [instanceReloadKey, setInstanceReloadKey] = useState(0);
 
   // DEV-01 Paginated LED Models state
   const [models, setModels] = useState<ManagedLedModelItem[]>([]);
@@ -204,10 +208,11 @@ export default function InventoryPage() {
   const [page, setPage] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Modals (DEV-02, DEV-03, DEV-04)
+  // Modals (DEV-02, DEV-03, DEV-04 & Stock-in instances)
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<ManagedLedModelItem | null>(null);
   const [deprecatingModel, setDeprecatingModel] = useState<ManagedLedModelItem | null>(null);
+  const [stockInModel, setStockInModel] = useState<ManagedLedModelItem | null>(null);
   const [viewingProductId, setViewingProductId] = useState<number | null>(null);
 
   const [notice, setNotice] = useState<{
@@ -237,6 +242,10 @@ export default function InventoryPage() {
           lowStockCount: nonDeprecated.filter((m) => m.isLowStock).length,
           activeCount: list.filter((m) => m.status === LedModelItem.status.ACTIVE).length,
           linkedProductCount: list.filter((m) => m.productId != null).length,
+        });
+        setSelectedModel((prev) => {
+          if (!prev) return null;
+          return list.find((m) => m.modelId === prev.modelId) ?? prev;
         });
       })
       .catch(() => {
@@ -282,6 +291,7 @@ export default function InventoryPage() {
 
   const triggerReload = useCallback(() => {
     setReloadKey((k) => k + 1);
+    setInstanceReloadKey((k) => k + 1);
   }, []);
 
   const resetFilters = () => {
@@ -393,35 +403,92 @@ export default function InventoryPage() {
 
       <div className="w-full">
         <section className="neo-box-no-hover overflow-hidden bg-white">
-          <div className="flex flex-wrap items-center gap-1 border-b-2 border-primary-light px-4 pt-3">
-            <button
-              type="button"
-              onClick={() => setActiveTab("models")}
-              className={`border-b-2 px-4 py-3 text-sm font-bold ${
-                activeTab === "models"
-                  ? "border-primary-dark text-primary-dark"
-                  : "border-transparent text-text-muted"
-              }`}
-            >
-              <List size={15} className="mr-1 inline" /> Danh sách theo mẫu LED
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("instances")}
-              className={`border-b-2 px-4 py-3 text-sm font-bold ${
-                activeTab === "instances"
-                  ? "border-primary-dark text-primary-dark"
-                  : "border-transparent text-text-muted"
-              }`}
-            >
-              <Boxes size={15} className="mr-1 inline" /> Danh sách thiết bị (Serial)
-            </button>
-          </div>
+          {selectedModel ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-primary-light bg-[#f9fdfa] px-5 py-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModel(null)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border-2 border-black bg-white px-3 py-1.5 text-xs font-black text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/20"
+                  >
+                    <ArrowLeft size={14} />
+                    Danh sách mẫu LED
+                  </button>
 
-          {activeTab === "instances" ? (
-            <LedInstancesSection />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-black text-gray-900">
+                        {selectedModel.modelName}
+                      </h2>
+                      <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-gray-700">
+                        #{selectedModel.modelId}
+                      </span>
+                      {selectedModel.spec?.widthPx && selectedModel.spec?.heightPx && (
+                        <span className="rounded border border-gray-200 bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-gray-700">
+                          {selectedModel.spec.widthPx}×{selectedModel.spec.heightPx} px
+                        </span>
+                      )}
+                      <span
+                        className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
+                          LED_MODEL_STATUS_STYLE[selectedModel.status]
+                        }`}
+                      >
+                        {MODEL_STATUS_LABEL[selectedModel.status] ?? selectedModel.status}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-text-muted">
+                      Tồn kho khả dụng:{" "}
+                      <strong className="text-gray-900">{selectedModel.stockQuantity} thiết bị</strong>{" "}
+                      · Xem toàn bộ thiết bị (Serial/MAC) thuộc mẫu LED này và nhập kho kèm mã thiết bị.
+                    </p>
+                  </div>
+                </div>
+
+                {canManageCatalog && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedModel.status !== LedModelItem.status.DEPRECATED && (
+                      <button
+                        type="button"
+                        onClick={() => setStockInModel(selectedModel)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border-2 border-black bg-primary px-3.5 py-2 text-xs font-black text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
+                      >
+                        <PackagePlus size={15} />
+                        Nhập kho thiết bị
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditingModel(selectedModel)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-800 hover:bg-gray-50"
+                    >
+                      <Edit3 size={13} />
+                      Cập nhật mẫu
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <LedInstancesSection
+                model={selectedModel}
+                externalReloadKey={instanceReloadKey}
+                canManageCatalog={canManageCatalog}
+                onOpenStockIn={() => setStockInModel(selectedModel)}
+              />
+            </>
           ) : (
             <>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-primary-light px-5 py-3.5">
+                <div>
+                  <h2 className="text-sm font-black uppercase tracking-wide text-primary-dark">
+                    Danh sách mẫu LED trong kho
+                  </h2>
+                  <p className="text-xs text-text-muted">
+                    Bấm vào một mẫu LED để xem danh sách thiết bị (Serial/MAC) và nhập kho thiết bị mới.
+                  </p>
+                </div>
+              </div>
+
               <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-[1fr_210px_auto_auto]">
                 <label className="flex items-center gap-2 border-2 border-gray-200 px-3 py-2 text-sm">
                   <Search size={15} className="text-text-muted" />
@@ -486,14 +553,14 @@ export default function InventoryPage() {
               )}
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[960px] table-fixed text-sm">
+                <table className="w-full min-w-[1040px] table-fixed text-sm">
                   <colgroup>
-                    <col className="w-[33%]" />
-                    <col className="w-[12%]" />
+                    <col className="w-[27%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[10%]" />
                     <col className="w-[12%]" />
                     <col className="w-[13%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[18%]" />
+                    <col className="w-[27%]" />
                   </colgroup>
                   <thead className="border-b border-gray-200 bg-gray-50/90 text-gray-700">
                     <tr>
@@ -550,7 +617,8 @@ export default function InventoryPage() {
                         return (
                           <tr
                             key={item.modelId}
-                            className={`transition-colors hover:bg-green-50/40 ${
+                            onClick={() => setSelectedModel(item)}
+                            className={`cursor-pointer transition-colors hover:bg-green-50/60 ${
                               isDeprecated ? "bg-gray-50/60 opacity-80" : ""
                             }`}
                           >
@@ -577,6 +645,9 @@ export default function InventoryPage() {
                                       Chưa khai báo thông số phụ
                                     </p>
                                   )}
+                                  <p className="mt-1 text-[11px] font-bold text-primary-dark">
+                                    Bấm để xem thiết bị (Serial) →
+                                  </p>
                                 </div>
                               </div>
                             </td>
@@ -608,7 +679,10 @@ export default function InventoryPage() {
                               </div>
                             </td>
 
-                            <td className="px-3 py-3.5 text-center">
+                            <td
+                              className="px-3 py-3.5 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               {item.productId != null ? (
                                 <button
                                   type="button"
@@ -634,33 +708,55 @@ export default function InventoryPage() {
                               </span>
                             </td>
 
-                            <td className="px-4 py-3.5 text-right">
-                              {canManageCatalog ? (
-                                <div className="inline-flex items-center justify-end gap-1.5">
+                            <td
+                              className="px-4 py-3.5 text-right"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                {canManageCatalog && !isDeprecated && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setStockInModel(item)}
+                                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-800 shadow-xs hover:bg-emerald-100"
+                                    title="Nhập kho thiết bị kèm Serial/MAC"
+                                  >
+                                    <PackagePlus size={13} />
+                                    Nhập kho
+                                  </button>
+                                )}
+                                {canManageCatalog && (
                                   <button
                                     type="button"
                                     onClick={() => setEditingModel(item)}
                                     className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold shadow-xs hover:bg-primary/20"
-                                    title="Cập nhật tên, tồn kho & thông số kỹ thuật"
+                                    title="Cập nhật tên & thông số kỹ thuật"
                                   >
                                     <Edit3 size={13} />
                                     Cập nhật
                                   </button>
-                                  {!isDeprecated && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setDeprecatingModel(item)}
-                                      className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-600 shadow-xs hover:bg-red-50"
-                                      title="Ngừng kinh doanh mẫu LED này"
-                                    >
-                                      <ShieldOff size={13} />
-                                      Ngừng KD
-                                    </button>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-text-muted">—</span>
-                              )}
+                                )}
+                                {canManageCatalog && !isDeprecated && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeprecatingModel(item)}
+                                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-600 shadow-xs hover:bg-red-50"
+                                    title="Ngừng kinh doanh mẫu LED này"
+                                  >
+                                    <ShieldOff size={13} />
+                                    Ngừng KD
+                                  </button>
+                                )}
+                                {!canManageCatalog && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedModel(item)}
+                                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold hover:bg-primary/20"
+                                  >
+                                    <Boxes size={13} />
+                                    Thiết bị
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -776,6 +872,31 @@ export default function InventoryPage() {
         />
       )}
 
+      {/* Nhập kho thiết bị (Serial & MAC) */}
+      {stockInModel && (
+        <StockInLedInstancesModal
+          model={stockInModel}
+          onClose={() => setStockInModel(null)}
+          onSuccess={(result) => {
+            setNotice({
+              type: "success",
+              message: `Đã nhập kho thành công ${result.importedCount} thiết bị (Serial/MAC) cho mẫu "${result.modelName}" — tồn kho mới: ${result.stockQuantity}.`,
+            });
+            setSelectedModel((prev) =>
+              prev && prev.modelId === result.modelId
+                ? {
+                    ...prev,
+                    stockQuantity: result.stockQuantity,
+                    status: result.modelStatus,
+                    isLowStock: result.stockQuantity < 5,
+                  }
+                : prev,
+            );
+            triggerReload();
+          }}
+        />
+      )}
+
       {viewingProductId != null && (
         <LinkedProductDetailModal
           productId={viewingProductId}
@@ -786,9 +907,18 @@ export default function InventoryPage() {
   );
 }
 
-function LedInstancesSection() {
+function LedInstancesSection({
+  model,
+  externalReloadKey,
+  canManageCatalog,
+  onOpenStockIn,
+}: {
+  model: ManagedLedModelItem;
+  externalReloadKey: number;
+  canManageCatalog: boolean;
+  onOpenStockIn: () => void;
+}) {
   const [instances, setInstances] = useState<LedInstanceItem[]>([]);
-  const [models, setModels] = useState<LedModelItem[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({
     page: 0,
     size: PAGE_SIZE,
@@ -798,7 +928,6 @@ function LedInstancesSection() {
     hasPrevious: false,
   });
   const [page, setPage] = useState(0);
-  const [modelId, setModelId] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     LedInstanceFilterRequest.status | ""
   >("");
@@ -812,16 +941,11 @@ function LedInstancesSection() {
   );
 
   useEffect(() => {
-    let cancelled = false;
-    fetchManagedLedModels().then((list) => {
-      if (!cancelled) {
-        setModels(list);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setPage(0);
+    setStatusFilter("");
+    setSearchInput("");
+    setDebouncedSearch("");
+  }, [model.modelId]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -839,15 +963,10 @@ function LedInstancesSection() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    const parsedModelId = modelId ? Number(modelId) : undefined;
-
     fetchLedInstances({
       page,
       size: PAGE_SIZE,
-      modelId:
-        parsedModelId && Number.isFinite(parsedModelId)
-          ? parsedModelId
-          : undefined,
+      modelId: model.modelId,
       status: statusFilter || undefined,
       search: debouncedSearch || undefined,
     })
@@ -875,12 +994,11 @@ function LedInstancesSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, modelId, statusFilter, debouncedSearch, reloadKey]);
+  }, [page, model.modelId, statusFilter, debouncedSearch, reloadKey, externalReloadKey]);
 
   const handleReset = () => {
     setSearchInput("");
     setDebouncedSearch("");
-    setModelId("");
     setStatusFilter("");
     setPage(0);
   };
@@ -899,7 +1017,7 @@ function LedInstancesSection() {
   return (
     <>
       {/* Filter bar */}
-      <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-[1fr_200px_190px_auto_auto]">
+      <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-[1fr_210px_auto_auto]">
         <label className="flex items-center gap-2 border-2 border-gray-200 px-3 py-2 text-sm">
           <Search size={15} className="shrink-0 text-text-muted" />
           <input
@@ -909,23 +1027,6 @@ function LedInstancesSection() {
             placeholder="Tìm Serial Number hoặc địa chỉ MAC..."
           />
         </label>
-
-        <select
-          value={modelId}
-          onChange={(event) => {
-            setModelId(event.target.value);
-            setPage(0);
-          }}
-          aria-label="Lọc theo model LED"
-          className="border-2 border-gray-200 px-3 py-2 text-sm"
-        >
-          <option value="">Tất cả model LED</option>
-          {models.map((model) => (
-            <option key={model.modelId} value={String(model.modelId)}>
-              {model.modelName}
-            </option>
-          ))}
-        </select>
 
         <select
           value={statusFilter}
@@ -1066,9 +1167,6 @@ function LedInstancesSection() {
                       </p>
                       <p className="text-[11px] text-text-muted">
                         #{row.instanceId}
-                        {row.hardwareRevision
-                          ? ` · ${row.hardwareRevision}`
-                          : ""}
                       </p>
                     </td>
 
@@ -1162,11 +1260,21 @@ function LedInstancesSection() {
                 >
                   <Boxes size={32} className="mx-auto mb-2 text-primary-dark" />
                   <p className="font-semibold text-gray-800">
-                    Không tìm thấy thiết bị LED vật lý nào.
+                    Chưa có thiết bị LED vật lý nào cho mẫu {model.modelName}.
                   </p>
                   <p className="mt-1 text-xs">
-                    Thử thay đổi bộ lọc model, trạng thái hoặc từ khóa tìm kiếm.
+                    Thử thay đổi bộ lọc trạng thái / từ khóa hoặc nhập kho thiết bị (Serial/MAC) mới.
                   </p>
+                  {canManageCatalog && model.status !== LedModelItem.status.DEPRECATED && (
+                    <button
+                      type="button"
+                      onClick={onOpenStockIn}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border-2 border-black bg-primary px-3.5 py-2 text-xs font-black text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:bg-primary/90"
+                    >
+                      <PackagePlus size={14} />
+                      Nhập kho thiết bị ngay
+                    </button>
+                  )}
                 </td>
               </tr>
             )}
@@ -1458,10 +1566,6 @@ function LedInstanceDetailModal({
                 <InfoField label="Instance ID" value={`#${detail.instanceId}`} />
                 <InfoField label="Serial Number" value={detail.serialNumber} />
                 <InfoField label="Địa chỉ MAC" value={detail.macAddress} />
-                <InfoField
-                  label="Phiên bản PCB"
-                  value={detail.hardwareRevision || "—"}
-                />
                 <InfoField
                   label="Firmware hiện tại"
                   value={

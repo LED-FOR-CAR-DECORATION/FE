@@ -32,6 +32,13 @@ import { formatPrice } from "@/lib/currency";
 const PRODUCTS_PER_PAGE = 12;
 const ALL_PRODUCT_TYPES: ProductType[] = ["LED_MODEL", "CHARACTER", "BUNDLE", "SUBSCRIPTION"];
 
+function scrollToCatalog(animate = true) {
+  document.getElementById("storefront-catalog")?.scrollIntoView({
+    behavior: animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "smooth" : "instant",
+    block: "start",
+  });
+}
+
 const HERO_SLIDES = [
   {
     id: "mirage",
@@ -84,13 +91,14 @@ function HeroSlider({ onExplore }: { onExplore: () => void }) {
     <section
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      className="neo-box-no-hover relative mb-6 overflow-hidden bg-white p-6 sm:p-8 lg:p-10"
+      className="relative flex min-h-[calc(100svh-106px)] flex-col overflow-hidden border-b-2 border-black bg-white px-4 py-8 sm:py-10 lg:px-8"
       aria-roledescription="carousel"
       aria-label="Khuyến mãi nổi bật"
     >
-      <div className="flex flex-col-reverse justify-between gap-6 md:flex-row md:items-center">
+      <div className="mx-auto flex w-full max-w-[1256px] flex-1 flex-col">
+      <div className="flex flex-1 flex-col-reverse justify-center gap-8 md:flex-row md:items-center md:justify-between lg:gap-14">
         {/* Content */}
-        <div className="relative z-10 max-w-xl">
+        <div className="relative z-10 max-w-2xl">
           <div className="mb-3 flex items-center gap-2">
             <span className={`border-2 border-black ${slide.badgeBg} px-3 py-1 text-xs font-black uppercase tracking-wider text-black shadow-[2px_2px_0_0_#000]`}>
               {slide.tag}
@@ -100,11 +108,11 @@ function HeroSlider({ onExplore }: { onExplore: () => void }) {
             </span>
           </div>
 
-          <h1 className="text-2xl font-black uppercase leading-tight tracking-tight text-black sm:text-3xl lg:text-4xl">
+          <h1 className="text-3xl font-black uppercase leading-tight tracking-tight text-black sm:text-4xl lg:text-6xl">
             {slide.title}
           </h1>
 
-          <p className="mt-3 text-sm font-medium leading-relaxed text-text-muted">
+          <p className="mt-5 max-w-xl text-sm font-medium leading-relaxed text-text-muted sm:text-base">
             {slide.desc}
           </p>
 
@@ -128,7 +136,7 @@ function HeroSlider({ onExplore }: { onExplore: () => void }) {
 
         {/* Visual Card */}
         <div className="flex shrink-0 items-center justify-center">
-          <div className={`relative flex h-36 w-36 items-center justify-center border-2 border-black ${slide.accentBg} shadow-[4px_4px_0_0_#000] sm:h-44 sm:w-44 lg:h-52 lg:w-52`}>
+          <div className={`relative flex h-36 w-36 items-center justify-center border-2 border-black ${slide.accentBg} shadow-[4px_4px_0_0_#000] sm:h-44 sm:w-44 md:h-52 md:w-52 lg:h-72 lg:w-72`}>
             <span className="text-6xl select-none sm:text-7xl lg:text-8xl" aria-hidden="true">
               {slide.emoji}
             </span>
@@ -180,6 +188,7 @@ function HeroSlider({ onExplore }: { onExplore: () => void }) {
             <ChevronRight size={16} />
           </button>
         </div>
+      </div>
       </div>
     </section>
   );
@@ -281,6 +290,10 @@ function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeSearchQuery = searchParams.get("search")?.trim() ?? "";
+
+  useEffect(() => {
+    if (activeSearchQuery) scrollToCatalog(false);
+  }, [activeSearchQuery]);
 
   const { addItem } = useCart();
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -415,7 +428,7 @@ function HomeContent() {
     setPage(clampedPage);
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        scrollToCatalog();
       });
     }
   };
@@ -447,8 +460,15 @@ function HomeContent() {
   return (
     <>
       <Header />
-      <main className="flex-1 bg-background py-8 text-text-main">
-        <div className="mx-auto w-full max-w-[1320px] px-4 lg:px-8">
+      <main className="flex-1 bg-background text-text-main">
+        <HeroSlider
+          onExplore={() => {
+            setActiveCategory("all");
+            setSelectedTypes(ALL_PRODUCT_TYPES);
+            scrollToCatalog();
+          }}
+        />
+        <section id="storefront-catalog" aria-label="Cửa hàng sản phẩm" className="mx-auto w-full max-w-[1320px] scroll-mt-32 px-4 py-8 lg:px-8">
           {/* Breadcrumb */}
           <div className="mb-6 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text-muted">
             <Link href="/" className="cursor-pointer hover:text-primary-ink hover:underline">
@@ -658,14 +678,6 @@ function HomeContent() {
 
             {/* ── Main Catalog Column ── */}
             <div>
-              {/* Hero Slider */}
-              <HeroSlider
-                onExplore={() => {
-                  setActiveCategory("all");
-                  setSelectedTypes(ALL_PRODUCT_TYPES);
-                }}
-              />
-
               {/* Catalog Top bar (Title & Sort) */}
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-3">
                 <div className="flex items-center gap-2">
@@ -793,7 +805,7 @@ function HomeContent() {
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* ── Toast Notification (Undo/Feedback per §3.7) ── */}
         {toastNotice && (

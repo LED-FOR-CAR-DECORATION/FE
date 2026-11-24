@@ -1,22 +1,26 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowLeft,
   Boxes,
   Check,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
   Copy,
+  Cpu,
   Edit3,
+  ExternalLink,
   Eye,
-  FileSpreadsheet,
   List,
   Loader2,
+  Lock,
   PackageCheck,
+  PackagePlus,
   Plus,
   Printer,
   QrCode,
@@ -24,44 +28,35 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
-  Trash2,
-  Upload,
+  ShieldOff,
+  Store,
   X,
 } from "lucide-react";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
-  getAvailableStock,
-  getInventoryStatus,
-  INVENTORY_IMPORTS,
-  LED_INVENTORY,
-  type InventoryImportRecord,
-  type InventoryStatus,
-  type LedInventoryItem,
-} from "@/features/product/inventory";
-import { useOrders } from "@/features/order/context/OrderContext";
+  fetchManagedStoreProducts,
+  type ManagedStoreProductItem,
+} from "@/lib/api/products";
+import StatusBadge from "@/features/store-listing/components/StatusBadge";
 import {
   fetchLedInstanceDetail,
   fetchLedInstances,
-  fetchManagedLedModels,
   formatLedInventoryError,
   LedInstanceDetailResponse,
   LedInstanceFilterRequest,
   LedInstanceItem,
+  LedModelItem,
   ModelInfo,
-  type LedModelItem,
   type PaginationMeta,
 } from "@/lib/api/ledInstances";
-
-const STATUS_LABEL: Record<InventoryStatus, string> = {
-  "In stock": "Còn hàng",
-  "Low stock": "Sắp hết hàng",
-  "Out of stock": "Hết hàng",
-};
-
-const STATUS_CLASS: Record<InventoryStatus, string> = {
-  "In stock": "border-green-200 bg-green-50 text-green-700",
-  "Low stock": "border-amber-200 bg-amber-50 text-amber-700",
-  "Out of stock": "border-red-200 bg-red-50 text-red-700",
-};
+import {
+  fetchLedModelsPage,
+  formatLedModelError,
+  type ManagedLedModelItem,
+} from "@/lib/api/ledModels";
+import LedModelFormModal from "@/features/product/components/LedModelFormModal";
+import DeprecateLedModelModal from "@/features/product/components/DeprecateLedModelModal";
+import StockInLedInstancesModal from "@/features/product/components/StockInLedInstancesModal";
 
 type InstanceStatusValue =
   | LedInstanceItem.status
@@ -115,13 +110,16 @@ const WARRANTY_STATUS_CONFIG: Record<
 const MODEL_STATUS_LABEL: Record<ModelInfo.status, string> = {
   ACTIVE: "Đang kinh doanh",
   OUT_OF_STOCK: "Hết hàng",
-  DEPRECATED: "Ngừng sản xuất",
+  DEPRECATED: "Ngừng kinh doanh",
 };
 
-type SortOption = "name" | "stock" | "available";
+const LED_MODEL_STATUS_STYLE: Record<LedModelItem.status, string> = {
+  ACTIVE: "border-green-200 bg-green-50 text-green-700",
+  OUT_OF_STOCK: "border-amber-200 bg-amber-50 text-amber-800",
+  DEPRECATED: "border-gray-300 bg-gray-100 text-gray-600",
+};
+
 const PAGE_SIZE = 10;
-const INVENTORY_STORAGE_KEY = "mirage_led_inventory_v1";
-const INVENTORY_IMPORTS_STORAGE_KEY = "mirage_led_inventory_imports_v1";
 
 function formatDateTime(value?: string | null, includeTime = true): string {
   if (!value) return "—";
@@ -173,255 +171,135 @@ function escapeHtml(text: string): string {
 }
 
 export default function InventoryPage() {
-  const [activeTab, setActiveTab] = useState<"models" | "instances">("models");
-  const [inventoryItems, setInventoryItems] =
-    useState<LedInventoryItem[]>(LED_INVENTORY);
-  const [importRecords, setImportRecords] =
-    useState<InventoryImportRecord[]>(INVENTORY_IMPORTS);
-  const [storageReady, setStorageReady] = useState(false);
+  const { user } = useAuth();
+  const canManageCatalog = user?.role === "ADMIN" || user?.role === "MANAGER";
 
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<InventoryStatus | "All">("All");
-  const [sort, setSort] = useState<SortOption>("name");
-  const [page, setPage] = useState(1);
-  const [fileName, setFileName] = useState("");
+  // Unified Master -> Detail state: null = LED models list, non-null = instances of that LED model
+  const [selectedModel, setSelectedModel] = useState<ManagedLedModelItem | null>(null);
+  const [instanceReloadKey, setInstanceReloadKey] = useState(0);
+
+  // DEV-01 Paginated LED Models state
+  const [models, setModels] = useState<ManagedLedModelItem[]>([]);
+  const [meta, setMeta] = useState<PaginationMeta>({
+    page: 0,
+    size: PAGE_SIZE,
+    totalElements: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrevious: false,
+  });
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+
+  // Summary metrics across full catalog (up to 100 models)
+  const [summaryStats, setSummaryStats] = useState({
+    totalStock: 0,
+    totalModels: 0,
+    lowStockCount: 0,
+    activeCount: 0,
+    linkedProductCount: 0,
+  });
+
+  // Filters
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState<LedModelItem.status | "ALL">("ALL");
+  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [page, setPage] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Modals (DEV-02, DEV-03, DEV-04 & Stock-in instances)
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<ManagedLedModelItem | null>(null);
+  const [deprecatingModel, setDeprecatingModel] = useState<ManagedLedModelItem | null>(null);
+  const [stockInModel, setStockInModel] = useState<ManagedLedModelItem | null>(null);
+  const [viewingProductId, setViewingProductId] = useState<number | null>(null);
+
   const [notice, setNotice] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
-  const [importModalOpen, setImportModalOpen] = useState(false);
-  const [adjustingItem, setAdjustingItem] = useState<LedInventoryItem | null>(
-    null,
-  );
-  const { orders } = useOrders();
 
-  // Load persisted inventory & import history on mount (client-only to avoid hydration mismatch)
   useEffect(() => {
-    try {
-      const savedInventory = window.localStorage.getItem(INVENTORY_STORAGE_KEY);
-      if (savedInventory) {
-        const parsed = JSON.parse(savedInventory);
-        if (Array.isArray(parsed)) {
-          setInventoryItems(parsed as LedInventoryItem[]);
-        }
-      }
-      const savedImports = window.localStorage.getItem(
-        INVENTORY_IMPORTS_STORAGE_KEY,
-      );
-      if (savedImports) {
-        const parsed = JSON.parse(savedImports);
-        if (Array.isArray(parsed)) {
-          setImportRecords(parsed as InventoryImportRecord[]);
-        }
-      }
-    } catch {
-      // Keep default seed data on storage read error
-    } finally {
-      setStorageReady(true);
-    }
+    const timer = setTimeout(() => {
+      setDebouncedKeyword(searchInput.trim());
+      setPage(0);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Load summary metrics
+  useEffect(() => {
+    let cancelled = false;
+    fetchLedModelsPage({ page: 0, size: 100 })
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.items;
+        const nonDeprecated = list.filter((m) => m.status !== LedModelItem.status.DEPRECATED);
+        setSummaryStats({
+          totalStock: nonDeprecated.reduce((sum, m) => sum + (m.stockQuantity ?? 0), 0),
+          totalModels: res.meta.totalElements,
+          lowStockCount: nonDeprecated.filter((m) => m.isLowStock).length,
+          activeCount: list.filter((m) => m.status === LedModelItem.status.ACTIVE).length,
+          linkedProductCount: list.filter((m) => m.productId != null).length,
+        });
+        setSelectedModel((prev) => {
+          if (!prev) return null;
+          return list.find((m) => m.modelId === prev.modelId) ?? prev;
+        });
+      })
+      .catch(() => {
+        // Summary stays last known values
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  // Load paginated models (DEV-01)
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingModels(true);
+    setModelsError(null);
+
+    fetchLedModelsPage({
+      page,
+      size: PAGE_SIZE,
+      keyword: debouncedKeyword || undefined,
+      status: statusFilter === "ALL" ? undefined : statusFilter,
+      lowStockOnly: lowStockOnly ? true : undefined,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setModels(res.items);
+        setMeta(res.meta);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setModelsError(
+          formatLedModelError(err, "Không thể tải danh sách mẫu LED từ máy chủ."),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingModels(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedKeyword, statusFilter, lowStockOnly, reloadKey]);
+
+  const triggerReload = useCallback(() => {
+    setReloadKey((k) => k + 1);
+    setInstanceReloadKey((k) => k + 1);
   }, []);
 
-  useEffect(() => {
-    if (!storageReady) return;
-    try {
-      window.localStorage.setItem(
-        INVENTORY_STORAGE_KEY,
-        JSON.stringify(inventoryItems),
-      );
-    } catch {
-      // Ignore storage quota errors
-    }
-  }, [inventoryItems, storageReady]);
-
-  useEffect(() => {
-    if (!storageReady) return;
-    try {
-      window.localStorage.setItem(
-        INVENTORY_IMPORTS_STORAGE_KEY,
-        JSON.stringify(importRecords),
-      );
-    } catch {
-      // Ignore storage quota errors
-    }
-  }, [importRecords, storageReady]);
-
-  const filteredItems = useMemo(
-    () =>
-      inventoryItems
-        .filter((item) => {
-          const normalized = query.trim().toLowerCase();
-          const matchesQuery =
-            !normalized ||
-            [item.name, item.modelCode, item.description].some((value) =>
-              value.toLowerCase().includes(normalized),
-            );
-          return (
-            matchesQuery &&
-            (status === "All" || getInventoryStatus(item) === status)
-          );
-        })
-        .sort((first, second) =>
-          sort === "name"
-            ? first.name.localeCompare(second.name)
-            : sort === "stock"
-              ? second.stock - first.stock
-              : getAvailableStock(second) - getAvailableStock(first),
-        ),
-    [inventoryItems, query, sort, status],
-  );
-  const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const paginatedItems = filteredItems.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, sort, status]);
-
-  const totalStock = inventoryItems.reduce((sum, item) => sum + item.stock, 0);
-  const lowStockCount = inventoryItems.filter(
-    (item) => getInventoryStatus(item) === "Low stock",
-  ).length;
-  const soldThisMonth = orders
-    .filter(
-      (order) =>
-        order.createdAt.slice(0, 7) === new Date().toISOString().slice(0, 7),
-    )
-    .reduce(
-      (sum, order) =>
-        sum +
-        order.items
-          .filter((item) => item.productType === "LED_MODEL")
-          .reduce((count, item) => count + item.quantity, 0),
-      0,
-    );
-
   const resetFilters = () => {
-    setQuery("");
-    setStatus("All");
-    setSort("name");
-    setPage(1);
-  };
-
-  const handleImportExistingStock = (
-    productId: string,
-    quantity: number,
-    recordName: string,
-  ) => {
-    const now = new Date().toISOString();
-    let targetName = "";
-    setInventoryItems((prev) =>
-      prev.map((item) => {
-        if (item.productId !== productId) return item;
-        targetName = item.name;
-        return {
-          ...item,
-          stock: item.stock + quantity,
-          lastUpdated: now,
-        };
-      }),
-    );
-    setImportRecords((prev) => [
-      {
-        id: `IMP-${Date.now().toString(36).toUpperCase()}`,
-        fileName: recordName,
-        importedAt: now,
-        itemCount: quantity,
-        status: "Completed",
-      },
-      ...prev,
-    ]);
-    setNotice({
-      type: "success",
-      message: `Đã nhập thêm ${quantity} sản phẩm vào "${targetName || productId}".`,
-    });
-  };
-
-  const handleCreateNewModelInWarehouse = (newModel: {
-    modelCode: string;
-    name: string;
-    description: string;
-    stock: number;
-    minimumStock: number;
-    unitPrice: number;
-  }) => {
-    const now = new Date().toISOString();
-    const created: LedInventoryItem = {
-      productId: `LED-${Date.now().toString(36).toUpperCase()}`,
-      modelCode: newModel.modelCode,
-      name: newModel.name,
-      description: newModel.description,
-      stock: newModel.stock,
-      reserved: 0,
-      minimumStock: newModel.minimumStock,
-      unitPrice: newModel.unitPrice,
-      lastUpdated: now,
-    };
-    setInventoryItems((prev) => [created, ...prev]);
-    setImportRecords((prev) => [
-      {
-        id: `IMP-${Date.now().toString(36).toUpperCase()}`,
-        fileName: `Model mới · ${created.modelCode}`,
-        importedAt: now,
-        itemCount: created.stock,
-        status: "Completed",
-      },
-      ...prev,
-    ]);
-    setNotice({
-      type: "success",
-      message: `Đã nhập model LED mới "${created.name}" (${created.modelCode}) với ${created.stock} sản phẩm.`,
-    });
-  };
-
-  const handleAdjustStock = (
-    productId: string,
-    nextStock: number,
-    nextMinimumStock: number,
-  ) => {
-    const now = new Date().toISOString();
-    const target = inventoryItems.find((item) => item.productId === productId);
-    setInventoryItems((prev) =>
-      prev.map((item) =>
-        item.productId === productId
-          ? {
-              ...item,
-              stock: nextStock,
-              minimumStock: nextMinimumStock,
-              lastUpdated: now,
-            }
-          : item,
-      ),
-    );
-    setAdjustingItem(null);
-    setNotice({
-      type: "success",
-      message: `Đã cập nhật tồn kho "${target?.name ?? productId}" thành ${nextStock} sản phẩm (ngưỡng cảnh báo: ${nextMinimumStock}).`,
-    });
-  };
-
-  const handleDeleteModel = (item: LedInventoryItem) => {
-    if (item.reserved > 0) {
-      setNotice({
-        type: "error",
-        message: `Không thể xóa model "${item.name}" vì đang có ${item.reserved} sản phẩm được đặt giữ cho đơn hàng.`,
-      });
-      return;
-    }
-    const confirmed = window.confirm(
-      `Bạn xác nhận muốn xóa model "${item.name}" (${item.modelCode}) khỏi kho LED?`,
-    );
-    if (!confirmed) return;
-
-    setInventoryItems((prev) =>
-      prev.filter((entry) => entry.productId !== item.productId),
-    );
-    setNotice({
-      type: "success",
-      message: `Đã xóa model "${item.name}" (${item.modelCode}) khỏi kho LED.`,
-    });
+    setSearchInput("");
+    setDebouncedKeyword("");
+    setStatusFilter("ALL");
+    setLowStockOnly(false);
+    setPage(0);
   };
 
   return (
@@ -430,19 +308,42 @@ export default function InventoryPage() {
         <div>
           <h1 className="text-2xl font-black">Quản lý kho LED</h1>
           <p className="mt-1 text-sm font-medium text-text-muted">
-            Theo dõi tồn kho, nhập hàng mới, điều chỉnh số lượng và xóa model LED trong kho
+            Quản lý danh mục mẫu LED phần cứng, tồn kho, thông số kỹ thuật và theo dõi từng thiết bị trong kho.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setImportModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg border-2 border-black bg-primary px-4 py-2.5 text-sm font-black shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
-        >
-          <Plus size={16} />
-          Nhập kho LED
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={triggerReload}
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-black bg-white px-3.5 py-2.5 text-sm font-bold shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-gray-50"
+          >
+            <RefreshCw size={15} className={isLoadingModels ? "animate-spin" : ""} />
+            Làm mới
+          </button>
+
+          {canManageCatalog && (
+            <button
+              type="button"
+              onClick={() => setCreateModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-black bg-primary px-4 py-2.5 text-sm font-black shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
+            >
+              <Plus size={16} />
+              Thêm mẫu LED
+            </button>
+          )}
+        </div>
       </header>
+
+      {!canManageCatalog && (
+        <p
+          role="status"
+          className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
+        >
+          <Lock size={15} className="shrink-0" />
+          Chế độ chỉ xem: Chỉ Quản lý hoặc Quản trị viên mới có quyền thêm, cập nhật hoặc ngừng kinh doanh mẫu LED.
+        </p>
+      )}
 
       {notice && (
         <div
@@ -475,94 +376,157 @@ export default function InventoryPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryCard
           icon={<Boxes size={19} />}
-          label="Tổng số lượng tồn kho"
-          value={totalStock}
-          helper="Số lượng sản phẩm hiện có"
+          label="Tổng tồn kho khả dụng"
+          value={summaryStats.totalStock}
+          helper="Không tính mẫu đã ngừng kinh doanh"
         />
         <SummaryCard
           icon={<List size={19} />}
-          label="Số model LED"
-          value={inventoryItems.length}
-          helper="Đang quản lý trong kho"
+          label="Tổng mẫu LED"
+          value={summaryStats.totalModels}
+          helper={`${summaryStats.linkedProductCount} mẫu đã gắn sản phẩm Cửa hàng`}
         />
         <SummaryCard
           icon={<AlertTriangle size={19} />}
-          label="Model sắp hết hàng"
-          value={lowStockCount}
-          helper="Cần kiểm tra"
+          label="Mẫu LED sắp hết hàng"
+          value={summaryStats.lowStockCount}
+          helper="Tồn kho dưới 5 chiếc"
           tone="warning"
         />
         <SummaryCard
           icon={<PackageCheck size={19} />}
-          label="LED đã bán (tháng này)"
-          value={soldThisMonth}
-          helper="Theo đơn hàng đã ghi nhận"
+          label="Đang kinh doanh"
+          value={summaryStats.activeCount}
+          helper="Sẵn sàng cấp phát & bày bán"
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,.8fr)]">
+      <div className="w-full">
         <section className="neo-box-no-hover overflow-hidden bg-white">
-          <div className="flex flex-wrap items-center gap-1 border-b-2 border-primary-light px-4 pt-3">
-            <button
-              type="button"
-              onClick={() => setActiveTab("models")}
-              className={`border-b-2 px-4 py-3 text-sm font-bold ${
-                activeTab === "models"
-                  ? "border-primary-dark text-primary-dark"
-                  : "border-transparent text-text-muted"
-              }`}
-            >
-              <List size={15} className="mr-1 inline" /> Danh sách theo model
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("instances")}
-              className={`border-b-2 px-4 py-3 text-sm font-bold ${
-                activeTab === "instances"
-                  ? "border-primary-dark text-primary-dark"
-                  : "border-transparent text-text-muted"
-              }`}
-            >
-              <Boxes size={15} className="mr-1 inline" /> Danh sách thiết bị
-              (instance)
-            </button>
-          </div>
+          {selectedModel ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-primary-light bg-[#f9fdfa] px-5 py-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModel(null)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border-2 border-black bg-white px-3 py-1.5 text-xs font-black text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/20"
+                  >
+                    <ArrowLeft size={14} />
+                    Danh sách mẫu LED
+                  </button>
 
-          {activeTab === "instances" ? (
-            <LedInstancesSection />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-black text-gray-900">
+                        {selectedModel.modelName}
+                      </h2>
+                      <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-gray-700">
+                        #{selectedModel.modelId}
+                      </span>
+                      {selectedModel.spec?.widthPx && selectedModel.spec?.heightPx && (
+                        <span className="rounded border border-gray-200 bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-gray-700">
+                          {selectedModel.spec.widthPx}×{selectedModel.spec.heightPx} px
+                        </span>
+                      )}
+                      <span
+                        className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
+                          LED_MODEL_STATUS_STYLE[selectedModel.status]
+                        }`}
+                      >
+                        {MODEL_STATUS_LABEL[selectedModel.status] ?? selectedModel.status}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-text-muted">
+                      Tồn kho khả dụng:{" "}
+                      <strong className="text-gray-900">{selectedModel.stockQuantity} thiết bị</strong>{" "}
+                      · Xem toàn bộ thiết bị (Serial/MAC) thuộc mẫu LED này và nhập kho kèm mã thiết bị.
+                    </p>
+                  </div>
+                </div>
+
+                {canManageCatalog && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedModel.status !== LedModelItem.status.DEPRECATED && (
+                      <button
+                        type="button"
+                        onClick={() => setStockInModel(selectedModel)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border-2 border-black bg-primary px-3.5 py-2 text-xs font-black text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90"
+                      >
+                        <PackagePlus size={15} />
+                        Nhập kho thiết bị
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditingModel(selectedModel)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-800 hover:bg-gray-50"
+                    >
+                      <Edit3 size={13} />
+                      Cập nhật mẫu
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <LedInstancesSection
+                model={selectedModel}
+                externalReloadKey={instanceReloadKey}
+                canManageCatalog={canManageCatalog}
+                onOpenStockIn={() => setStockInModel(selectedModel)}
+              />
+            </>
           ) : (
             <>
-              <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-[1fr_180px_180px_auto]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-primary-light px-5 py-3.5">
+                <div>
+                  <h2 className="text-sm font-black uppercase tracking-wide text-primary-dark">
+                    Danh sách mẫu LED trong kho
+                  </h2>
+                  <p className="text-xs text-text-muted">
+                    Bấm vào một mẫu LED để xem danh sách thiết bị (Serial/MAC) và nhập kho thiết bị mới.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-[1fr_210px_auto_auto]">
                 <label className="flex items-center gap-2 border-2 border-gray-200 px-3 py-2 text-sm">
                   <Search size={15} className="text-text-muted" />
                   <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
                     className="w-full outline-none"
-                    placeholder="Tìm model, mã model..."
+                    placeholder="Tìm theo tên mẫu LED..."
                   />
                 </label>
+
                 <select
-                  value={status}
-                  onChange={(event) =>
-                    setStatus(event.target.value as InventoryStatus | "All")
-                  }
-                  className="border-2 border-gray-200 px-3 py-2 text-sm"
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value as LedModelItem.status | "ALL");
+                    setPage(0);
+                  }}
+                  className="border-2 border-gray-200 px-3 py-2 text-sm font-medium"
                 >
-                  <option value="All">Trạng thái: Tất cả</option>
-                  <option value="In stock">Còn hàng</option>
-                  <option value="Low stock">Sắp hết hàng</option>
-                  <option value="Out of stock">Hết hàng</option>
+                  <option value="ALL">Trạng thái: Tất cả</option>
+                  <option value={LedModelItem.status.ACTIVE}>Đang kinh doanh</option>
+                  <option value={LedModelItem.status.OUT_OF_STOCK}>Hết hàng</option>
+                  <option value={LedModelItem.status.DEPRECATED}>Ngừng kinh doanh</option>
                 </select>
-                <select
-                  value={sort}
-                  onChange={(event) => setSort(event.target.value as SortOption)}
-                  className="border-2 border-gray-200 px-3 py-2 text-sm"
-                >
-                  <option value="name">Sắp xếp: Tên model (A - Z)</option>
-                  <option value="stock">Tồn kho cao nhất</option>
-                  <option value="available">Khả dụng cao nhất</option>
-                </select>
+
+                <label className="inline-flex cursor-pointer items-center gap-2 border-2 border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-800">
+                  <input
+                    type="checkbox"
+                    checked={lowStockOnly}
+                    onChange={(e) => {
+                      setLowStockOnly(e.target.checked);
+                      setPage(0);
+                    }}
+                    className="h-3.5 w-3.5 accent-[#439660]"
+                  />
+                  Chỉ mẫu sắp hết (&lt; 5)
+                </label>
+
                 <button
                   type="button"
                   onClick={resetFilters}
@@ -571,162 +535,256 @@ export default function InventoryPage() {
                   <RotateCcw size={14} /> Đặt lại
                 </button>
               </div>
+
+              {modelsError && (
+                <div className="m-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+                  <span className="flex items-center gap-2">
+                    <AlertTriangle size={16} />
+                    {modelsError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={triggerReload}
+                    className="rounded border border-red-300 bg-white px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-100"
+                  >
+                    Thử lại
+                  </button>
+                </div>
+              )}
+
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] text-sm">
-                  <thead className="border-b border-gray-200 bg-gray-50">
+                <table className="w-full min-w-[1040px] table-fixed text-sm">
+                  <colgroup>
+                    <col className="w-[27%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[27%]" />
+                  </colgroup>
+                  <thead className="border-b border-gray-200 bg-gray-50/90 text-gray-700">
                     <tr>
-                      {[
-                        "Model",
-                        "Mã model",
-                        "Tồn kho",
-                        "Đã đặt",
-                        "Khả dụng",
-                        "Ngưỡng tối thiểu",
-                        "Trạng thái",
-                        "Thao tác",
-                      ].map((heading) => (
-                        <th
-                          key={heading}
-                          className={`whitespace-nowrap px-4 py-3 text-[11px] font-black uppercase ${
-                            heading === "Thao tác" ? "text-right" : "text-left"
-                          }`}
-                        >
-                          {heading}
-                        </th>
-                      ))}
+                      <th className="px-5 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                        Mẫu LED &amp; Thông số
+                      </th>
+                      <th className="px-3 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                        Kích thước
+                      </th>
+                      <th className="px-2 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                        Tồn kho
+                      </th>
+                      <th className="px-3 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                        Sản phẩm liên kết
+                      </th>
+                      <th className="px-2 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                        Trạng thái
+                      </th>
+                      <th className="px-4 py-3.5 text-right text-[11px] font-black uppercase tracking-wider">
+                        Thao tác
+                      </th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {paginatedItems.map((item) => {
-                      const itemStatus = getInventoryStatus(item);
-                      return (
-                        <tr
-                          key={item.productId}
-                          className="border-b border-gray-100 hover:bg-green-50/50"
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-gray-200 bg-gray-50">
-                                {item.previewUrl ? (
-                                  <Image
-                                    src={item.previewUrl}
-                                    alt=""
-                                    width={40}
-                                    height={40}
-                                    className="h-full w-full object-contain"
-                                  />
-                                ) : (
-                                  <Boxes
-                                    size={17}
-                                    className="text-text-muted"
-                                  />
-                                )}
-                              </div>
-                              <div>
-                                <p className="font-bold">{item.name}</p>
-                                <p className="text-[11px] text-text-muted">
-                                  {item.description || "Không có mô tả"}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-xs font-bold text-text-muted">
-                            {item.modelCode}
-                          </td>
-                          <td className="px-4 py-3 font-black">{item.stock}</td>
-                          <td className="px-4 py-3">{item.reserved}</td>
-                          <td className="px-4 py-3 font-black text-primary-dark">
-                            {getAvailableStock(item)}
-                          </td>
-                          <td className="px-4 py-3">{item.minimumStock}</td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-bold ${STATUS_CLASS[itemStatus]}`}
-                            >
-                              {STATUS_LABEL[itemStatus]}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="inline-flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setAdjustingItem(item)}
-                                className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold hover:bg-primary/20"
-                              >
-                                <Edit3 size={13} />
-                                Chỉnh số lượng
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteModel(item)}
-                                className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 size={13} />
-                                Xóa
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {filteredItems.length === 0 && (
+                  <tbody className="divide-y divide-gray-100">
+                    {isLoadingModels ? (
                       <tr>
-                        <td
-                          colSpan={8}
-                          className="px-4 py-12 text-center font-semibold text-text-muted"
-                        >
-                          Không tìm thấy model LED phù hợp.
+                        <td colSpan={6} className="px-4 py-12 text-center text-sm text-text-muted">
+                          <span className="inline-flex items-center gap-2 font-semibold">
+                            <Loader2 size={18} className="animate-spin text-primary-dark" />
+                            Đang tải danh sách mẫu LED từ máy chủ...
+                          </span>
                         </td>
                       </tr>
+                    ) : models.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-4 py-12 text-center font-semibold text-text-muted"
+                        >
+                          Không tìm thấy mẫu LED phù hợp.
+                        </td>
+                      </tr>
+                    ) : (
+                      models.map((item) => {
+                        const width = item.spec?.widthPx;
+                        const height = item.spec?.heightPx;
+                        const isDeprecated = item.status === LedModelItem.status.DEPRECATED;
+                        const specPreview =
+                          item.spec?.attributes
+                            ?.slice(0, 2)
+                            .map((a) => `${a.label}: ${a.value}`)
+                            .join(" • ") ?? "";
+
+                        return (
+                          <tr
+                            key={item.modelId}
+                            onClick={() => setSelectedModel(item)}
+                            className={`cursor-pointer transition-colors hover:bg-green-50/60 ${
+                              isDeprecated ? "bg-gray-50/60 opacity-80" : ""
+                            }`}
+                          >
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-start gap-3">
+                                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-gray-200 bg-primary/15 text-primary-dark">
+                                  <Cpu size={18} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="truncate font-bold text-gray-900 text-sm leading-snug">
+                                      {item.modelName}
+                                    </p>
+                                    <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-gray-700">
+                                      #{item.modelId}
+                                    </span>
+                                  </div>
+                                  {specPreview ? (
+                                    <p className="mt-0.5 truncate text-[11px] text-text-muted">
+                                      {specPreview}
+                                    </p>
+                                  ) : (
+                                    <p className="mt-0.5 text-[11px] text-text-muted">
+                                      Chưa khai báo thông số phụ
+                                    </p>
+                                  )}
+                                  <p className="mt-1 text-[11px] font-bold text-primary-dark">
+                                    Bấm để xem thiết bị (Serial) →
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="px-3 py-3.5 text-center">
+                              <span className="inline-block whitespace-nowrap rounded border border-gray-200 bg-gray-100/90 px-2.5 py-1 font-mono text-xs font-bold text-gray-800">
+                                {width && height ? `${width}×${height} px` : "—"}
+                              </span>
+                            </td>
+
+                            <td className="px-2 py-3.5 text-center">
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span
+                                  className={`text-sm font-black ${
+                                    item.stockQuantity === 0
+                                      ? "text-red-600"
+                                      : item.isLowStock
+                                        ? "text-amber-700"
+                                        : "text-gray-900"
+                                  }`}
+                                >
+                                  {item.stockQuantity}
+                                </span>
+                                {item.isLowStock && !isDeprecated && (
+                                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                                    Sắp hết
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td
+                              className="px-3 py-3.5 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {item.productId != null ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingProductId(item.productId!)}
+                                  title={`Xem chi tiết sản phẩm #${item.productId}`}
+                                  aria-label={`Xem chi tiết sản phẩm #${item.productId}`}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100"
+                                >
+                                  <Eye size={15} />
+                                </button>
+                              ) : (
+                                <span className="text-xs font-medium text-gray-400">—</span>
+                              )}
+                            </td>
+
+                            <td className="px-2 py-3.5 text-center">
+                              <span
+                                className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
+                                  LED_MODEL_STATUS_STYLE[item.status]
+                                }`}
+                              >
+                                {MODEL_STATUS_LABEL[item.status] ?? item.status}
+                              </span>
+                            </td>
+
+                            <td
+                              className="px-4 py-3.5 text-right"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                {canManageCatalog && !isDeprecated && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setStockInModel(item)}
+                                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-800 shadow-xs hover:bg-emerald-100"
+                                    title="Nhập kho thiết bị kèm Serial/MAC"
+                                  >
+                                    <PackagePlus size={13} />
+                                    Nhập kho
+                                  </button>
+                                )}
+                                {canManageCatalog && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingModel(item)}
+                                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold shadow-xs hover:bg-primary/20"
+                                    title="Cập nhật tên & thông số kỹ thuật"
+                                  >
+                                    <Edit3 size={13} />
+                                    Cập nhật
+                                  </button>
+                                )}
+                                {canManageCatalog && !isDeprecated && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeprecatingModel(item)}
+                                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-600 shadow-xs hover:bg-red-50"
+                                    title="Ngừng kinh doanh mẫu LED này"
+                                  >
+                                    <ShieldOff size={13} />
+                                    Ngừng KD
+                                  </button>
+                                )}
+                                {!canManageCatalog && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedModel(item)}
+                                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold hover:bg-primary/20"
+                                  >
+                                    <Boxes size={13} />
+                                    Thiết bị
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
               </div>
+
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <p className="text-xs text-text-muted">
-                  Hiển thị{" "}
-                  {filteredItems.length === 0
-                    ? 0
-                    : (currentPage - 1) * PAGE_SIZE + 1}{" "}
-                  - {Math.min(currentPage * PAGE_SIZE, filteredItems.length)} /{" "}
-                  {filteredItems.length} model
+                  Trang {meta.page + 1} / {Math.max(1, meta.totalPages)} · Tổng{" "}
+                  <strong className="text-gray-800">{meta.totalElements}</strong> mẫu LED
                 </p>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() =>
-                      setPage((current) => Math.max(1, current - 1))
-                    }
-                    disabled={currentPage === 1}
+                    onClick={() => setPage((current) => Math.max(0, current - 1))}
+                    disabled={!meta.hasPrevious || isLoadingModels}
                     className="border border-gray-300 p-1.5 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Trang trước"
                   >
                     <ChevronLeft size={16} />
                   </button>
-                  {Array.from(
-                    { length: pageCount },
-                    (_, index) => index + 1,
-                  ).map((pageNumber) => (
-                    <button
-                      key={pageNumber}
-                      type="button"
-                      onClick={() => setPage(pageNumber)}
-                      className={`min-w-8 border px-2 py-1 text-xs font-bold ${
-                        currentPage === pageNumber
-                          ? "border-primary-dark bg-primary/20 text-primary-dark"
-                          : "border-gray-300 hover:bg-primary/10"
-                      }`}
-                      aria-label={`Trang ${pageNumber}`}
-                    >
-                      {pageNumber}
-                    </button>
-                  ))}
                   <button
                     type="button"
-                    onClick={() =>
-                      setPage((current) => Math.min(pageCount, current + 1))
-                    }
-                    disabled={currentPage === pageCount}
+                    onClick={() => setPage((current) => current + 1)}
+                    disabled={!meta.hasNext || isLoadingModels}
                     className="border border-gray-300 p-1.5 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Trang sau"
                   >
@@ -737,99 +795,130 @@ export default function InventoryPage() {
             </>
           )}
         </section>
-
-        <aside className="flex flex-col gap-5">
-          <ImportCard
-            fileName={fileName}
-            models={inventoryItems}
-            onFileChange={setFileName}
-            onConfirmExcelImport={(productId, quantity, importedFile) => {
-              handleImportExistingStock(productId, quantity, importedFile);
-              setFileName("");
-            }}
-          />
-          <section className="neo-box-no-hover bg-white p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet size={17} className="text-primary-dark" />
-                <h2 className="font-black">Lịch sử nhập kho</h2>
-              </div>
-              <span className="text-xs font-bold text-text-muted">
-                {importRecords.length} lượt
-              </span>
-            </div>
-            <div className="flex flex-col gap-3">
-              {importRecords.length === 0 ? (
-                <p className="py-4 text-center text-xs text-text-muted">
-                  Chưa có lượt nhập kho nào được ghi nhận.
-                </p>
-              ) : (
-                importRecords.slice(0, 8).map((record) => (
-                  <div
-                    key={record.id}
-                    className="flex items-center gap-3 border-b border-gray-100 pb-3 last:border-0 last:pb-0"
-                  >
-                    <FileSpreadsheet
-                      size={17}
-                      className="shrink-0 text-primary-dark"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-bold">
-                        {record.fileName}
-                      </p>
-                      <p className="text-[10px] text-text-muted">
-                        +{record.itemCount} thiết bị ·{" "}
-                        {new Date(record.importedAt).toLocaleString("vi-VN")}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
-                        record.status === "Completed"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {record.status === "Completed" ? "Thành công" : "Lỗi"}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        </aside>
       </div>
 
-      {importModalOpen && (
-        <ImportStockModal
-          models={inventoryItems}
-          onClose={() => setImportModalOpen(false)}
-          onImportExisting={(productId, qty, note) => {
-            handleImportExistingStock(productId, qty, note);
-            setImportModalOpen(false);
-          }}
-          onCreateNewModel={(newModel) => {
-            handleCreateNewModelInWarehouse(newModel);
-            setImportModalOpen(false);
+      {/* DEV-02: Tạo mới Mẫu LED */}
+      {createModalOpen && (
+        <LedModelFormModal
+          mode="create"
+          onClose={() => setCreateModalOpen(false)}
+          onSuccess={(created, extra) => {
+            if (extra?.productError) {
+              setNotice({
+                type: "error",
+                message: `Đã tạo mẫu LED "${created.modelName}" (#${created.modelId}), nhưng ${extra.productError}`,
+              });
+            } else if (extra?.linkedProductId) {
+              setNotice({
+                type: "success",
+                message: `Đã tạo mẫu LED "${created.modelName}" (#${created.modelId}) và liên kết sản phẩm Cửa hàng #${extra.linkedProductId} thành công.`,
+              });
+            } else {
+              setNotice({
+                type: "success",
+                message: `Đã đăng ký mẫu LED mới "${created.modelName}" (#${created.modelId}) với tồn kho ${created.stockQuantity}.`,
+              });
+            }
+            setPage(0);
+            triggerReload();
           }}
         />
       )}
 
-      {adjustingItem && (
-        <AdjustQuantityModal
-          item={adjustingItem}
-          onClose={() => setAdjustingItem(null)}
-          onSave={(nextStock, nextMinimum) =>
-            handleAdjustStock(adjustingItem.productId, nextStock, nextMinimum)
-          }
+      {/* DEV-03: Cập nhật Mẫu LED & đồng bộ Sản phẩm */}
+      {editingModel && (
+        <LedModelFormModal
+          mode="edit"
+          initialModel={editingModel}
+          onClose={() => setEditingModel(null)}
+          onSuccess={(updated, extra) => {
+            if (extra?.productError) {
+              setNotice({
+                type: "error",
+                message: `Đã cập nhật mẫu LED "${updated.modelName}" (#${updated.modelId}), nhưng đồng bộ sản phẩm Cửa hàng gặp lỗi: ${extra.productError}`,
+              });
+            } else if (extra?.linkedProductId) {
+              setNotice({
+                type: "success",
+                message: `Đã cập nhật đồng thời mẫu LED "${updated.modelName}" (#${updated.modelId}) và sản phẩm Cửa hàng #${extra.linkedProductId} — tồn kho: ${updated.stockQuantity}.`,
+              });
+            } else {
+              setNotice({
+                type: "success",
+                message: `Đã cập nhật mẫu LED "${updated.modelName}" (#${updated.modelId}) — tồn kho hiện tại: ${updated.stockQuantity}.`,
+              });
+            }
+            triggerReload();
+          }}
+        />
+      )}
+
+      {/* DEV-04: Ngừng kinh doanh Mẫu LED */}
+      {deprecatingModel && (
+        <DeprecateLedModelModal
+          model={deprecatingModel}
+          onClose={() => setDeprecatingModel(null)}
+          onSuccess={(deprecated) => {
+            setNotice({
+              type: "success",
+              message: `Đã ngừng kinh doanh mẫu LED "${deprecated.modelName}" (#${deprecated.modelId})${
+                deprecated.productId != null
+                  ? ` và đồng bộ lưu trữ sản phẩm Cửa hàng #${deprecated.productId}`
+                  : ""
+              }.`,
+            });
+            triggerReload();
+          }}
+        />
+      )}
+
+      {/* Nhập kho thiết bị (Serial & MAC) */}
+      {stockInModel && (
+        <StockInLedInstancesModal
+          model={stockInModel}
+          onClose={() => setStockInModel(null)}
+          onSuccess={(result) => {
+            setNotice({
+              type: "success",
+              message: `Đã nhập kho thành công ${result.importedCount} thiết bị (Serial/MAC) cho mẫu "${result.modelName}" — tồn kho mới: ${result.stockQuantity}.`,
+            });
+            setSelectedModel((prev) =>
+              prev && prev.modelId === result.modelId
+                ? {
+                    ...prev,
+                    stockQuantity: result.stockQuantity,
+                    status: result.modelStatus,
+                    isLowStock: result.stockQuantity < 5,
+                  }
+                : prev,
+            );
+            triggerReload();
+          }}
+        />
+      )}
+
+      {viewingProductId != null && (
+        <LinkedProductDetailModal
+          productId={viewingProductId}
+          onClose={() => setViewingProductId(null)}
         />
       )}
     </div>
   );
 }
 
-function LedInstancesSection() {
+function LedInstancesSection({
+  model,
+  externalReloadKey,
+  canManageCatalog,
+  onOpenStockIn,
+}: {
+  model: ManagedLedModelItem;
+  externalReloadKey: number;
+  canManageCatalog: boolean;
+  onOpenStockIn: () => void;
+}) {
   const [instances, setInstances] = useState<LedInstanceItem[]>([]);
-  const [models, setModels] = useState<LedModelItem[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({
     page: 0,
     size: PAGE_SIZE,
@@ -839,7 +928,6 @@ function LedInstancesSection() {
     hasPrevious: false,
   });
   const [page, setPage] = useState(0);
-  const [modelId, setModelId] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     LedInstanceFilterRequest.status | ""
   >("");
@@ -853,16 +941,11 @@ function LedInstancesSection() {
   );
 
   useEffect(() => {
-    let cancelled = false;
-    fetchManagedLedModels().then((list) => {
-      if (!cancelled) {
-        setModels(list);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setPage(0);
+    setStatusFilter("");
+    setSearchInput("");
+    setDebouncedSearch("");
+  }, [model.modelId]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -880,15 +963,10 @@ function LedInstancesSection() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    const parsedModelId = modelId ? Number(modelId) : undefined;
-
     fetchLedInstances({
       page,
       size: PAGE_SIZE,
-      modelId:
-        parsedModelId && Number.isFinite(parsedModelId)
-          ? parsedModelId
-          : undefined,
+      modelId: model.modelId,
       status: statusFilter || undefined,
       search: debouncedSearch || undefined,
     })
@@ -916,12 +994,11 @@ function LedInstancesSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, modelId, statusFilter, debouncedSearch, reloadKey]);
+  }, [page, model.modelId, statusFilter, debouncedSearch, reloadKey, externalReloadKey]);
 
   const handleReset = () => {
     setSearchInput("");
     setDebouncedSearch("");
-    setModelId("");
     setStatusFilter("");
     setPage(0);
   };
@@ -940,7 +1017,7 @@ function LedInstancesSection() {
   return (
     <>
       {/* Filter bar */}
-      <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-[1fr_200px_190px_auto_auto]">
+      <div className="grid gap-3 border-b border-gray-100 p-4 md:grid-cols-[1fr_210px_auto_auto]">
         <label className="flex items-center gap-2 border-2 border-gray-200 px-3 py-2 text-sm">
           <Search size={15} className="shrink-0 text-text-muted" />
           <input
@@ -950,23 +1027,6 @@ function LedInstancesSection() {
             placeholder="Tìm Serial Number hoặc địa chỉ MAC..."
           />
         </label>
-
-        <select
-          value={modelId}
-          onChange={(event) => {
-            setModelId(event.target.value);
-            setPage(0);
-          }}
-          aria-label="Lọc theo model LED"
-          className="border-2 border-gray-200 px-3 py-2 text-sm"
-        >
-          <option value="">Tất cả model LED</option>
-          {models.map((model) => (
-            <option key={model.modelId} value={String(model.modelId)}>
-              {model.modelName}
-            </option>
-          ))}
-        </select>
 
         <select
           value={statusFilter}
@@ -1038,26 +1098,43 @@ function LedInstancesSection() {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50">
+        <table className="w-full min-w-[1020px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-[17%]" />
+            <col className="w-[20%]" />
+            <col className="w-[13%]" />
+            <col className="w-[12%]" />
+            <col className="w-[15%]" />
+            <col className="w-[12%]" />
+            <col className="w-[5.5%]" />
+            <col className="w-[5.5%]" />
+          </colgroup>
+          <thead className="border-b border-gray-200 bg-gray-50/90 text-gray-700">
             <tr>
-              {[
-                "Serial & ID",
-                "Model LED",
-                "Địa chỉ MAC",
-                "Trạng thái",
-                "Đơn hàng / Chủ sở hữu",
-                "Bảo hành / Ngày SX",
-                "QR Nhà máy",
-                "Chi tiết",
-              ].map((heading) => (
-                <th
-                  key={heading}
-                  className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase"
-                >
-                  {heading}
-                </th>
-              ))}
+              <th className="px-4 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Serial & ID
+              </th>
+              <th className="px-4 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Model LED
+              </th>
+              <th className="px-3 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Địa chỉ MAC
+              </th>
+              <th className="px-3 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                Trạng thái
+              </th>
+              <th className="px-4 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Đơn hàng / Chủ sở hữu
+              </th>
+              <th className="px-3 py-3.5 text-left text-[11px] font-black uppercase tracking-wider">
+                Bảo hành / Ngày SX
+              </th>
+              <th className="px-2 py-3.5 text-center text-[11px] font-black uppercase tracking-wider">
+                QR Nhà máy
+              </th>
+              <th className="px-4 py-3.5 text-right text-[11px] font-black uppercase tracking-wider">
+                Chi tiết
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1082,21 +1159,18 @@ function LedInstancesSection() {
                 return (
                   <tr
                     key={row.instanceId}
-                    className="border-b border-gray-100 hover:bg-green-50/50"
+                    className="border-b border-gray-100 transition-colors hover:bg-green-50/40"
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <p className="font-bold text-gray-900">
                         {row.serialNumber}
                       </p>
                       <p className="text-[11px] text-text-muted">
                         #{row.instanceId}
-                        {row.hardwareRevision
-                          ? ` · ${row.hardwareRevision}`
-                          : ""}
                       </p>
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <p className="font-semibold text-gray-900">
                         {row.modelName ?? `Model #${row.modelId}`}
                       </p>
@@ -1107,19 +1181,19 @@ function LedInstancesSection() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3 text-xs font-semibold text-gray-700">
+                    <td className="px-3 py-3.5 font-mono text-xs font-semibold text-gray-700">
                       {row.macAddress}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3.5 text-center">
                       <span
-                        className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusBadge.className}`}
+                        className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${statusBadge.className}`}
                       >
                         {statusBadge.label}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 text-xs">
+                    <td className="px-4 py-3.5 text-xs">
                       {row.fulfillment || row.owner ? (
                         <div className="space-y-0.5">
                           {row.fulfillment && (
@@ -1140,7 +1214,7 @@ function LedInstancesSection() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3 text-xs text-gray-700">
+                    <td className="px-3 py-3.5 text-xs text-gray-700">
                       {row.warrantyExpiresAt ? (
                         <span>
                           BH đến {formatDateTime(row.warrantyExpiresAt, false)}
@@ -1154,25 +1228,25 @@ function LedInstancesSection() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-3.5 text-center">
                       {hasQrPayload ? (
-                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
                           <QrCode size={12} /> Có sẵn
                         </span>
                       ) : (
-                        <span className="inline-flex whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-600">
+                        <span className="inline-flex whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-[11px] font-bold text-gray-600">
                           Đã ẩn
                         </span>
                       )}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5 text-right">
                       <button
                         type="button"
                         onClick={() => setSelectedInstanceId(row.instanceId)}
-                        className="inline-flex items-center gap-1 whitespace-nowrap border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold hover:border-black hover:bg-primary/20"
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-bold shadow-2xs hover:border-black hover:bg-primary/20"
                       >
-                        <Eye size={14} /> Xem chi tiết
+                        <Eye size={13} /> Chi tiết
                       </button>
                     </td>
                   </tr>
@@ -1186,11 +1260,21 @@ function LedInstancesSection() {
                 >
                   <Boxes size={32} className="mx-auto mb-2 text-primary-dark" />
                   <p className="font-semibold text-gray-800">
-                    Không tìm thấy thiết bị LED vật lý nào.
+                    Chưa có thiết bị LED vật lý nào cho mẫu {model.modelName}.
                   </p>
                   <p className="mt-1 text-xs">
-                    Thử thay đổi bộ lọc model, trạng thái hoặc từ khóa tìm kiếm.
+                    Thử thay đổi bộ lọc trạng thái / từ khóa hoặc nhập kho thiết bị (Serial/MAC) mới.
                   </p>
+                  {canManageCatalog && model.status !== LedModelItem.status.DEPRECATED && (
+                    <button
+                      type="button"
+                      onClick={onOpenStockIn}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border-2 border-black bg-primary px-3.5 py-2 text-xs font-black text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:bg-primary/90"
+                    >
+                      <PackagePlus size={14} />
+                      Nhập kho thiết bị ngay
+                    </button>
+                  )}
                 </td>
               </tr>
             )}
@@ -1483,10 +1567,6 @@ function LedInstanceDetailModal({
                 <InfoField label="Serial Number" value={detail.serialNumber} />
                 <InfoField label="Địa chỉ MAC" value={detail.macAddress} />
                 <InfoField
-                  label="Phiên bản PCB"
-                  value={detail.hardwareRevision || "—"}
-                />
-                <InfoField
                   label="Firmware hiện tại"
                   value={
                     detail.currentFirmwareId != null
@@ -1774,611 +1854,198 @@ function SummaryCard({
   );
 }
 
-function ImportCard({
-  fileName,
-  models,
-  onFileChange,
-  onConfirmExcelImport,
+function LinkedProductDetailModal({
+  productId,
+  onClose,
 }: {
-  fileName: string;
-  models: LedInventoryItem[];
-  onFileChange: (value: string) => void;
-  onConfirmExcelImport: (
-    productId: string,
-    quantity: number,
-    importedFileName: string,
-  ) => void;
+  productId: number;
+  onClose: () => void;
 }) {
-  const [targetProductId, setTargetProductId] = useState(
-    models[0]?.productId ?? "",
-  );
-  const [importQty, setImportQty] = useState("10");
-  const [cardError, setCardError] = useState("");
+  const [product, setProduct] = useState<ManagedStoreProductItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!models.some((m) => m.productId === targetProductId)) {
-      setTargetProductId(models[0]?.productId ?? "");
-    }
-  }, [models, targetProductId]);
+    let active = true;
+    setLoading(true);
+    setError(null);
+    fetchManagedStoreProducts({ productType: "LED", size: 200 })
+      .then((res) => {
+        if (!active) return;
+        const found = res.items.find((item) => item.productId === productId) ?? null;
+        if (!found) {
+          setError(`Không tìm thấy sản phẩm #${productId} trong cửa hàng.`);
+        } else {
+          setProduct(found);
+        }
+      })
+      .catch(() => {
+        if (active) setError("Không thể tải chi tiết sản phẩm liên kết.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [productId]);
 
-  const handleDownloadSample = () => {
-    const csvContent =
-      "\uFEFFmodelCode,name,quantity,unitPrice\nLUM-MAT-6464,Lumintra Matrix Pro 64x64 RGB,20,1490000\n";
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "mau-nhap-kho-led.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const canOpenStorefront =
+    product?.status === "PUBLISHED" || product?.status === "ARCHIVED";
 
-  const handleConfirm = () => {
-    setCardError("");
-    if (!fileName) {
-      setCardError("Vui lòng chọn file Excel/CSV trước khi xác nhận.");
-      return;
-    }
-    if (!targetProductId) {
-      setCardError("Chưa có model LED trong kho để nhập.");
-      return;
-    }
-    const qty = Number(importQty);
-    if (!Number.isInteger(qty) || qty <= 0) {
-      setCardError("Số lượng nhập phải là số nguyên dương (> 0).");
-      return;
-    }
-    onConfirmExcelImport(targetProductId, qty, fileName);
-  };
-
-  return (
-    <section className="neo-box-no-hover bg-white p-5">
-      <div className="mb-4 flex items-center gap-2">
-        <Upload size={17} className="text-primary-dark" />
-        <h2 className="font-black">Nhập kho từ file Excel</h2>
-      </div>
-      <div className="flex flex-col gap-3.5 text-xs">
-        <div className="flex gap-2">
-          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary font-black">
-            1
-          </span>
-          <div>
-            <p className="font-bold">Tải file Excel / CSV</p>
-            <p className="text-text-muted">
-              Chọn file chứa danh sách thiết bị để nhập kho
-            </p>
-          </div>
-        </div>
-
-        <label className="flex cursor-pointer flex-col items-center gap-2 border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center hover:border-primary-dark">
-          <Upload size={20} className="text-primary-dark" />
-          <span className="font-bold">
-            {fileName || "Nhấn để chọn hoặc kéo thả file Excel/CSV"}
-          </span>
-          <span className="text-text-muted">.xlsx, .xls, .csv (tối đa 10MB)</span>
-          <input
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="sr-only"
-            onChange={(event) => {
-              setCardError("");
-              onFileChange(event.target.files?.[0]?.name ?? "");
-            }}
-          />
-        </label>
-
-        <button
-          type="button"
-          onClick={handleDownloadSample}
-          className="inline-flex items-center justify-center gap-2 border-2 border-black bg-white px-3 py-2 text-xs font-bold hover:bg-primary/20"
-        >
-          <FileSpreadsheet size={14} /> Tải mẫu file Excel
-        </button>
-
-        <div className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-          <p className="font-bold text-gray-800">2. Áp dụng vào kho model</p>
-          <select
-            value={targetProductId}
-            onChange={(e) => setTargetProductId(e.target.value)}
-            disabled={models.length === 0}
-            className="w-full rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
-          >
-            {models.length === 0 ? (
-              <option value="">Chưa có model trong kho</option>
-            ) : (
-              models.map((m) => (
-                <option key={m.productId} value={m.productId}>
-                  {m.modelCode} · {m.name}
-                </option>
-              ))
-            )}
-          </select>
-          <label className="block font-semibold text-gray-700">
-            Số lượng nhập thêm
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={importQty}
-              onChange={(e) => setImportQty(e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
-            />
-          </label>
-        </div>
-
-        {cardError && (
-          <p role="alert" className="rounded bg-red-50 p-2 font-semibold text-red-700">
-            {cardError}
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={handleConfirm}
-          className="inline-flex items-center justify-center gap-2 border-2 border-black bg-primary px-3 py-2 text-xs font-black hover:bg-primary/80"
-        >
-          <Check size={14} /> 3. Xác nhận nhập kho
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function ImportStockModal({
-  models,
-  onClose,
-  onImportExisting,
-  onCreateNewModel,
-}: {
-  models: LedInventoryItem[];
-  onClose: () => void;
-  onImportExisting: (productId: string, qty: number, note: string) => void;
-  onCreateNewModel: (newModel: {
-    modelCode: string;
-    name: string;
-    description: string;
-    stock: number;
-    minimumStock: number;
-    unitPrice: number;
-  }) => void;
-}) {
-  const [mode, setMode] = useState<"existing" | "new">(
-    models.length > 0 ? "existing" : "new",
-  );
-  const [selectedId, setSelectedId] = useState(models[0]?.productId ?? "");
-  const [addQty, setAddQty] = useState("20");
-  const [note, setNote] = useState("");
-
-  // New model fields
-  const [modelCode, setModelCode] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [initialStock, setInitialStock] = useState("25");
-  const [minimumStock, setMinimumStock] = useState("5");
-  const [unitPrice, setUnitPrice] = useState("1490000");
-
-  const [error, setError] = useState("");
-
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-
-    if (mode === "existing") {
-      if (!selectedId) {
-        setError("Vui lòng chọn model LED cần nhập thêm.");
-        return;
-      }
-      const parsedQty = Number(addQty);
-      if (!Number.isInteger(parsedQty) || parsedQty <= 0) {
-        setError("Số lượng nhập thêm phải là số nguyên lớn hơn 0.");
-        return;
-      }
-      const selectedModel = models.find((m) => m.productId === selectedId);
-      const recordTitle = note.trim()
-        ? `${note.trim()} (${selectedModel?.modelCode ?? selectedId})`
-        : `Nhập kho thủ công · ${selectedModel?.modelCode ?? selectedId}`;
-      onImportExisting(selectedId, parsedQty, recordTitle);
-      return;
-    }
-
-    const cleanCode = modelCode.trim().toUpperCase();
-    const cleanName = name.trim();
-    if (!cleanCode || !cleanName) {
-      setError("Vui lòng nhập đầy đủ Mã model và Tên model LED.");
-      return;
-    }
-    if (
-      models.some(
-        (m) => m.modelCode.toLowerCase() === cleanCode.toLowerCase(),
-      )
-    ) {
-      setError(`Mã model "${cleanCode}" đã tồn tại trong kho.`);
-      return;
-    }
-
-    const stockNum = Number(initialStock);
-    const minNum = Number(minimumStock);
-    const priceNum = Number(unitPrice);
-
-    if (!Number.isInteger(stockNum) || stockNum < 0) {
-      setError("Số lượng ban đầu phải là số nguyên >= 0.");
-      return;
-    }
-    if (!Number.isInteger(minNum) || minNum < 0) {
-      setError("Ngưỡng cảnh báo tối thiểu phải là số nguyên >= 0.");
-      return;
-    }
-    if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Đơn giá phải lớn hơn hoặc bằng 0.");
-      return;
-    }
-
-    onCreateNewModel({
-      modelCode: cleanCode,
-      name: cleanName,
-      description: description.trim(),
-      stock: stockNum,
-      minimumStock: minNum,
-      unitPrice: priceNum,
-    });
-  };
-
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="import-stock-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="w-full max-w-lg rounded-2xl border-2 border-black bg-white p-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <h2 id="import-stock-title" className="text-lg font-black">
-            Nhập kho LED
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Đóng"
-            className="rounded-lg p-1 text-gray-500 hover:bg-gray-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            disabled={models.length === 0}
-            onClick={() => {
-              setMode("existing");
-              setError("");
-            }}
-            className={`rounded-lg border px-3 py-2 text-xs font-bold ${
-              mode === "existing"
-                ? "border-black bg-primary text-black"
-                : "border-gray-300 bg-white text-gray-600"
-            } disabled:opacity-40`}
-          >
-            Nhập thêm model có sẵn
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("new");
-              setError("");
-            }}
-            className={`rounded-lg border px-3 py-2 text-xs font-bold ${
-              mode === "new"
-                ? "border-black bg-primary text-black"
-                : "border-gray-300 bg-white text-gray-600"
-            }`}
-          >
-            Nhập model LED mới
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3 text-sm">
-          {mode === "existing" ? (
-            <>
-              <label className="block text-xs font-bold text-gray-700">
-                Chọn model LED
-                <select
-                  value={selectedId}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                >
-                  {models.map((m) => (
-                    <option key={m.productId} value={m.productId}>
-                      {m.modelCode} · {m.name} (Hiện có: {m.stock})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block text-xs font-bold text-gray-700">
-                Số lượng nhập thêm *
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={addQty}
-                  onChange={(e) => setAddQty(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </label>
-
-              <label className="block text-xs font-bold text-gray-700">
-                Ghi chú lô nhập (tùy chọn)
-                <input
-                  type="text"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ví dụ: Lô nhập tháng 11 - Nhà cung cấp A"
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </label>
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="block text-xs font-bold text-gray-700">
-                  Mã model *
-                  <input
-                    type="text"
-                    value={modelCode}
-                    onChange={(e) => setModelCode(e.target.value)}
-                    placeholder="Ví dụ: LUM-CAR-6432"
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="block text-xs font-bold text-gray-700">
-                  Đơn giá tham chiếu (VNĐ)
-                  <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    value={unitPrice}
-                    onChange={(e) => setUnitPrice(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </label>
-              </div>
-
-              <label className="block text-xs font-bold text-gray-700">
-                Tên model LED *
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ví dụ: Lumintra Windshield Matrix 64×32"
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </label>
-
-              <label className="block text-xs font-bold text-gray-700">
-                Mô tả kỹ thuật
-                <input
-                  type="text"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Độ phân giải, kết nối, kích thước..."
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs font-bold text-gray-700">
-                  Số lượng nhập kho *
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={initialStock}
-                    onChange={(e) => setInitialStock(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="block text-xs font-bold text-gray-700">
-                  Ngưỡng cảnh báo tối thiểu *
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={minimumStock}
-                    onChange={(e) => setMinimumStock(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </label>
-              </div>
-            </>
-          )}
-
-          {error && (
-            <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-xs font-semibold text-red-700">
-              {error}
-            </p>
-          )}
-
-          <div className="mt-2 flex justify-end gap-2 border-t border-gray-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold hover:bg-gray-50"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              className="rounded-lg border-2 border-black bg-primary px-4 py-2 text-xs font-black hover:bg-primary/80"
-            >
-              {mode === "existing" ? "Xác nhận nhập thêm" : "Thêm model vào kho"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function AdjustQuantityModal({
-  item,
-  onClose,
-  onSave,
-}: {
-  item: LedInventoryItem;
-  onClose: () => void;
-  onSave: (nextStock: number, nextMinimumStock: number) => void;
-}) {
-  const [stockInput, setStockInput] = useState(String(item.stock));
-  const [minStockInput, setMinStockInput] = useState(String(item.minimumStock));
-  const [error, setError] = useState("");
-
-  const parsedStock = Number(stockInput);
-  const previewAvailable = Number.isFinite(parsedStock)
-    ? Math.max(0, parsedStock - item.reserved)
-    : 0;
-
-  const applyDelta = (delta: number) => {
-    const base = Number.isInteger(parsedStock) ? parsedStock : item.stock;
-    setStockInput(String(Math.max(item.reserved, base + delta)));
-    setError("");
-  };
-
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-
-    const nextStock = Number(stockInput);
-    const nextMin = Number(minStockInput);
-
-    if (!Number.isInteger(nextStock) || nextStock < 0) {
-      setError("Số lượng tồn kho phải là số nguyên >= 0.");
-      return;
-    }
-    if (nextStock < item.reserved) {
-      setError(
-        `Tồn kho không được nhỏ hơn số lượng đang đặt giữ (${item.reserved}).`,
-      );
-      return;
-    }
-    if (!Number.isInteger(nextMin) || nextMin < 0) {
-      setError("Ngưỡng tối thiểu phải là số nguyên >= 0.");
-      return;
-    }
-
-    onSave(nextStock, nextMin);
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="adjust-stock-title"
-    >
-      <div className="w-full max-w-md rounded-2xl border-2 border-black bg-white p-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <div>
-            <h2 id="adjust-stock-title" className="text-lg font-black">
-              Chỉnh số lượng tồn kho
-            </h2>
-            <p className="text-xs font-semibold text-text-muted">
-              {item.modelCode} · {item.name}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Đóng"
-            className="rounded-lg p-1 text-gray-500 hover:bg-gray-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-center text-xs">
-          <div>
-            <p className="text-text-muted">Hiện tại</p>
-            <p className="mt-0.5 text-base font-black">{item.stock}</p>
-          </div>
-          <div>
-            <p className="text-text-muted">Đang đặt</p>
-            <p className="mt-0.5 text-base font-black">{item.reserved}</p>
-          </div>
-          <div>
-            <p className="text-text-muted">Khả dụng mới</p>
-            <p className="mt-0.5 text-base font-black text-primary-dark">
-              {previewAvailable}
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3 text-sm">
-          <div>
-            <span className="text-xs font-bold text-gray-700">
-              Điều chỉnh nhanh
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border-2 border-[#173b28] bg-white shadow-[6px_6px_0_#173b28]">
+        <div className="flex items-center justify-between border-b border-[#e3efe6] bg-[#f4fbf6] px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-9 w-9 place-items-center rounded-lg border border-[#3f9660] bg-white text-[#173b28]">
+              <Store size={18} />
             </span>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {[-5, -1, 1, 5, 10].map((delta) => (
-                <button
-                  key={delta}
-                  type="button"
-                  onClick={() => applyDelta(delta)}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-bold hover:bg-primary/20"
-                >
-                  {delta > 0 ? `+${delta}` : delta}
-                </button>
-              ))}
+            <div>
+              <h2 className="text-base font-black text-[#173b28]">
+                Chi tiết sản phẩm liên kết #{productId}
+              </h2>
+              <p className="font-mono text-xs font-semibold text-[#3f7553]">
+                /products/{productId}
+              </p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Đóng"
+            className="rounded-lg p-1.5 text-text-muted hover:bg-emerald-100/70 hover:text-[#173b28]"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-          <label className="block text-xs font-bold text-gray-700">
-            Số lượng tồn kho mới *
-            <input
-              type="number"
-              min={item.reserved}
-              step={1}
-              value={stockInput}
-              onChange={(e) => setStockInput(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold"
-            />
-          </label>
-
-          <label className="block text-xs font-bold text-gray-700">
-            Ngưỡng cảnh báo sắp hết hàng *
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={minStockInput}
-              onChange={(e) => setMinStockInput(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-          </label>
-
-          {error && (
-            <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-xs font-semibold text-red-700">
+        <div className="flex-1 overflow-y-auto p-5">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm font-semibold text-text-muted">
+              <Loader2 size={18} className="animate-spin text-primary-dark" />
+              Đang tải chi tiết sản phẩm...
+            </div>
+          ) : error ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
               {error}
-            </p>
-          )}
+            </div>
+          ) : product ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-4 sm:flex-row">
+                <div className="h-28 w-28 shrink-0 overflow-hidden rounded-xl border border-[#d8e6dc] bg-[#f6fbf7]">
+                  {product.thumbnailUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={product.thumbnailUrl}
+                      alt={product.productName}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center text-xs font-bold text-text-muted">
+                      Chưa có ảnh
+                    </div>
+                  )}
+                </div>
 
-          <div className="mt-2 flex justify-end gap-2 border-t border-gray-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold hover:bg-gray-50"
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-black text-[#173b28]">
+                      {product.productName}
+                    </h3>
+                    <StatusBadge status={product.status} />
+                  </div>
+                  <p className="text-base font-black text-[#155e59]">
+                    {Number(product.basePrice ?? 0).toLocaleString("vi-VN")} VNĐ
+                  </p>
+                  <p className="text-xs leading-relaxed text-text-muted">
+                    {product.description || "Chưa có mô tả chi tiết."}
+                  </p>
+                </div>
+              </div>
+
+              {product.tags && product.tags.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold uppercase text-text-muted">
+                    Thẻ phân loại
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {product.tags.map((tag) => (
+                      <span
+                        key={tag.tagId}
+                        className="rounded-full border border-[#cfe0d4] bg-[#f4fbf6] px-2.5 py-0.5 text-xs font-bold text-[#1f432b]"
+                      >
+                        {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {product.galleryUrls && product.galleryUrls.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold uppercase text-text-muted">
+                    Ảnh bổ sung ({product.galleryUrls.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {product.galleryUrls.map((url, idx) => (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        key={`${url}-${idx}`}
+                        src={url}
+                        alt={`${product.productName} ${idx + 1}`}
+                        className="h-16 w-16 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] object-cover"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!canOpenStorefront && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                  Sản phẩm này hiện đang ở trạng thái{" "}
+                  <strong>{product.status === "UNPUBLISHED" ? "Chờ duyệt" : "Đã xóa"}</strong>{" "}
+                  nên chưa mở trên trang công khai <code>/products/{productId}</code>.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#e3efe6] bg-[#f9fcfa] px-5 py-3.5">
+          <Link
+            href="/staff/pricing"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#cfe0d4] bg-white px-3.5 py-2 text-xs font-bold text-[#173b28] hover:bg-[#eef8f0]"
+          >
+            Quản lý tại Cửa hàng
+          </Link>
+          {canOpenStorefront && (
+            <Link
+              href={`/products/${productId}`}
+              target="_blank"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#439660] px-3.5 py-2 text-xs font-black text-white hover:bg-[#387e51]"
             >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              className="rounded-lg border-2 border-black bg-primary px-4 py-2 text-xs font-black hover:bg-primary/80"
-            >
-              Lưu thay đổi
-            </button>
-          </div>
-        </form>
+              Xem trang Store
+              <ExternalLink size={13} />
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-bold hover:bg-gray-50"
+          >
+            Đóng
+          </button>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

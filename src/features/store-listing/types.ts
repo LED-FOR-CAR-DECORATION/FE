@@ -6,8 +6,12 @@
  * the existing frontend convention.
  */
 
-/** CHARACTER.status / STORE_LISTING.status as shown to the Manager. */
-export type ListingStatus = "Pending Review" | "Published" | "Hidden" | "Archived" | "Deleted";
+import type { BackendProductStatus, ManagedStoreProductItem } from "@/lib/api/products";
+import type { TagItem } from "@/api_client";
+
+/** Mirrors backend `com.lumintra.backend.store.domain.model.ProductStatus`. */
+export type StoreProductStatus = BackendProductStatus;
+export type ListingStatus = StoreProductStatus;
 
 /** CHARACTER.visibility. Only a Manager may set this to "Visible" (BR-14). */
 export type CharacterVisibility = "Visible" | "Hidden";
@@ -32,7 +36,6 @@ export interface CharacterVersion {
   storeListingId: string | null;
   versionNumber: number;
   fileUrl: string;
-  ledBinaryUrl: string;
   format: string;
   width: number;
   height: number;
@@ -69,7 +72,16 @@ export interface ActiveVersionSummary {
 
 /** A row of the Characters table: CHARACTER joined with its active CHARACTER_VERSION. */
 export interface StoreCharacterRow extends StoreCharacter {
+  basePrice?: number;
+  galleryUrls?: string[];
+  tags?: TagItem[];
   activeVersion: ActiveVersionSummary | null;
+  draft?: {
+    basePrice: number;
+    thumbnailUrl?: string | null;
+    galleryUrls: string[];
+  };
+  rawProduct?: ManagedStoreProductItem;
 }
 
 /** Who is performing a store-visibility action. */

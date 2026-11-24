@@ -15,14 +15,18 @@ import {
 } from "@/features/character/services/entitlement.service";
 import type { UserEntitlement } from "@/features/character/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import {
-  fetchCustomerOwnedCharacters,
+  fetchActiveCustomerSubscription,
+  fetchCustomerGallery,
   formatOwnedCharactersError,
-  type CustomerOwnedCharacterItem,
+  type CustomerActiveSubscription,
+  type CustomerGalleryItem,
 } from "@/lib/api/customerCharacters";
 
 interface GalleryContextValue {
-  ownedCharacters: CustomerOwnedCharacterItem[];
+  ownedCharacters: CustomerGalleryItem[];
+  activeSubscription: CustomerActiveSubscription | null;
   entitlements: UserEntitlement[];
   isLoading: boolean;
   error: string | null;
@@ -34,14 +38,17 @@ const GalleryContext = createContext<GalleryContextValue | null>(null);
 export function GalleryProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [ownedCharacters, setOwnedCharacters] = useState<
-    CustomerOwnedCharacterItem[]
+    CustomerGalleryItem[]
   >([]);
+  const [activeSubscription, setActiveSubscription] =
+    useState<CustomerActiveSubscription | null>(null);
   const [entitlements, setEntitlements] = useState<UserEntitlement[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
 
   const refresh = useCallback(() => {
+    const requestId = ++requestIdRef.current;
     if (isAuthLoading) return;
 
     const currentUser = user;
@@ -51,22 +58,27 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
 
     if (!isAuthenticated || !currentUser || currentUser.role !== "CUSTOMER") {
       setOwnedCharacters([]);
+      setActiveSubscription(null);
       setEntitlements(localEntitlements);
       setError(null);
       setIsLoading(false);
       return;
     }
 
-    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
 
-    fetchCustomerOwnedCharacters()
-      .then((items) => {
+    Promise.all([
+      fetchCustomerGallery(),
+      fetchActiveCustomerSubscription().catch(() => null),
+    ])
+      .then(([items, subscription]) => {
         if (requestIdRef.current !== requestId) return;
         setOwnedCharacters(items);
+        setActiveSubscription(subscription);
 
-        const apiEntitlements: UserEntitlement[] = items.map((item) => ({
+        // An accepted image is not a CharacterVersion and cannot grant LED/store access.
+        const apiEntitlements: UserEntitlement[] = items.filter((item) => item.characterId !== null).map((item) => ({
           entitlementId: `OWNED-${item.orderId}-${item.characterId}`,
           userId: currentUser.userId,
           characterId: String(item.characterId),
@@ -92,6 +104,7 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         if (requestIdRef.current !== requestId) return;
         setOwnedCharacters([]);
+        setActiveSubscription(null);
         setEntitlements(localEntitlements);
         setError(formatOwnedCharactersError(err));
       })
@@ -105,13 +118,26 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
     window.addEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
+    window.addEventListener(ORDERS_CHANGED_EVENT, refresh);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      ++requestIdRef.current;
+      window.removeEventListener(ENTITLEMENTS_CHANGED_EVENT, refresh);
+      window.removeEventListener(ORDERS_CHANGED_EVENT, refresh);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [refresh]);
 
   return (
     <GalleryContext.Provider
       value={{
         ownedCharacters,
+        activeSubscription,
         entitlements,
         isLoading,
         error,

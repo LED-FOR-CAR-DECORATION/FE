@@ -59,6 +59,11 @@ export interface MockOrder {
     rawStatus?: string;
     trackingUrl?: string;
     carrierFee?: number;
+    failureReason?: string;
+    attemptCount?: number;
+    maxAttempts?: number;
+    latitude?: number;
+    longitude?: number;
     createdAt: string;
     expectedAt: string;
   };

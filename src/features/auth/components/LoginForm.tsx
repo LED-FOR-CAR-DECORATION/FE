@@ -32,35 +32,35 @@ const ROLE_META: Record<
   { label: string; badge: string; icon: React.ReactNode; bg: string; border: string }
 > = {
   MANAGER: {
-    label: "Manager",
+    label: "Quản lý",
     badge: "Quản lý",
     icon: <ShieldCheck size={13} />,
     bg: "bg-emerald-50 text-emerald-800",
     border: "border-emerald-300 hover:border-emerald-600",
   },
   DESIGNER: {
-    label: "Designer",
+    label: "Thiết kế",
     badge: "Thiết kế",
     icon: <Palette size={13} />,
     bg: "bg-purple-50 text-purple-800",
     border: "border-purple-300 hover:border-purple-600",
   },
   CUSTOMER: {
-    label: "Customer",
+    label: "Khách hàng",
     badge: "Khách hàng",
     icon: <User size={13} />,
     bg: "bg-blue-50 text-blue-800",
     border: "border-blue-300 hover:border-blue-600",
   },
   STAFF: {
-    label: "Staff",
+    label: "Nhân viên",
     badge: "Nhân viên",
     icon: <Briefcase size={13} />,
     bg: "bg-amber-50 text-amber-800",
     border: "border-amber-300 hover:border-amber-600",
   },
   ADMIN: {
-    label: "Admin",
+    label: "Quản trị",
     badge: "Quản trị",
     icon: <ShieldAlert size={13} />,
     bg: "bg-rose-50 text-rose-800",
@@ -122,7 +122,7 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
             : user.role === "STAFF"
               ? "/staff"
               : user.role === "DESIGNER"
-                ? "/designer/characters"
+                ? "/designer/dashboard"
                 : "/";
 
       let targetRedirect = roleHome;
@@ -240,7 +240,7 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
             setEmail(val);
             if (selectedRole) setSelectedRole(null);
           }}
-          placeholder={USE_MOCK_AUTH ? "vd: manager123@gmail.com" : "you@example.com"}
+          placeholder="vd: tenban@gmail.com"
           error={errors.email}
           icon={<Mail size={15} />}
           required

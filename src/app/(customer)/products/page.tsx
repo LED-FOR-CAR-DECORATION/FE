@@ -9,7 +9,7 @@ import { ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
 import type { CatalogProduct } from "@/features/cart/catalog";
 import { fetchStoreProducts } from "@/lib/api/products";
 
-const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} đ`;
+const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} VNĐ`;
 const PRODUCTS_PER_PAGE = 12;
 
 export default function ProductsPage() {
@@ -38,13 +38,23 @@ export default function ProductsPage() {
   const pageCount = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
   const paginatedProducts = products.slice((page - 1) * PRODUCTS_PER_PAGE, page * PRODUCTS_PER_PAGE);
 
+  const handlePageChange = (nextPage: number) => {
+    const clampedPage = Math.min(pageCount, Math.max(1, nextPage));
+    setPage(clampedPage);
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+  };
+
   return (
     <>
       <Header />
       <main className="flex-1 bg-background py-10">
         <div className="container mx-auto max-w-6xl px-4">
           <div className="mb-8">
-            <p className="text-sm font-bold text-primary-dark">MIRAGE STORE</p>
+            <p className="text-sm font-bold text-primary-dark">LUMINTRA STORE</p>
             <h1 className="text-3xl font-black uppercase">Sản phẩm</h1>
             <p className="mt-2 text-text-muted">Chọn bảng LED và sprite phù hợp cho thiết kế của bạn.</p>
           </div>
@@ -88,15 +98,15 @@ export default function ProductsPage() {
                   Hiển thị {(page - 1) * PRODUCTS_PER_PAGE + 1} - {Math.min(page * PRODUCTS_PER_PAGE, products.length)} / {products.length} sản phẩm
                 </p>
                 <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1} className="border border-gray-300 p-2 disabled:opacity-40" aria-label="Trang trước">
+                  <button type="button" onClick={() => handlePageChange(page - 1)} disabled={page === 1} className="border border-gray-300 p-2 disabled:opacity-40" aria-label="Trang trước">
                     <ChevronLeft size={16} />
                   </button>
                   {Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
-                    <button key={pageNumber} type="button" onClick={() => setPage(pageNumber)} className={`min-w-8 border px-2 py-1 text-xs font-bold ${page === pageNumber ? "border-primary-dark bg-primary/20 text-primary-dark" : "border-gray-300"}`}>
+                    <button key={pageNumber} type="button" onClick={() => handlePageChange(pageNumber)} className={`min-w-8 border px-2 py-1 text-xs font-bold ${page === pageNumber ? "border-primary-dark bg-primary/20 text-primary-dark" : "border-gray-300"}`}>
                       {pageNumber}
                     </button>
                   ))}
-                  <button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount} className="border border-gray-300 p-2 disabled:opacity-40" aria-label="Trang sau">
+                  <button type="button" onClick={() => handlePageChange(page + 1)} disabled={page === pageCount} className="border border-gray-300 p-2 disabled:opacity-40" aria-label="Trang sau">
                     <ChevronRight size={16} />
                   </button>
                 </div>

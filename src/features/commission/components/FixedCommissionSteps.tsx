@@ -1,37 +1,35 @@
-import type { ChangeEvent, FormEvent, ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
-  COMMISSION_FRAME_PRICE, COMMISSION_SIZES, MAX_COMMISSION_FRAMES, MIN_COMMISSION_FRAMES,
-  formatCommissionMoney, type CommissionDesign,
+  COMMISSION_DESIGN_FIELDS, MAX_COMMISSION_FRAMES, MIN_COMMISSION_FRAMES,
+  formatCommissionMoney, type CommissionDesign, type CommissionDesignField,
 } from "../config/fixedPricing";
 
 export const commissionButton = "rounded-lg bg-[#155e59] px-4 py-2.5 font-semibold text-white hover:bg-[#0e4b47] disabled:opacity-50";
 const field = "mt-1 block w-full rounded-lg border border-[#819e8c] bg-white p-2.5 text-[#26352f]";
 
-export function CommissionDesignPicker({ design, onChange }: {
+export function CommissionDesignPicker({ design, onChange, fields = COMMISSION_DESIGN_FIELDS }: {
   design: CommissionDesign;
   onChange: (design: CommissionDesign) => void;
+  fields?: readonly CommissionDesignField[];
 }) {
   return (
     <div className="grid gap-5 sm:grid-cols-2">
-      <label>
-        Kích thước ma trận LED
-        <select className={field} value={design.size} onChange={(event) =>
-          onChange({ ...design, size: event.target.value as CommissionDesign["size"] })}>
-          {(Object.keys(COMMISSION_SIZES) as CommissionDesign["size"][]).map((size) => (
-            <option key={size} value={size}>
-              {size.replace("x", " × ")}{design.format === "image" ? ` · ${formatCommissionMoney(COMMISSION_SIZES[size])}` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Định dạng
-        <select className={field} value={design.format} onChange={(event) =>
-          onChange({ ...design, format: event.target.value as CommissionDesign["format"] })}>
-          <option value="image">Ảnh tĩnh</option>
-          <option value="gif">GIF động · {formatCommissionMoney(COMMISSION_FRAME_PRICE)}/frame</option>
-        </select>
-      </label>
+      {fields.map(({ key, label, options }) => (
+        <label key={key}>
+          {label}
+          <select className={field} value={design[key]}
+            onChange={(event) => onChange({ ...design, [key]: event.target.value })}>
+            {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          {key === "palette" && (
+            <span className="mt-1 block text-sm">Ưu tiên màu sáng, neon hoặc tương phản cao để dễ nhìn trên kính lái. Hạn chế tông quá tối.</span>
+          )}
+          {key === "outline" && design.background === "Trong suốt" && (
+            <span className="mt-1 block text-sm">Viền trắng hoặc màu sáng giúp đối tượng nổi bật trên nền trong suốt.</span>
+          )}
+        </label>
+      ))}
       {design.format === "gif" && (
         <label>
           Số frame ({MIN_COMMISSION_FRAMES}–{MAX_COMMISSION_FRAMES})
@@ -43,13 +41,30 @@ export function CommissionDesignPicker({ design, onChange }: {
   );
 }
 
-export function CommissionBrief({ note, onNote, references, onFiles, onRemove, error }: {
+function ReferenceThumbnail({ file }: { file: File }) {
+  const [src, setSrc] = useState<string>();
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div className="grid size-16 shrink-0 place-items-center overflow-hidden border-2 border-black bg-primary/15">
+      {src && <img src={src} alt="" className="size-full object-contain" />}
+    </div>
+  );
+}
+
+export function CommissionBrief({ note, onNote, references, onFiles, onRemove, error, maxNoteLength = 1000 }: {
   note: string;
   onNote: (note: string) => void;
   references: File[];
   onFiles: (files: File[]) => void;
   onRemove: (index: number) => void;
   error: string;
+  maxNoteLength?: number;
 }) {
   function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     onFiles(Array.from(event.currentTarget.files ?? []));
@@ -58,23 +73,25 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
   return (
     <div className="space-y-4">
       <label className="block">
-        Mô tả thiết kế
-        <textarea className={field} rows={5} maxLength={1000} required value={note}
+        Brief thiết kế (bắt buộc)
+        <textarea className="mt-1 block w-full p-2.5 border-2 border-black bg-white text-text-main focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60" rows={5} maxLength={maxNoteLength} required value={note}
           onChange={(event) => onNote(event.target.value)}
-          placeholder="Mô tả nhân vật, màu sắc và hiệu ứng LED bạn muốn." />
+          placeholder="Ghi tên đối tượng, biểu cảm (vui, giận, ngạc nhiên), tư thế (vẫy tay, giơ ngón cái), màu chủ đạo và đặc điểm phải giữ như kính, tóc hoặc mũ. Với ma trận 32×32, ghi rõ chi tiết nhỏ có thể lược bỏ." />
       </label>
       <label className="block">
         Ảnh tham khảo (không bắt buộc, tối đa 5 ảnh, 5 MB mỗi ảnh)
-        <input className={field} type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif"
+        <span className="mt-1 block text-sm">Chọn ảnh gốc của đối tượng hoặc mẫu pixel art thể hiện nét vẽ và cách đổ bóng bạn muốn.</span>
+        <input className="mt-1 block min-h-11 w-full cursor-pointer text-sm border-2 border-black bg-white text-text-main focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60 file:mr-3 file:min-h-11 file:cursor-pointer file:border-0 file:border-r-2 file:border-black file:bg-primary file:px-3 file:font-bold" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif"
           onChange={chooseFiles} disabled={references.length >= 5} />
       </label>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       {references.length > 0 && (
         <ul className="space-y-2">
           {references.map((file, index) => (
-            <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-white p-3">
-              <span className="min-w-0 break-all">{file.name}</span>
-              <button type="button" className="shrink-0 font-semibold text-red-700"
+            <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3">
+              <ReferenceThumbnail file={file} />
+              <span className="min-w-0 flex-1 break-all">{file.name}</span>
+              <button type="button" className="min-h-11 shrink-0 cursor-pointer px-2 font-bold text-red-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
                 aria-label={`Xóa ${file.name}`} onClick={() => onRemove(index)}>Xóa</button>
             </li>
           ))}
@@ -98,38 +115,6 @@ export function CommissionPayment({ code, amount, onPay, onBack }: {
         <button type="button" onClick={onBack}>Quay lại brief</button>
         <button type="button" className={commissionButton} onClick={onPay}>Mô phỏng thanh toán thành công</button>
       </CommissionActions>
-    </div>
-  );
-}
-
-export function CommissionChatBox({ code, messages, onSend }: {
-  code: string; messages: string[]; onSend: (message: string) => void;
-}) {
-  function send(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const input = event.currentTarget;
-    const message = String(new FormData(input).get("message") ?? "").trim();
-    if (!message) return;
-    onSend(message);
-    input.reset();
-  }
-  return (
-    <div className="space-y-4">
-      <p role="status">Đã xác nhận thanh toán mô phỏng cho {code}.</p>
-      <p className="text-sm">Tin nhắn được lưu trong phiên demo trên trang này.</p>
-      <ul role="log" aria-label="Tin nhắn Commission" className="max-h-72 space-y-3 overflow-y-auto rounded-lg bg-white p-4">
-        <li>Đã tạo cuộc trò chuyện cho yêu cầu {code}.</li>
-        {messages.map((message, index) => (
-          <li key={index} className="break-words rounded-lg bg-[#eaf5e8] p-3"><strong>Bạn</strong> · {message}</li>
-        ))}
-      </ul>
-      <form onSubmit={send} className="flex flex-wrap items-end gap-3">
-        <label className="min-w-40 flex-1">
-          Tin nhắn
-          <input className={field} name="message" maxLength={1000} required />
-        </label>
-        <button className={commissionButton}>Gửi</button>
-      </form>
     </div>
   );
 }

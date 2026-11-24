@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   AlertCircle,
-  Check,
+  ArrowLeft,
   CheckCircle2,
   ChevronRight,
   ImageIcon,
@@ -15,10 +15,10 @@ import {
   Rocket,
   Search,
   Sparkles,
-  Tag,
   Upload,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
+import CategoryTagSelector from "./CategoryTagSelector";
 import {
   apiCreateStoreProduct,
   apiUpdateProductStatus,
@@ -40,6 +40,7 @@ import { saveCreatedStoreProduct } from "../services/store-listing.service";
 interface CreateCharacterProductModalProps {
   onClose: () => void;
   onSuccess: (created: CreatedStoreProductResponse) => void;
+  onBackToTypeSelect?: () => void;
 }
 
 const PRICE_PRESETS = [49000, 99000, 149000, 199000, 249000];
@@ -47,6 +48,7 @@ const PRICE_PRESETS = [49000, 99000, 149000, 199000, 249000];
 export default function CreateCharacterProductModal({
   onClose,
   onSuccess,
+  onBackToTypeSelect,
 }: CreateCharacterProductModalProps) {
   // Step 1: Designer Characters & Versions
   const [characters, setCharacters] = useState<AdminCharacterSummary[]>([]);
@@ -168,11 +170,21 @@ export default function CreateCharacterProductModal({
     }
   };
 
-  const toggleTag = (tagId?: number) => {
-    if (!tagId) return;
+  const toggleTag = (tagId: number) => {
     setSelectedTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
     );
+  };
+
+  const handleTagCreated = (created: TagItem) => {
+    setAvailableTags((prev) =>
+      prev.some((t) => t.tagId === created.tagId) ? prev : [...prev, created],
+    );
+    if (created.tagId) {
+      setSelectedTagIds((prev) =>
+        prev.includes(created.tagId!) ? prev : [...prev, created.tagId!],
+      );
+    }
   };
 
   // Upload thumbnail from machine
@@ -194,19 +206,12 @@ export default function CreateCharacterProductModal({
     setError(null);
 
     try {
-      const res = await uploadMediaFile(file, "STORE_PRODUCT");
+      const res = await uploadMediaFile(file, "CHARACTER_ASSET");
       setThumbnailUrl(res.publicUrl);
-      if (res.usedFallback) {
-        setUploadNotice("Đã tải ảnh lên và áp dụng URL xem trước thành công.");
-      } else {
-        setUploadNotice("Tải ảnh lên máy chủ Media thành công.");
-      }
+      setUploadNotice("Tải ảnh lên máy chủ Media thành công.");
     } catch (err: any) {
       console.error("Upload thumbnail failed:", err);
-      // Fallback: create local object URL so user is never blocked
-      const localUrl = URL.createObjectURL(file);
-      setThumbnailUrl(localUrl);
-      setUploadNotice("Đã nạp ảnh xem trước từ máy tính.");
+      setError(err?.message || "Không thể tải ảnh lên máy chủ Media.");
     } finally {
       setIsUploadingImage(false);
       if (fileInputRef.current) {
@@ -238,7 +243,7 @@ export default function CreateCharacterProductModal({
 
     const priceNum = Number(basePrice);
     if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Giá bán cơ bản phải là số hợp lệ và lớn hơn hoặc bằng 0 đ.");
+      setError("Giá bán cơ bản phải là số hợp lệ và lớn hơn hoặc bằng 0 VNĐ.");
       return;
     }
 
@@ -282,7 +287,7 @@ export default function CreateCharacterProductModal({
           `Phiên bản #${selectedVersion.versionId} đã được liên kết với một sản phẩm khác trên Store (409). Vui lòng chọn phiên bản khác.`,
         );
       } else if (err?.response?.status === 403) {
-        setError("Chỉ tài khoản MANAGER hoặc ADMIN mới có quyền tạo sản phẩm Store (403).");
+        setError("Chỉ tài khoản Quản lý hoặc Quản trị viên mới có quyền tạo sản phẩm Cửa hàng (403).");
       } else {
         setError(serverMessage || "Tạo sản phẩm thất bại. Vui lòng kiểm tra lại thông tin.");
       }
@@ -303,16 +308,27 @@ export default function CreateCharacterProductModal({
 
   return (
     <Modal
-      title="Bày bán Character lên Store"
-      description="Chọn nhân vật & phiên bản từ Designer để định giá, gắn tag và niêm yết bán trên Cửa hàng."
+      title="Tạo sản phẩm Nhân vật"
+      description="Chọn nhân vật & phiên bản có sẵn từ Designer để định giá, gắn thẻ và bày bán lên Cửa hàng."
       onClose={onClose}
       busy={isSubmitting}
       size="lg"
       footer={
         <>
+          {onBackToTypeSelect && (
+            <button
+              type="button"
+              onClick={onBackToTypeSelect}
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#cfe0d4] bg-white px-3.5 py-2 text-xs font-bold text-[#1f432b] transition hover:bg-[#eef8f0] disabled:opacity-50"
+            >
+              <ArrowLeft size={14} />
+              Đổi loại sản phẩm
+            </button>
+          )}
           <p className="mr-auto text-xs font-medium text-text-muted">
             {selectedVersion
-              ? `Đã chọn: Version ${selectedVersion.versionNumber} (ID #${selectedVersion.versionId})`
+              ? `Đã chọn: Phiên bản ${selectedVersion.versionNumber} (ID #${selectedVersion.versionId})`
               : "Vui lòng chọn phiên bản để tiếp tục"}
           </p>
           <button
@@ -337,12 +353,12 @@ export default function CreateCharacterProductModal({
             ) : publishImmediately ? (
               <>
                 <Rocket size={16} />
-                Tạo & Mở bán ngay
+                Tạo &amp; Mở bán ngay
               </>
             ) : (
               <>
                 <Sparkles size={16} />
-                Tạo sản phẩm Store (Chờ duyệt)
+                Tạo sản phẩm (Chưa mở bán)
               </>
             )}
           </button>
@@ -578,7 +594,7 @@ export default function CreateCharacterProductModal({
                             : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
                         }`}
                       >
-                        {preset.toLocaleString("vi-VN")} đ
+                        {preset.toLocaleString("vi-VN")} VNĐ
                       </button>
                     ))}
                   </div>
@@ -665,36 +681,14 @@ export default function CreateCharacterProductModal({
                 </div>
 
                 {/* Tags */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700">
-                    Thẻ phân loại (Store Tags)
-                  </label>
-                  {isLoadingTags ? (
-                    <p className="mt-1 text-[11px] text-slate-400">Đang tải thẻ...</p>
-                  ) : (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {availableTags.map((tag) => {
-                        const isSelected = selectedTagIds.includes(tag.tagId!);
-                        return (
-                          <button
-                            key={tag.tagId}
-                            type="button"
-                            onClick={() => toggleTag(tag.tagId)}
-                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold transition ${
-                              isSelected
-                                ? "border-[#3f9660] bg-[#eefaf1] text-[#215732]"
-                                : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
-                            }`}
-                          >
-                            <Tag size={10} />
-                            {tag.name}
-                            {isSelected && <Check size={12} />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <CategoryTagSelector
+                  availableTags={availableTags}
+                  selectedTagIds={selectedTagIds}
+                  isLoading={isLoadingTags}
+                  label="Thẻ phân loại sản phẩm"
+                  onToggleTag={toggleTag}
+                  onTagCreated={handleTagCreated}
+                />
 
                 {/* Publish Immediately Option */}
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">

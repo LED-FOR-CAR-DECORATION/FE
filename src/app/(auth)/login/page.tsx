@@ -25,7 +25,7 @@ export default function LoginPage() {
         <div className="absolute inset-0 z-0">
           <Image
             src="/images/auth/login.png"
-            alt="Banner Pixel Art"
+            alt="Ảnh nền hệ thống hiển thị LED"
             fill
             sizes="50vw"
             className="object-cover opacity-65"
@@ -48,7 +48,7 @@ export default function LoginPage() {
                 PIXEL HUB
               </span>
               <span className="text-[10px] font-bold tracking-widest uppercase text-[#89c89b]">
-                LED Controller &amp; Store
+                Điều khiển LED &amp; Cửa hàng
               </span>
             </div>
           </div>
@@ -78,7 +78,7 @@ export default function LoginPage() {
           </h1>
 
           <p className="mt-4 text-sm font-medium text-gray-300 leading-relaxed">
-            Nền tảng đồng bộ hóa phần cứng LED ma trận cùng kho Character Pixel Art độc quyền từ các Designer hàng đầu.
+            Nền tảng đồng bộ hóa phần cứng LED ma trận cùng kho nhân vật độc quyền từ các nhà thiết kế hàng đầu.
           </p>
 
           {/* Key Feature Cards */}
@@ -90,12 +90,12 @@ export default function LoginPage() {
             </div>
             <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
               <Palette size={18} className="text-[#a3d7b2] mb-1.5" />
-              <p className="text-xs font-bold text-white">Kho Character</p>
-              <p className="text-[10px] text-gray-300">Pixel art động đa dạng</p>
+              <p className="text-xs font-bold text-white">Kho Nhân vật</p>
+              <p className="text-[10px] text-gray-300">Hoạt ảnh điểm ảnh đa dạng</p>
             </div>
             <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
               <ShieldCheck size={18} className="text-[#89c89b] mb-1.5" />
-              <p className="text-xs font-bold text-white">Quản lý Store</p>
+              <p className="text-xs font-bold text-white">Quản lý Cửa hàng</p>
               <p className="text-[10px] text-gray-300">Kiểm duyệt nghiêm ngặt</p>
             </div>
           </div>
@@ -103,7 +103,7 @@ export default function LoginPage() {
 
         {/* Bottom Status */}
         <div className="relative z-10 flex items-center justify-between border-t border-white/15 pt-4 text-[11px] font-semibold text-gray-400">
-          <span>PIXEL HUB OS v2.4</span>
+          <span>HỆ THỐNG PIXEL HUB v2.4</span>
         </div>
       </section>
 
@@ -130,7 +130,7 @@ export default function LoginPage() {
 
         {/* Auth Window Container */}
         <div className="w-full max-w-md relative z-10 my-auto pt-12 md:pt-0">
-          <AuthWindow title="Đăng nhập" subtitle="PIXEL HUB Authentication">
+          <AuthWindow title="Đăng nhập" subtitle="Xác thực tài khoản">
             <div className="px-5 py-6 sm:px-8 sm:py-7">
               <LoginForm redirectTo={redirectTo} />
             </div>

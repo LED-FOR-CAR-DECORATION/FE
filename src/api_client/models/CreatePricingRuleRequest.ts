@@ -20,13 +20,25 @@ export type CreatePricingRuleRequest = {
      */
     description?: string;
     /**
-     * Selection cardinality type
+     * Selection cardinality or input primitive type
      */
     selectionType: CreatePricingRuleRequest.selectionType;
     /**
      * UI component presentation type
      */
     uiType: CreatePricingRuleRequest.uiType;
+    /**
+     * Whether this rule contributes to the Base price bucket used by BASE_PERCENT modifiers (allowed on FLAT_ADD choice rules only)
+     */
+    isBasePrice?: boolean | null;
+    /**
+     * Minimum allowed count when selectionType is QUANTITY
+     */
+    minQuantity?: number | null;
+    /**
+     * Maximum allowed count when selectionType is QUANTITY
+     */
+    maxQuantity?: number | null;
     /**
      * Whether selection is mandatory
      */
@@ -36,7 +48,7 @@ export type CreatePricingRuleRequest = {
      */
     displayOrder?: number;
     /**
-     * Parent option ID this rule conditionally depends on
+     * Parent option ID this rule conditionally depends on (acyclic multi-level up to depth 5)
      */
     dependsOnOptionId?: number | null;
     /**
@@ -46,11 +58,12 @@ export type CreatePricingRuleRequest = {
 };
 export namespace CreatePricingRuleRequest {
     /**
-     * Selection cardinality type
+     * Selection cardinality or input primitive type
      */
     export enum selectionType {
         SINGLE_SELECT = 'SINGLE_SELECT',
         MULTI_SELECT = 'MULTI_SELECT',
+        QUANTITY = 'QUANTITY',
         TEXT_INPUT = 'TEXT_INPUT',
     }
     /**
@@ -60,6 +73,7 @@ export namespace CreatePricingRuleRequest {
         RADIO = 'RADIO',
         DROPDOWN = 'DROPDOWN',
         CHECKBOX = 'CHECKBOX',
+        NUMBER = 'NUMBER',
         TEXT = 'TEXT',
     }
 }

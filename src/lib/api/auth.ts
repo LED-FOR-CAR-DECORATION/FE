@@ -17,12 +17,42 @@ const STATUS_MESSAGES: Record<number, string> = {
     503: 'Hệ thống gửi mã tạm thời không khả dụng. Vui lòng thử lại sau.',
 };
 
+/** Ánh xạ mã lỗi nghiệp vụ của hệ thống thương mại / giỏ hàng / kho */
+const COMMERCE_ERROR_CODES: Record<string, string> = {
+    DIGITAL_ITEM_QUANTITY_LIMIT: 'Sản phẩm kỹ thuật số này đã có trong giỏ hàng (tối đa 1 sản phẩm).',
+    PRODUCT_ALREADY_OWNED: 'Bạn đã sở hữu sản phẩm kỹ thuật số này trong tài khoản.',
+    INSUFFICIENT_STOCK: 'Số lượng yêu cầu vượt quá số lượng tồn kho khả dụng.',
+    PRODUCT_NOT_AVAILABLE: 'Sản phẩm hiện không khả dụng để đặt mua.',
+    DELIVERY_ADDRESS_REQUIRED: 'Vui lòng chọn địa chỉ giao hàng cho sản phẩm vật lý.',
+    CART_ITEM_NOT_FOUND: 'Sản phẩm không tồn tại trong giỏ hàng.',
+};
+
 /** Chuyển mọi lỗi (ApiError, lỗi mạng, ...) thành câu thông báo hiển thị cho người dùng. */
 export function getApiErrorMessage(error: unknown, fallback = 'Đã có lỗi xảy ra. Vui lòng thử lại.'): string {
     if (error instanceof ApiError) {
-        const body = error.body as ErrorResponse | undefined;
+        const body = error.body as (ErrorResponse & { code?: string }) | undefined;
+        if (body?.code && COMMERCE_ERROR_CODES[body.code]) {
+            return COMMERCE_ERROR_CODES[body.code];
+        }
+        if (typeof body?.message === 'string') {
+            const msg = body.message;
+            if (msg.includes('Digital products cannot exceed a quantity of 1')) {
+                return 'Sản phẩm số này đã có trong giỏ hàng (tối đa 1 sản phẩm).';
+            }
+            if (msg.includes('already owns this digital product')) {
+                return 'Bạn đã sở hữu sản phẩm số này trong tài khoản.';
+            }
+            if (msg.includes('exceeds available stock')) {
+                return 'Số lượng yêu cầu vượt quá số lượng tồn kho khả dụng.';
+            }
+            return msg;
+        }
         const detail = body?.details?.find((d) => d.message)?.message;
-        return body?.message || detail || STATUS_MESSAGES[error.status] || fallback;
+        if (detail) return detail;
+        if (error.status && STATUS_MESSAGES[error.status]) {
+            return STATUS_MESSAGES[error.status];
+        }
+        return fallback;
     }
     if (error instanceof Error) {
         // axios ném "Network Error" khi không kết nối được backend hoặc bị chặn CORS.
@@ -99,7 +129,7 @@ export async function apiLogout(): Promise<void> {
     } catch {
         // Bỏ qua: dù backend lỗi, phía client vẫn phải đăng xuất.
     } finally {
-        clearTokens();
+        if (getRefreshToken() === refreshToken) clearTokens();
     }
 }
 

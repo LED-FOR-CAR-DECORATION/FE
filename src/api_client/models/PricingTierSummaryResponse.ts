@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Summary of a commission pricing tier with bundle savings and revision quota
+ * Summary of a commission pricing preset or CUSTOM mode with bundle comparison and revision quota
  */
 export type PricingTierSummaryResponse = {
     /**
@@ -27,11 +27,11 @@ export type PricingTierSummaryResponse = {
      */
     basePrice?: number;
     /**
-     * Calculated custom builder price for identical options in VND
+     * Informational CUSTOM mode calculated price for identical options in VND
      */
     customCalculatedPrice?: number;
     /**
-     * Savings amount in VND compared to custom configurator
+     * Informational savings amount in VND compared to CUSTOM mode
      */
     savingsAmount?: number;
     /**
@@ -46,6 +46,10 @@ export type PricingTierSummaryResponse = {
      * Display order sequence
      */
     displayOrder?: number;
+    /**
+     * Optional option IDs that filter/display this preset (empty means available globally)
+     */
+    triggerOptionIds?: Array<number>;
     /**
      * List of option IDs bundled in this tier for client lookup against the rules list
      */

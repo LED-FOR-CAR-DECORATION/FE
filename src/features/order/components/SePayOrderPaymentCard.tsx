@@ -15,17 +15,18 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { PaymentSessionResponse } from "@/api_client";
+import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
 import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import { fetchOrderDetail } from "@/lib/api/orders";
 import { fetchPaymentSession, mockPaymentSuccess } from "@/lib/api/payments";
 import { formatPrice } from "@/lib/currency";
 
-interface SePayOrderPaymentCardProps {
-  orderId: string;
-  initialPaymentCode?: string;
-  redirectOnSuccess?: boolean;
+type SePayOrderPaymentCardProps = {
   onPaymentSuccess?: (session: PaymentSessionResponse) => void;
-}
+} & (
+  | { orderId: string; initialPaymentCode?: string; redirectOnSuccess?: boolean; commissionId?: never }
+  | { commissionId: number; initialPaymentCode: string; orderId?: never; redirectOnSuccess?: never }
+);
 
 const POLL_INTERVAL_MS = 3000;
 const REDIRECT_DELAY_MS = 1600;
@@ -42,8 +43,9 @@ function formatCountdown(expiresAt?: string | null, nowMs?: number): string | nu
 
 export default function SePayOrderPaymentCard({
   orderId,
+  commissionId,
   initialPaymentCode,
-  redirectOnSuccess = true,
+  redirectOnSuccess = orderId !== undefined,
   onPaymentSuccess,
 }: SePayOrderPaymentCardProps) {
   const router = useRouter();
@@ -79,12 +81,13 @@ export default function SePayOrderPaymentCard({
       setSucceededState(true);
       setError("");
 
-      if (typeof window !== "undefined") {
+      if (orderId !== undefined && typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+        window.dispatchEvent(new CustomEvent(ENTITLEMENTS_CHANGED_EVENT));
       }
       onPaymentSuccessRef.current?.(latestSession);
 
-      if (redirectOnSuccess) {
+      if (redirectOnSuccess && orderId !== undefined) {
         redirectTimeoutRef.current = setTimeout(() => {
           router.replace(`/checkout/result?orderId=${encodeURIComponent(orderId)}&paid=1`);
         }, REDIRECT_DELAY_MS);
@@ -96,6 +99,7 @@ export default function SePayOrderPaymentCard({
   const resolveCodeForOrder = useCallback(async (): Promise<string> => {
     const trimmedInitial = initialPaymentCode?.trim();
     if (trimmedInitial) return trimmedInitial;
+    if (orderId === undefined) throw new Error("Commission chưa có mã thanh toán.");
 
     const detail = await fetchOrderDetail(orderId);
     const codeFromDetail = detail?.payment?.paymentContent?.trim() || detail?.payment?.bankReferenceCode?.trim();
@@ -320,7 +324,7 @@ export default function SePayOrderPaymentCard({
               <div className="overflow-hidden rounded-sm border-2 border-black bg-white p-2 shadow-sm">
                 <Image
                   src={session.qrUrl}
-                  alt={`Mã QR thanh toán đơn hàng #${orderId}`}
+                  alt={`Mã QR thanh toán ${commissionId === undefined ? `đơn hàng #${orderId}` : `Commission #${commissionId}`}`}
                   width={240}
                   height={240}
                   unoptimized
@@ -429,7 +433,7 @@ export default function SePayOrderPaymentCard({
                     disabled={isMocking || refreshing}
                     onClick={() => void handleMockSuccess()}
                     className="inline-flex items-center gap-1.5 rounded-sm border-2 border-emerald-600 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 shadow-sm"
-                    title="Dành cho Dev/Test: Bấm để xác nhận đơn hàng thành công ngay lập tức"
+                    title="Dành cho Dev/Test: Xác nhận thanh toán mô phỏng"
                   >
                     {isMocking ? (
                       <Loader2 size={12} className="animate-spin text-emerald-700" />

@@ -20,7 +20,7 @@ export class StoreProductManagementService {
      * @returns ApiResponseUpdatedStoreProductResponse Updated product
      * @throws ApiError
      */
-    public static update3(
+    public static update4(
         id: number,
         requestBody: UpdateStoreProductRequest,
     ): CancelablePromise<ApiResponseUpdatedStoreProductResponse> {
@@ -92,7 +92,7 @@ export class StoreProductManagementService {
      * @returns ApiResponseCreatedStoreProductResponse Product created
      * @throws ApiError
      */
-    public static create2(
+    public static create3(
         requestBody: CreateStoreProductRequest,
     ): CancelablePromise<ApiResponseCreatedStoreProductResponse> {
         return __request(OpenAPI, {
@@ -117,7 +117,7 @@ export class StoreProductManagementService {
      * @returns ApiResponseUpdatedStoreProductStatusResponse Updated product
      * @throws ApiError
      */
-    public static update5(
+    public static update6(
         id: number,
         requestBody: UpdateStoreProductStatusRequest,
     ): CancelablePromise<ApiResponseUpdatedStoreProductStatusResponse> {

@@ -1,19 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AlertCircle, Check, Loader2, Tag } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, Image as ImageIcon, Loader2, Upload, X } from "lucide-react";
 import Modal from "@/components/ui/Modal";
+import CategoryTagSelector from "./CategoryTagSelector";
 import { apiUpdateStoreProduct, fetchStoreTags } from "@/lib/api/products";
+import { uploadMediaFile, type MediaPurposeType } from "@/lib/api/media";
 import type { TagItem, UpdateStoreProductRequest } from "@/api_client";
 
 export interface EditableProductData {
   id: string | number;
+  productType?: "LED" | "CHARACTER" | "BUNDLE" | "SUBSCRIPTION";
   productName: string;
   basePrice: number;
   description?: string;
   thumbnailUrl?: string;
   galleryUrls?: string[];
   tags?: Array<string | TagItem>;
+}
+
+function resolveProductMediaPurpose(
+  productType?: EditableProductData["productType"],
+): MediaPurposeType {
+  switch (productType) {
+    case "LED":
+      return "PRODUCT_LED";
+    case "BUNDLE":
+      return "PRODUCT_BUNDLE";
+    case "SUBSCRIPTION":
+      return "PRODUCT_SUBSCRIPTION";
+    case "CHARACTER":
+      return "CHARACTER_ASSET";
+    default:
+      return "STORE_PRODUCT";
+  }
 }
 
 interface EditStoreProductModalProps {
@@ -29,11 +49,75 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
   const [thumbnailUrl, setThumbnailUrl] = useState(product.thumbnailUrl ?? "");
   const [galleryUrlsText, setGalleryUrlsText] = useState((product.galleryUrls ?? []).join("\n"));
 
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string>(product.thumbnailUrl ?? "");
+
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const mediaPurpose = resolveProductMediaPurpose(product.productType);
+
+  const handleThumbnailFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingThumbnail(true);
+    setError(null);
+    try {
+      const res = await uploadMediaFile(file, mediaPurpose);
+      setThumbnailUrl(res.publicUrl);
+      setThumbnailPreviewUrl(res.localPreviewUrl || res.publicUrl);
+    } catch (err: any) {
+      setError(err?.message || "Không thể tải ảnh thumbnail lên. Vui lòng thử lại.");
+    } finally {
+      setIsUploadingThumbnail(false);
+      if (thumbnailInputRef.current) {
+        thumbnailInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleGalleryFilesChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setIsUploadingGallery(true);
+    setError(null);
+    try {
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        const res = await uploadMediaFile(file, mediaPurpose);
+        if (res.publicUrl) {
+          uploadedUrls.push(res.publicUrl);
+        }
+      }
+      setGalleryUrlsText((prev) => {
+        const existing = prev.trim();
+        const joined = uploadedUrls.join("\n");
+        return existing ? `${existing}\n${joined}` : joined;
+      });
+    } catch (err: any) {
+      setError(err?.message || "Không thể tải các ảnh gallery lên. Vui lòng thử lại.");
+    } finally {
+      setIsUploadingGallery(false);
+      if (galleryInputRef.current) {
+        galleryInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleRemoveGalleryUrl = (indexToRemove: number) => {
+    const currentList = galleryUrlsText
+      .split(/[\n,]/)
+      .map((u) => u.trim())
+      .filter((u) => u.length > 0);
+    const updated = currentList.filter((_, idx) => idx !== indexToRemove);
+    setGalleryUrlsText(updated.join("\n"));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -55,11 +139,21 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
     };
   }, [product.tags]);
 
-  const toggleTag = (tagId?: number) => {
-    if (!tagId) return;
+  const toggleTag = (tagId: number) => {
     setSelectedTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
     );
+  };
+
+  const handleTagCreated = (created: TagItem) => {
+    setAvailableTags((prev) =>
+      prev.some((t) => t.tagId === created.tagId) ? prev : [...prev, created],
+    );
+    if (created.tagId) {
+      setSelectedTagIds((prev) =>
+        prev.includes(created.tagId!) ? prev : [...prev, created.tagId!],
+      );
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,7 +168,7 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
 
     const priceNum = Number(basePrice);
     if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Giá bán cơ bản phải lớn hơn hoặc bằng 0 đ.");
+      setError("Giá bán cơ bản phải lớn hơn hoặc bằng 0 VNĐ.");
       return;
     }
 
@@ -196,55 +290,186 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
         </div>
 
         {/* Thumbnail & Gallery */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">Thumbnail URL</label>
-            <input
-              type="text"
-              value={thumbnailUrl}
-              onChange={(e) => setThumbnailUrl(e.target.value)}
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
-            />
+        <div className="space-y-4 rounded-xl border border-[#d8e6dc] bg-[#f9fdfa] p-4">
+          <div className="flex items-center justify-between border-b border-[#e5efe7] pb-2">
+            <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#1f432b]">
+              <ImageIcon size={15} /> Hình ảnh sản phẩm (Thumbnail & Thư viện ảnh)
+            </h4>
+            <span className="text-[11px] text-[#558363]">Hỗ trợ PNG, JPG, WEBP, GIF</span>
           </div>
-          <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">Gallery URLs (cách nhau dòng hoặc dấu phẩy)</label>
-            <input
-              type="text"
-              value={galleryUrlsText}
-              onChange={(e) => setGalleryUrlsText(e.target.value)}
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
-            />
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* THUMBNAIL */}
+            <div className="flex flex-col gap-2 rounded-lg border border-[#e0ede3] bg-white p-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[#1f432b]">
+                  Ảnh đại diện (Thumbnail)
+                </label>
+                <button
+                  type="button"
+                  disabled={isUploadingThumbnail}
+                  onClick={() => thumbnailInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
+                >
+                  {isUploadingThumbnail ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" /> Đang tải...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={12} /> Chọn ảnh từ máy
+                    </>
+                  )}
+                </button>
+                <input
+                  ref={thumbnailInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleThumbnailFileChosen}
+                />
+              </div>
+
+              {/* Preview Thumbnail */}
+              {(thumbnailPreviewUrl || thumbnailUrl) && (
+                <div className="relative mt-1 flex items-center gap-3 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] p-2">
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-[#cbe4d2] bg-white">
+                    <img
+                      src={thumbnailPreviewUrl || thumbnailUrl}
+                      alt="Thumbnail Preview"
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = "none";
+                      }}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-[#1f432b]">
+                      {thumbnailUrl || "Ảnh đã tải lên"}
+                    </p>
+                    <p className="text-[11px] text-text-muted">
+                      Đã gán làm ảnh đại diện sản phẩm
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setThumbnailUrl("");
+                      setThumbnailPreviewUrl("");
+                    }}
+                    title="Xóa ảnh này"
+                    className="rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-500"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <span className="text-[11px] text-text-muted">Hoặc nhập trực tiếp URL ảnh:</span>
+                <input
+                  type="text"
+                  value={thumbnailUrl}
+                  onChange={(e) => {
+                    setThumbnailUrl(e.target.value);
+                    setThumbnailPreviewUrl(e.target.value);
+                  }}
+                  placeholder="https://cdn.lumintra.com/products/matrix.png"
+                  className="mt-1 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                />
+              </div>
+            </div>
+
+            {/* GALLERY */}
+            <div className="flex flex-col gap-2 rounded-lg border border-[#e0ede3] bg-white p-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[#1f432b]">
+                  Thư viện ảnh (Gallery)
+                </label>
+                <button
+                  type="button"
+                  disabled={isUploadingGallery}
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
+                >
+                  {isUploadingGallery ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" /> Đang tải...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={12} /> Tải nhiều ảnh từ máy
+                    </>
+                  )}
+                </button>
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  multiple
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleGalleryFilesChosen}
+                />
+              </div>
+
+              {/* Preview Gallery List */}
+              {(() => {
+                const galleryList = galleryUrlsText
+                  .split(/[\n,]/)
+                  .map((u) => u.trim())
+                  .filter((u) => u.length > 0);
+                if (galleryList.length === 0) return null;
+                return (
+                  <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] p-2">
+                    {galleryList.map((url, idx) => (
+                      <div
+                        key={idx}
+                        className="group relative h-14 w-14 overflow-hidden rounded-md border border-[#cbe4d2] bg-white shadow-xs"
+                      >
+                        <img
+                          src={url}
+                          alt={`Gallery ${idx + 1}`}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = "none";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveGalleryUrl(idx)}
+                          className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white transition hover:bg-red-600"
+                          title="Xóa ảnh"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <div>
+                <span className="text-[11px] text-text-muted">Hoặc dán danh sách URL (mỗi dòng 1 link):</span>
+                <textarea
+                  rows={2}
+                  value={galleryUrlsText}
+                  onChange={(e) => setGalleryUrlsText(e.target.value)}
+                  placeholder="https://.../img1.png&#10;https://.../img2.png"
+                  className="mt-1 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Tags */}
-        {availableTags.length > 0 && (
-          <div>
-            <label className="mb-1.5 flex items-center gap-1 font-bold text-[#1f432b]">
-              <Tag size={14} /> Thẻ phân loại (Category Tags - AC03)
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {availableTags.map((tag) => {
-                const isSelected = selectedTagIds.includes(tag.tagId ?? -1);
-                return (
-                  <button
-                    key={tag.tagId}
-                    type="button"
-                    onClick={() => toggleTag(tag.tagId)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
-                      isSelected
-                        ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b]"
-                        : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
-                    }`}
-                  >
-                    {isSelected && <Check size={12} />}
-                    {tag.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <CategoryTagSelector
+          availableTags={availableTags}
+          selectedTagIds={selectedTagIds}
+          label="Thẻ phân loại sản phẩm"
+          onToggleTag={toggleTag}
+          onTagCreated={handleTagCreated}
+        />
       </form>
     </Modal>
   );

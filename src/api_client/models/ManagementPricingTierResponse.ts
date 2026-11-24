@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { BundledOptionResponse } from './BundledOptionResponse';
 /**
- * Management pricing tier detail including configuration, active status, and bundled options
+ * Management pricing preset/tier detail including configuration, active status, trigger options, and bundled options
  */
 export type ManagementPricingTierResponse = {
     /**
@@ -28,11 +28,11 @@ export type ManagementPricingTierResponse = {
      */
     basePrice?: number;
     /**
-     * Calculated custom builder price for identical options in VND
+     * Informational CUSTOM mode calculated price for identical options in VND
      */
     customCalculatedPrice?: number;
     /**
-     * Savings amount in VND compared to custom configurator
+     * Informational savings amount in VND compared to CUSTOM mode
      */
     savingsAmount?: number;
     /**
@@ -59,6 +59,10 @@ export type ManagementPricingTierResponse = {
      * Display order sequence
      */
     displayOrder?: number;
+    /**
+     * Optional option IDs that filter/display this preset (empty applies globally)
+     */
+    triggerOptionIds?: Array<number>;
     /**
      * List of bundled rule options included in this tier
      */

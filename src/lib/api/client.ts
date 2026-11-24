@@ -1,6 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
-import { AuthenticationService, OpenAPI } from '@/api_client';
-import { clearSession, clearTokens, getRefreshToken, getSessionToken, saveTokens } from '../auth/session';
+import { OpenAPI } from '@/api_client';
+import { accessTokenNeedsRefresh, expireSession, getRefreshToken, getSessionToken, readAccessToken, saveTokens } from '../auth/session';
+import type { LoginResponse } from '@/api_client';
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
 
@@ -16,9 +17,9 @@ OpenAPI.WITH_CREDENTIALS = true;
 
 // Gán một HÀM (Callback), tuyệt đối KHÔNG gọi hàm để gán giá trị tĩnh!
 // OpenAPI sẽ tự động chạy hàm này trước mỗi lần gửi request để gắp token.
-OpenAPI.TOKEN = async () => {
+OpenAPI.TOKEN = async (options) => {
     getApiBaseUrl();
-    const token = await getSessionToken();
+    const token = options.url.startsWith('/api/auth/') ? readAccessToken() : await getSessionToken();
     return token || '';
 };
 
@@ -34,15 +35,28 @@ export function refreshAccessToken(): Promise<string | null> {
     if (!refreshPromise) {
         refreshPromise = (async () => {
             const refreshToken = getRefreshToken();
-            if (!refreshToken) return null;
+            if (!refreshToken) {
+                expireSession();
+                return null;
+            }
             try {
-                const res = await AuthenticationService.refreshToken({ refreshToken });
-                const data = res.data;
-                if (!data?.accessToken) return null;
+                // Do not resolve OpenAPI.TOKEN here: it may itself be waiting for this promise.
+                const res = await axios.post<{ data: LoginResponse }>(`${getApiBaseUrl()}/api/auth/refresh`, { refreshToken }, {
+                    withCredentials: OpenAPI.WITH_CREDENTIALS,
+                });
+                if (getRefreshToken() !== refreshToken) throw new Error('Phiên đăng nhập đã thay đổi.');
+                const data = res.data.data;
+                if (!data?.accessToken || !data.refreshToken) throw new Error('Phản hồi gia hạn phiên không hợp lệ.');
                 saveTokens(data.accessToken, data.refreshToken, data.expiresIn);
                 return data.accessToken;
-            } catch {
-                return null;
+            } catch (error) {
+                const status = (error as AxiosError).response?.status;
+                if ((status === 401 || status === 403) && getRefreshToken() === refreshToken) {
+                    expireSession();
+                    return null;
+                }
+                // Network/5xx failures must not destroy a valid refresh session.
+                throw error;
             }
         })().finally(() => {
             refreshPromise = null;
@@ -58,16 +72,26 @@ if (typeof window !== 'undefined' && !globalScope.__ledAuthInterceptor) {
     globalScope.__ledAuthInterceptor = true;
     axios.interceptors.response.use(undefined, async (error: AxiosError) => {
         const config = error.config as RetriableConfig | undefined;
-        const isAuthEndpoint = config?.url?.includes('/api/auth/');
-        if (error.response?.status !== 401 || !config || config._retried || isAuthEndpoint) {
+        if (error.response?.status !== 401 || !config) {
+            return Promise.reject(error);
+        }
+        const base = new URL(getApiBaseUrl());
+        const target = new URL(config.url ?? '', config.baseURL ?? base.href);
+        const apiPath = `${base.pathname.replace(/\/$/, '')}/api/`;
+        if (target.origin !== base.origin || !target.pathname.startsWith(apiPath) || target.pathname.startsWith(`${apiPath}auth/`)) {
+            return Promise.reject(error);
+        }
+        if (config._retried) {
+            if (config.headers.get('Authorization') === `Bearer ${readAccessToken()}`) expireSession();
             return Promise.reject(error);
         }
         config._retried = true;
-        const newToken = await refreshAccessToken();
+        // A delayed 401 may belong to a token that another request already refreshed.
+        const currentToken = readAccessToken();
+        const failedAuthorization = config.headers.get('Authorization');
+        const newToken = currentToken && !accessTokenNeedsRefresh(currentToken, 0) && failedAuthorization !== `Bearer ${currentToken}`
+            ? currentToken : await refreshAccessToken();
         if (!newToken) {
-            // Refresh thất bại: phiên hết hạn -> xoá dữ liệu đăng nhập.
-            clearTokens();
-            clearSession();
             return Promise.reject(error);
         }
         config.headers.set('Authorization', `Bearer ${newToken}`);

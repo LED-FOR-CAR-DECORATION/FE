@@ -34,7 +34,7 @@ export class ManagedBundleControllerService {
      * @returns ApiResponseListManagedBundleResponse OK
      * @throws ApiError
      */
-    public static list1(
+    public static list2(
         page?: number,
         size: number = 10,
         status?: 'UNPUBLISHED' | 'PUBLISHED' | 'ARCHIVED' | 'DELETED',

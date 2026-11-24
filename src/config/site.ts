@@ -5,11 +5,11 @@
  * TODO: thay các giá trị đánh dấu TODO bằng thông tin thật của nhóm trước khi demo/triển khai.
  */
 export const SITE = {
-  name: "MIRAGE",
-  team: "Mirage Team",
+  name: "LUMINTRA",
+  team: "Lumintra Team",
   tagline: "Bảng LED ma trận trang trí xe và chợ nhân vật Pixel Art",
   description:
-    "Mirage mang đến bảng LED ma trận gắn kính xe, thư viện nhân vật Pixel Art và dịch vụ thiết kế nhân vật theo yêu cầu, để mỗi chiếc xe thể hiện cá tính riêng.",
+    "Lumintra mang đến bảng LED ma trận gắn kính xe, thư viện nhân vật Pixel Art và dịch vụ thiết kế nhân vật theo yêu cầu, để mỗi chiếc xe thể hiện cá tính riêng.",
 
   contact: {
     /** TODO: địa chỉ thật — cũng là địa chỉ hiển thị trên Google Map. */
@@ -18,7 +18,7 @@ export const SITE = {
     phone: "0900 000 000",
     phoneHref: "tel:+84900000000",
     /** TODO: email hỗ trợ thật. */
-    email: "support@mirage.example",
+    email: "support@lumintra.example",
     hours: "Thứ 2 – Thứ 7, 8:00 – 17:30",
   },
 

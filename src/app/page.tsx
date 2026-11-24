@@ -41,8 +41,8 @@ function scrollToCatalog(animate = true) {
 
 const HERO_SLIDES = [
   {
-    id: "mirage",
-    tag: "BỘ SƯU TẬP MIRAGE",
+    id: "lumintra",
+    tag: "BỘ SƯU TẬP LUMINTRA",
     title: "Nhân vật sống động cho không gian xe của bạn",
     desc: "Khám phá bộ sưu tập Nhân vật và bảng LED ma trận để tạo nên phong cách độc bản, sống động trên mọi cung đường.",
     badgeBg: "bg-primary",
@@ -801,7 +801,7 @@ function HomeContent() {
               {/* Quality Commitment Footer Banner */}
               <div className="neo-box-no-hover mt-6 flex items-center justify-center gap-2 bg-white p-3 text-xs font-bold uppercase tracking-wide text-black">
                 <Check size={16} className="text-primary-ink" />
-                <span>Sản phẩm chính hãng và tương thích 100% hệ sinh thái Mirage</span>
+                <span>Sản phẩm chính hãng và tương thích 100% hệ sinh thái Lumintra</span>
               </div>
             </div>
           </div>
@@ -839,7 +839,7 @@ export default function Home() {
       fallback={
         <div className="min-h-screen bg-background flex items-center justify-center">
           <p className="text-xs font-black uppercase tracking-wider text-text-muted">
-            Đang tải Mirage...
+            Đang tải Lumintra...
           </p>
         </div>
       }

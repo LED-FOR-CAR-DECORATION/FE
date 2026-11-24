@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { LogOut, PanelLeftClose, PanelLeftOpen, User } from "lucide-react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { UserRole } from "@/features/auth/types";
+import { SITE } from "@/config/site";
 import { getRoleHome, menuItems, roleLabels, type MenuItem } from "@/components/layout/internal-nav";
 
 const COLLAPSE_KEY = "internal_rail_collapsed";
@@ -117,11 +118,11 @@ export default function InternalShell({ children }: { children: React.ReactNode 
       <header className="ps-menubar relative flex h-10 shrink-0 items-center gap-2 px-2 text-[12px]">
         <Link
           href={getRoleHome(role)}
-          aria-label="Mirage — trang chủ nội bộ"
+          aria-label={`${SITE.name} — trang chủ nội bộ`}
           className="flex items-center gap-2 rounded-[4px] px-1 py-0.5"
         >
-          <span className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-[#2d6a4f] text-[11px] font-black text-white">M</span>
-          <span className="hidden text-[13px] font-black tracking-tight sm:inline">MIRAGE</span>
+          <span className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-[#2d6a4f] text-[11px] font-black text-white">{SITE.name[0]}</span>
+          <span className="hidden text-[13px] font-black tracking-tight sm:inline">{SITE.name}</span>
         </Link>
         <span className="rounded-[3px] bg-[var(--ps-active)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#2d6a4f]">
           {role ? roleLabels[role] : "Nội bộ"}
@@ -193,7 +194,7 @@ export default function InternalShell({ children }: { children: React.ReactNode 
           Sẵn sàng
         </span>
         <span className="truncate">{active?.label ?? ""}</span>
-        <span className="ml-auto hidden sm:inline">MIRAGE · {role ? roleLabels[role] : "Nội bộ"}</span>
+        <span className="ml-auto hidden sm:inline">{SITE.name} · {role ? roleLabels[role] : "Nội bộ"}</span>
       </footer>
     </div>
   );

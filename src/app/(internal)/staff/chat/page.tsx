@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import StaffInbox from "@/features/commission-chat/components/StaffInbox";
 
 export const metadata: Metadata = {
-  title: "Tin nhắn khách hàng | MIRAGE Staff",
+  title: "Tin nhắn khách hàng | LUMINTRA Staff",
 };
 
 export default function StaffChatPage() {

@@ -129,7 +129,7 @@ export async function apiLogout(): Promise<void> {
     } catch {
         // Bỏ qua: dù backend lỗi, phía client vẫn phải đăng xuất.
     } finally {
-        clearTokens();
+        if (getRefreshToken() === refreshToken) clearTokens();
     }
 }
 

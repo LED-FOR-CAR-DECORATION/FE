@@ -8,7 +8,11 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CartItem } from "@/features/cart/types";
 import type { MockOrder, OrderStatus } from "@/features/order/types";
 import { ORDERS_CHANGED_EVENT, orderService } from "@/features/order/services/order.service";
-import type { DispatchOrderRequest, DispatchOrderResponse } from "@/lib/api/orders";
+import type {
+  DispatchOrderRequest,
+  DispatchOrderResponse,
+  UpdateStaffDeliveryAddressRequest,
+} from "@/lib/api/orders";
 
 interface OrderContextValue {
   orders: MockOrder[];
@@ -21,7 +25,8 @@ interface OrderContextValue {
     shipping: number;
     paymentMethod: string;
   }) => Promise<{ id: string; paymentCode?: string }>;
-  updateOrderStatus: (id: string, status: OrderStatus) => void;
+  updateOrderStatus: (id: string, status: OrderStatus, reason?: string) => Promise<void>;
+  updateOrderDeliveryAddress: (id: string, payload: UpdateStaffDeliveryAddressRequest) => Promise<void>;
   createDelivery: (id: string) => Promise<void>;
   dispatchOrder: (id: string, payload: DispatchOrderRequest) => Promise<DispatchOrderResponse>;
   confirmOrderDelivery: (orderId: string | number) => Promise<void>;
@@ -83,27 +88,35 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   );
 
   const updateOrderStatus = useCallback(
-    async (id: string, status: OrderStatus) => {
-      setOrders((current) => current.map((order) => (order.id === id ? { ...order, status } : order)));
+    async (id: string, status: OrderStatus, reason?: string) => {
       if (user?.role === "STAFF" || user?.role === "MANAGER" || user?.role === "ADMIN") {
-        try {
-          const targetBackendStatus =
-            status === "Cancelled"
-              ? "CANCELED"
-              : status === "Confirmed"
-                ? "PROCESSING"
-                : status === "Delivered"
+        const targetBackendStatus =
+          status === "Cancelled" || status === "CANCELED"
+            ? "CANCELED"
+            : status === "Confirmed" || status === "PROCESSING" || status === "Preparing"
+              ? "PROCESSING"
+              : status === "REFUNDED"
+                ? "REFUNDED"
+                : status === "Delivered" || status === "COMPLETED"
                   ? "COMPLETED"
                   : undefined;
-          if (targetBackendStatus) {
-            await orderService.updateStaffStatus(id, targetBackendStatus);
-          }
-        } catch (err) {
-          console.error("Failed to update status on server:", err);
+        if (targetBackendStatus) {
+          await orderService.updateStaffStatus(id, targetBackendStatus, reason);
+          await refreshOrders();
+          return;
         }
       }
+      setOrders((current) => current.map((order) => (order.id === id ? { ...order, status } : order)));
     },
-    [user?.role],
+    [user?.role, refreshOrders],
+  );
+
+  const updateOrderDeliveryAddress = useCallback(
+    async (id: string, payload: UpdateStaffDeliveryAddressRequest) => {
+      await orderService.updateStaffDeliveryAddress(id, payload);
+      await refreshOrders();
+    },
+    [refreshOrders],
   );
 
   const createDelivery = useCallback(async (_id: string) => {
@@ -183,6 +196,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         refreshOrders,
         createOrder,
         updateOrderStatus,
+        updateOrderDeliveryAddress,
         createDelivery,
         dispatchOrder,
         confirmOrderDelivery,

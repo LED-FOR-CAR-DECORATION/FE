@@ -14,8 +14,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Mirage",
-  description: "Mirage - bảng LED trang trí và các nhân vật kỹ thuật số cho xe",
+  title: "Lumintra",
+  description: "Lumintra - bảng LED trang trí và các nhân vật kỹ thuật số cho xe",
 };
 
 export default function RootLayout({

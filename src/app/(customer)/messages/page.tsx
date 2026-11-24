@@ -4,8 +4,8 @@ import Header from "@/components/layout/Header";
 import CustomerInbox from "@/features/commission-chat/components/CustomerInbox";
 
 export const metadata: Metadata = {
-  title: "Tin nhắn | MIRAGE",
-  description: "Trao đổi với nhân viên MIRAGE về các commission thiết kế nhân vật của bạn.",
+  title: "Tin nhắn | LUMINTRA",
+  description: "Trao đổi với nhân viên LUMINTRA về các commission thiết kế nhân vật của bạn.",
 };
 
 /** Hộp thư kiểu Messenger: chiếm trọn chiều cao còn lại dưới Header, không có Footer. */

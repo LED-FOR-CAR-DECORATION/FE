@@ -1,13 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Image from "next/image";
 import {
-  AlertTriangle,
   Archive,
   CheckCircle2,
   Edit,
-  EyeOff,
   RotateCcw,
   Search,
   Sparkles,
@@ -18,6 +15,19 @@ import { formatDateTime } from "../format";
 import type { PublishMode, StoreCharacterRow, StoreProductStatus } from "../types";
 import StatusBadge, { STATUS_LABEL } from "./StatusBadge";
 import type { StoreStatusFilter } from "./StoreListingToolbar";
+import {
+  STORE_FORBIDDEN_HINT,
+  STORE_TABLE_CLASS,
+  STORE_THEAD_CLASS,
+  STORE_TH_CLASS,
+  StoreActionButton,
+  StoreEmptyRow,
+  StoreErrorRow,
+  StoreSkeletonRows,
+  StoreTableFooter,
+  StoreThumbnail,
+  storeRowClass,
+} from "./StoreTablePrimitives";
 
 type StatusFilter = StoreProductStatus | "All";
 
@@ -36,6 +46,7 @@ interface CharacterListingTableProps {
   onCreateCharacter?: () => void;
   statusFilter?: StoreStatusFilter;
   searchQuery?: string;
+  onResetFilters?: () => void;
   hideControls?: boolean;
 }
 
@@ -56,8 +67,6 @@ const HEADINGS = [
   "Thao tác",
 ];
 
-const FORBIDDEN_HINT = "Chỉ Quản lý mới có quyền thay đổi trạng thái hiển thị trên cửa hàng.";
-
 export default function CharacterListingTable({
   rows,
   isLoading,
@@ -72,6 +81,7 @@ export default function CharacterListingTable({
   onCreateCharacter,
   statusFilter,
   searchQuery,
+  onResetFilters,
   hideControls = false,
 }: CharacterListingTableProps) {
   const [query, setQuery] = useState("");
@@ -94,6 +104,10 @@ export default function CharacterListingTable({
 
   const hasFilters = effectiveQuery !== "" || effectiveStatus !== "All";
   const reset = () => {
+    if (onResetFilters) {
+      onResetFilters();
+      return;
+    }
     setQuery("");
     setStatus("All");
   };
@@ -150,63 +164,48 @@ export default function CharacterListingTable({
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px] text-sm">
-          <caption className="sr-only">Danh sách nhân vật chờ duyệt hoặc đang niêm yết trên cửa hàng</caption>
-          <thead className="border-b border-[#e3efe6]">
+        <table className={STORE_TABLE_CLASS}>
+          <caption className="sr-only">
+            Danh sách nhân vật chờ duyệt hoặc đang niêm yết trên cửa hàng
+          </caption>
+          <thead className={STORE_THEAD_CLASS}>
             <tr>
               {HEADINGS.map((heading) => (
-                <th
-                  key={heading}
-                  scope="col"
-                  className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide"
-                >
+                <th key={heading} scope="col" className={STORE_TH_CLASS}>
                   {heading}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <SkeletonRows />}
+            {isLoading && <StoreSkeletonRows columns={HEADINGS.length} />}
 
             {!isLoading && error && (
-              <tr>
-                <td colSpan={HEADINGS.length} className="px-4 py-14 text-center">
-                  <div role="alert" className="mx-auto flex max-w-sm flex-col items-center gap-3">
-                    <AlertTriangle size={24} className="text-red-600" />
-                    <p className="text-sm font-semibold text-red-700">{error}</p>
-                    <button
-                      type="button"
-                      onClick={onRetry}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50"
-                    >
-                      <RotateCcw size={13} /> Thử lại
-                    </button>
-                  </div>
-                </td>
-              </tr>
+              <StoreErrorRow colSpan={HEADINGS.length} message={error} onRetry={onRetry} />
             )}
 
             {!isLoading && !error && filtered.length === 0 && (
-              <tr>
-                <td colSpan={HEADINGS.length} className="px-4 py-14 text-center text-sm font-semibold text-text-muted">
-                  {rows.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <p>Chưa có nhân vật nào được niêm yết trên cửa hàng.</p>
-                      {canManage && onCreateCharacter && (
-                        <button
-                          type="button"
-                          onClick={onCreateCharacter}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#eefaf1] px-3.5 py-2 text-xs font-black text-[#10351f] shadow-sm transition hover:bg-[#d8f5df]"
-                        >
-                          <Sparkles size={14} /> Mở bán nhân vật từ nhà thiết kế
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    "Không tìm thấy nhân vật phù hợp với bộ lọc."
-                  )}
-                </td>
-              </tr>
+              <StoreEmptyRow
+                colSpan={HEADINGS.length}
+                message={
+                  rows.length === 0
+                    ? "Chưa có nhân vật nào được niêm yết trên cửa hàng."
+                    : "Không tìm thấy nhân vật phù hợp với bộ lọc."
+                }
+                hasActiveFilters={rows.length > 0 && hasFilters}
+                onResetFilters={reset}
+                action={
+                  canManage && onCreateCharacter ? (
+                    <button
+                      type="button"
+                      onClick={onCreateCharacter}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#3f9660] bg-[#eefaf1] px-3.5 py-2 text-xs font-black text-[#10351f] shadow-sm transition hover:bg-[#d8f5df]"
+                    >
+                      <Sparkles size={14} /> Mở bán nhân vật từ nhà thiết kế
+                    </button>
+                  ) : undefined
+                }
+              />
             )}
 
             {!isLoading &&
@@ -214,29 +213,25 @@ export default function CharacterListingTable({
               filtered.map((row) => {
                 const isDeleted = row.status === "DELETED";
                 return (
-                  <tr
-                    key={row.characterId}
-                    className={`border-b border-[#eef5f0] last:border-0 transition-all ${
-                      isDeleted
-                        ? "bg-neutral-100/60 opacity-40 grayscale"
-                        : "hover:bg-[#f9fdfa]"
-                    }`}
-                  >
+                  <tr key={row.characterId} className={storeRowClass(isDeleted)}>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
                       #{row.characterId}
                     </td>
                     <td className="px-4 py-3">
-                      <Image
+                      <StoreThumbnail
                         src={row.thumbnailUrl}
-                        alt={`Thumbnail của ${row.name}`}
-                        width={44}
-                        height={44}
-                        className="h-11 w-11 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] object-contain"
+                        alt={`Ảnh đại diện của ${row.name}`}
+                        fallback={<Sparkles size={18} />}
+                        pixelated
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <p className={`font-bold ${isDeleted ? "line-through text-neutral-500" : ""}`}>{row.name}</p>
-                      <p className="text-[11px] text-text-muted">Cập nhật lúc {formatDateTime(row.updatedAt)}</p>
+                      <p className={`font-bold ${isDeleted ? "line-through text-neutral-500" : ""}`}>
+                        {row.name}
+                      </p>
+                      <p className="text-[11px] text-text-muted">
+                        Cập nhật lúc {formatDateTime(row.updatedAt)}
+                      </p>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium">{row.creatorName}</td>
                     <td className="px-4 py-3">
@@ -261,9 +256,11 @@ export default function CharacterListingTable({
       </div>
 
       {!isLoading && !error && (
-        <p className="border-t border-[#e3efe6] px-4 py-3 text-xs font-medium text-text-muted" aria-live="polite">
-          Hiển thị {filtered.length} / {rows.length} nhân vật
-        </p>
+        <StoreTableFooter
+          filteredCount={filtered.length}
+          totalCount={rows.length}
+          unitLabel="nhân vật"
+        />
       )}
     </>
   );
@@ -279,27 +276,25 @@ interface RowActionsProps {
   onDelete?: CharacterListingTableProps["onDelete"];
 }
 
-/** Thao tác tùy thuộc theo trạng thái của Character. BR-14: vô hiệu nếu tài khoản không phải Manager. */
+/** Thao tác tùy thuộc theo trạng thái của nhân vật. BR-14: vô hiệu nếu tài khoản không phải Quản lý. */
 function RowActions({
   row,
   canManage,
   onPublish,
-  onUnlist,
   onEdit,
   onArchive,
   onDelete,
 }: RowActionsProps) {
-  // Khi sản phẩm đã bị xóa mềm: không hiển thị bất kỳ nút nào!
   if (row.status === "DELETED") {
     return null;
   }
 
-  const title = canManage ? undefined : FORBIDDEN_HINT;
+  const title = canManage ? undefined : STORE_FORBIDDEN_HINT;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {onEdit && (
-        <ActionButton
+        <StoreActionButton
           variant="secondary"
           disabled={!canManage}
           title={title}
@@ -307,12 +302,12 @@ function RowActions({
           icon={<Edit size={13} />}
         >
           Sửa
-        </ActionButton>
+        </StoreActionButton>
       )}
 
       {row.status === "UNPUBLISHED" && (
         <>
-          <ActionButton
+          <StoreActionButton
             variant="primary"
             disabled={!canManage}
             title={title}
@@ -320,9 +315,9 @@ function RowActions({
             icon={<CheckCircle2 size={13} />}
           >
             Duyệt mở bán
-          </ActionButton>
+          </StoreActionButton>
           {onArchive && (
-            <ActionButton
+            <StoreActionButton
               variant="secondary"
               disabled={!canManage}
               title={title}
@@ -330,13 +325,13 @@ function RowActions({
               icon={<Archive size={13} />}
             >
               Ngừng bán
-            </ActionButton>
+            </StoreActionButton>
           )}
         </>
       )}
 
       {row.status === "PUBLISHED" && onArchive && (
-        <ActionButton
+        <StoreActionButton
           variant="secondary"
           disabled={!canManage}
           title={title}
@@ -344,11 +339,11 @@ function RowActions({
           icon={<Archive size={13} />}
         >
           Ngừng bán
-        </ActionButton>
+        </StoreActionButton>
       )}
 
       {row.status === "ARCHIVED" && (
-        <ActionButton
+        <StoreActionButton
           variant="primary"
           disabled={!canManage}
           title={title}
@@ -356,11 +351,11 @@ function RowActions({
           icon={<Undo2 size={13} />}
         >
           Mở bán lại
-        </ActionButton>
+        </StoreActionButton>
       )}
 
       {onDelete && (
-        <ActionButton
+        <StoreActionButton
           variant="danger"
           disabled={!canManage}
           title={title}
@@ -368,53 +363,8 @@ function RowActions({
           icon={<Trash2 size={13} />}
         >
           Xóa
-        </ActionButton>
+        </StoreActionButton>
       )}
     </div>
-  );
-}
-
-const VARIANT: Record<"primary" | "secondary" | "danger", string> = {
-  primary:
-    "border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] text-[#10351f] shadow-[2px_2px_0_#c6e8cd] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]",
-  secondary: "border-[#cfe0d4] bg-white text-[#173b28] hover:border-[#a3d7b2] hover:bg-[#eef8f0]",
-  danger: "border-red-200 bg-white text-red-700 hover:bg-red-50",
-};
-
-function ActionButton({
-  variant,
-  icon,
-  children,
-  ...props
-}: { variant: keyof typeof VARIANT; icon: React.ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      type="button"
-      {...props}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-bold transition-all disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none ${VARIANT[variant]}`}
-    >
-      {icon}
-      {children}
-    </button>
-  );
-}
-
-function SkeletonRows() {
-  return (
-    <>
-      {[0, 1, 2, 3, 4].map((row) => (
-        <tr key={row} className="border-b border-[#eef5f0]" aria-hidden="true">
-          {HEADINGS.map((heading) => (
-            <td key={heading} className="px-4 py-4">
-              <div
-                className={`h-4 animate-pulse rounded bg-[#e7f3ea] ${
-                  heading === "Thumbnail" ? "h-11 w-11" : "w-24"
-                }`}
-              />
-            </td>
-          ))}
-        </tr>
-      ))}
-    </>
   );
 }

@@ -378,11 +378,18 @@ export default function StaffOrdersPage() {
 
                       {/* Status Badge (Soft-colored pill badge, no icons) */}
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${st.badgeClass}`}
-                        >
-                          {st.label}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${st.badgeClass}`}
+                          >
+                            {st.label}
+                          </span>
+                          {order.status === "DELIVERY_FAILED" && (
+                            <span className="text-[11px] font-semibold text-orange-700">
+                              Cần giao lại / hoàn tiền
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Created Date */}

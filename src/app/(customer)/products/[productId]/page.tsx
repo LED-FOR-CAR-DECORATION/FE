@@ -14,11 +14,11 @@ import {
   Plus,
   ShoppingCart,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/features/cart/context/CartContext";
+import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CatalogProduct } from "@/features/cart/catalog";
 import { getApiErrorMessage } from "@/lib/api/auth";
@@ -28,7 +28,8 @@ import { formatPrice } from "@/lib/currency";
 export default function ProductDetailPage() {
   const router = useRouter();
   const params = useParams<{ productId: string }>();
-  const { items: cartItems, addItem, setSelectedIds } = useCart();
+  const { items: cartItems, addItem } = useCart();
+  const { ownedCharacters, activeSubscription } = useGallery();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const canBuy = isAuthenticated && !authLoading;
 
@@ -103,8 +104,31 @@ export default function ProductDetailPage() {
 
   const isCharacter = item.productType === "CHARACTER";
   const isSubscription = item.productType === "SUBSCRIPTION";
+  const isBundle = item.productType === "BUNDLE";
   const isDigital = isCharacter || isSubscription;
-  const isOwned = false; // Resolved via entitlements if needed
+  const hasAllAccess = Boolean(activeSubscription?.allAccessCharacters);
+  const ownedCharIdSet = new Set(ownedCharacters.map((o) => o.characterId));
+  const isOwnedCharacter =
+    isCharacter &&
+    (hasAllAccess ||
+      ownedCharacters.some(
+        (owned) =>
+          String(owned.storeProductId) === String(item.id) ||
+          (item.characterDetails?.characterId != null &&
+            owned.characterId === item.characterDetails.characterId)
+      ));
+  const isOwnedBundle =
+    isBundle &&
+    (item.bundleDetails?.items?.some(
+      (bi) =>
+        bi.itemType === "CHARACTER" &&
+        (hasAllAccess || (bi.characterId != null && ownedCharIdSet.has(bi.characterId)))
+    ) ??
+      false);
+  const isOwned =
+    isOwnedCharacter ||
+    isOwnedBundle ||
+    (isSubscription && activeSubscription != null);
   const isAlreadyInCart = cartItems.some((i) => i.id === String(item.id));
 
   const productTypeLabel = isSubscription
@@ -134,7 +158,7 @@ export default function ProductDetailPage() {
     specifications.push(["Phiên bản hiện tại", `v${item.characterDetails.versionNumber}`]);
     specifications.push(["Số khung hình", `${item.characterDetails.frameCount ?? 1} frames`]);
     specifications.push(["Độ trễ khung hình", `${item.characterDetails.frameDelayMs ?? 0} ms`]);
-    specifications.push(["Định dạng tệp", "Chuẩn LED Binary (.lbin)"]);
+    specifications.push(["Định dạng tệp", "Ảnh động GIF (.gif)"]);
   } else if (item.bundleDetails) {
     specifications.push([
       "Thành phần gói",
@@ -171,26 +195,6 @@ export default function ProductDetailPage() {
     } catch (err) {
       setActionError(getApiErrorMessage(err, "Không thể thêm sản phẩm vào giỏ hàng."));
       return false;
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleBuyNow = async () => {
-    if (!isAuthenticated) {
-      router.push(`/login?returnUrl=${encodeURIComponent(`/products/${params.productId}`)}`);
-      return;
-    }
-    if (isOwned) return;
-    setActionError("");
-    setIsSubmitting(true);
-    try {
-      await addItem(item, isDigital ? 1 : quantity);
-      // Select strictly this item and jump straight to checkout
-      setSelectedIds([String(item.id)]);
-      router.push("/checkout");
-    } catch (err) {
-      setActionError(getApiErrorMessage(err, "Không thể tiếp tục mua ngay."));
     } finally {
       setIsSubmitting(false);
     }
@@ -285,7 +289,7 @@ export default function ProductDetailPage() {
                 </h1>
 
                 <p className="mt-1 text-xs font-bold uppercase text-text-muted">
-                  Sản phẩm chính hãng Mirage Ecosystem
+                  Sản phẩm chính hãng Lumintra Ecosystem
                 </p>
 
                 <div className="mt-4 border-b-2 border-dashed border-gray-300 pb-4">
@@ -346,26 +350,21 @@ export default function ProductDetailPage() {
                     </Link>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={add}
-                      disabled={isSubmitting}
-                      className="btn-secondary flex flex-1 items-center justify-center gap-2 py-3.5 text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
-                    >
-                      <ShoppingCart size={18} className="shrink-0" aria-hidden />
-                      <span>{added || isAlreadyInCart ? "Đã thêm · Thêm tiếp" : "Thêm vào giỏ hàng"}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleBuyNow}
-                      disabled={isSubmitting}
-                      className="btn-primary flex flex-1 items-center justify-center gap-2 py-3.5 text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
-                    >
-                      <Zap size={16} />
-                      <span>Mua ngay</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={add}
+                    disabled={isSubmitting || (isDigital && isAlreadyInCart)}
+                    className="btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-xs font-black uppercase shadow-[2px_2px_0_0_#000] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <ShoppingCart size={18} className="shrink-0" aria-hidden />
+                    <span>
+                      {isDigital && isAlreadyInCart
+                        ? "Đã có trong giỏ hàng"
+                        : added || isAlreadyInCart
+                          ? "Đã thêm · Thêm tiếp"
+                          : "Thêm vào giỏ hàng"}
+                    </span>
+                  </button>
                 )}
 
                 {actionError && (
@@ -383,7 +382,7 @@ export default function ProductDetailPage() {
                     >
                       đăng nhập
                     </Link>{" "}
-                    để thêm vào giỏ hàng hoặc mua ngay.
+                    để thêm vào giỏ hàng.
                   </p>
                 )}
               </div>
@@ -395,13 +394,13 @@ export default function ProductDetailPage() {
                 <Monitor size={16} className="text-primary-ink" /> Tương thích thiết bị
               </h2>
               <p className="text-xs font-medium leading-relaxed text-text-muted">
-                Hoạt động đồng bộ 100% trên hệ sinh thái bảng LED và ứng dụng điều khiển Mirage.
+                Hoạt động đồng bộ 100% trên hệ sinh thái bảng LED và ứng dụng điều khiển Lumintra.
               </p>
               <ul className="mt-4 space-y-2.5 text-xs font-bold text-text-main">
                 {[
-                  "Bảng LED Mirage Matrix 32×32",
-                  "Bảng LED Mirage Panorama 64×32",
-                  "Điều khiển đồng bộ qua App Mirage Mobile",
+                  "Bảng LED Lumintra Matrix 32×32",
+                  "Bảng LED Lumintra Panorama 64×32",
+                  "Điều khiển đồng bộ qua App Lumintra Mobile",
                 ].map((device) => (
                   <li key={device} className="flex items-center gap-2">
                     <Check size={14} className="text-primary-ink shrink-0" />
@@ -424,7 +423,7 @@ export default function ProductDetailPage() {
                   <Sparkles size={16} className="mt-0.5 text-primary-ink shrink-0" />
                   <div>
                     <strong className="block font-black uppercase">Bản quyền trọn đời</strong>
-                    <span className="text-text-muted">Sử dụng vĩnh viễn trên tài khoản Mirage.</span>
+                    <span className="text-text-muted">Sử dụng vĩnh viễn trên tài khoản Lumintra.</span>
                   </div>
                 </div>
               </div>

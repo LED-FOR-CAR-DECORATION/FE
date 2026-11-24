@@ -5,7 +5,8 @@
 
 const VN_MOBILE = /^0(3|5|7|8|9)\d{8}$/;
 const RECIPIENT_NAME = /^[\p{L}][\p{L}\s.'-]{1,99}$/u;
-const HOUSE_DETAIL = /^[\p{L}\p{N}\s,./#-]{2,100}$/u;
+const HOUSE_DETAIL = /^[\p{L}\p{N}\s,./#():&-]{2,100}$/u;
+const RAW_COORDINATES = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/;
 
 /** Backend limit for `fullAddress` on AddUserAddressRequest. */
 export const FULL_ADDRESS_MAX = 255;
@@ -39,15 +40,66 @@ export function validateVnMobile(value: string): string | null {
 export function validateHouseDetail(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return "Vui lòng nhập số nhà, hẻm hoặc tòa nhà.";
-  if (!HOUSE_DETAIL.test(trimmed)) return "Số nhà chỉ gồm chữ, số và , . / # - (2–100 ký tự).";
+  if (!HOUSE_DETAIL.test(trimmed)) return "Số nhà chỉ gồm chữ, số và , . / # ( ) : & - (2–100 ký tự).";
   return null;
 }
 
-/** Joins the typed house detail with the map address, skipping the detail if the map text already starts with it. */
+function sanitizeHouseCandidate(raw: string): string {
+  return raw
+    .replace(/[–—]/g, "-")
+    .replace(/[^\p{L}\p{N}\s,./#():&-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/^[,\s]+|[,\s]+$/g, "")
+    .slice(0, 100)
+    .trim();
+}
+
+/**
+ * Extracts a concise street/building detail from a Goong formatted map address
+ * so the house-detail input can be auto-filled when the customer picks a place.
+ */
+export function extractHouseDetailFromMapAddress(mapAddress: string): string {
+  const trimmed = mapAddress.trim();
+  if (!trimmed || RAW_COORDINATES.test(trimmed)) return "";
+
+  const parts = trimmed
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return "";
+
+  const primary =
+    parts.length >= 4
+      ? parts.slice(0, parts.length - 3).join(", ")
+      : parts[0];
+
+  const candidate = sanitizeHouseCandidate(primary);
+  if (candidate.length >= 2) return candidate;
+
+  return sanitizeHouseCandidate(parts.slice(0, Math.min(2, parts.length)).join(", "));
+}
+
+/** Joins the typed house detail with the map address while removing overlapping leading segments. */
 export function composeFullAddress(houseDetail: string, mapAddress: string): string {
   const house = houseDetail.trim();
   const map = mapAddress.trim();
   if (!house) return map;
+  if (!map) return house;
   if (map.toLowerCase().startsWith(house.toLowerCase())) return map;
+
+  const houseParts = house.split(",").map((p) => p.trim()).filter(Boolean);
+  const mapParts = map.split(",").map((p) => p.trim()).filter(Boolean);
+  const maxOverlap = Math.min(houseParts.length, mapParts.length);
+
+  for (let overlap = maxOverlap; overlap >= 1; overlap--) {
+    const houseTail = houseParts.slice(houseParts.length - overlap);
+    const mapHead = mapParts.slice(0, overlap);
+    if (houseTail.every((part, idx) => part.toLowerCase() === mapHead[idx].toLowerCase())) {
+      const remainingMap = mapParts.slice(overlap).join(", ");
+      return remainingMap ? `${house}, ${remainingMap}` : house;
+    }
+  }
+
   return `${house}, ${map}`;
 }

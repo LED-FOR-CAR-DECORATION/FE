@@ -231,7 +231,7 @@ function getFooterHint(order: MockOrder): string {
       return "Vui lòng bấm \"Đã nhận hàng\" nếu bạn đã kiểm tra và hài lòng với sản phẩm.";
     case "COMPLETED":
     case "Completed":
-      return "Cảm ơn bạn đã mua sắm tại MIRAGE!";
+      return "Cảm ơn bạn đã mua sắm tại LUMINTRA!";
     case "CANCELED":
     case "Cancelled":
       return "Đơn hàng đã được hủy và tồn kho đã được hoàn lại.";
@@ -450,7 +450,7 @@ export default function OrderHistoryPage() {
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-3.5">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-xs bg-[#155e59] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                            MIRAGE
+                            LUMINTRA
                           </span>
                           <span className="text-sm font-bold text-gray-900">Đơn hàng #{order.id}</span>
                           <Link

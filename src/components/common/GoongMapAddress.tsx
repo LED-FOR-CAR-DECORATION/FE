@@ -12,17 +12,32 @@ const GOONG_API_KEY = process.env.NEXT_PUBLIC_GOONG_API_KEY || 'YOUR_API_KEY_HER
 
 interface GoongMapAddressProps {
   onLocationSelect?: (lng: number, lat: number, address: string) => void;
+  initialLat?: number;
+  initialLng?: number;
+  initialQuery?: string;
 }
 
-export const GoongMapAddress: React.FC<GoongMapAddressProps> = ({ onLocationSelect }) => {
+export const GoongMapAddress: React.FC<GoongMapAddressProps> = ({
+  onLocationSelect,
+  initialLat,
+  initialLng,
+  initialQuery,
+}) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const marker = useRef<Marker | null>(null);
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
-  const [center] = useState<[number, number]>([105.85242472181584, 21.029579719995272]); // Default center
+  const resolvedCenter: [number, number] =
+    typeof initialLng === 'number' &&
+    Number.isFinite(initialLng) &&
+    typeof initialLat === 'number' &&
+    Number.isFinite(initialLat)
+      ? [initialLng, initialLat]
+      : [106.700806, 10.776889];
+  const [center] = useState<[number, number]>(resolvedCenter); // Default HCMC center or provided coordinates
   const [zoom] = useState(14);
   const [radiusInMeters] = useState(500);
 

@@ -178,17 +178,17 @@ export default function ManagerProductListingTable({
 
       {/* Data Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs text-[#26352f]">
-          <thead className="border-b border-[#e3efe6] bg-[#f7fbf8] font-bold text-[#173b28]">
+        <table className="w-full min-w-[960px] text-left text-sm">
+          <thead className="border-b border-[#e3efe6]">
             <tr>
-              <th className="whitespace-nowrap px-4 py-3 text-[11px] font-black uppercase tracking-wide">Mã sản phẩm</th>
-              <th className="px-4 py-3">Tác phẩm</th>
-              <th className="px-4 py-3">Tên nhân vật</th>
-              <th className="px-4 py-3">Nhà thiết kế</th>
-              <th className="px-4 py-3">Phiên bản</th>
-              <th className="px-4 py-3">Giá đề xuất</th>
-              <th className="px-4 py-3">Trạng thái</th>
-              <th className="px-4 py-3 text-right">Phê duyệt</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Mã sản phẩm</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Ảnh đại diện</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Tên nhân vật</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Nhà thiết kế</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Phiên bản</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Giá đề xuất</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Trạng thái</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#eef5f0]">
@@ -290,8 +290,8 @@ export default function ManagerProductListingTable({
                       <StatusBadge status={row.status} />
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {onEdit && (
                           <button
                             type="button"

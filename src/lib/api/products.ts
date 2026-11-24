@@ -77,7 +77,7 @@ export function mapProductDetailToCatalog(detail: ProductDetailResponse): Catalo
       undefined,
     galleryUrls: detail.galleryUrls ?? [],
     tags: detail.tags ?? [],
-    format: detail.characterDetails ? "LED_BINARY" : undefined,
+    format: detail.characterDetails ? "GIF" : undefined,
     animationType:
       detail.characterDetails && (detail.characterDetails.frameCount ?? 0) > 1
         ? "LOOP"

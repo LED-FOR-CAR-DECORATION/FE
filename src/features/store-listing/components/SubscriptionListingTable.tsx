@@ -7,23 +7,42 @@ import {
   Clock,
   Crown,
   Edit,
-  EyeOff,
   Infinity as InfinityIcon,
   Plus,
   Sparkles,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import {
   fetchManagedSubscriptions,
   formatSubscriptionApiError,
   type ManagedSubscriptionPlan,
 } from "@/lib/api/subscriptions";
-import { formatVnd } from "../format";
+import { fetchManagedStoreProducts } from "@/lib/api/products";
+import { formatDateTime, formatVnd } from "../format";
 import StatusBadge from "./StatusBadge";
 import StoreListingToolbar, {
   computeStatusCounts,
   type StoreStatusFilter,
 } from "./StoreListingToolbar";
+import {
+  STORE_FORBIDDEN_HINT,
+  STORE_TABLE_CLASS,
+  STORE_THEAD_CLASS,
+  STORE_TH_CLASS,
+  StoreActionButton,
+  StoreEmptyRow,
+  StoreErrorRow,
+  StoreSkeletonRows,
+  StoreTableFooter,
+  StoreThumbnail,
+  storeRowClass,
+} from "./StoreTablePrimitives";
+
+interface EnrichedSubscriptionPlan extends ManagedSubscriptionPlan {
+  thumbnailUrl?: string;
+  updatedAt?: string;
+}
 
 interface SubscriptionListingTableProps {
   canManage?: boolean;
@@ -37,41 +56,71 @@ interface SubscriptionListingTableProps {
   onCountChange?: (count: number) => void;
 }
 
+const HEADINGS = [
+  "Mã sản phẩm",
+  "Ảnh đại diện",
+  "Tên gói hội viên",
+  "Thời hạn",
+  "Quyền lợi",
+  "Giá bán",
+  "Trạng thái",
+  "Thao tác",
+];
+
 export default function SubscriptionListingTable({
   canManage = false,
   refreshTrigger = 0,
   onCreate,
   onEdit,
   onPublish,
-  onUnlist,
   onArchive,
   onDelete,
   onCountChange,
 }: SubscriptionListingTableProps) {
-  const [plans, setPlans] = useState<ManagedSubscriptionPlan[]>([]);
+  const [plans, setPlans] = useState<EnrichedSubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StoreStatusFilter>("ALL");
 
-  const loadPlans = () => {
+  const loadPlans = async () => {
     setIsLoading(true);
     setError(null);
-    fetchManagedSubscriptions()
-      .then((list) => {
-        setPlans(list);
-        onCountChange?.(list.length);
-      })
-      .catch((err) => {
-        setError(formatSubscriptionApiError(err));
-      })
-      .finally(() => {
-        setIsLoading(false);
+    try {
+      const [list, productsRes] = await Promise.all([
+        fetchManagedSubscriptions(),
+        fetchManagedStoreProducts({ productType: "SUBSCRIPTION", size: 200 }).catch(() => ({
+          items: [],
+          totalElements: 0,
+          totalPages: 0,
+        })),
+      ]);
+
+      const productById = new Map(
+        productsRes.items.map((product) => [product.productId, product]),
+      );
+
+      const enriched: EnrichedSubscriptionPlan[] = list.map((plan) => {
+        const linked = productById.get(plan.productId);
+        return {
+          ...plan,
+          thumbnailUrl: linked?.thumbnailUrl || linked?.galleryUrls?.[0] || undefined,
+          updatedAt: linked?.updatedAt ?? linked?.createdAt ?? plan.createdAt,
+        };
       });
+
+      setPlans(enriched);
+      onCountChange?.(list.length);
+    } catch (err) {
+      setError(formatSubscriptionApiError(err));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadPlans();
+    void loadPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTrigger]);
 
   const statusCounts = useMemo(
@@ -95,8 +144,16 @@ export default function SubscriptionListingTable({
     });
   }, [plans, searchTerm, statusFilter]);
 
+  const hasFilters = statusFilter !== "ALL" || searchTerm !== "";
+  const resetFilters = () => {
+    setStatusFilter("ALL");
+    setSearchTerm("");
+  };
+
+  const actionTitle = canManage ? undefined : STORE_FORBIDDEN_HINT;
+
   return (
-    <div className="flex flex-col">
+    <>
       <StoreListingToolbar
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
@@ -104,141 +161,165 @@ export default function SubscriptionListingTable({
         isLoading={isLoading}
         searchQuery={searchTerm}
         onSearchChange={setSearchTerm}
-        searchPlaceholder="Tìm theo tên gói, mã gói, ID…"
+        searchPlaceholder="Tìm kiếm gói hội viên theo tên hoặc mã…"
         onRefresh={loadPlans}
-        onReset={() => {
-          setStatusFilter("ALL");
-          setSearchTerm("");
-        }}
-        canReset={statusFilter !== "ALL" || searchTerm !== ""}
-        rightAction={
-          canManage &&
-          onCreate && (
-            <button
-              type="button"
-              onClick={onCreate}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#2d6a4f] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#1f432b]"
-            >
-              <Plus size={14} /> Tạo gói hội viên
-            </button>
-          )
-        }
+        onReset={resetFilters}
+        canReset={hasFilters}
       />
 
-      {/* Table */}
-      {error ? (
-        <div className="m-4 rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
-          {error}
-        </div>
-      ) : isLoading ? (
-        <div className="p-10 text-center text-sm text-text-muted">
-          Đang tải danh sách gói hội viên...
-        </div>
-      ) : filteredPlans.length === 0 ? (
-        <div className="m-4 rounded-xl border border-dashed border-[#cbe0d1] bg-white p-10 text-center">
-          <Crown size={32} className="mx-auto mb-2 text-[#88b998]" />
-          <p className="text-sm font-bold text-[#1f432b]">Chưa có gói hội viên nào phù hợp</p>
-          <p className="mt-1 text-xs text-text-muted">
-            Hãy tạo gói hội viên mới (theo ngày hoặc vĩnh viễn) để mở bán trên cửa hàng.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse text-left text-sm">
-            <thead className="border-b border-[#e3efe6]">
-              <tr className="text-[11px] font-black uppercase tracking-wide">
-                <th className="whitespace-nowrap px-4 py-3">Mã sản phẩm</th>
-                <th className="whitespace-nowrap px-4 py-3">Tên gói hội viên</th>
-                <th className="whitespace-nowrap px-4 py-3">Thời hạn</th>
-                <th className="whitespace-nowrap px-4 py-3">Quyền lợi</th>
-                <th className="whitespace-nowrap px-4 py-3">Giá bán</th>
-                <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#eef5f0]">
-              {filteredPlans.map((plan) => {
+      <div className="overflow-x-auto">
+        <table className={STORE_TABLE_CLASS}>
+          <caption className="sr-only">
+            Danh sách gói hội viên đang quản lý trên cửa hàng
+          </caption>
+          <thead className={STORE_THEAD_CLASS}>
+            <tr>
+              {HEADINGS.map((heading) => (
+                <th key={heading} scope="col" className={STORE_TH_CLASS}>
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && <StoreSkeletonRows columns={HEADINGS.length} />}
+
+            {!isLoading && error && (
+              <StoreErrorRow colSpan={HEADINGS.length} message={error} onRetry={loadPlans} />
+            )}
+
+            {!isLoading && !error && filteredPlans.length === 0 && (
+              <StoreEmptyRow
+                colSpan={HEADINGS.length}
+                message={
+                  plans.length === 0
+                    ? "Chưa có gói hội viên nào được niêm yết trên cửa hàng."
+                    : "Không tìm thấy gói hội viên phù hợp với bộ lọc."
+                }
+                hasActiveFilters={plans.length > 0 && hasFilters}
+                onResetFilters={resetFilters}
+                action={
+                  canManage && onCreate ? (
+                    <StoreActionButton
+                      variant="primary"
+                      onClick={onCreate}
+                      icon={<Plus size={13} />}
+                    >
+                      Tạo gói hội viên
+                    </StoreActionButton>
+                  ) : undefined
+                }
+              />
+            )}
+
+            {!isLoading &&
+              !error &&
+              filteredPlans.map((plan) => {
                 const isDeleted = plan.status === "DELETED";
                 return (
-                  <tr
-                    key={plan.subscriptionDetailId}
-                    className={isDeleted ? "bg-neutral-100/60 opacity-45 grayscale" : "hover:bg-[#f9fcfa]"}
-                  >
+                  <tr key={plan.subscriptionDetailId} className={storeRowClass(isDeleted)}>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
                       #{plan.productId}
                     </td>
                     <td className="px-4 py-3">
-                      <p className={`font-bold text-[#1f432b] ${isDeleted ? "line-through text-neutral-500" : ""}`}>
-                        {plan.planName}
-                      </p>
-                      <p className="mt-0.5 font-mono text-[11px] font-medium text-text-muted">
-                        Mã gói: {plan.planCode}
-                      </p>
+                      <StoreThumbnail
+                        src={plan.thumbnailUrl}
+                        alt={`Ảnh đại diện của ${plan.planName}`}
+                        fallback={<Crown size={18} />}
+                      />
                     </td>
                     <td className="px-4 py-3">
+                      <p className={`font-bold ${isDeleted ? "line-through text-neutral-500" : ""}`}>
+                        {plan.planName}
+                      </p>
+                      <p className="text-[11px] text-text-muted">
+                        Mã gói: <span className="font-mono font-semibold">{plan.planCode}</span>
+                        {plan.updatedAt ? ` · Cập nhật lúc ${formatDateTime(plan.updatedAt)}` : ""}
+                      </p>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
                       {plan.isLifetime ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 px-2 py-0.5 text-xs font-bold text-purple-800">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-800">
                           <InfinityIcon size={13} /> Vĩnh viễn
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-800">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-800">
                           <Clock size={12} /> {plan.durationDays} ngày
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3">
                       {plan.allAccessCharacters ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#2d6a4f]">
-                          <Sparkles size={13} /> Mở khóa toàn bộ Character
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#173b28]">
+                          <Sparkles size={13} className="text-[#3f9660]" /> Mở khóa toàn bộ nhân vật
                         </span>
                       ) : (
-                        <span className="text-xs text-text-muted">Theo cấu hình gói</span>
+                        <span className="text-xs font-medium text-text-muted">Theo cấu hình gói</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-extrabold text-[#1f432b]">
+                    <td className="whitespace-nowrap px-4 py-3 font-bold tabular-nums text-[#173b28]">
                       {formatVnd(plan.basePrice)}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={plan.status} />
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {canManage && !isDeleted && (
-                        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                    <td className="px-4 py-3">
+                      {isDeleted ? null : (
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {onEdit && (
-                            <button
-                              type="button"
+                            <StoreActionButton
+                              variant="secondary"
+                              disabled={!canManage}
+                              title={actionTitle}
                               onClick={() => onEdit(plan)}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1 text-xs font-bold text-[#1f432b] hover:bg-gray-50"
+                              icon={<Edit size={13} />}
                             >
-                              <Edit size={12} /> Sửa
-                            </button>
+                              Sửa
+                            </StoreActionButton>
                           )}
-                          {(plan.status === "UNPUBLISHED" || plan.status === "ARCHIVED") && onPublish && (
-                            <button
-                              type="button"
+                          {plan.status === "UNPUBLISHED" && onPublish && (
+                            <StoreActionButton
+                              variant="primary"
+                              disabled={!canManage}
+                              title={actionTitle}
                               onClick={() => onPublish(plan)}
-                              className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-bold text-white hover:bg-[#1f432b]"
+                              icon={<CheckCircle2 size={13} />}
                             >
-                              <CheckCircle2 size={12} /> {plan.status === "ARCHIVED" ? "Mở bán lại" : "Mở bán"}
-                            </button>
+                              Mở bán
+                            </StoreActionButton>
+                          )}
+                          {plan.status === "ARCHIVED" && onPublish && (
+                            <StoreActionButton
+                              variant="primary"
+                              disabled={!canManage}
+                              title={actionTitle}
+                              onClick={() => onPublish(plan)}
+                              icon={<Undo2 size={13} />}
+                            >
+                              Mở bán lại
+                            </StoreActionButton>
                           )}
                           {plan.status !== "ARCHIVED" && onArchive && (
-                            <button
-                              type="button"
+                            <StoreActionButton
+                              variant="secondary"
+                              disabled={!canManage}
+                              title={actionTitle}
                               onClick={() => onArchive(plan)}
-                              className="inline-flex items-center gap-1 rounded-md border border-[#cfe0d4] bg-white px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-50"
+                              icon={<Archive size={13} />}
                             >
-                              <Archive size={12} /> Ngừng bán
-                            </button>
+                              Ngừng bán
+                            </StoreActionButton>
                           )}
                           {onDelete && (
-                            <button
-                              type="button"
+                            <StoreActionButton
+                              variant="danger"
+                              disabled={!canManage}
+                              title={actionTitle}
                               onClick={() => onDelete(plan)}
-                              className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50"
+                              icon={<Trash2 size={13} />}
                             >
-                              <Trash2 size={12} /> Xóa
-                            </button>
+                              Xóa
+                            </StoreActionButton>
                           )}
                         </div>
                       )}
@@ -246,10 +327,17 @@ export default function SubscriptionListingTable({
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </table>
+      </div>
+
+      {!isLoading && !error && (
+        <StoreTableFooter
+          filteredCount={filteredPlans.length}
+          totalCount={plans.length}
+          unitLabel="gói hội viên"
+        />
       )}
-    </div>
+    </>
   );
 }

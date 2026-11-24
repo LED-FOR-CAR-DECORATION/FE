@@ -124,11 +124,21 @@ function MetricCard({
 
 const PRODUCT_CATEGORY_LABELS: Record<string, string> = {
   HARDWARE: "Phần cứng",
+  LED: "Phần cứng",
+  PHYSICAL: "Phần cứng",
   COMMISSION: "Yêu cầu thiết kế",
   CHARACTER: "Nhân vật",
+  DIGITAL: "Nhân vật",
   BUNDLE: "Gói sản phẩm",
   SUBSCRIPTION: "Gói hội viên",
 };
+
+function formatRevenuePeriodVi(period?: string): string {
+  if (!period) return "So với tháng trước";
+  return period
+    .replace(/^vs\.\s*/i, "So với ")
+    .replace(/^vs\s+/i, "So với ");
+}
 
 function currentMonth(): string {
   const now = new Date();
@@ -136,12 +146,15 @@ function currentMonth(): string {
 }
 
 const STOCK_STATUS_MAP: Record<
-  NonNullable<TopProductItem["stockStatus"]>,
+  string,
   { label: string; className: string }
 > = {
   "In stock": { label: "Còn hàng", className: "bg-green-50 text-green-700" },
   "Low stock": { label: "Sắp hết", className: "bg-amber-50 text-amber-700" },
   "Out of stock": { label: "Hết hàng", className: "bg-red-50 text-red-700" },
+  IN_STOCK: { label: "Còn hàng", className: "bg-green-50 text-green-700" },
+  LOW_STOCK: { label: "Sắp hết", className: "bg-amber-50 text-amber-700" },
+  OUT_OF_STOCK: { label: "Hết hàng", className: "bg-red-50 text-red-700" },
 };
 
 function formatMillionVnd(value: number): string {
@@ -432,7 +445,7 @@ function TopProductsCard({
           </div>
 
           <span className="inline-flex shrink-0 items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-            Top {products.length > 0 ? products.length : 5}
+            Top {products.length > 0 ? products.length : 5} sản phẩm
           </span>
         </div>
 
@@ -864,7 +877,7 @@ export default function ManagerDashboard() {
               value: `${growthPositive ? "+" : ""}${kpi.revenueGrowthPercent}%`,
               isPositive: growthPositive,
             }}
-            footerText={kpi.revenuePeriod}
+            footerText={formatRevenuePeriodVi(kpi.revenuePeriod)}
             onValueClick={() =>
               setDrilldownQuery({
                 month,
@@ -1396,10 +1409,20 @@ export default function ManagerDashboard() {
                           className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                             ticket.status === "PENDING"
                               ? "bg-amber-50 text-amber-700"
-                              : "bg-blue-50 text-blue-700"
+                              : ticket.status === "APPROVED"
+                                ? "bg-blue-50 text-blue-700"
+                                : ticket.status === "COMPLETED"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-slate-100 text-slate-700"
                           }`}
                         >
-                          {ticket.status === "PENDING" ? "Chờ tiếp nhận" : "Đang xử lý"}
+                          {ticket.status === "PENDING"
+                            ? "Chờ tiếp nhận"
+                            : ticket.status === "APPROVED"
+                              ? "Đã tiếp nhận"
+                              : ticket.status === "COMPLETED"
+                                ? "Đã hoàn tất"
+                                : "Đang xử lý"}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3.5 text-right">

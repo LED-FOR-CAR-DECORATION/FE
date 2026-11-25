@@ -105,7 +105,7 @@ function HeroSlider({
   const firstBundle = products.find((p) => p.productType === "BUNDLE" && p.previewUrl);
 
   const slideVisuals: Record<string, { src: string | null; alt: string }> = {
-    mirage: {
+    lumintra: {
       src: firstBundle?.previewUrl || firstCharacter?.previewUrl || null,
       alt: firstBundle?.name || firstCharacter?.name || HERO_SLIDES[0].title,
     },
@@ -123,7 +123,7 @@ function HeroSlider({
   const visual = slideVisuals[slide.id];
   const activeImageSrc = loading
     ? null
-    : visual.src && !failedUrls[visual.src]
+    : visual?.src && !failedUrls[visual.src]
       ? visual.src
       : slide.fallbackImage;
   const showEmojiFallback = !loading && Boolean(activeImageSrc && failedUrls[activeImageSrc]);
@@ -191,7 +191,7 @@ function HeroSlider({
               <div className="relative h-full w-full overflow-hidden bg-white">
                 <Image
                   src={activeImageSrc}
-                  alt={visual.alt}
+                  alt={visual?.alt ?? slide.title}
                   fill
                   sizes="(max-width: 640px) 144px, (max-width: 1024px) 208px, 288px"
                   className="object-contain p-3 [image-rendering:pixelated]"

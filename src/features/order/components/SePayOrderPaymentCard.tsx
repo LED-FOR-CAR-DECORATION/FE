@@ -440,7 +440,7 @@ export default function SePayOrderPaymentCard({
                     ) : (
                       <span className="text-emerald-600 font-bold">⚡</span>
                     )}
-                    )}
+                    Giả lập thanh toán
                   </button>
                 )}
                 <button

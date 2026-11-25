@@ -12,7 +12,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import StoreModal from "./StoreModal";
 import CategoryTagSelector from "./CategoryTagSelector";
 import {
   apiCreateStoreProduct,
@@ -381,9 +381,12 @@ export default function CreateStoreProductModal({
   };
 
   return (
-    <Modal
+    <StoreModal
       title="Tạo Mẫu LED & Sản phẩm bày bán"
+      badge="TẠO MẪU LED"
       description="Tạo đồng thời mẫu phần cứng LED trong kho và sản phẩm bày bán tương ứng trên Cửa hàng."
+      icon={<Cpu size={18} />}
+      iconBoxClassName="bg-primary"
       onClose={onClose}
       busy={isSubmitting}
       size="lg"
@@ -394,9 +397,9 @@ export default function CreateStoreProductModal({
               type="button"
               onClick={onBackToTypeSelect}
               disabled={isSubmitting}
-              className="mr-auto inline-flex items-center gap-1.5 rounded-lg border border-[#cfe0d4] bg-white px-3.5 py-2 text-xs font-bold text-[#1f432b] transition hover:bg-[#eef8f0] disabled:opacity-50"
+              className="btn-secondary mr-auto inline-flex items-center gap-1.5 px-3.5! py-2! text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
             >
-              <ArrowLeft size={14} />
+              <ArrowLeft size={14} aria-hidden="true" />
               Đổi loại sản phẩm
             </button>
           )}
@@ -404,7 +407,7 @@ export default function CreateStoreProductModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-[#cfe0d4] bg-white px-4 py-2 text-sm font-bold hover:bg-[#eef8f0] disabled:opacity-50"
+            className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             Hủy
           </button>
@@ -412,21 +415,21 @@ export default function CreateStoreProductModal({
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting || isUploadingThumbnail || isUploadingGallery}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#3b8555] bg-[#439660] px-5 py-2 text-sm font-black text-white shadow-xs hover:bg-[#387e51] disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-primary inline-flex items-center gap-2 px-5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             {isSubmitting ? (
               <>
-                <Loader2 size={15} className="animate-spin" />
+                <Loader2 size={15} className="animate-spin" aria-hidden="true" />
                 Đang tạo...
               </>
             ) : publishImmediately ? (
               <>
-                <Rocket size={15} />
+                <Rocket size={15} aria-hidden="true" />
                 Tạo &amp; Mở bán ngay
               </>
             ) : (
               <>
-                <Sparkles size={15} />
+                <Sparkles size={15} aria-hidden="true" />
                 Tạo mẫu LED &amp; Sản phẩm
               </>
             )}
@@ -438,23 +441,23 @@ export default function CreateStoreProductModal({
         {error && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800"
+            className="flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
           >
-            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Thông tin Sản phẩm */}
-        <div className="space-y-3 rounded-xl border border-[#d8e6dc] bg-[#f9fdfa] p-4">
-          <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#1f432b]">
-            <Sparkles size={14} className="text-[#2d6a4f]" />
+        <div className="space-y-3 border-2 border-black bg-white p-4 shadow-[2px_2px_0_0_#000]">
+          <h4 className="flex items-center gap-1.5 border-b-2 border-black pb-2 text-xs font-black uppercase tracking-wider text-black">
+            <Sparkles size={14} className="text-primary-ink" aria-hidden="true" />
             1. Thông tin sản phẩm trên Cửa hàng
           </h4>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                Tên sản phẩm bày bán <span className="text-red-500">*</span>
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+                Tên sản phẩm bày bán <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -463,12 +466,12 @@ export default function CreateStoreProductModal({
                 value={productName}
                 onChange={(e) => setProductName(e.target.value)}
                 placeholder="Ví dụ: Bảng LED Ma Trận Pro 64×64"
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-sm outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                Giá bán (VNĐ) <span className="text-red-500">*</span>
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+                Giá bán (VNĐ) <span className="text-red-600">*</span>
               </label>
               <input
                 type="number"
@@ -478,13 +481,13 @@ export default function CreateStoreProductModal({
                 value={basePrice}
                 onChange={(e) => setBasePrice(e.target.value)}
                 placeholder="1490000"
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-sm outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-black text-primary-ink tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#1f432b]">
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
               Mô tả chi tiết sản phẩm
             </label>
             <textarea
@@ -492,26 +495,26 @@ export default function CreateStoreProductModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Mô tả tính năng, độ sáng, phụ kiện đi kèm, cách lắp đặt..."
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-sm outline-none focus:border-[#439660]"
+              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-medium text-black placeholder:text-text-muted focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
           </div>
         </div>
 
         {/* Thông tin Phần cứng Mẫu LED (bắt buộc) */}
-        <div className="space-y-3 rounded-xl border border-[#dbece0] bg-[#f9fdfa] p-4">
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#1f432b]">
-              <Cpu size={14} className="text-[#2d6a4f]" />
+        <div className="space-y-3 border-2 border-black bg-white p-4 shadow-[2px_2px_0_0_#000]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2">
+            <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+              <Cpu size={14} className="text-primary-ink" aria-hidden="true" />
               2. Thông số Mẫu LED &amp; Tồn kho ban đầu
             </h4>
-            <span className="rounded-md bg-[#eaf7ee] px-2 py-0.5 text-[11px] font-bold text-[#1c4b2b]">
+            <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
               Tự động đồng bộ vào Kho LED
             </span>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-bold text-[#1f432b]">
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
                 Tên mẫu LED trong kho
               </label>
               <input
@@ -520,12 +523,12 @@ export default function CreateStoreProductModal({
                 value={modelName}
                 onChange={(e) => setModelName(e.target.value)}
                 placeholder="Để trống sẽ dùng tên sản phẩm"
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                Tồn kho ban đầu <span className="text-red-500">*</span>
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+                Tồn kho ban đầu <span className="text-red-600">*</span>
               </label>
               <input
                 type="number"
@@ -534,15 +537,15 @@ export default function CreateStoreProductModal({
                 required
                 value={stockQuantity}
                 onChange={(e) => setStockQuantity(e.target.value)}
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div>
-              <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                Rộng (px) <span className="text-red-500">*</span>
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+                Rộng (px) <span className="text-red-600">*</span>
               </label>
               <input
                 type="number"
@@ -551,12 +554,12 @@ export default function CreateStoreProductModal({
                 required
                 value={widthPx}
                 onChange={(e) => setWidthPx(e.target.value)}
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                Cao (px) <span className="text-red-500">*</span>
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+                Cao (px) <span className="text-red-600">*</span>
               </label>
               <input
                 type="number"
@@ -565,11 +568,11 @@ export default function CreateStoreProductModal({
                 required
                 value={heightPx}
                 onChange={(e) => setHeightPx(e.target.value)}
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-bold text-[#1f432b]">
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
                 Kết nối
               </label>
               <input
@@ -577,11 +580,11 @@ export default function CreateStoreProductModal({
                 value={connectivity}
                 onChange={(e) => setConnectivity(e.target.value)}
                 placeholder="Wi-Fi + BLE"
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-bold text-[#1f432b]">
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
                 Nguồn điện
               </label>
               <input
@@ -589,13 +592,13 @@ export default function CreateStoreProductModal({
                 value={voltage}
                 onChange={(e) => setVoltage(e.target.value)}
                 placeholder="5V USB-C"
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-[#1f432b]">
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
               Ghi chú thông số bổ sung
             </label>
             <input
@@ -603,40 +606,42 @@ export default function CreateStoreProductModal({
               value={specNote}
               onChange={(e) => setSpecNote(e.target.value)}
               placeholder="Ví dụ: RGB HUB75 ESP32-S3, khung nhôm chống nước"
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
+              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
           </div>
         </div>
 
         {/* Ảnh đại diện & Thư viện ảnh */}
-        <div className="space-y-4 rounded-xl border border-[#d8e6dc] bg-[#f9fdfa] p-4">
-          <div className="flex items-center justify-between border-b border-[#e5efe7] pb-2">
-            <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#1f432b]">
-              <ImageIcon size={15} /> 3. Hình ảnh sản phẩm (Ảnh đại diện &amp; Thư viện ảnh)
+        <div className="space-y-4 border-2 border-black bg-white p-4 shadow-[2px_2px_0_0_#000]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2">
+            <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+              <ImageIcon size={15} className="text-primary-ink" aria-hidden="true" /> 3. Hình ảnh sản phẩm (Ảnh đại diện &amp; Thư viện ảnh)
             </h4>
-            <span className="text-[11px] text-[#558363]">Hỗ trợ PNG, JPG, WEBP, GIF</span>
+            <span className="border border-black bg-gray-100 px-2 py-0.5 text-[10px] font-black uppercase text-black">
+              PNG, JPG, WEBP, GIF
+            </span>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Ảnh đại diện */}
-            <div className="flex flex-col gap-2 rounded-lg border border-[#e0ede3] bg-white p-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#1f432b]">
+            <div className="flex flex-col gap-2.5 border-2 border-black bg-gray-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-black uppercase tracking-wide text-black">
                   Ảnh đại diện
                 </label>
                 <button
                   type="button"
                   disabled={isUploadingThumbnail}
                   onClick={() => thumbnailInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
+                  className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1! text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
                 >
                   {isUploadingThumbnail ? (
                     <>
-                      <Loader2 size={12} className="animate-spin" /> Đang tải...
+                      <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Đang tải...
                     </>
                   ) : (
                     <>
-                      <Upload size={12} /> Chọn ảnh từ máy
+                      <Upload size={12} aria-hidden="true" /> Chọn ảnh từ máy
                     </>
                   )}
                 </button>
@@ -650,23 +655,23 @@ export default function CreateStoreProductModal({
               </div>
 
               {(thumbnailPreviewUrl || thumbnailUrl) && (
-                <div className="relative mt-1 flex items-center gap-3 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] p-2">
-                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-[#cbe4d2] bg-white">
+                <div className="relative mt-1 flex items-center gap-3 border-2 border-black bg-white p-2">
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden border-2 border-black bg-gray-50">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={thumbnailPreviewUrl || thumbnailUrl}
                       alt="Ảnh đại diện xem trước"
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain [image-rendering:pixelated]"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = "none";
                       }}
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium text-[#1f432b]">
+                    <p className="truncate text-xs font-bold text-black">
                       {thumbnailUrl || "Ảnh đã tải lên"}
                     </p>
-                    <p className="text-[11px] text-text-muted">
+                    <p className="text-[11px] font-medium text-text-muted">
                       Đã gán làm ảnh đại diện sản phẩm
                     </p>
                   </div>
@@ -677,15 +682,16 @@ export default function CreateStoreProductModal({
                       setThumbnailPreviewUrl("");
                     }}
                     title="Xóa ảnh này"
-                    className="rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-500"
+                    aria-label="Xóa ảnh đại diện"
+                    className="btn-secondary p-1! shadow-[1px_1px_0_0_#000]"
                   >
-                    <X size={15} />
+                    <X size={14} aria-hidden="true" />
                   </button>
                 </div>
               )}
 
               <div>
-                <span className="text-[11px] text-text-muted">
+                <span className="text-[11px] font-bold text-text-muted">
                   Hoặc dán URL / đường dẫn ảnh (vd: /images/products/led/matrix-64.png):
                 </span>
                 <input
@@ -696,30 +702,30 @@ export default function CreateStoreProductModal({
                     setThumbnailPreviewUrl(e.target.value);
                   }}
                   placeholder="/images/products/led/matrix-64.png"
-                  className="mt-1 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  className="mt-1 w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
                 />
               </div>
             </div>
 
             {/* Thư viện ảnh */}
-            <div className="flex flex-col gap-2 rounded-lg border border-[#e0ede3] bg-white p-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#1f432b]">
+            <div className="flex flex-col gap-2.5 border-2 border-black bg-gray-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-black uppercase tracking-wide text-black">
                   Thư viện ảnh
                 </label>
                 <button
                   type="button"
                   disabled={isUploadingGallery}
                   onClick={() => galleryInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
+                  className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1! text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
                 >
                   {isUploadingGallery ? (
                     <>
-                      <Loader2 size={12} className="animate-spin" /> Đang tải...
+                      <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Đang tải...
                     </>
                   ) : (
                     <>
-                      <Upload size={12} /> Tải nhiều ảnh từ máy
+                      <Upload size={12} aria-hidden="true" /> Tải nhiều ảnh từ máy
                     </>
                   )}
                 </button>
@@ -740,17 +746,17 @@ export default function CreateStoreProductModal({
                   .filter((u) => u.length > 0);
                 if (galleryList.length === 0) return null;
                 return (
-                  <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] p-2">
+                  <div className="mt-1 flex flex-wrap gap-2 border-2 border-black bg-white p-2">
                     {galleryList.map((url, idx) => (
                       <div
                         key={idx}
-                        className="group relative h-14 w-14 overflow-hidden rounded-md border border-[#cbe4d2] bg-white shadow-xs"
+                        className="group relative h-14 w-14 overflow-hidden border-2 border-black bg-gray-50"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={url}
                           alt={`Ảnh thư viện ${idx + 1}`}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain [image-rendering:pixelated]"
                           onError={(e) => {
                             (e.target as HTMLElement).style.display = "none";
                           }}
@@ -758,10 +764,11 @@ export default function CreateStoreProductModal({
                         <button
                           type="button"
                           onClick={() => handleRemoveGalleryUrl(idx)}
-                          className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white transition hover:bg-red-600"
+                          className="absolute right-0.5 top-0.5 border border-black bg-black/80 p-0.5 text-white transition hover:bg-red-600"
                           title="Xóa ảnh"
+                          aria-label={`Xóa ảnh thư viện ${idx + 1}`}
                         >
-                          <X size={11} />
+                          <X size={11} aria-hidden="true" />
                         </button>
                       </div>
                     ))}
@@ -770,7 +777,7 @@ export default function CreateStoreProductModal({
               })()}
 
               <div>
-                <span className="text-[11px] text-text-muted">
+                <span className="text-[11px] font-bold text-text-muted">
                   Hoặc dán danh sách URL (mỗi dòng 1 đường dẫn):
                 </span>
                 <textarea
@@ -778,7 +785,7 @@ export default function CreateStoreProductModal({
                   value={galleryUrlsText}
                   onChange={(e) => setGalleryUrlsText(e.target.value)}
                   placeholder="/images/products/led/matrix-32.png&#10;/images/products/led/matrix-64.png"
-                  className="mt-1 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  className="mt-1 w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
                 />
               </div>
             </div>
@@ -796,23 +803,23 @@ export default function CreateStoreProductModal({
         />
 
         {/* Trạng thái mở bán */}
-        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-[#d2e4d7] bg-[#f7fbf8] p-3 text-xs text-[#2e573c]">
+        <label className="flex cursor-pointer items-center justify-between gap-3 border-2 border-black bg-primary/15 p-3.5 text-xs text-black">
           <div>
-            <span className="block font-bold text-[#1f432b]">
+            <span className="block font-black uppercase tracking-wide text-black">
               Mở bán ngay sau khi tạo
             </span>
-            <span className="text-text-muted">
-              Mặc định sản phẩm tạo mới ở trạng thái <strong>Chưa mở bán</strong> để kiểm tra trước khi đăng lên Cửa hàng.
+            <span className="font-medium text-text-muted">
+              Mặc định sản phẩm tạo mới ở trạng thái <strong className="font-black text-black">Chưa mở bán</strong> để kiểm tra trước khi đăng lên Cửa hàng.
             </span>
           </div>
           <input
             type="checkbox"
             checked={publishImmediately}
             onChange={(e) => setPublishImmediately(e.target.checked)}
-            className="h-4 w-4 accent-[#439660]"
+            className="h-4 w-4 accent-[#1f432b]"
           />
         </label>
       </form>
-    </Modal>
+    </StoreModal>
   );
 }

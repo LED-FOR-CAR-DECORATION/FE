@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronRight,
   Edit2,
   FolderTree,
   Loader2,
@@ -146,183 +147,311 @@ export default function StoreTagsPage() {
   });
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-[#0F5B38]">
-              <TagIcon size={22} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-gray-900">Quản lý thẻ sản phẩm</h1>
-              <p className="text-xs text-gray-500">
-                Tạo, chỉnh sửa và quản lý các thẻ danh mục phân loại cho Cửa hàng
+    <div className="manager-neo-dashboard mx-auto w-full max-w-[1440px] font-sans text-text-main">
+      <div className="flex flex-col gap-6">
+        {/* Top Header Banner */}
+        <header className="border-2 border-black border-l-8 border-l-primary bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
+                  PHÂN LOẠI CỬA HÀNG
+                </span>
+                <nav
+                  aria-label="Đường dẫn"
+                  className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-text-muted"
+                >
+                  <span>Quản lý</span>
+                  <ChevronRight className="h-3.5 w-3.5 text-black" aria-hidden="true" />
+                  <span className="text-black">Thẻ sản phẩm</span>
+                </nav>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <TagIcon
+                  size={24}
+                  className="shrink-0 text-primary-ink"
+                  aria-hidden="true"
+                />
+                <h1 className="text-xl font-black uppercase tracking-tight text-black sm:text-2xl">
+                  Quản lý thẻ sản phẩm
+                </h1>
+              </div>
+
+              <p className="text-xs font-medium text-text-muted sm:text-sm">
+                Tạo, chỉnh sửa và quản lý các thẻ danh mục phân loại cho Cửa hàng.
               </p>
             </div>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={loadTags}
-            disabled={isLoading}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={loadTags}
+                disabled={isLoading}
+                className="btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+              >
+                <RefreshCw
+                  size={14}
+                  className={isLoading ? "animate-spin" : ""}
+                  aria-hidden="true"
+                />
+                Làm mới
+              </button>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="btn-primary inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+              >
+                <Plus size={15} strokeWidth={2.5} aria-hidden="true" />
+                Tạo thẻ mới
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Stats Toolbar */}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t-2 border-dashed border-gray-200 pt-4">
+            <div className="relative min-w-[260px] max-w-md flex-1">
+              <Search
+                size={15}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                aria-label="Tìm kiếm thẻ sản phẩm"
+                placeholder="Tìm theo tên thẻ, mã thẻ hoặc mô tả..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full border-2 border-black bg-gray-50 py-2 pl-9 pr-3 text-xs font-bold text-black placeholder:text-text-muted focus:bg-white"
+              />
+            </div>
+
+            <span className="inline-flex items-center gap-1.5 border border-black bg-primary/40 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black tabular-nums shadow-[1px_1px_0_0_#000]">
+              Tổng cộng: <strong>{filteredTags.length}</strong> thẻ
+            </span>
+          </div>
+        </header>
+
+        {/* Thông báo Alert */}
+        {errorMessage && (
+          <div
+            role="alert"
+            className="flex items-start justify-between gap-3 border-2 border-black bg-[#fee2e2] px-4 py-3 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
           >
-            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
-            Làm mới
-          </button>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="flex items-center gap-1.5 rounded-lg bg-[#0F5B38] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#0c4a2d]"
-          >
-            <Plus size={16} />
-            Tạo thẻ mới
-          </button>
-        </div>
-      </div>
-
-      {/* Thông báo Alert */}
-      {errorMessage && (
-        <div
-          role="alert"
-          className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-800"
-        >
-          <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
-          <span className="flex-1">{errorMessage}</span>
-          <button type="button" onClick={() => setErrorMessage("")} className="text-red-500 hover:text-red-700">
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
-      {successMessage && (
-        <div
-          role="status"
-          className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800"
-        >
-          <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
-          <span className="flex-1">{successMessage}</span>
-          <button type="button" onClick={() => setSuccessMessage("")} className="text-emerald-500 hover:text-emerald-700">
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
-      {/* Thanh tìm kiếm & thống kê */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-        <div className="relative min-w-[280px] flex-1 max-w-md">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Tìm theo tên thẻ, mã thẻ hoặc mô tả..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 py-1.5 pl-9 pr-3 text-xs outline-none focus:border-[#0F5B38]"
-          />
-        </div>
-        <span className="text-xs font-bold text-gray-500">
-          Tổng cộng: <strong className="text-gray-900">{filteredTags.length}</strong> thẻ
-        </span>
-      </div>
-
-      {/* Danh sách Thẻ Table */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        {isLoading ? (
-          <div className="flex items-center justify-center p-12 text-xs font-semibold text-gray-500">
-            <Loader2 size={18} className="mr-2 animate-spin text-[#0F5B38]" />
-            Đang tải danh sách thẻ từ máy chủ...
-          </div>
-        ) : filteredTags.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 text-center">
-            <FolderTree size={36} className="mb-2 text-gray-300" />
-            <p className="text-sm font-bold text-gray-700">Không tìm thấy thẻ nào</p>
-            <p className="text-xs text-gray-500">
-              {searchQuery ? "Thử tìm kiếm với từ khóa khác." : "Hệ thống chưa có thẻ nào. Hãy tạo thẻ đầu tiên!"}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-gray-100 bg-gray-50 text-[11px] font-black uppercase tracking-wider text-gray-500">
-                <tr>
-                  <th className="py-3 pl-4 pr-3">Mã thẻ</th>
-                  <th className="py-3 px-3">Tên thẻ phân loại</th>
-                  <th className="py-3 px-3">Mô tả</th>
-                  <th className="py-3 pl-3 pr-4 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredTags.map((tag) => (
-                  <tr key={tag.tagId} className="transition-colors hover:bg-gray-50/70">
-                    <td className="py-3.5 pl-4 pr-3 font-mono font-bold text-gray-500">
-                      #{tag.tagId}
-                    </td>
-                    <td className="py-3.5 px-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/60 px-2.5 py-1 text-xs font-bold text-[#0F5B38]">
-                        <TagIcon size={12} />
-                        {tag.name}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-gray-600 max-w-md">
-                      {tag.description || <span className="italic text-gray-400">Không có mô tả</span>}
-                    </td>
-                    <td className="py-3.5 pl-3 pr-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(tag)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 font-bold text-gray-700 transition hover:bg-gray-50 hover:text-blue-600"
-                        >
-                          <Edit2 size={12} /> Sửa
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeletingTag(tag)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50/50 px-2.5 py-1 font-bold text-red-600 transition hover:bg-red-100"
-                        >
-                          <Trash2 size={12} /> Xóa
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <span className="flex items-start gap-2.5">
+              <AlertCircle
+                size={16}
+                className="mt-0.5 shrink-0 text-red-700"
+                aria-hidden="true"
+              />
+              <span>{errorMessage}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setErrorMessage("")}
+              aria-label="Đóng thông báo lỗi"
+              className="shrink-0 cursor-pointer border border-black bg-white p-1 text-black transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
           </div>
         )}
+
+        {successMessage && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-start justify-between gap-3 border-2 border-black bg-primary/35 px-4 py-3 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
+          >
+            <span className="flex items-start gap-2.5">
+              <CheckCircle2
+                size={16}
+                className="mt-0.5 shrink-0 text-primary-ink"
+                aria-hidden="true"
+              />
+              <span>{successMessage}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setSuccessMessage("")}
+              aria-label="Đóng thông báo"
+              className="shrink-0 cursor-pointer border border-black bg-white p-1 text-black transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+
+        {/* Danh sách Thẻ Table Panel */}
+        <section
+          aria-label="Danh sách thẻ sản phẩm"
+          className="border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black pb-4">
+            <div className="flex items-start gap-2.5">
+              <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center border-2 border-black bg-primary shadow-[2px_2px_0_0_#000]">
+                <TagIcon className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2 className="text-sm font-black uppercase tracking-wider text-black sm:text-base">
+                    Danh sách thẻ phân loại
+                  </h2>
+                  <span className="inline-flex items-center gap-1 border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black tabular-nums shadow-[1px_1px_0_0_#000]">
+                    {filteredTags.length} thẻ
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs font-medium text-text-muted">
+                  Quản lý mã thẻ, tên hiển thị và mô tả cho từng nhóm sản phẩm trên cửa hàng.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="mt-5 flex items-center justify-center border-2 border-dashed border-black/25 bg-gray-50 p-12 text-xs font-black uppercase tracking-wider text-black">
+              <Loader2
+                size={18}
+                className="mr-2.5 animate-spin text-primary-ink"
+                aria-hidden="true"
+              />
+              Đang tải danh sách thẻ từ máy chủ...
+            </div>
+          ) : filteredTags.length === 0 ? (
+            <div className="mt-5 flex flex-col items-center justify-center border-2 border-dashed border-black/25 bg-gray-50 px-6 py-12 text-center">
+              <div className="mb-3 grid h-11 w-11 place-items-center border-2 border-black bg-white shadow-[2px_2px_0_0_#000]">
+                <FolderTree size={22} className="text-black" aria-hidden="true" />
+              </div>
+              <p className="text-xs font-black uppercase tracking-wide text-black sm:text-sm">
+                Không tìm thấy thẻ nào
+              </p>
+              <p className="mt-1 text-xs font-medium text-text-muted">
+                {searchQuery
+                  ? "Thử tìm kiếm với từ khóa khác."
+                  : "Hệ thống chưa có thẻ nào. Hãy tạo thẻ đầu tiên!"}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 overflow-x-auto border-2 border-black">
+              <table className="w-full min-w-[680px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
+                    <th className="px-4 py-3 text-left">Mã thẻ</th>
+                    <th className="px-4 py-3 text-left">Tên thẻ phân loại</th>
+                    <th className="px-4 py-3 text-left">Mô tả</th>
+                    <th className="px-4 py-3 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y-2 divide-black/10 bg-white">
+                  {filteredTags.map((tag) => (
+                    <tr
+                      key={tag.tagId}
+                      className="transition-colors duration-150 hover:bg-[#f3faf5]"
+                    >
+                      <td className="whitespace-nowrap px-4 py-3.5">
+                        <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
+                          #{tag.tagId}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center gap-1 border border-black bg-primary/50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                          <TagIcon size={11} aria-hidden="true" />
+                          {tag.name}
+                        </span>
+                      </td>
+                      <td className="max-w-md px-4 py-3.5 text-xs font-medium text-text-muted">
+                        {tag.description || (
+                          <span className="italic text-text-muted/75">Không có mô tả</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(tag)}
+                            className="btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                          >
+                            <Edit2 size={12} aria-hidden="true" />
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingTag(tag)}
+                            className="btn-danger inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                          >
+                            <Trash2 size={12} aria-hidden="true" />
+                            Xóa
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed border-gray-200 pt-3 text-xs font-medium text-text-muted">
+            <span>
+              Hiển thị <strong className="font-black text-black tabular-nums">{filteredTags.length}</strong> /{" "}
+              <strong className="font-black text-black tabular-nums">{tags.length}</strong> thẻ sản phẩm trên hệ thống.
+            </span>
+          </div>
+        </section>
       </div>
 
       {/* Modal Tạo / Sửa Thẻ */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-black text-gray-900">
-                {editingTag ? "Chỉnh sửa thẻ sản phẩm" : "Tạo thẻ sản phẩm mới"}
-              </h3>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tag-modal-title"
+            className="w-full max-w-md border-2 border-black bg-white p-6 shadow-[6px_6px_0_0_#000]"
+          >
+            <div className="flex items-start justify-between gap-4 border-b-2 border-black pb-4">
+              <div>
+                <span className="inline-flex items-center gap-1 border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                  {editingTag ? `Cập nhật #${editingTag.tagId}` : "Thẻ phân loại mới"}
+                </span>
+                <h3
+                  id="tag-modal-title"
+                  className="mt-2 text-base font-black uppercase tracking-tight text-black"
+                >
+                  {editingTag ? "Chỉnh sửa thẻ sản phẩm" : "Tạo thẻ sản phẩm mới"}
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Đóng hộp thoại"
+                className="cursor-pointer border-2 border-black bg-white p-1.5 text-black transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
-                <X size={18} />
+                <X size={16} aria-hidden="true" />
               </button>
             </div>
 
             <form onSubmit={handleSaveTag} className="mt-4 flex flex-col gap-4 text-left">
               {formError && (
-                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
-                  <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+                >
+                  <AlertCircle
+                    size={15}
+                    className="mt-0.5 shrink-0 text-red-700"
+                    aria-hidden="true"
+                  />
                   <span>{formError}</span>
                 </div>
               )}
 
               <div>
-                <label htmlFor="tag-name" className="text-xs font-bold text-gray-700">
-                  Tên thẻ <span className="text-red-500">*</span>
+                <label
+                  htmlFor="tag-name"
+                  className="block text-[11px] font-black uppercase tracking-wider text-black"
+                >
+                  Tên thẻ <span className="text-red-600">*</span>
                 </label>
                 <input
                   id="tag-name"
@@ -331,16 +460,19 @@ export default function StoreTagsPage() {
                   placeholder="Ví dụ: Hoạt hình, Xe cộ, Đèn LED, Nghệ thuật..."
                   value={tagName}
                   onChange={(e) => setTagName(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-900 outline-none focus:border-[#0F5B38]"
+                  className="mt-1.5 w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black placeholder:text-text-muted focus:bg-white"
                   required
                 />
-                <p className="mt-1 text-[11px] text-gray-400">
+                <p className="mt-1.5 text-[11px] font-medium text-text-muted">
                   Tối đa 100 ký tự. Không được trùng lặp tên với các thẻ khác (không phân biệt chữ hoa, chữ thường).
                 </p>
               </div>
 
               <div>
-                <label htmlFor="tag-desc" className="text-xs font-bold text-gray-700">
+                <label
+                  htmlFor="tag-desc"
+                  className="block text-[11px] font-black uppercase tracking-wider text-black"
+                >
                   Mô tả thẻ (tùy chọn)
                 </label>
                 <textarea
@@ -349,25 +481,27 @@ export default function StoreTagsPage() {
                   placeholder="Mô tả danh mục phân loại này..."
                   value={tagDescription}
                   onChange={(e) => setTagDescription(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-900 outline-none focus:border-[#0F5B38]"
+                  className="mt-1.5 w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black placeholder:text-text-muted focus:bg-white"
                 />
               </div>
 
-              <div className="mt-2 flex items-center justify-end gap-2 border-t border-gray-100 pt-4">
+              <div className="mt-2 flex items-center justify-end gap-2.5 border-t-2 border-dashed border-gray-200 pt-4">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   disabled={isSubmitting}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                  className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F5B38] px-4 py-2 text-xs font-bold text-white hover:bg-[#0c4a2d] disabled:opacity-50"
+                  className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
                 >
-                  {isSubmitting && <Loader2 size={13} className="animate-spin" />}
+                  {isSubmitting && (
+                    <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+                  )}
                   {editingTag ? "Lưu thay đổi" : "Tạo thẻ"}
                 </button>
               </div>
@@ -379,22 +513,54 @@ export default function StoreTagsPage() {
       {/* Modal Xác nhận Xóa Thẻ */}
       {deletingTag && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <h3 className="text-base font-black text-gray-900">Xác nhận xóa thẻ?</h3>
-            <p className="mt-2 text-xs text-gray-600">
-              Bạn có chắc chắn muốn xóa thẻ{" "}
-              <strong className="text-gray-900">"{deletingTag.name}"</strong> (Mã: #{deletingTag.tagId})?
-            </p>
-            <p className="mt-1 text-[11px] text-gray-500">
-              Hệ thống sẽ tự động gỡ thẻ này khỏi tất cả các sản phẩm đang liên kết mà không làm mất sản phẩm.
-            </p>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-tag-modal-title"
+            className="w-full max-w-md border-2 border-black bg-white p-6 shadow-[6px_6px_0_0_#000]"
+          >
+            <div className="flex items-start justify-between gap-4 border-b-2 border-black pb-4">
+              <div>
+                <span className="inline-flex items-center gap-1 border border-black bg-[#fecaca] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                  Cảnh báo xóa
+                </span>
+                <h3
+                  id="delete-tag-modal-title"
+                  className="mt-2 text-base font-black uppercase tracking-tight text-black"
+                >
+                  Xác nhận xóa thẻ?
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setDeletingTag(null)}
                 disabled={isDeleting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                aria-label="Đóng hộp thoại xác nhận xóa"
+                className="cursor-pointer border-2 border-black bg-white p-1.5 text-black transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:opacity-60"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2.5 text-xs">
+              <p className="font-bold text-black">
+                Bạn có chắc chắn muốn xóa thẻ{" "}
+                <span className="inline-flex items-center gap-1 border border-black bg-primary/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                  {deletingTag.name}
+                </span>{" "}
+                <span className="font-mono font-black text-text-muted">(#{deletingTag.tagId})</span>?
+              </p>
+              <p className="border-2 border-dashed border-black/25 bg-gray-50 p-3 font-medium text-text-muted">
+                Hệ thống sẽ tự động gỡ thẻ này khỏi tất cả các sản phẩm đang liên kết mà không làm mất sản phẩm.
+              </p>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2.5 border-t-2 border-dashed border-gray-200 pt-4">
+              <button
+                type="button"
+                onClick={() => setDeletingTag(null)}
+                disabled={isDeleting}
+                className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
               >
                 Hủy
               </button>
@@ -402,9 +568,11 @@ export default function StoreTagsPage() {
                 type="button"
                 onClick={handleDeleteTag}
                 disabled={isDeleting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                className="btn-danger inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
               >
-                {isDeleting && <Loader2 size={13} className="animate-spin" />}
+                {isDeleting && (
+                  <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+                )}
                 Xác nhận xóa
               </button>
             </div>

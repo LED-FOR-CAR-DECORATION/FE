@@ -10,7 +10,7 @@ interface MonthlyRevenueChartCardProps {
   points: DailyRevenuePoint[];
   totalRevenue: number;
   loading?: boolean;
-  accent?: "blue" | "emerald";
+  accent?: "primary" | "compare" | "blue" | "emerald";
   /** Shared Y-axis ceiling so two side-by-side comparison charts share identical bar scale. */
   sharedMaxRevenue?: number;
   onDrilldown?: () => void;
@@ -49,11 +49,11 @@ export default function MonthlyRevenueChartCard({
   points,
   totalRevenue,
   loading = false,
-  accent = "blue",
+  accent = "primary",
   sharedMaxRevenue,
   onDrilldown,
 }: MonthlyRevenueChartCardProps) {
-  const [hoveredDay, setHoveredDay] = useState<number | null>(null);
+  const [activeDay, setActiveDay] = useState<number | null>(null);
 
   const normalizedPoints = useMemo(() => {
     if (points && points.length > 0) return points;
@@ -102,21 +102,22 @@ export default function MonthlyRevenueChartCard({
   );
 
   const activePoint =
-    hoveredDay != null
-      ? normalizedPoints.find((p) => p.day === hoveredDay) ?? null
+    activeDay != null
+      ? normalizedPoints.find((p) => p.day === activeDay) ?? null
       : null;
 
-  const isEmerald = accent === "emerald";
-  const barBgClass = isEmerald
-    ? "bg-emerald-500 group-hover:bg-emerald-600"
-    : "bg-blue-500 group-hover:bg-blue-600";
-  const peakBarBgClass = isEmerald ? "bg-emerald-600" : "bg-blue-600";
-  const badgeClass = isEmerald
-    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-    : "bg-blue-50 text-blue-700 border-blue-200";
-  const iconBgClass = isEmerald
-    ? "bg-emerald-50 text-emerald-600"
-    : "bg-blue-50 text-blue-600";
+  const isCompare = accent === "compare" || accent === "emerald";
+  const barBgClass = isCompare
+    ? "bg-[#fcd34d] group-hover:bg-[#f59e0b] group-focus-visible:bg-[#f59e0b]"
+    : "bg-primary group-hover:bg-primary-dark group-focus-visible:bg-primary-dark";
+  const peakBarBgClass = isCompare ? "bg-[#b45309]" : "bg-primary-ink";
+  const badgeClass = isCompare
+    ? "bg-[#fef08a] text-black"
+    : "bg-primary text-black";
+  const iconBgClass = isCompare ? "bg-[#fef08a]" : "bg-primary";
+  const footerStripClass = isCompare
+    ? "bg-[#fef9c3]/70"
+    : "bg-primary/15";
 
   const axisTickDays = useMemo(() => {
     const lastDay = normalizedPoints.length;
@@ -126,19 +127,21 @@ export default function MonthlyRevenueChartCard({
   return (
     <section
       aria-label={`${titlePrefix} ${formatMonthDisplay(month)}`}
-      className="flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+      className="flex h-full flex-col justify-between border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6"
     >
       <div>
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black pb-4">
           <div className="flex items-start gap-2.5">
-            <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconBgClass}`}>
-              <BarChart3 className="h-4 w-4" />
+            <div
+              className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center border-2 border-black shadow-[2px_2px_0_0_#000] ${iconBgClass}`}
+            >
+              <BarChart3 className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-sm font-black uppercase tracking-wider text-black sm:text-base">
                 {titlePrefix} · {formatMonthDisplay(month)}
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="mt-0.5 text-xs font-medium text-text-muted">
                 Doanh thu từng ngày trong tháng ({totalOrders.toLocaleString("vi-VN")} đơn/giao dịch)
               </p>
             </div>
@@ -146,7 +149,7 @@ export default function MonthlyRevenueChartCard({
 
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold tabular-nums ${badgeClass}`}
+              className={`inline-flex items-center border-2 border-black px-2.5 py-1 text-xs font-black tabular-nums shadow-[2px_2px_0_0_#000] ${badgeClass}`}
             >
               {loading ? "…" : `${totalRevenue.toLocaleString("vi-VN")} VNĐ`}
             </span>
@@ -154,7 +157,7 @@ export default function MonthlyRevenueChartCard({
               <button
                 type="button"
                 onClick={onDrilldown}
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                className="btn-secondary px-2.5 py-1 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
               >
                 Truy xuất đơn
               </button>
@@ -162,36 +165,44 @@ export default function MonthlyRevenueChartCard({
           </div>
         </div>
 
-        {/* Hover / Active Day Inspector Strip */}
-        <div className="mt-3 flex min-h-[34px] flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-1.5 text-xs">
+        {/* Hover / Keyboard Focus Day Inspector Strip */}
+        <div
+          aria-live="polite"
+          className="mt-3.5 flex min-h-[38px] flex-wrap items-center justify-between gap-2 border-2 border-black bg-gray-50 px-3 py-1.5 text-xs"
+        >
           {activePoint ? (
             <>
-              <span className="inline-flex items-center gap-1.5 font-semibold text-slate-800">
-                <Calendar className="h-3.5 w-3.5 text-slate-400" />
+              <span className="inline-flex items-center gap-1.5 font-black uppercase text-black">
+                <Calendar className="h-3.5 w-3.5 text-primary-ink" aria-hidden="true" />
                 {formatDateShort(activePoint.date, activePoint.day)}
+                {peakPoint?.day === activePoint.day && Number(activePoint.revenue) > 0 && (
+                  <span className="border border-black bg-primary px-1.5 py-0.2 text-[10px] font-black uppercase text-black">
+                    Đỉnh tháng
+                  </span>
+                )}
               </span>
               <div className="flex items-center gap-3 tabular-nums">
-                <span className="font-bold text-slate-900">
+                <span className="font-black text-primary-ink">
                   {Number(activePoint.revenue).toLocaleString("vi-VN")} VNĐ
                 </span>
-                <span className="text-slate-500">
+                <span className="font-bold text-text-muted">
                   ({activePoint.orderCount} giao dịch)
                 </span>
               </div>
             </>
           ) : (
-            <span className="text-slate-500">
-              Di chuột vào từng cột ngày để xem doanh thu &amp; số giao dịch chi tiết.
+            <span className="font-medium text-text-muted">
+              Di chuột hoặc dùng phím Tab qua từng cột ngày để xem doanh thu &amp; số giao dịch chi tiết.
             </span>
           )}
         </div>
 
         {/* Daily Bar Chart */}
         {localMax > 0 ? (
-          <div className="mt-4">
-            <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
+          <div className="mt-5">
+            <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-2">
               {/* Y-Axis Labels */}
-              <div className="flex h-48 flex-col justify-between pb-6 text-right text-[10px] font-medium text-slate-400 tabular-nums">
+              <div className="flex h-48 flex-col justify-between pb-6 text-right text-[10px] font-black text-text-muted tabular-nums">
                 <span>{formatCompactVnd(chartMax)}</span>
                 <span>{formatCompactVnd(chartMax / 2)}</span>
                 <span>0</span>
@@ -199,53 +210,59 @@ export default function MonthlyRevenueChartCard({
 
               {/* Bars + Horizontal Gridlines */}
               <div className="relative h-48 pb-6">
-                {/* Dashed Gridlines */}
+                {/* Dashed Gridlines & Crisp Baseline */}
                 <div className="pointer-events-none absolute inset-x-0 top-0 bottom-6 flex flex-col justify-between">
-                  <div className="border-t border-dashed border-slate-200" />
-                  <div className="border-t border-dashed border-slate-100" />
-                  <div className="border-t border-slate-200" />
+                  <div className="border-t border-dashed border-black/20" />
+                  <div className="border-t border-dashed border-black/15" />
+                  <div className="border-t-2 border-black" />
                 </div>
 
                 {/* Columns */}
                 <div className="relative z-10 flex h-full items-end gap-[2px] sm:gap-1">
                   {normalizedPoints.map((pt) => {
                     const rev = Number(pt.revenue) || 0;
-                    const heightPct = rev > 0 ? Math.max((rev / chartMax) * 100, 3) : 0;
+                    const heightPct = rev > 0 ? Math.max((rev / chartMax) * 100, 4) : 0;
                     const isPeak = peakPoint?.day === pt.day && rev > 0;
-                    const isHovered = hoveredDay === pt.day;
+                    const isActive = activeDay === pt.day;
+                    const dateLabel = formatDateShort(pt.date, pt.day);
 
                     return (
-                      <div
+                      <button
                         key={pt.day}
-                        onMouseEnter={() => setHoveredDay(pt.day)}
-                        onMouseLeave={() => setHoveredDay(null)}
-                        className="group relative flex h-full flex-1 flex-col items-center justify-end"
+                        type="button"
+                        onMouseEnter={() => setActiveDay(pt.day)}
+                        onMouseLeave={() => setActiveDay(null)}
+                        onFocus={() => setActiveDay(pt.day)}
+                        onBlur={() => setActiveDay(null)}
+                        onClick={() => onDrilldown?.()}
+                        aria-label={`${dateLabel}: ${rev.toLocaleString("vi-VN")} VNĐ, ${pt.orderCount} giao dịch`}
+                        title={`${dateLabel}: ${rev.toLocaleString("vi-VN")} VNĐ (${pt.orderCount} giao dịch)`}
+                        className="group relative flex h-full flex-1 cursor-pointer flex-col items-center justify-end bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
                       >
                         <div className="flex h-full w-full items-end justify-center">
                           <div
-                            style={{ height: `${heightPct}%` }}
-                            className={`w-full max-w-[16px] rounded-t-sm transition-all duration-200 ${
+                            style={{ height: rev > 0 ? `${heightPct}%` : "2px" }}
+                            className={`w-full max-w-[18px] transition-all duration-150 ${
                               rev === 0
-                                ? "h-[2px] bg-slate-100"
+                                ? "bg-black/15"
                                 : isPeak
-                                  ? `${peakBarBgClass} ring-2 ring-offset-1 ${isEmerald ? "ring-emerald-200" : "ring-blue-200"}`
-                                  : barBgClass
-                            } ${isHovered && rev > 0 ? "opacity-100 scale-x-110" : "opacity-90"}`}
-                            title={`${formatDateShort(pt.date, pt.day)}: ${rev.toLocaleString("vi-VN")} VNĐ (${pt.orderCount} giao dịch)`}
+                                  ? `${peakBarBgClass} border-2 border-black shadow-[1px_0_0_0_#000]`
+                                  : `${barBgClass} border border-black`
+                            } ${isActive && rev > 0 ? "-translate-y-0.5 shadow-[2px_2px_0_0_#000]" : ""}`}
                           />
                         </div>
                         <span
                           className={`absolute -bottom-5 text-[10px] tabular-nums ${
-                            isHovered
-                              ? "font-bold text-slate-900"
+                            isActive
+                              ? "font-black text-black"
                               : axisTickDays.has(pt.day)
-                                ? "font-medium text-slate-400"
+                                ? "font-bold text-text-muted"
                                 : "hidden"
                           }`}
                         >
                           {pt.day}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -253,11 +270,11 @@ export default function MonthlyRevenueChartCard({
             </div>
           </div>
         ) : (
-          <div className="my-6 flex h-44 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 text-center">
-            <p className="text-sm font-medium text-slate-600">
+          <div className="my-6 flex h-44 flex-col items-center justify-center border-2 border-dashed border-black/25 bg-gray-50 px-4 text-center">
+            <p className="text-xs font-black uppercase tracking-wide text-black">
               Không có doanh thu phát sinh trong {formatMonthDisplay(month)}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs font-medium text-text-muted">
               Chọn tháng khác để xem lịch sử doanh thu và sản phẩm bán chạy.
             </p>
           </div>
@@ -265,18 +282,20 @@ export default function MonthlyRevenueChartCard({
       </div>
 
       {/* Footer Highlights */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs">
-        <span className="text-slate-600">
+      <div
+        className={`mt-4 flex flex-wrap items-center justify-between gap-2 border-2 border-black px-3.5 py-2.5 text-xs ${footerStripClass}`}
+      >
+        <span className="font-bold text-black">
           Ngày cao nhất:{" "}
-          <strong className="text-slate-900">
+          <strong className="font-black text-primary-ink tabular-nums">
             {peakPoint && Number(peakPoint.revenue) > 0
               ? `Ngày ${peakPoint.day}/${month.split("-")[1]} (${Number(peakPoint.revenue).toLocaleString("vi-VN")} VNĐ)`
               : "—"}
           </strong>
         </span>
-        <span className="text-slate-600">
+        <span className="font-bold text-black">
           TB ngày có đơn:{" "}
-          <strong className="text-slate-900">
+          <strong className="font-black text-primary-ink tabular-nums">
             {activeDaysCount > 0
               ? `${Math.round(totalRevenue / activeDaysCount).toLocaleString("vi-VN")} VNĐ`
               : "0 VNĐ"}

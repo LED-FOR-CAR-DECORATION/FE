@@ -69,22 +69,22 @@ const GATEWAY_LABELS: Record<string, string> = {
 };
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
-  COMPLETED: { label: "Hoàn thành", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  DELIVERED: { label: "Đã giao hàng", className: "bg-teal-50 text-teal-700 border-teal-200" },
-  SHIPPING: { label: "Đang vận chuyển", className: "bg-sky-50 text-sky-700 border-sky-200" },
-  PROCESSING: { label: "Đang xử lý / Chờ đóng gói", className: "bg-blue-50 text-blue-700 border-blue-200" },
-  PARTIALLY_FULFILLED: { label: "Đã cấp nhân vật số", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  IN_PROGRESS: { label: "Đang thiết kế", className: "bg-blue-50 text-blue-700 border-blue-200" },
-  AWAITING_CUSTOMER_REVIEW: { label: "Chờ khách duyệt", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  AWAITING_EXTRA_PAYMENT: { label: "Chờ thanh toán phụ thu", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  ASSIGNED: { label: "Đã phân công Designer", className: "bg-purple-50 text-purple-700 border-purple-200" },
-  SUCCESS: { label: "Thanh toán thành công", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  PAID: { label: "Đã thanh toán", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  PENDING_PAYMENT: { label: "Chờ thanh toán", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  CANCELED: { label: "Đã hủy", className: "bg-red-50 text-red-700 border-red-200" },
-  CANCELLED: { label: "Đã hủy", className: "bg-red-50 text-red-700 border-red-200" },
-  REFUNDED: { label: "Đã hoàn tiền", className: "bg-slate-100 text-slate-700 border-slate-200" },
-  DELIVERY_FAILED: { label: "Giao hàng thất bại", className: "bg-red-50 text-red-700 border-red-200" },
+  COMPLETED: { label: "Hoàn thành", className: "bg-primary text-black" },
+  DELIVERED: { label: "Đã giao hàng", className: "bg-primary/70 text-black" },
+  SHIPPING: { label: "Đang vận chuyển", className: "bg-[#e0f2fe] text-black" },
+  PROCESSING: { label: "Đang xử lý / Chờ đóng gói", className: "bg-[#fef08a] text-black" },
+  PARTIALLY_FULFILLED: { label: "Đã cấp nhân vật số", className: "bg-primary/40 text-black" },
+  IN_PROGRESS: { label: "Đang thiết kế", className: "bg-[#e0f2fe] text-black" },
+  AWAITING_CUSTOMER_REVIEW: { label: "Chờ khách duyệt", className: "bg-[#fef08a] text-black" },
+  AWAITING_EXTRA_PAYMENT: { label: "Chờ thanh toán phụ thu", className: "bg-[#fed7aa] text-black" },
+  ASSIGNED: { label: "Đã phân công Designer", className: "bg-[#ede9fe] text-black" },
+  SUCCESS: { label: "Thanh toán thành công", className: "bg-primary text-black" },
+  PAID: { label: "Đã thanh toán", className: "bg-primary text-black" },
+  PENDING_PAYMENT: { label: "Chờ thanh toán", className: "bg-[#fef08a] text-black" },
+  CANCELED: { label: "Đã hủy", className: "bg-[#fecaca] text-black" },
+  CANCELLED: { label: "Đã hủy", className: "bg-[#fecaca] text-black" },
+  REFUNDED: { label: "Đã hoàn tiền", className: "bg-gray-200 text-black" },
+  DELIVERY_FAILED: { label: "Giao hàng thất bại", className: "bg-[#fecaca] text-black" },
 };
 
 function formatVnd(value: number): string {
@@ -108,7 +108,7 @@ function getStatusBadge(status: string) {
   return (
     STATUS_BADGES[status] ?? {
       label: status,
-      className: "bg-slate-100 text-slate-700 border-slate-200",
+      className: "bg-gray-100 text-black",
     }
   );
 }
@@ -233,80 +233,89 @@ export default function RevenueDrilldownDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex justify-end bg-black/45 font-sans"
       role="dialog"
       aria-modal="true"
       aria-label="Truy xuất đơn hàng nguồn doanh thu"
       onClick={onClose}
     >
       <div
-        className="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
+        className="flex h-full w-full max-w-3xl flex-col border-l-2 border-black bg-white shadow-[-6px_0_0_0_#000]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b-2 border-black bg-primary/25 px-6 py-5">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-blue-600">
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5">
-                <FileSearch className="h-3.5 w-3.5" />
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1 border border-black bg-primary px-2 py-0.5 text-black shadow-[1px_1px_0_0_#000]">
+                <FileSearch className="h-3.5 w-3.5" aria-hidden="true" />
                 Truy xuất số liệu
               </span>
-              <span className="text-slate-400">·</span>
-              <span className="text-slate-600">Tháng {query.month}</span>
+              <span className="text-black" aria-hidden="true">·</span>
+              <span className="text-black">Tháng {query.month}</span>
               {data?.scopeType === "PRODUCT" && (
                 <>
-                  <span className="text-slate-400">·</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">
+                  <span className="text-black" aria-hidden="true">·</span>
+                  <span className="border border-black bg-white px-2 py-0.5 text-black">
                     Theo sản phẩm
                   </span>
                 </>
               )}
             </div>
-            <h2 className="mt-1.5 truncate text-lg font-bold text-slate-900">
+            <h2 className="mt-2 truncate text-lg font-black uppercase tracking-tight text-black">
               {data?.scopeLabel || query.titleHint || "Chi tiết nguồn doanh thu"}
             </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 text-xs font-medium text-text-muted">
               Danh sách đơn hàng và yêu cầu thiết kế đóng góp trực tiếp vào số liệu thống kê. Nhấn vào từng đơn để xem chi tiết hóa đơn.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            className="btn-secondary shrink-0 p-2! shadow-[2px_2px_0_0_#000]"
             aria-label="Đóng bảng truy xuất"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
         {/* Summary Strip */}
-        <div className="grid grid-cols-3 gap-3 border-b border-slate-200 bg-slate-50/70 px-6 py-4">
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5">
-            <p className="text-[11px] font-medium text-slate-500">Tổng doanh thu đối soát</p>
-            <p className="mt-0.5 text-base font-bold text-slate-900 tabular-nums">
+        <div className="grid grid-cols-1 gap-3 border-b-2 border-black bg-gray-50 px-6 py-4 sm:grid-cols-3">
+          <div className="border-2 border-black bg-white px-3.5 py-2.5 shadow-[2px_2px_0_0_#000]">
+            <p className="text-[10px] font-black uppercase tracking-wider text-text-muted">
+              Tổng doanh thu đối soát
+            </p>
+            <p className="mt-0.5 text-base font-black text-primary-ink tabular-nums">
               {loading && !data ? "…" : formatVnd(data?.totalRevenue ?? 0)}
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5">
-            <p className="text-[11px] font-medium text-slate-500">Tổng số lượng bán</p>
-            <p className="mt-0.5 text-base font-bold text-slate-900 tabular-nums">
+          <div className="border-2 border-black bg-white px-3.5 py-2.5 shadow-[2px_2px_0_0_#000]">
+            <p className="text-[10px] font-black uppercase tracking-wider text-text-muted">
+              Tổng số lượng bán
+            </p>
+            <p className="mt-0.5 text-base font-black text-black tabular-nums">
               {loading && !data ? "…" : `${(data?.totalUnits ?? 0).toLocaleString("vi-VN")} đơn vị`}
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5">
-            <p className="text-[11px] font-medium text-slate-500">Nguồn đơn phát sinh</p>
-            <p className="mt-0.5 text-base font-bold text-blue-700 tabular-nums">
+          <div className="border-2 border-black bg-white px-3.5 py-2.5 shadow-[2px_2px_0_0_#000]">
+            <p className="text-[10px] font-black uppercase tracking-wider text-text-muted">
+              Nguồn đơn phát sinh
+            </p>
+            <p className="mt-0.5 text-base font-black text-primary-ink tabular-nums">
               {loading && !data ? "…" : `${(data?.distinctSourceCount ?? 0).toLocaleString("vi-VN")} đơn`}
             </p>
           </div>
         </div>
 
         {/* Filter & Search Toolbar */}
-        <div className="space-y-3 border-b border-slate-200 px-6 py-3.5">
+        <div className="space-y-3 border-b-2 border-black bg-white px-6 py-3.5">
           {query.productId != null ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-medium text-slate-600">
-                Đang lọc theo mã sản phẩm <strong className="text-slate-900">#{query.productId}</strong>
+              <span className="text-xs font-bold text-text-muted">
+                Đang lọc theo mã sản phẩm{" "}
+                <strong className="border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-black">
+                  #{query.productId}
+                </strong>
               </span>
               <button
                 type="button"
@@ -317,7 +326,7 @@ export default function RevenueDrilldownDrawer({
                     titleHint: "Tổng doanh thu",
                   })
                 }
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                className="btn-secondary px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
               >
                 Xem toàn bộ đơn tháng {query.month}
               </button>
@@ -330,6 +339,7 @@ export default function RevenueDrilldownDrawer({
                   <button
                     key={tab.key}
                     type="button"
+                    aria-pressed={isActive}
                     onClick={() =>
                       onChangeQuery({
                         month: query.month,
@@ -337,10 +347,10 @@ export default function RevenueDrilldownDrawer({
                         titleHint: tab.label,
                       })
                     }
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`cursor-pointer border-2 border-black px-2.5 py-1 text-xs font-black uppercase tracking-wide transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                       isActive
-                        ? "bg-blue-600 text-white shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                        ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
+                        : "bg-white text-black hover:bg-primary/20"
                     }`}
                   >
                     {tab.label}
@@ -351,61 +361,64 @@ export default function RevenueDrilldownDrawer({
           )}
 
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black"
+              aria-hidden="true"
+            />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo mã đơn (#38, COM-12), tên khách hàng, email hoặc sản phẩm..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/70 py-2 pl-9 pr-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
+              className="w-full border-2 border-black bg-gray-50 py-2 pl-9 pr-9 text-xs font-bold text-black placeholder:text-text-muted focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-700"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-black hover:text-red-700"
                 aria-label="Xóa từ khóa tìm kiếm"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
           </div>
         </div>
 
         {/* Source List */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto bg-background px-6 py-4">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
-              <p className="mt-3 text-sm font-medium text-slate-600">
+              <Loader2 className="h-7 w-7 animate-spin text-primary-ink" aria-hidden="true" />
+              <p className="mt-3 text-xs font-black uppercase tracking-wider text-black">
                 Đang truy xuất danh sách đơn hàng...
               </p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-red-200 bg-red-50/60 p-8 text-center">
-              <AlertCircle className="h-7 w-7 text-red-500" />
-              <p className="mt-2 text-sm font-semibold text-red-700">{error}</p>
+            <div className="flex flex-col items-center justify-center border-2 border-black bg-[#fee2e2] p-8 text-center shadow-[4px_4px_0_0_#000]">
+              <AlertCircle className="h-7 w-7 text-red-700" aria-hidden="true" />
+              <p className="mt-2 text-xs font-black uppercase text-black">{error}</p>
             </div>
           ) : filteredItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">
-              <ReceiptText className="h-8 w-8 text-slate-400" />
-              <p className="mt-3 text-sm font-semibold text-slate-700">
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-black/30 bg-white px-6 py-14 text-center">
+              <ReceiptText className="h-8 w-8 text-text-muted" aria-hidden="true" />
+              <p className="mt-3 text-xs font-black uppercase tracking-wide text-black">
                 {search
                   ? "Không tìm thấy đơn hàng khớp với từ khóa"
                   : "Chưa có đơn hàng nào đóng góp vào mục này trong kỳ báo cáo"}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs font-medium text-text-muted">
                 Các đơn ở trạng thái Chờ thanh toán, Hủy, Giao thất bại hoặc Hoàn tiền không được tính vào doanh thu.
               </p>
             </div>
           ) : (
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {search && (
-                <div className="flex items-center justify-between rounded-lg bg-blue-50/70 px-3 py-2 text-xs text-blue-800">
-                  <span>
-                    Hiển thị <strong>{filteredItems.length}</strong> / {data?.items.length ?? 0} dòng khớp
+                <div className="flex items-center justify-between border-2 border-black bg-primary/25 px-3.5 py-2 text-xs text-black">
+                  <span className="font-bold">
+                    Hiển thị <strong className="font-black">{filteredItems.length}</strong> / {data?.items.length ?? 0} dòng khớp
                   </span>
-                  <span className="font-bold tabular-nums">
+                  <span className="font-black text-primary-ink tabular-nums">
                     Tổng lọc: {formatVnd(filteredRevenueSum)}
                   </span>
                 </div>
@@ -424,15 +437,16 @@ export default function RevenueDrilldownDrawer({
                 return (
                   <div
                     key={`${item.sourceType}-${item.referenceId}-${item.productId ?? "all"}-${index}`}
-                    className={`overflow-hidden rounded-2xl border transition-colors ${
+                    className={`overflow-hidden border-2 border-black bg-white transition-shadow duration-150 ${
                       isExpanded
-                        ? "border-blue-300 bg-blue-50/20 shadow-xs"
-                        : "border-slate-200 bg-white hover:border-slate-300"
+                        ? "shadow-[4px_4px_0_0_#000]"
+                        : "shadow-[2px_2px_0_0_#000] hover:shadow-[4px_4px_0_0_#000]"
                     }`}
                   >
                     <div
                       role={isOrder ? "button" : undefined}
                       tabIndex={isOrder ? 0 : undefined}
+                      aria-expanded={isOrder ? isExpanded : undefined}
                       onClick={() => isOrder && toggleOrderDetail(item)}
                       onKeyDown={(e) => {
                         if (isOrder && (e.key === "Enter" || e.key === " ")) {
@@ -441,89 +455,95 @@ export default function RevenueDrilldownDrawer({
                         }
                       }}
                       className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${
-                        isOrder ? "cursor-pointer" : ""
+                        isOrder
+                          ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-black"
+                          : ""
                       }`}
                     >
                       <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span
-                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-xs font-bold ${
+                            className={`inline-flex items-center gap-1 border border-black px-2 py-0.5 font-mono text-xs font-black ${
                               isOrder
-                                ? "bg-slate-900 text-white"
-                                : "bg-emerald-600 text-white"
+                                ? "bg-black text-white"
+                                : "bg-primary text-black"
                             }`}
                           >
-                            {isOrder ? <Package className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+                            {isOrder ? (
+                              <Package className="h-3 w-3" aria-hidden="true" />
+                            ) : (
+                              <Sparkles className="h-3 w-3" aria-hidden="true" />
+                            )}
                             {item.referenceCode}
                           </span>
 
                           <span
-                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+                            className={`inline-flex items-center border border-black px-2 py-0.5 text-[10px] font-black uppercase tracking-wider shadow-[1px_1px_0_0_#000] ${badge.className}`}
                           >
                             {badge.label}
                           </span>
 
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                          <span className="border border-black/30 bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase text-black">
                             {ORDER_TYPE_LABELS[item.orderType] ?? item.orderType}
                           </span>
 
-                          <span className="text-[11px] text-slate-400 tabular-nums">
+                          <span className="text-[11px] font-medium text-text-muted tabular-nums">
                             {formatDateTime(item.createdAt)}
                           </span>
                         </div>
 
-                        <p className="text-sm font-semibold text-slate-900">
+                        <p className="text-sm font-black uppercase text-black">
                           {item.itemName}
                         </p>
 
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
                           <span className="inline-flex items-center gap-1">
-                            <User className="h-3.5 w-3.5 text-slate-400" />
-                            <span className="font-medium text-slate-700">
+                            <User className="h-3.5 w-3.5 text-primary-ink" aria-hidden="true" />
+                            <span className="font-bold text-black">
                               {item.customerName || "Khách hàng"}
                             </span>
                             {item.customerEmail && (
-                              <span className="text-slate-400">({item.customerEmail})</span>
+                              <span className="text-text-muted">({item.customerEmail})</span>
                             )}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex shrink-0 items-center justify-between gap-4 border-t border-slate-100 pt-2.5 sm:flex-col sm:items-end sm:border-t-0 sm:pt-0">
+                      <div className="flex shrink-0 items-center justify-between gap-4 border-t-2 border-dashed border-gray-200 pt-2.5 sm:flex-col sm:items-end sm:border-t-0 sm:pt-0">
                         <div className="text-left sm:text-right">
-                          <p className="text-sm font-bold text-slate-900 tabular-nums">
+                          <p className="text-sm font-black text-primary-ink tabular-nums">
                             {formatVnd(item.contributionAmount)}
                           </p>
-                          <p className="text-[11px] text-slate-500 tabular-nums">
+                          <p className="text-[11px] font-bold text-text-muted tabular-nums">
                             {item.quantity > 1 && data?.scopeType !== "ALL"
                               ? `${item.quantity} × ${formatVnd(item.unitPrice)}`
                               : `${item.quantity} đơn vị`}
                           </p>
                           {showOrderTotalDiff && (
-                            <p className="text-[11px] text-blue-600 tabular-nums">
+                            <p className="text-[11px] font-bold text-black tabular-nums">
                               Tổng đơn: {formatVnd(item.orderTotalAmount)}
                             </p>
                           )}
                         </div>
 
                         {isOrder ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600">
+                          <span className="inline-flex items-center gap-1 border border-black bg-white px-2 py-0.5 text-[11px] font-black uppercase text-black shadow-[1px_1px_0_0_#000]">
                             {isExpanded ? (
                               <>
-                                Ẩn chi tiết <ChevronUp className="h-3.5 w-3.5" />
+                                Ẩn chi tiết <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
                               </>
                             ) : (
                               <>
-                                Xem đơn <ChevronDown className="h-3.5 w-3.5" />
+                                Xem đơn <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
                               </>
                             )}
                           </span>
                         ) : (
                           <Link
                             href="/staff/commission"
-                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                            className="btn-primary inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
                           >
-                            Mở yêu cầu <ExternalLink className="h-3 w-3" />
+                            Mở yêu cầu <ExternalLink className="h-3 w-3" aria-hidden="true" />
                           </Link>
                         )}
                       </div>
@@ -531,29 +551,29 @@ export default function RevenueDrilldownDrawer({
 
                     {/* Expanded Order Audit Detail */}
                     {isExpanded && (
-                      <div className="border-t border-blue-200/80 bg-slate-50/90 px-4 py-3.5 text-xs">
+                      <div className="border-t-2 border-black bg-[#f7fbf8] px-4 py-4 text-xs">
                         {isLoadingDetail ? (
-                          <div className="flex items-center gap-2 py-3 text-slate-500">
-                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                          <div className="flex items-center gap-2 py-3 font-bold text-text-muted">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary-ink" aria-hidden="true" />
                             <span>Đang tải chi tiết hóa đơn {item.referenceCode}...</span>
                           </div>
                         ) : orderDetailError && !detail ? (
-                          <p className="text-red-600">{orderDetailError}</p>
+                          <p className="font-bold text-red-700">{orderDetailError}</p>
                         ) : detail ? (
                           <div className="space-y-3">
                             {/* Payment metadata */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-2 border-black bg-white px-3 py-2">
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-text-muted">
                                 <span>
                                   Mã giao dịch:{" "}
-                                  <strong className="font-mono text-slate-900">
+                                  <strong className="font-mono font-black text-black">
                                     {detail.paymentCode || "—"}
                                   </strong>
                                 </span>
                                 {detail.paymentGateway && (
                                   <span>
                                     Cổng:{" "}
-                                    <strong className="text-slate-900">
+                                    <strong className="font-black text-black">
                                       {GATEWAY_LABELS[detail.paymentGateway.toUpperCase()] ?? detail.paymentGateway}
                                     </strong>
                                   </span>
@@ -561,7 +581,7 @@ export default function RevenueDrilldownDrawer({
                                 {detail.paidAt && (
                                   <span>
                                     Thanh toán:{" "}
-                                    <strong className="text-slate-900 tabular-nums">
+                                    <strong className="font-black text-black tabular-nums">
                                       {formatDateTime(detail.paidAt)}
                                     </strong>
                                   </span>
@@ -569,7 +589,7 @@ export default function RevenueDrilldownDrawer({
                               </div>
                               {detail.paymentStatus && (
                                 <span
-                                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                  className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase ${
                                     getStatusBadge(detail.paymentStatus).className
                                   }`}
                                 >
@@ -579,9 +599,9 @@ export default function RevenueDrilldownDrawer({
                             </div>
 
                             {/* Order Line Items Table */}
-                            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                            <div className="overflow-x-auto border-2 border-black bg-white">
                               <table className="w-full text-left text-xs">
-                                <thead className="border-b border-slate-100 bg-slate-50 text-[11px] font-semibold text-slate-500">
+                                <thead className="border-b-2 border-black bg-[#e9f5ed] text-[10px] font-black uppercase tracking-wider text-black">
                                   <tr>
                                     <th className="px-3 py-2">Sản phẩm trong đơn</th>
                                     <th className="px-3 py-2">Danh mục</th>
@@ -590,7 +610,7 @@ export default function RevenueDrilldownDrawer({
                                     <th className="px-3 py-2 text-right">Thành tiền</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100">
+                                <tbody className="divide-y divide-black/15">
                                   {detail.items.map((line) => {
                                     const isHighlighted =
                                       (query.productId != null && line.productId === query.productId) ||
@@ -601,26 +621,26 @@ export default function RevenueDrilldownDrawer({
                                     return (
                                       <tr
                                         key={line.orderItemId}
-                                        className={isHighlighted ? "bg-blue-50/70" : undefined}
+                                        className={isHighlighted ? "bg-primary/20" : undefined}
                                       >
-                                        <td className="px-3 py-2 font-medium text-slate-900">
+                                        <td className="px-3 py-2 font-bold text-black">
                                           {line.productName}
                                           {isHighlighted && (
-                                            <span className="ml-1.5 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                            <span className="ml-1.5 border border-black bg-primary px-1.5 py-0.2 text-[9px] font-black uppercase text-black">
                                               Đang truy xuất
                                             </span>
                                           )}
                                         </td>
-                                        <td className="px-3 py-2 text-slate-500">
+                                        <td className="px-3 py-2 font-medium text-text-muted">
                                           {CATEGORY_LABELS[line.category] ?? line.category}
                                         </td>
-                                        <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-700">
+                                        <td className="px-3 py-2 text-right font-bold tabular-nums text-black">
                                           {line.quantity}
                                         </td>
-                                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                                        <td className="px-3 py-2 text-right tabular-nums text-text-muted">
                                           {formatVnd(line.unitPrice)}
                                         </td>
-                                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">
+                                        <td className="px-3 py-2 text-right font-black tabular-nums text-primary-ink">
                                           {formatVnd(line.subtotal)}
                                         </td>
                                       </tr>
@@ -631,15 +651,15 @@ export default function RevenueDrilldownDrawer({
                             </div>
 
                             {/* Totals footer */}
-                            <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-1 px-1 text-slate-600 tabular-nums">
+                            <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-1 px-1 text-text-muted tabular-nums">
                               <span>
-                                Tạm tính: <strong className="text-slate-800">{formatVnd(detail.subtotal)}</strong>
+                                Tạm tính: <strong className="font-bold text-black">{formatVnd(detail.subtotal)}</strong>
                               </span>
                               <span>
                                 Phí giao hàng:{" "}
-                                <strong className="text-slate-800">{formatVnd(detail.shippingFee)}</strong>
+                                <strong className="font-bold text-black">{formatVnd(detail.shippingFee)}</strong>
                               </span>
-                              <span className="text-sm font-bold text-slate-900">
+                              <span className="text-sm font-black text-primary-ink">
                                 Tổng đơn: {formatVnd(detail.totalAmount)}
                               </span>
                             </div>

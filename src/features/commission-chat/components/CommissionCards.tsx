@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { formatPrice } from "@/lib/currency";
+import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
 import { commissionErrorMessage } from "@/features/commission/errors";
 import {
   approveDeliverableCard,
@@ -155,6 +156,7 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
 
   const brief = typeof meta?.brief === "string" && meta.brief ? meta.brief : message.content;
   const usesFreeQuota = meta?.usesFreeQuota === true;
+  const usesSubscriptionCredit = meta?.usesSubscriptionCredit === true;
   const fee = asNumber(meta?.revisionFee) ?? 0;
   const maxRevisions = asNumber(meta?.maxRevisions) ?? info.maxRevisions;
   const metaRevisionsUsed = asNumber(meta?.revisionsUsed);
@@ -181,7 +183,9 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
           : "Hết hiệu lực";
 
   const feeText = usesFreeQuota
-    ? `Miễn phí · dùng 1 lượt${maxRevisions !== undefined ? ` (đã dùng ${revisionsUsed}/${maxRevisions})` : ""}`
+    ? usesSubscriptionCredit
+      ? "Miễn phí · trừ 1 lượt từ ví gói hội viên"
+      : `Miễn phí · dùng 1 lượt${maxRevisions !== undefined ? ` (đã dùng ${revisionsUsed}/${maxRevisions})` : ""}`
     : `${formatPrice(fee)}${typeof meta?.feePercentage === "number" ? ` · ${meta.feePercentage}% giá ban đầu` : ""}`;
 
   return (
@@ -204,13 +208,18 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
             <>
               <p className="text-xs font-medium text-text-main">
                 {usesFreeQuota
-                  ? "Yêu cầu dùng 1 lượt miễn phí. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
+                  ? usesSubscriptionCredit
+                    ? "Yêu cầu sẽ trừ 1 lượt miễn phí từ ví gói hội viên của bạn. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
+                    : "Yêu cầu dùng 1 lượt miễn phí. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
                   : `Bạn sẽ được chuyển tới trang thanh toán ${formatPrice(fee)}. Sau thanh toán, họa sĩ sẽ xác nhận thời gian thực hiện.`}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={action.busy} className={primaryButton}
                   onClick={() => void action.run(() => confirmRevisionCard(info.commissionId, message.messageId), "Không xác nhận được yêu cầu chỉnh sửa.",
                     ({ data }) => {
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(new Event(ENTITLEMENTS_CHANGED_EVENT));
+                      }
                       onChanged();
                       if (data?.paymentSession) router.push(paymentHref);
                     })}>

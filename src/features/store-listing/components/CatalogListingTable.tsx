@@ -223,27 +223,30 @@ export default function CatalogListingTable({
 
                 return (
                   <tr key={item.id} className={storeRowClass(isDeleted)}>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
-                      #{item.productId ?? item.id}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
+                        #{item.productId ?? item.id}
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <StoreThumbnail
                         src={item.previewUrl}
                         alt={`Ảnh đại diện của ${item.name}`}
-                        fallback={<Cpu size={18} />}
+                        fallback={<Cpu size={18} aria-hidden="true" />}
+                        pixelated
                       />
                     </td>
-                    <td className="px-4 py-3">
-                      <p className={`font-bold ${isDeleted ? "text-neutral-500 line-through" : ""}`}>
+                    <td className="px-4 py-3.5">
+                      <p className={`text-xs font-black uppercase sm:text-sm ${isDeleted ? "text-text-muted line-through" : "text-black"}`}>
                         {item.name}
                       </p>
                       {item.updatedAt && (
-                        <p className="text-[11px] text-text-muted">
+                        <p className="text-[11px] font-medium text-text-muted tabular-nums">
                           Cập nhật lúc {formatDateTime(item.updatedAt)}
                         </p>
                       )}
                     </td>
-                    <td className="max-w-xs px-4 py-3 text-xs font-medium text-text-muted">
+                    <td className="max-w-xs px-4 py-3.5 text-xs font-medium text-text-muted">
                       <span className="line-clamp-2">
                         {isBundle
                           ? `${item.components?.length ?? 0} sản phẩm: ${(item.components ?? [])
@@ -252,14 +255,14 @@ export default function CatalogListingTable({
                           : item.description || "—"}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-bold tabular-nums text-[#173b28]">
+                    <td className="whitespace-nowrap px-4 py-3.5 text-sm font-black text-primary-ink tabular-nums">
                       {formatVnd(item.price)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <StatusBadge status={status} />
                     </td>
                     {!isBundle && (
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         {isDeleted ? null : (
                           <div className="flex flex-wrap items-center gap-1.5">
                             {onEdit && (

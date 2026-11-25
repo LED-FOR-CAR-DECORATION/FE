@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, Loader2 } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import { AlertTriangle, Archive, Loader2 } from "lucide-react";
+import StoreModal from "./StoreModal";
 import { apiUpdateProductStatus } from "@/lib/api/products";
 
 interface ArchiveProductConfirmModalProps {
@@ -45,9 +45,11 @@ export default function ArchiveProductConfirmModal({
   };
 
   return (
-    <Modal
+    <StoreModal
       title="Ngừng bán sản phẩm?"
       description={`Chuyển sản phẩm #${productId} - ${productName} sang trạng thái Ngừng bán (ARCHIVED).`}
+      icon={<Archive size={18} />}
+      iconBoxClassName="bg-[#fef08a]"
       onClose={onClose}
       busy={isSubmitting}
       footer={
@@ -56,7 +58,7 @@ export default function ArchiveProductConfirmModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-[#cfe0d4] bg-white px-4 py-2 text-sm font-bold hover:bg-[#eef8f0] disabled:opacity-50"
+            className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             Hủy thao tác
           </button>
@@ -64,9 +66,9 @@ export default function ArchiveProductConfirmModal({
             type="button"
             onClick={handleArchive}
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 rounded-lg border border-blue-400 bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
+            className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
-            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Archive size={15} />}
+            {isSubmitting ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Archive size={15} aria-hidden="true" />}
             Xác nhận ngừng bán
           </button>
         </>
@@ -74,16 +76,19 @@ export default function ArchiveProductConfirmModal({
     >
       <div className="flex flex-col gap-3 text-sm">
         {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800">
-            {error}
+          <div
+            role="alert"
+            className="flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+          >
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
+            <span>{error}</span>
           </div>
         )}
 
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-900">
+        <div className="border-2 border-black bg-[#fef08a]/60 p-3.5 text-xs font-semibold leading-relaxed text-black shadow-[2px_2px_0_0_#000]">
           Sản phẩm đã lưu trữ sẽ không thể tiếp tục đặt mua (ngừng bán), nhưng vẫn cho phép khách hàng xem trang chi tiết công khai và lịch sử đơn hàng cũ vẫn được bảo toàn.
         </div>
       </div>
-    </Modal>
+    </StoreModal>
   );
 }
-

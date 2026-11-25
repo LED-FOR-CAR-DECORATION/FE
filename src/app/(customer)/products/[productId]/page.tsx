@@ -5,10 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
-  Check,
-  ChevronRight,
-  Download,
-  Heart,
   Minus,
   Monitor,
   Plus,
@@ -21,6 +17,7 @@ import { useCart } from "@/features/cart/context/CartContext";
 import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CatalogProduct } from "@/features/cart/catalog";
+import { ProductCompatibilityCard } from "@/features/storefront/components/ProductCompatibilityCard";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchStoreProductDetail, fetchStoreProducts } from "@/lib/api/products";
 import { formatPrice } from "@/lib/currency";
@@ -29,7 +26,7 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const params = useParams<{ productId: string }>();
   const { items: cartItems, addItem } = useCart();
-  const { ownedCharacters, activeSubscription } = useGallery();
+  const { ownedCharacters, activeSubscriptions, hasAllAccessCharacters } = useGallery();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const canBuy = isAuthenticated && !authLoading;
 
@@ -106,7 +103,7 @@ export default function ProductDetailPage() {
   const isSubscription = item.productType === "SUBSCRIPTION";
   const isBundle = item.productType === "BUNDLE";
   const isDigital = isCharacter || isSubscription;
-  const hasAllAccess = Boolean(activeSubscription?.allAccessCharacters);
+  const hasAllAccess = hasAllAccessCharacters;
   const ownedCharIdSet = new Set(ownedCharacters.map((o) => o.characterId));
   const isOwnedCharacter =
     isCharacter &&
@@ -125,10 +122,22 @@ export default function ProductDetailPage() {
         (hasAllAccess || (bi.characterId != null && ownedCharIdSet.has(bi.characterId)))
     ) ??
       false);
+  const subDetail = item.subscriptionDetails;
+  const isCommissionRevisionPack =
+    isSubscription &&
+    !subDetail?.allAccessCharacters &&
+    (subDetail?.maxCommissionRevisions ?? 0) > 0;
+  const isCurrentActiveSubscription =
+    isSubscription &&
+    activeSubscriptions.some(
+      (active) =>
+        active.productId === Number(item.id) ||
+        (subDetail?.planCode != null && active.planCode === subDetail.planCode),
+    );
   const isOwned =
     isOwnedCharacter ||
     isOwnedBundle ||
-    (isSubscription && activeSubscription != null);
+    (isCurrentActiveSubscription && !isCommissionRevisionPack);
   const isAlreadyInCart = cartItems.some((i) => i.id === String(item.id));
 
   const productTypeLabel = isSubscription
@@ -168,16 +177,22 @@ export default function ProductDetailPage() {
     ]);
   } else if (item.subscriptionDetails) {
     specifications.push(["Mã gói", item.subscriptionDetails.planCode]);
-    specifications.push([
-      "Thời hạn",
-      item.subscriptionDetails.isLifetime
-        ? "Trọn đời (Lifetime)"
-        : `${item.subscriptionDetails.durationDays ?? 30} ngày`,
-    ]);
-    specifications.push([
-      "Mở khóa toàn bộ Character",
-      item.subscriptionDetails.allAccessCharacters ? "Có" : "Không",
-    ]);
+    if (!isCommissionRevisionPack) {
+      specifications.push([
+        "Thời hạn",
+        item.subscriptionDetails.isLifetime
+          ? "Trọn đời (Lifetime)"
+          : `${item.subscriptionDetails.durationDays ?? 30} ngày`,
+      ]);
+    }
+    if (item.subscriptionDetails.allAccessCharacters) {
+      specifications.push(["Quyền lợi", "Mở khóa toàn bộ thư viện nhân vật"]);
+    } else if ((item.subscriptionDetails.maxCommissionRevisions ?? 0) > 0) {
+      specifications.push([
+        "Quyền lợi",
+        `+${item.subscriptionDetails.maxCommissionRevisions} lượt chỉnh sửa thiết kế miễn phí`,
+      ]);
+    }
   }
 
   const add = async (): Promise<boolean> => {
@@ -307,7 +322,11 @@ export default function ProductDetailPage() {
                 </div>
 
                 <p className="mt-4 text-sm font-medium leading-relaxed text-text-muted">
-                  {item.description || "Chưa có mô tả chi tiết cho sản phẩm này."}
+                  {isSubscription && subDetail?.allAccessCharacters
+                    ? "Mở khóa toàn bộ thư viện nhân vật"
+                    : isCommissionRevisionPack
+                      ? `+${subDetail?.maxCommissionRevisions} lượt chỉnh sửa thiết kế miễn phí`
+                      : item.description || "Chưa có mô tả chi tiết cho sản phẩm này."}
                 </p>
 
                 {/* Quantity selector (physical products only) */}
@@ -395,46 +414,8 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* ── Right Column: Guarantees & Compatibility ── */}
-            <aside className="neo-box-no-hover h-fit bg-white p-5">
-              <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 text-xs font-black uppercase tracking-wider text-black">
-                <Monitor size={16} className="text-primary-ink" /> Tương thích thiết bị
-              </h2>
-              <p className="text-xs font-medium leading-relaxed text-text-muted">
-                Hoạt động đồng bộ 100% trên hệ sinh thái bảng LED và ứng dụng điều khiển Lumintra.
-              </p>
-              <ul className="mt-4 space-y-2.5 text-xs font-bold text-text-main">
-                {[
-                  "Bảng LED Lumintra Matrix 32×32",
-                  "Bảng LED Lumintra Panorama 64×32",
-                  "Điều khiển đồng bộ qua App Lumintra Mobile",
-                ].map((device) => (
-                  <li key={device} className="flex items-center gap-2">
-                    <Check size={14} className="text-primary-ink shrink-0" />
-                    <span>{device}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <hr className="my-5 border-t-2 border-black" />
-
-              <div className="space-y-3 text-xs">
-                <div className="flex items-start gap-2.5">
-                  <Download size={16} className="mt-0.5 text-primary-ink shrink-0" />
-                  <div>
-                    <strong className="block font-black uppercase">Đồng bộ OTA tức thì</strong>
-                    <span className="text-text-muted">Tải ảnh động về thiết bị trong tích tắc.</span>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <Sparkles size={16} className="mt-0.5 text-primary-ink shrink-0" />
-                  <div>
-                    <strong className="block font-black uppercase">Bản quyền trọn đời</strong>
-                    <span className="text-text-muted">Sử dụng vĩnh viễn trên tài khoản Lumintra.</span>
-                  </div>
-                </div>
-              </div>
-            </aside>
+            {/* ── Right Column: Context-Aware Compatibility & Highlights ── */}
+            <ProductCompatibilityCard item={item} />
           </div>
 
           {/* ── Specifications Section ── */}

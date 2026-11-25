@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
   Cpu,
@@ -12,7 +13,6 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import Modal from "@/components/ui/Modal";
 import CategoryTagSelector from "@/features/store-listing/components/CategoryTagSelector";
 import {
   getCreatedStoreProducts,
@@ -85,6 +85,8 @@ export default function LedModelFormModal({
   const isEdit = mode === "edit" && Boolean(initialModel);
   const linkedProductId = initialModel?.productId ?? null;
 
+  const [mounted, setMounted] = useState(false);
+
   // LED Model fields (DEV-02 / DEV-03)
   const [modelName, setModelName] = useState(initialModel?.modelName ?? "");
   const resolvedStockQuantity = isEdit ? (initialModel?.stockQuantity ?? 0) : 0;
@@ -131,6 +133,41 @@ export default function LedModelFormModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const isSubmittingRef = useRef(isSubmitting);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    isSubmittingRef.current = isSubmitting;
+  });
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isSubmittingRef.current) {
+        onCloseRef.current();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
+    };
+  }, []);
 
   // Hydrate existing Store Product when editing a linked LED model
   useEffect(() => {
@@ -508,26 +545,461 @@ export default function LedModelFormModal({
 
   const showProductSection = !isEdit || linkedProductId != null;
 
-  return (
-    <Modal
-      title={isEdit ? `Cập nhật mẫu LED #${initialModel?.modelId}` : "Thêm mẫu LED mới"}
-      description={
-        isEdit
-          ? linkedProductId != null
-            ? `Chỉnh sửa thông tin Mẫu LED và đồng bộ trực tiếp sang sản phẩm Cửa hàng #${linkedProductId}.`
-            : "Chỉnh sửa tên mẫu LED, tồn kho và danh sách thông số kỹ thuật."
-          : "Đăng ký mẫu phần cứng LED mới vào kho và tùy chọn tạo đồng thời sản phẩm bày bán trên Cửa hàng."
-      }
-      onClose={onClose}
-      busy={isSubmitting}
-      size="lg"
-      footer={
-        <>
+  const modalTitle = isEdit
+    ? `Cập nhật mẫu LED #${initialModel?.modelId}`
+    : "Thêm mẫu LED mới";
+  const modalDescription = isEdit
+    ? linkedProductId != null
+      ? `Chỉnh sửa thông tin Mẫu LED và đồng bộ trực tiếp sang sản phẩm Cửa hàng #${linkedProductId}.`
+      : "Chỉnh sửa tên mẫu LED, tồn kho và danh sách thông số kỹ thuật."
+    : "Đăng ký mẫu phần cứng LED mới vào kho và tùy chọn tạo đồng thời sản phẩm bày bán trên Cửa hàng.";
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 font-sans text-text-main"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden border-2 border-black bg-white shadow-[6px_6px_0_0_#000] outline-none"
+      >
+        <header className="flex items-start justify-between gap-4 border-b-2 border-black bg-primary/20 px-6 py-4">
+          <div className="min-w-0">
+            <span className="inline-flex items-center border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+              {isEdit ? `MẪU LED #${initialModel?.modelId}` : "ĐĂNG KÝ MẪU LED MỚI"}
+            </span>
+            <h2
+              id={titleId}
+              className="mt-1.5 text-base font-black uppercase tracking-tight text-black sm:text-lg"
+            >
+              {modalTitle}
+            </h2>
+            <p id={descriptionId} className="mt-0.5 text-xs font-medium text-text-muted">
+              {modalDescription}
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            aria-label="Đóng hộp thoại"
+            className="btn-secondary p-1.5! shadow-[2px_2px_0_0_#000]"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <form id="led-model-form" onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm">
+            {error && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+              >
+                <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Tên & Tồn kho */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="led-model-name-input"
+                  className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-black"
+                >
+                  Tên mẫu LED <span className="text-red-600">*</span>
+                </label>
+                <input
+                  id="led-model-name-input"
+                  type="text"
+                  required
+                  maxLength={255}
+                  value={modelName}
+                  onChange={(e) => handleModelNameChange(e.target.value)}
+                  placeholder="Ví dụ: Lumintra Matrix 64x64 Pro V2"
+                  className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-black">
+                  Số lượng tồn kho (theo thiết bị thực tế)
+                </label>
+                <div className="flex items-center justify-between gap-2 border-2 border-black bg-gray-100 px-3 py-1.5 text-xs">
+                  <span className="font-black text-black tabular-nums">
+                    {resolvedStockQuantity} thiết bị
+                  </span>
+                  <span className="border border-black bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
+                    Chỉ tăng qua nhập kho Serial
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[11px] font-medium text-text-muted">
+                  {isEdit
+                    ? "Để nhập thêm hàng vào kho, hãy bấm vào mẫu LED và chọn \"Nhập kho thiết bị\" kèm Serial/MAC."
+                    : "Mẫu mới bắt đầu từ 0 thiết bị. Sau khi tạo, mở mẫu LED để nhập kho theo từng Serial & MAC."}
+                </p>
+              </div>
+            </div>
+
+            {/* Kích thước ma trận */}
+            <div className="border-2 border-black bg-[#f3faf5] p-3.5 shadow-[2px_2px_0_0_#000]">
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 border-b-2 border-dashed border-black/20 pb-2">
+                <span className="text-xs font-black uppercase tracking-wider text-black">
+                  Kích thước ma trận LED (Pixel)
+                </span>
+                {isEdit && (
+                  <span className="inline-flex items-center gap-1 border border-black bg-[#fef08a] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
+                    <Info size={12} aria-hidden="true" />
+                    Khóa nếu đã có thiết bị trong kho
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    htmlFor="led-model-width-px"
+                    className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
+                  >
+                    Chiều rộng (widthPx) <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="led-model-width-px"
+                    type="number"
+                    min={1}
+                    step={1}
+                    required
+                    value={widthPx}
+                    onChange={(e) => setWidthPx(e.target.value)}
+                    className="w-full border-2 border-black bg-white px-3 py-2 text-xs font-black text-black tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="led-model-height-px"
+                    className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
+                  >
+                    Chiều cao (heightPx) <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="led-model-height-px"
+                    type="number"
+                    min={1}
+                    step={1}
+                    required
+                    value={heightPx}
+                    onChange={(e) => setHeightPx(e.target.value)}
+                    className="w-full border-2 border-black bg-white px-3 py-2 text-xs font-black text-black tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Danh sách thông số kỹ thuật có thứ tự */}
+            <LedSpecAttributesEditor
+              attributes={attributes}
+              onChange={setAttributes}
+              disabled={isSubmitting}
+            />
+
+            {isEdit && initialModel && (
+              <div className="flex items-start gap-2.5 border-2 border-black bg-[#e0f2fe] p-3 text-xs font-medium text-black shadow-[2px_2px_0_0_#000]">
+                <Info size={15} className="mt-0.5 shrink-0 text-black" aria-hidden="true" />
+                <p>
+                  {initialModel.status === "DEPRECATED" ? (
+                    <>
+                      Mẫu này hiện đang ở trạng thái <strong className="font-black">Ngừng kinh doanh</strong> và sẽ giữ nguyên trạng thái này dù thay đổi tồn kho.
+                    </>
+                  ) : (
+                    <>
+                      Trạng thái mẫu LED sẽ tự động cập nhật theo tồn kho: <strong className="font-black">Đang kinh doanh</strong> khi tồn kho &gt; 0 và <strong className="font-black">Hết hàng</strong> khi tồn kho = 0.
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* Đồng bộ / Tạo kèm Sản phẩm trên Cửa hàng */}
+            {showProductSection && (
+              <div className="space-y-3 border-2 border-black bg-[#f3faf5] p-3.5 shadow-[2px_2px_0_0_#000]">
+                <label className="flex cursor-pointer items-center justify-between gap-3">
+                  <div>
+                    <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+                      <Sparkles size={14} className="text-primary-ink" aria-hidden="true" />
+                      {isEdit
+                        ? `Đồng bộ cập nhật sản phẩm Cửa hàng (SP #${linkedProductId})`
+                        : "Tạo đồng thời sản phẩm bày bán trên Cửa hàng"}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] font-medium text-text-muted">
+                      {isEdit
+                        ? "Khi bật, thông tin tên, giá bán, mô tả, hình ảnh và thẻ của sản phẩm Cửa hàng liên kết sẽ được cập nhật cùng lúc."
+                        : "Tắt tùy chọn này nếu chỉ muốn đăng ký mẫu phần cứng LED độc lập trong kho (chưa gắn sản phẩm)."}
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={syncStoreProduct}
+                    disabled={isHydratingProduct}
+                    onChange={(e) => setSyncStoreProduct(e.target.checked)}
+                    className="h-4 w-4 shrink-0 cursor-pointer accent-black"
+                  />
+                </label>
+
+                {isHydratingProduct ? (
+                  <div className="flex items-center gap-2 border-t-2 border-dashed border-black/20 pt-3 text-xs font-bold text-text-muted">
+                    <Loader2 size={14} className="animate-spin text-primary-ink" aria-hidden="true" />
+                    Đang tải thông tin sản phẩm Cửa hàng #{linkedProductId}...
+                  </div>
+                ) : (
+                  syncStoreProduct && (
+                    <div className="space-y-3 border-t-2 border-dashed border-black/20 pt-3">
+                      {isEdit && !productHydrated && (
+                        <div className="flex items-start gap-2 border-2 border-black bg-[#fef08a] p-2.5 text-[11px] font-bold text-black shadow-[2px_2px_0_0_#000]">
+                          <Info size={14} className="mt-0.5 shrink-0 text-black" aria-hidden="true" />
+                          <span>
+                            Sản phẩm #{linkedProductId} đang ở trạng thái chưa mở bán nên không tự tải được dữ liệu cũ. Hãy kiểm tra kỹ giá bán, mô tả và hình ảnh bên dưới trước khi lưu đồng bộ.
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                          <label
+                            htmlFor="led-store-product-name"
+                            className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
+                          >
+                            Tên sản phẩm trên Cửa hàng <span className="text-red-600">*</span>
+                          </label>
+                          <input
+                            id="led-store-product-name"
+                            type="text"
+                            maxLength={255}
+                            value={productName}
+                            onChange={(e) => {
+                              setProductName(e.target.value);
+                              setProductNameCustomized(true);
+                            }}
+                            placeholder="Mặc định trùng tên mẫu LED"
+                            className="w-full border-2 border-black bg-white px-3 py-2 text-xs font-bold text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="led-store-base-price"
+                            className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
+                          >
+                            Giá bán trên Cửa hàng (VNĐ) <span className="text-red-600">*</span>
+                          </label>
+                          <input
+                            id="led-store-base-price"
+                            type="number"
+                            min={0}
+                            step={1000}
+                            value={basePrice}
+                            onChange={(e) => setBasePrice(e.target.value)}
+                            className="w-full border-2 border-black bg-white px-3 py-2 text-xs font-black text-primary-ink tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="led-store-description"
+                          className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
+                        >
+                          Mô tả sản phẩm
+                        </label>
+                        <textarea
+                          id="led-store-description"
+                          rows={2}
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          placeholder="Mô tả hiển thị trên Cửa hàng..."
+                          className="w-full border-2 border-black bg-white px-3 py-2 text-xs font-medium text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-2 border-2 border-black bg-white p-2.5 shadow-[2px_2px_0_0_#000]">
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wider text-black">
+                              <ImageIcon size={13} aria-hidden="true" /> Ảnh đại diện
+                            </label>
+                            <button
+                              type="button"
+                              disabled={isUploadingThumb}
+                              onClick={() => thumbInputRef.current?.click()}
+                              className="btn-primary inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                            >
+                              {isUploadingThumb ? (
+                                <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+                              ) : (
+                                <Upload size={11} aria-hidden="true" />
+                              )}
+                              Chọn ảnh
+                            </button>
+                            <input
+                              ref={thumbInputRef}
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              className="hidden"
+                              onChange={handleThumbUpload}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={thumbnailUrl}
+                              onChange={(e) => setThumbnailUrl(e.target.value)}
+                              placeholder="/images/products/led/matrix-64.png"
+                              aria-label="Đường dẫn ảnh đại diện"
+                              className="w-full border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-black focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                            />
+                            {thumbnailUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setThumbnailUrl("")}
+                                aria-label="Xóa ảnh đại diện"
+                                className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center border-2 border-black bg-white text-red-700 hover:bg-[#fecaca]"
+                              >
+                                <X size={12} aria-hidden="true" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 border-2 border-black bg-white p-2.5 shadow-[2px_2px_0_0_#000]">
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wider text-black">
+                              <ImageIcon size={13} aria-hidden="true" /> Thư viện ảnh
+                            </label>
+                            <button
+                              type="button"
+                              disabled={isUploadingGallery}
+                              onClick={() => galleryInputRef.current?.click()}
+                              className="btn-primary inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                            >
+                              {isUploadingGallery ? (
+                                <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+                              ) : (
+                                <Upload size={11} aria-hidden="true" />
+                              )}
+                              Tải ảnh
+                            </button>
+                            <input
+                              ref={galleryInputRef}
+                              type="file"
+                              multiple
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              className="hidden"
+                              onChange={handleGalleryUpload}
+                            />
+                          </div>
+                          {(() => {
+                            const list = galleryUrlsText
+                              .split(/[\n,]/)
+                              .map((u) => u.trim())
+                              .filter((u) => u.length > 0);
+                            if (list.length === 0) return null;
+                            return (
+                              <div className="flex flex-wrap gap-1.5">
+                                {list.map((url, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="relative h-10 w-10 overflow-hidden border-2 border-black bg-gray-50"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={url}
+                                      alt={`Gallery ${idx + 1}`}
+                                      className="h-full w-full object-cover"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveGalleryUrl(idx)}
+                                      aria-label={`Xóa ảnh thư viện ${idx + 1}`}
+                                      className="absolute right-0 top-0 cursor-pointer border-b border-l border-black bg-black p-0.5 text-white hover:bg-red-600"
+                                    >
+                                      <X size={9} aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                          <textarea
+                            rows={2}
+                            value={galleryUrlsText}
+                            onChange={(e) => setGalleryUrlsText(e.target.value)}
+                            placeholder="Mỗi dòng 1 URL ảnh"
+                            aria-label="Danh sách URL thư viện ảnh"
+                            className="w-full border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-black focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                          />
+                        </div>
+                      </div>
+
+                      <CategoryTagSelector
+                        availableTags={availableTags}
+                        selectedTagIds={selectedTagIds}
+                        isLoading={isLoadingTags}
+                        label="Thẻ phân loại sản phẩm"
+                        onToggleTag={(tagId) => {
+                          setTagsInitialized(true);
+                          setSelectedTagIds((prev) =>
+                            prev.includes(tagId)
+                              ? prev.filter((id) => id !== tagId)
+                              : [...prev, tagId],
+                          );
+                        }}
+                        onTagCreated={(created) => {
+                          setTagsInitialized(true);
+                          setAvailableTags((prev) =>
+                            prev.some((t) => t.tagId === created.tagId) ? prev : [...prev, created],
+                          );
+                          if (created.tagId) {
+                            setSelectedTagIds((prev) =>
+                              prev.includes(created.tagId!) ? prev : [...prev, created.tagId!],
+                            );
+                          }
+                        }}
+                      />
+
+                      {!isEdit && (
+                        <label className="flex cursor-pointer items-center justify-between gap-2 border-2 border-black bg-white px-3 py-2 text-xs shadow-[2px_2px_0_0_#000]">
+                          <span className="font-black text-black">
+                            Mở bán ngay trên Cửa hàng (mặc định: Chưa mở bán)
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={publishImmediately}
+                            onChange={(e) => setPublishImmediately(e.target.checked)}
+                            className="h-4 w-4 shrink-0 cursor-pointer accent-black"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </form>
+        </div>
+
+        <footer className="flex flex-wrap items-center justify-end gap-2.5 border-t-2 border-dashed border-gray-200 bg-white px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             Hủy
           </button>
@@ -540,395 +1012,30 @@ export default function LedModelFormModal({
               isUploadingGallery ||
               isHydratingProduct
             }
-            className="inline-flex items-center gap-2 rounded-lg border-2 border-black bg-primary px-5 py-2 text-sm font-black text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90 disabled:opacity-50"
+            className="btn-primary inline-flex items-center gap-2 px-5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             {isSubmitting ? (
               <>
-                <Loader2 size={15} className="animate-spin" />
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
                 Đang lưu...
               </>
             ) : isEdit ? (
               <>
-                <Save size={15} />
+                <Save size={14} aria-hidden="true" />
                 {linkedProductId != null && syncStoreProduct
                   ? "Lưu Mẫu LED & Sản phẩm"
                   : "Lưu cập nhật"}
               </>
             ) : (
               <>
-                <Cpu size={15} />
+                <Cpu size={14} aria-hidden="true" />
                 {syncStoreProduct ? "Tạo mẫu LED & Sản phẩm" : "Tạo mẫu LED"}
               </>
             )}
           </button>
-        </>
-      }
-    >
-      <form id="led-model-form" onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm">
-        {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800"
-          >
-            <AlertCircle size={16} className="mt-0.5 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Tên & Tồn kho */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-bold text-gray-800">
-              Tên mẫu LED <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              maxLength={255}
-              value={modelName}
-              onChange={(e) => handleModelNameChange(e.target.value)}
-              placeholder="Ví dụ: Lumintra Matrix 64x64 Pro V2"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#439660]"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-bold text-gray-800">
-              Số lượng tồn kho (theo thiết bị thực tế)
-            </label>
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
-              <span className="font-black text-gray-900">
-                {resolvedStockQuantity} thiết bị
-              </span>
-              <span className="rounded bg-white px-2 py-0.5 text-[11px] font-semibold text-text-muted border border-gray-200">
-                Chỉ tăng qua nhập kho Serial
-              </span>
-            </div>
-            <p className="mt-1 text-[11px] text-text-muted">
-              {isEdit
-                ? "Để nhập thêm hàng vào kho, hãy bấm vào mẫu LED và chọn \"Nhập kho thiết bị\" kèm Serial/MAC."
-                : "Mẫu mới bắt đầu từ 0 thiết bị. Sau khi tạo, mở mẫu LED để nhập kho theo từng Serial & MAC."}
-            </p>
-          </div>
-        </div>
-
-        {/* Kích thước ma trận */}
-        <div className="rounded-xl border border-[#dbece0] bg-[#f9fdfa] p-3.5">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-black uppercase tracking-wider text-[#1f432b]">
-              Kích thước ma trận LED (Pixel)
-            </span>
-            {isEdit && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800">
-                <Info size={13} />
-                Kích thước sẽ bị khóa nếu mẫu đã có thiết bị thực tế trong kho
-              </span>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-bold text-gray-700">
-                Chiều rộng (widthPx) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                required
-                value={widthPx}
-                onChange={(e) => setWidthPx(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-[#439660]"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-bold text-gray-700">
-                Chiều cao (heightPx) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                required
-                value={heightPx}
-                onChange={(e) => setHeightPx(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-[#439660]"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Danh sách thông số kỹ thuật có thứ tự */}
-        <LedSpecAttributesEditor
-          attributes={attributes}
-          onChange={setAttributes}
-          disabled={isSubmitting}
-        />
-
-        {isEdit && initialModel && (
-          <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900">
-            <Info size={15} className="mt-0.5 shrink-0" />
-            <p>
-              {initialModel.status === "DEPRECATED" ? (
-                <>
-                  Mẫu này hiện đang ở trạng thái <strong>Ngừng kinh doanh</strong> và sẽ giữ nguyên trạng thái này dù thay đổi tồn kho.
-                </>
-              ) : (
-                <>
-                  Trạng thái mẫu LED sẽ tự động cập nhật theo tồn kho: <strong>Đang kinh doanh</strong> khi tồn kho &gt; 0 và <strong>Hết hàng</strong> khi tồn kho = 0.
-                </>
-              )}
-            </p>
-          </div>
-        )}
-
-        {/* Đồng bộ / Tạo kèm Sản phẩm trên Cửa hàng */}
-        {showProductSection && (
-          <div className="space-y-3 rounded-xl border border-[#cde2d3] bg-[#f4fbf6] p-3.5">
-            <label className="flex cursor-pointer items-center justify-between gap-3">
-              <div>
-                <span className="flex items-center gap-1.5 text-xs font-black text-[#1f432b]">
-                  <Sparkles size={14} className="text-[#2d6a4f]" />
-                  {isEdit
-                    ? `Đồng bộ cập nhật sản phẩm Cửa hàng (SP #${linkedProductId})`
-                    : "Tạo đồng thời sản phẩm bày bán trên Cửa hàng"}
-                </span>
-                <span className="mt-0.5 block text-[11px] text-text-muted">
-                  {isEdit
-                    ? "Khi bật, thông tin tên, giá bán, mô tả, hình ảnh và thẻ của sản phẩm Cửa hàng liên kết sẽ được cập nhật cùng lúc."
-                    : "Tắt tùy chọn này nếu chỉ muốn đăng ký mẫu phần cứng LED độc lập trong kho (chưa gắn sản phẩm)."}
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                checked={syncStoreProduct}
-                disabled={isHydratingProduct}
-                onChange={(e) => setSyncStoreProduct(e.target.checked)}
-                className="h-4 w-4 accent-[#439660]"
-              />
-            </label>
-
-            {isHydratingProduct ? (
-              <div className="flex items-center gap-2 border-t border-[#d8eadc] pt-3 text-xs text-text-muted">
-                <Loader2 size={14} className="animate-spin text-[#2d6a4f]" />
-                Đang tải thông tin sản phẩm Cửa hàng #{linkedProductId}...
-              </div>
-            ) : (
-              syncStoreProduct && (
-                <div className="space-y-3 border-t border-[#d8eadc] pt-3">
-                  {isEdit && !productHydrated && (
-                    <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
-                      <Info size={14} className="mt-0.5 shrink-0" />
-                      <span>
-                        Sản phẩm #{linkedProductId} đang ở trạng thái chưa mở bán nên không tự tải được dữ liệu cũ. Hãy kiểm tra kỹ giá bán, mô tả và hình ảnh bên dưới trước khi lưu đồng bộ.
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                        Tên sản phẩm trên Cửa hàng <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={255}
-                        value={productName}
-                        onChange={(e) => {
-                          setProductName(e.target.value);
-                          setProductNameCustomized(true);
-                        }}
-                        placeholder="Mặc định trùng tên mẫu LED"
-                        className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                        Giá bán trên Cửa hàng (VNĐ) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={1000}
-                        value={basePrice}
-                        onChange={(e) => setBasePrice(e.target.value)}
-                        className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs font-bold outline-none focus:border-[#439660]"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-xs font-bold text-[#1f432b]">
-                      Mô tả sản phẩm
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Mô tả hiển thị trên Cửa hàng..."
-                      className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs outline-none focus:border-[#439660]"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5 rounded-lg border border-[#d8e6dc] bg-white p-2.5">
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-1 text-xs font-bold text-[#1f432b]">
-                          <ImageIcon size={13} /> Ảnh đại diện
-                        </label>
-                        <button
-                          type="button"
-                          disabled={isUploadingThumb}
-                          onClick={() => thumbInputRef.current?.click()}
-                          className="inline-flex items-center gap-1 rounded bg-[#2d6a4f] px-2 py-1 text-[11px] font-bold text-white hover:bg-[#1f432b] disabled:opacity-50"
-                        >
-                          {isUploadingThumb ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : (
-                            <Upload size={11} />
-                          )}
-                          Chọn ảnh
-                        </button>
-                        <input
-                          ref={thumbInputRef}
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp,image/gif"
-                          className="hidden"
-                          onChange={handleThumbUpload}
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          value={thumbnailUrl}
-                          onChange={(e) => setThumbnailUrl(e.target.value)}
-                          placeholder="/images/products/led/matrix-64.png"
-                          className="w-full rounded-md border border-[#d8e6dc] px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
-                        />
-                        {thumbnailUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setThumbnailUrl("")}
-                            className="rounded-md border border-gray-300 p-1.5 text-gray-500 hover:text-red-600"
-                          >
-                            <X size={12} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5 rounded-lg border border-[#d8e6dc] bg-white p-2.5">
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-1 text-xs font-bold text-[#1f432b]">
-                          <ImageIcon size={13} /> Thư viện ảnh
-                        </label>
-                        <button
-                          type="button"
-                          disabled={isUploadingGallery}
-                          onClick={() => galleryInputRef.current?.click()}
-                          className="inline-flex items-center gap-1 rounded bg-[#2d6a4f] px-2 py-1 text-[11px] font-bold text-white hover:bg-[#1f432b] disabled:opacity-50"
-                        >
-                          {isUploadingGallery ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : (
-                            <Upload size={11} />
-                          )}
-                          Tải ảnh
-                        </button>
-                        <input
-                          ref={galleryInputRef}
-                          type="file"
-                          multiple
-                          accept="image/png,image/jpeg,image/webp,image/gif"
-                          className="hidden"
-                          onChange={handleGalleryUpload}
-                        />
-                      </div>
-                      {(() => {
-                        const list = galleryUrlsText
-                          .split(/[\n,]/)
-                          .map((u) => u.trim())
-                          .filter((u) => u.length > 0);
-                        if (list.length === 0) return null;
-                        return (
-                          <div className="flex flex-wrap gap-1.5">
-                            {list.map((url, idx) => (
-                              <div
-                                key={idx}
-                                className="relative h-10 w-10 overflow-hidden rounded border border-[#cbe4d2]"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={url}
-                                  alt={`Gallery ${idx + 1}`}
-                                  className="h-full w-full object-cover"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveGalleryUrl(idx)}
-                                  className="absolute right-0 top-0 rounded-bl bg-black/60 p-0.5 text-white hover:bg-red-600"
-                                >
-                                  <X size={9} />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                      <textarea
-                        rows={2}
-                        value={galleryUrlsText}
-                        onChange={(e) => setGalleryUrlsText(e.target.value)}
-                        placeholder="Mỗi dòng 1 URL ảnh"
-                        className="w-full rounded-md border border-[#d8e6dc] px-2.5 py-1 text-xs outline-none focus:border-[#439660]"
-                      />
-                    </div>
-                  </div>
-
-                  <CategoryTagSelector
-                    availableTags={availableTags}
-                    selectedTagIds={selectedTagIds}
-                    isLoading={isLoadingTags}
-                    label="Thẻ phân loại sản phẩm"
-                    onToggleTag={(tagId) => {
-                      setTagsInitialized(true);
-                      setSelectedTagIds((prev) =>
-                        prev.includes(tagId)
-                          ? prev.filter((id) => id !== tagId)
-                          : [...prev, tagId],
-                      );
-                    }}
-                    onTagCreated={(created) => {
-                      setTagsInitialized(true);
-                      setAvailableTags((prev) =>
-                        prev.some((t) => t.tagId === created.tagId) ? prev : [...prev, created],
-                      );
-                      if (created.tagId) {
-                        setSelectedTagIds((prev) =>
-                          prev.includes(created.tagId!) ? prev : [...prev, created.tagId!],
-                        );
-                      }
-                    }}
-                  />
-
-                  {!isEdit && (
-                    <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-xs">
-                      <span className="font-bold text-[#1f432b]">
-                        Mở bán ngay trên Cửa hàng (mặc định: Chưa mở bán)
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={publishImmediately}
-                        onChange={(e) => setPublishImmediately(e.target.checked)}
-                        className="h-4 w-4 accent-[#439660]"
-                      />
-                    </label>
-                  )}
-                </div>
-              )
-            )}
-          </div>
-        )}
-      </form>
-    </Modal>
+        </footer>
+      </div>
+    </div>,
+    document.body,
   );
 }

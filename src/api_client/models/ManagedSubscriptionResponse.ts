@@ -11,6 +11,7 @@ export type ManagedSubscriptionResponse = {
     isLifetime?: boolean;
     durationDays?: number;
     allAccessCharacters?: boolean;
+    maxCommissionRevisions?: number;
     status?: ManagedSubscriptionResponse.status;
     createdAt?: string;
 };

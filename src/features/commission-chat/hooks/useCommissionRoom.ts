@@ -18,6 +18,7 @@ import {
   type CommissionMessage,
 } from "../services/commission-messages.api";
 import { buildStompUrl, subscribeStomp, type StompStatus } from "../services/stomp-client";
+import { isPageVisible, scheduleVisiblePoll } from "@/lib/polling";
 
 export type ChatViewer = "CUSTOMER" | "STAFF";
 
@@ -150,17 +151,17 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
 
   useEffect(() => {
     let active = true;
-    let timer: ReturnType<typeof setTimeout>;
+    let cancelPoll: (() => void) | undefined;
     async function run() {
       const next = await loadInfo();
       if (!active) return;
       const waitingForChat = next && (next.status === "PENDING_PAYMENT" || next.status === "PENDING_REVIEW");
-      if (waitingForChat) timer = setTimeout(run, STATUS_POLL_MS);
+      if (waitingForChat) cancelPoll = scheduleVisiblePoll(() => void run(), STATUS_POLL_MS);
     }
     void run();
     return () => {
       active = false;
-      clearTimeout(timer);
+      cancelPoll?.();
     };
   }, [loadInfo, reloadKey]);
 
@@ -243,7 +244,9 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
   // Dự phòng khi WebSocket không kết nối được: poll lịch sử định kỳ.
   useEffect(() => {
     if (!readable || realtime === "connected") return;
-    const timer = setInterval(() => void loadHistory(), FALLBACK_POLL_MS);
+    const timer = setInterval(() => {
+      if (isPageVisible()) void loadHistory();
+    }, FALLBACK_POLL_MS);
     return () => clearInterval(timer);
   }, [readable, realtime, loadHistory]);
 

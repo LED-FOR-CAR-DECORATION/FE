@@ -105,7 +105,7 @@ function HeroSlider({
   const firstBundle = products.find((p) => p.productType === "BUNDLE" && p.previewUrl);
 
   const slideVisuals: Record<string, { src: string | null; alt: string }> = {
-    mirage: {
+    lumintra: {
       src: firstBundle?.previewUrl || firstCharacter?.previewUrl || null,
       alt: firstBundle?.name || firstCharacter?.name || HERO_SLIDES[0].title,
     },
@@ -120,7 +120,7 @@ function HeroSlider({
   };
 
   const slide = HERO_SLIDES[current];
-  const visual = slideVisuals[slide.id];
+  const visual = slideVisuals[slide.id] ?? { src: null, alt: slide.title };
   const activeImageSrc = loading
     ? null
     : visual.src && !failedUrls[visual.src]

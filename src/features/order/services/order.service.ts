@@ -1,4 +1,5 @@
 import { CheckoutRequest, type OrderDetailResponse, type OrderSummaryItem } from "@/api_client";
+import { fetchAllPages, mapWithConcurrency } from "@/lib/api/paging";
 import type { Address } from "@/features/address/types";
 import type { AuthUser } from "@/features/auth/types";
 import type { CartItem } from "@/features/cart/types";
@@ -24,6 +25,9 @@ import {
 import { mapBackendProductType } from "@/lib/api/products";
 
 export const ORDERS_CHANGED_EVENT = "led-controller-orders-changed";
+
+/** Số request chi tiết đơn chạy song song tối đa (tránh dội hàng chục request cùng lúc). */
+const DETAIL_CONCURRENCY = 6;
 
 export function mapBackendOrderStatus(status?: string): OrderStatus {
   switch (status) {
@@ -311,31 +315,22 @@ export function mapStaffOrderSummaryAndDetailToOrder(
 export const orderService = {
   async fetchCustomerOrders(customer: AuthUser | null): Promise<MockOrder[]> {
     if (!customer || customer.role !== "CUSTOMER") return [];
-    try {
-      const { items: summaries } = await fetchMyOrders({ page: 0, size: 50 });
-      const details = await Promise.all(
-        summaries.map((s) => fetchOrderDetail(s.orderId).catch(() => null)),
-      );
-      return summaries.map((summary, idx) =>
-        mapOrderSummaryAndDetailToOrder(summary, details[idx] ?? null, customer),
-      );
-    } catch {
-      return [];
-    }
+    const summaries = await fetchAllPages((page) => fetchMyOrders({ page, size: 50 }));
+    const details = await mapWithConcurrency(summaries, DETAIL_CONCURRENCY, (s) =>
+      fetchOrderDetail(s.orderId).catch(() => null),
+    );
+    return summaries.map((summary, idx) =>
+      mapOrderSummaryAndDetailToOrder(summary, details[idx] ?? null, customer),
+    );
   },
   async fetchStaffOrders(): Promise<MockOrder[]> {
-    try {
-      const { items: summaries } = await fetchStaffOrders({ allStatuses: true, page: 0, size: 50 });
-      const details = await Promise.all(
-        summaries.map((s) => fetchStaffOrderDetail(s.orderId).catch(() => null)),
-      );
-      return summaries.map((summary, idx) =>
-        mapStaffOrderSummaryAndDetailToOrder(summary, details[idx] ?? null),
-      );
-    } catch (err) {
-      console.error("fetchStaffOrders failed:", err);
-      return [];
-    }
+    const { items: summaries } = await fetchStaffOrders({ allStatuses: true, size: 50 });
+    const details = await mapWithConcurrency(summaries, DETAIL_CONCURRENCY, (s) =>
+      fetchStaffOrderDetail(s.orderId).catch(() => null),
+    );
+    return summaries.map((summary, idx) =>
+      mapStaffOrderSummaryAndDetailToOrder(summary, details[idx] ?? null),
+    );
   },
   async updateStaffStatus(orderId: number | string, status: string, reason?: string): Promise<void> {
     let backendStatus = status;

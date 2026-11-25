@@ -1,4 +1,3 @@
-import { DEMO_ACCOUNTS } from "../mock-auth";
 import type { AuthUser, RegisterInput, UserRole } from "../types";
 import {
   apiForgotPassword,
@@ -12,74 +11,14 @@ import {
   getApiErrorMessage,
 } from "@/lib/api/auth";
 
-const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-/** Bật mock bằng NEXT_PUBLIC_USE_MOCK_AUTH=true trong .env. Mặc định gọi backend thật. */
-export const USE_MOCK_AUTH = process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true";
 
-export class MockAuthError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "MockAuthError";
-  }
-}
 
 export interface RegisterResult {
   /** true nếu tài khoản cần xác thực email bằng OTP trước khi đăng nhập. */
   requiresVerification: boolean;
 }
 
-/** Prototype-only boundary. Used when NEXT_PUBLIC_USE_MOCK_AUTH=true. */
-const mockAuthService = {
-  async login(email: string, password: string): Promise<AuthUser> {
-    await wait(500);
-    const account = DEMO_ACCOUNTS.find(
-      (item) => item.email === email.trim().toLowerCase() && item.password === password,
-    );
-    if (!account) {
-      throw new MockAuthError("Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại thông tin đăng nhập.");
-    }
-    return account.user;
-  },
-  async logout(): Promise<void> { await wait(150); },
-  async getCurrentUser(): Promise<AuthUser | null> { return null; },
-  async register(data: RegisterInput): Promise<RegisterResult> {
-    await wait(600);
-    if (DEMO_ACCOUNTS.some((account) => account.email === data.email.trim().toLowerCase())) {
-      throw new MockAuthError("Email này đã được dùng trong tài khoản demo.");
-    }
-    return { requiresVerification: false };
-  },
-  async verifyEmail(_email: string, otp: string): Promise<void> {
-    await wait(400);
-    if (otp !== "123456") throw new MockAuthError("Mã OTP không đúng hoặc đã hết hạn.");
-  },
-  async resendVerification(_email: string): Promise<void> { await wait(400); },
-  async requestPasswordReset(email: string): Promise<void> {
-    await wait(600);
-    if (!DEMO_ACCOUNTS.some((account) => account.email === email.trim().toLowerCase())) {
-      throw new MockAuthError("Không tìm thấy tài khoản với email này.");
-    }
-  },
-  async verifyCurrentPassword(email: string, password: string): Promise<void> {
-    await wait(500);
-    const account = DEMO_ACCOUNTS.find(
-      (item) => item.email === email.trim().toLowerCase() && item.password === password,
-    );
-    if (!account) throw new MockAuthError("Mật khẩu hiện tại không đúng.");
-  },
-  async sendPasswordOtp(email: string): Promise<void> {
-    await this.requestPasswordReset(email);
-  },
-  async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
-    await wait(500);
-    if (otp !== "123456") throw new MockAuthError("Mã OTP không đúng hoặc đã hết hạn.");
-    if (newPassword.length < 8) throw new MockAuthError("Mật khẩu mới phải có ít nhất 8 ký tự.");
-    const account = DEMO_ACCOUNTS.find((item) => item.email === email.trim().toLowerCase());
-    if (!account) throw new MockAuthError("Không tìm thấy tài khoản với email này.");
-    account.password = newPassword;
-  },
-};
 
 /** Chạy lời gọi API và đổi lỗi thành Error có message tiếng Việt để UI hiển thị trực tiếp. */
 async function withFriendlyError<T>(call: () => Promise<T>, fallback?: string): Promise<T> {
@@ -89,9 +28,6 @@ async function withFriendlyError<T>(call: () => Promise<T>, fallback?: string): 
     throw new Error(getApiErrorMessage(error, fallback));
   }
 }
-
-const notSupported = (feature: string) =>
-  Promise.reject(new Error(`Chức năng "${feature}" chưa có API ở backend.`));
 
 const VALID_ROLES: readonly UserRole[] = ["ADMIN", "MANAGER", "STAFF", "DESIGNER", "CUSTOMER"] as const;
 
@@ -175,20 +111,11 @@ const realAuthService = {
     );
   },
   async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
-    try {
-      await withFriendlyError(
-        () => apiResetPassword(email.trim().toLowerCase(), otp.trim(), newPassword),
-        "Không thể đổi mật khẩu."
-      );
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("404")) {
-        throw new Error("Backend hiện chưa hỗ trợ API đổi mật khẩu (Issue #8). Mã OTP đã được gửi về email của bạn!");
-      }
-      throw error;
-    }
+    await withFriendlyError(
+      () => apiResetPassword(email.trim().toLowerCase(), otp.trim(), newPassword),
+      "Không thể đổi mật khẩu.",
+    );
   },
-  verifyCurrentPassword: (_email: string, _password: string): Promise<void> => notSupported("Đổi mật khẩu"),
-  sendPasswordOtp: (_email: string): Promise<void> => notSupported("Đổi mật khẩu"),
 };
 
-export const authService = USE_MOCK_AUTH ? mockAuthService : realAuthService;
+export const authService = realAuthService;

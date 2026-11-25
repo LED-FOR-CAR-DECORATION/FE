@@ -43,32 +43,48 @@ const CATEGORY_TABS: Array<{ key: string; label: string }> = [
 const CATEGORY_LABELS: Record<string, string> = {
   ALL: "Tổng doanh thu",
   HARDWARE: "Phần cứng",
+  LED: "Phần cứng",
+  PHYSICAL: "Phần cứng",
   COMMISSION: "Yêu cầu thiết kế",
   BUNDLE: "Gói sản phẩm",
   CHARACTER: "Nhân vật",
+  DIGITAL: "Nhân vật",
   SUBSCRIPTION: "Gói hội viên",
   MIXED: "Đa danh mục",
 };
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
-  PHYSICAL: "Vật lý",
-  DIGITAL: "Kỹ thuật số",
-  MIXED: "Kết hợp",
-  SUBSCRIPTION: "Hội viên",
-  COMMISSION: "Thiết kế",
+  PHYSICAL: "Vật lý (Phần cứng)",
+  DIGITAL: "Kỹ thuật số (Nhân vật)",
+  MIXED: "Kết hợp (Combo/Hỗn hợp)",
+  SUBSCRIPTION: "Gói hội viên",
+  COMMISSION: "Yêu cầu thiết kế",
+};
+
+const GATEWAY_LABELS: Record<string, string> = {
+  SEPAY: "SePay (VietQR)",
+  VIETQR: "VietQR",
+  BANK_TRANSFER: "Chuyển khoản ngân hàng",
+  MOCK: "Mô phỏng thanh toán",
 };
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   COMPLETED: { label: "Hoàn thành", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  DELIVERED: { label: "Đã giao", className: "bg-teal-50 text-teal-700 border-teal-200" },
-  SHIPPING: { label: "Đang giao", className: "bg-sky-50 text-sky-700 border-sky-200" },
-  PROCESSING: { label: "Đang xử lý", className: "bg-blue-50 text-blue-700 border-blue-200" },
-  PARTIALLY_FULFILLED: { label: "Đã cấp nội dung số", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  DELIVERED: { label: "Đã giao hàng", className: "bg-teal-50 text-teal-700 border-teal-200" },
+  SHIPPING: { label: "Đang vận chuyển", className: "bg-sky-50 text-sky-700 border-sky-200" },
+  PROCESSING: { label: "Đang xử lý / Chờ đóng gói", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  PARTIALLY_FULFILLED: { label: "Đã cấp nhân vật số", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   IN_PROGRESS: { label: "Đang thiết kế", className: "bg-blue-50 text-blue-700 border-blue-200" },
   AWAITING_CUSTOMER_REVIEW: { label: "Chờ khách duyệt", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  AWAITING_EXTRA_PAYMENT: { label: "Chờ thanh toán thêm", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  ASSIGNED: { label: "Đã phân công", className: "bg-purple-50 text-purple-700 border-purple-200" },
-  SUCCESS: { label: "Đã thanh toán", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  AWAITING_EXTRA_PAYMENT: { label: "Chờ thanh toán phụ thu", className: "bg-amber-50 text-amber-700 border-amber-200" },
+  ASSIGNED: { label: "Đã phân công Designer", className: "bg-purple-50 text-purple-700 border-purple-200" },
+  SUCCESS: { label: "Thanh toán thành công", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  PAID: { label: "Đã thanh toán", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  PENDING_PAYMENT: { label: "Chờ thanh toán", className: "bg-amber-50 text-amber-700 border-amber-200" },
+  CANCELED: { label: "Đã hủy", className: "bg-red-50 text-red-700 border-red-200" },
+  CANCELLED: { label: "Đã hủy", className: "bg-red-50 text-red-700 border-red-200" },
+  REFUNDED: { label: "Đã hoàn tiền", className: "bg-slate-100 text-slate-700 border-slate-200" },
+  DELIVERY_FAILED: { label: "Giao hàng thất bại", className: "bg-red-50 text-red-700 border-red-200" },
 };
 
 function formatVnd(value: number): string {
@@ -536,7 +552,10 @@ export default function RevenueDrilldownDrawer({
                                 </span>
                                 {detail.paymentGateway && (
                                   <span>
-                                    Cổng: <strong className="text-slate-900">{detail.paymentGateway}</strong>
+                                    Cổng:{" "}
+                                    <strong className="text-slate-900">
+                                      {GATEWAY_LABELS[detail.paymentGateway.toUpperCase()] ?? detail.paymentGateway}
+                                    </strong>
                                   </span>
                                 )}
                                 {detail.paidAt && (

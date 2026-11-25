@@ -10,7 +10,7 @@ export type PixelTool =
 
 export type MirrorMode = "NONE" | "HORIZONTAL" | "VERTICAL" | "BOTH";
 export type PixelShape = "LINE" | "RECTANGLE" | "ELLIPSE" | "STAR";
-export type ExportFormat = "PNG" | "JPEG";
+export type ExportFormat = "PNG" | "JPEG" | "GIF";
 export type ImportFitMode = "CONTAIN" | "COVER" | "STRETCH";
 
 export interface GlyphSizePreset {

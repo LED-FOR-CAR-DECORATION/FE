@@ -16,7 +16,7 @@ export default async function CommissionPaymentPage({ params }: {
     <>
       <Header />
       <main className="flex-1 bg-background py-6 text-text-main md:py-10">
-        <div className="mx-auto w-full max-w-4xl px-4 sm:px-6">
+        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
           <Link
             href="/commission"
             className="btn-secondary mb-6 inline-flex min-h-11 items-center gap-2 text-xs font-black uppercase"

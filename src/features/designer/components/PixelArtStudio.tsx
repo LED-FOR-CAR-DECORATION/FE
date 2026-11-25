@@ -67,8 +67,11 @@ import {
   PALETTE_PRESETS,
   extractPaletteFromFrames,
   loadCharacterPalette,
+  loadCustomPalettePresets,
   saveCharacterPalette,
+  saveCustomPalettePresets,
   type ColorSwatch,
+  type PalettePreset,
 } from "../palette-storage";
 import StudioLayersPanel from "./StudioLayersPanel";
 import {
@@ -360,6 +363,10 @@ export default function PixelArtStudio({
     loadCharacterPalette(propCharacterId ?? null),
   );
   const [selectedSwatchIdx, setSelectedSwatchIdx] = useState<number>(0);
+  const [customPresets, setCustomPresets] = useState<PalettePreset[]>([]);
+  const [activePresetId, setActivePresetId] = useState<string>("");
+  const [savingPresetOpen, setSavingPresetOpen] = useState<boolean>(false);
+  const [presetNameInput, setPresetNameInput] = useState<string>("");
   const [colorPanelTab, setColorPanelTab] = useState<"SWATCH" | "SLIDERS">(
     "SWATCH",
   );
@@ -409,6 +416,9 @@ export default function PixelArtStudio({
   useEffect(() => {
     setActiveCharacterId(propCharacterId ?? null);
     setPaletteSwatches(loadCharacterPalette(propCharacterId ?? null));
+    setCustomPresets(loadCustomPalettePresets());
+    setActivePresetId("");
+    setSavingPresetOpen(false);
     if (initialCharacterName !== undefined) {
       setCharacterName(initialCharacterName);
     }
@@ -1980,10 +1990,13 @@ export default function PixelArtStudio({
   };
 
   const handleApplyPalettePreset = (presetId: string) => {
-    const preset = PALETTE_PRESETS.find((p) => p.id === presetId);
+    const preset =
+      customPresets.find((p) => p.id === presetId) ??
+      PALETTE_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     const nextSwatches = preset.swatches.map((s) => ({ ...s }));
     setPaletteSwatches(nextSwatches);
+    setActivePresetId(preset.id);
     setSelectedSwatchIdx(0);
     if (nextSwatches[0]) {
       setSelectedColor(nextSwatches[0].hex);
@@ -1991,6 +2004,90 @@ export default function PixelArtStudio({
     setStatusNotice({
       type: "success",
       message: `Đã nạp bộ màu "${preset.label}" cho nhân vật.`,
+    });
+  };
+
+  const handleOpenSavePreset = () => {
+    if (paletteSwatches.length === 0) {
+      setStatusNotice({
+        type: "info",
+        message: "Khay màu đang trống. Hãy thêm ít nhất 1 ô màu trước khi lưu preset.",
+      });
+      return;
+    }
+    const baseName = characterName.trim()
+      ? `Màu ${characterName.trim()}`
+      : `Preset ${customPresets.length + 1}`;
+    setPresetNameInput(baseName);
+    setSavingPresetOpen(true);
+  };
+
+  const handleSaveCustomPreset = () => {
+    const trimmed = presetNameInput.trim();
+    if (!trimmed) {
+      setStatusNotice({
+        type: "error",
+        message: "Vui lòng nhập tên preset bảng màu.",
+      });
+      return;
+    }
+    if (paletteSwatches.length === 0) {
+      setStatusNotice({
+        type: "info",
+        message: "Khay màu đang trống, không thể lưu preset.",
+      });
+      return;
+    }
+    const nextPreset: PalettePreset = {
+      id: `custom-${Date.now().toString(36)}`,
+      label: trimmed,
+      swatches: paletteSwatches.map((s) => ({ name: s.name, hex: normalizeHex(s.hex) })),
+      custom: true,
+    };
+    const nextList = [...customPresets, nextPreset];
+    setCustomPresets(nextList);
+    saveCustomPalettePresets(nextList);
+    setActivePresetId(nextPreset.id);
+    setSavingPresetOpen(false);
+    setPresetNameInput("");
+    setStatusNotice({
+      type: "success",
+      message: `Đã lưu preset cá nhân "${trimmed}" (${nextPreset.swatches.length} màu) trên máy này.`,
+    });
+  };
+
+  const handleUpdateSelectedCustomPreset = () => {
+    const target = customPresets.find((p) => p.id === activePresetId);
+    if (!target || paletteSwatches.length === 0) return;
+    const nextList = customPresets.map((p) =>
+      p.id === target.id
+        ? {
+            ...p,
+            swatches: paletteSwatches.map((s) => ({
+              name: s.name,
+              hex: normalizeHex(s.hex),
+            })),
+          }
+        : p,
+    );
+    setCustomPresets(nextList);
+    saveCustomPalettePresets(nextList);
+    setStatusNotice({
+      type: "success",
+      message: `Đã cập nhật preset "${target.label}" (${paletteSwatches.length} màu).`,
+    });
+  };
+
+  const handleDeleteSelectedCustomPreset = () => {
+    const target = customPresets.find((p) => p.id === activePresetId);
+    if (!target) return;
+    const nextList = customPresets.filter((p) => p.id !== target.id);
+    setCustomPresets(nextList);
+    saveCustomPalettePresets(nextList);
+    setActivePresetId("");
+    setStatusNotice({
+      type: "success",
+      message: `Đã xóa preset cá nhân "${target.label}".`,
     });
   };
 
@@ -2004,6 +2101,7 @@ export default function PixelArtStudio({
       return;
     }
     setPaletteSwatches(extracted);
+    setActivePresetId("");
     setSelectedSwatchIdx(0);
     setSelectedColor(extracted[0].hex);
     setStatusNotice({
@@ -3360,32 +3458,110 @@ export default function PixelArtStudio({
               {colorPanelTab === "SWATCH" ? (
                 <div className="space-y-2">
                   {/* Palette Preset & Extract from Canvas */}
-                  <div className="flex items-center gap-1">
-                    <select
-                      aria-label="Bộ màu mẫu"
-                      value=""
-                      onChange={(e) => {
-                        if (e.target.value) handleApplyPalettePreset(e.target.value);
-                      }}
-                      className="ase-input min-w-0 flex-1 px-1.5 py-1 text-[10px] font-bold text-[#1f2a24]"
-                    >
-                      <option value="" disabled>
-                        Nạp bộ màu...
-                      </option>
-                      {PALETTE_PRESETS.map((preset) => (
-                        <option key={preset.id} value={preset.id}>
-                          {preset.label}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1">
+                      <select
+                        aria-label="Bộ màu mẫu"
+                        value={activePresetId}
+                        onChange={(e) => {
+                          if (e.target.value) handleApplyPalettePreset(e.target.value);
+                        }}
+                        className="ase-input min-w-0 flex-1 px-1.5 py-1 text-[10px] font-bold text-[#1f2a24]"
+                      >
+                        <option value="" disabled>
+                          Nạp bộ màu...
                         </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleExtractPalette}
-                      title="Trích bảng màu từ tất cả frame của nhân vật hiện tại"
-                      className="ase-btn inline-flex shrink-0 items-center gap-1 px-2 py-1 text-[10px] font-bold"
-                    >
-                      <Wand2 size={10} /> Trích
-                    </button>
+                        {customPresets.length > 0 && (
+                          <optgroup label="Preset cá nhân (trên máy)">
+                            {customPresets.map((preset) => (
+                              <option key={preset.id} value={preset.id}>
+                                {preset.label} ({preset.swatches.length})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <optgroup label="Preset hệ thống">
+                          {PALETTE_PRESETS.map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              {preset.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handleExtractPalette}
+                        title="Trích bảng màu từ tất cả frame của nhân vật hiện tại"
+                        className="ase-btn inline-flex shrink-0 items-center gap-1 px-2 py-1 text-[10px] font-bold"
+                      >
+                        <Wand2 size={10} /> Trích
+                      </button>
+                    </div>
+
+                    {savingPresetOpen ? (
+                      <div className="flex items-center gap-1 border border-[#8a948e] bg-[#f5f7f6] p-1">
+                        <input
+                          type="text"
+                          value={presetNameInput}
+                          onChange={(e) => setPresetNameInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveCustomPreset();
+                            if (e.key === "Escape") setSavingPresetOpen(false);
+                          }}
+                          placeholder="Tên preset..."
+                          aria-label="Tên preset bảng màu cá nhân"
+                          className="ase-input min-w-0 flex-1 px-1.5 py-0.5 text-[10px] font-semibold"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveCustomPreset}
+                          className="ase-btn-primary shrink-0 px-1.5 py-0.5 text-[10px] font-bold"
+                        >
+                          Lưu
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSavingPresetOpen(false)}
+                          aria-label="Hủy lưu preset"
+                          className="ase-btn shrink-0 p-0.5"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handleOpenSavePreset}
+                          title="Lưu khay màu hiện tại thành preset cá nhân trên máy này"
+                          className="ase-btn inline-flex flex-1 items-center justify-center gap-1 px-1.5 py-0.5 text-[10px] font-bold"
+                        >
+                          <Save size={10} /> Lưu thành preset
+                        </button>
+                        {customPresets.some((p) => p.id === activePresetId) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleUpdateSelectedCustomPreset}
+                              disabled={paletteSwatches.length === 0}
+                              title="Ghi đè preset cá nhân đang chọn bằng khay màu hiện tại"
+                              className="ase-btn shrink-0 px-1.5 py-0.5 text-[10px] font-bold"
+                            >
+                              Cập nhật
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleDeleteSelectedCustomPreset}
+                              title="Xóa preset cá nhân đang chọn"
+                              aria-label="Xóa preset cá nhân"
+                              className="ase-btn shrink-0 p-1 text-red-700"
+                            >
+                              <Trash size={10} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {paletteSwatches.length === 0 ? (

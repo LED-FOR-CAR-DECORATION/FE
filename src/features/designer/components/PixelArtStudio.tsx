@@ -15,6 +15,7 @@ import {
   FlipHorizontal2,
   FlipVertical2,
   ImagePlus,
+  Keyboard,
   Layers,
   LayoutGrid,
   Loader2,
@@ -23,6 +24,7 @@ import {
   PaintBucket,
   Pause,
   Pen,
+  Pencil,
   Pipette,
   Play,
   Plus,
@@ -38,6 +40,7 @@ import {
   Trash,
   Type,
   Undo2,
+  Wand2,
   X,
   ZoomIn,
   ZoomOut,
@@ -60,6 +63,15 @@ import {
   saveVersionFramesCache,
 } from "../studio-draft";
 import {
+  DEFAULT_SWATCHES,
+  PALETTE_PRESETS,
+  extractPaletteFromFrames,
+  loadCharacterPalette,
+  saveCharacterPalette,
+  type ColorSwatch,
+} from "../palette-storage";
+import StudioLayersPanel from "./StudioLayersPanel";
+import {
   decodeGifBytesToFrames,
   encodeFramesToGifBlob,
   encodeFramesToGifDataUrl,
@@ -72,10 +84,14 @@ import {
   CANVAS_SIZE_OPTIONS,
   clearDocumentRegion,
   compositeDocument,
+  createDefaultLayer,
   createEmptyDocument,
   drawShape,
+  ensureLayeredFrame,
   extractRegionPixels,
   fitsPixelText,
+  flattenLayersForFrame,
+  flipRegionInDocument,
   floodFill,
   GLYPH_SIZE_PRESETS,
   hexToRgb,
@@ -83,6 +99,7 @@ import {
   normalizeHex,
   normalizeSelectionRect,
   rasterizeImageToPixels,
+  rasterizeTextBlockIntoPixels,
   renderDocumentToDataUrl,
   rgbToHex,
   rgbToHsv,
@@ -92,18 +109,44 @@ import {
   type ImportFitMode,
   type MirrorMode,
   type PixelDocumentState,
+  type PixelLayer,
   type PixelShape,
   type PixelText,
   type PixelTool,
   type SelectionRect,
 } from "../domain/pixelDocument";
 
-export type { PixelTool, MirrorMode, PixelShape, ExportFormat, ImportFitMode };
+export type { ColorSwatch, PixelTool, MirrorMode, PixelShape, ExportFormat, ImportFitMode };
 
-export interface ColorSwatch {
-  name: string;
-  hex: string;
-  custom?: boolean;
+function constrainPointByShift(
+  start: PixelPoint,
+  point: PixelPoint,
+  mode: "SHAPE" | "MOVE",
+  shapeKind: PixelShape,
+): PixelPoint {
+  const dx = point.x - start.x;
+  const dy = point.y - start.y;
+  if (mode === "MOVE") {
+    return Math.abs(dx) >= Math.abs(dy)
+      ? { x: point.x, y: start.y }
+      : { x: start.x, y: point.y };
+  }
+  if (shapeKind === "LINE") {
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    if (absDx > absDy * 2) return { x: point.x, y: start.y };
+    if (absDy > absDx * 2) return { x: start.x, y: point.y };
+    const step = Math.max(absDx, absDy);
+    return {
+      x: start.x + (dx >= 0 ? step : -step),
+      y: start.y + (dy >= 0 ? step : -step),
+    };
+  }
+  const side = Math.max(Math.abs(dx), Math.abs(dy));
+  return {
+    x: start.x + (dx >= 0 ? side : -side),
+    y: start.y + (dy >= 0 ? side : -side),
+  };
 }
 
 export interface PixelPoint {
@@ -160,19 +203,6 @@ export interface PixelArtStudioProps {
   commissionId?: number;
 }
 
-const DEFAULT_SWATCHES: ColorSwatch[] = [
-  { name: "Neon Cyan", hex: "#00F5FF" },
-  { name: "Cyber Magenta", hex: "#FF007F" },
-  { name: "Lime Green", hex: "#39FF14" },
-  { name: "Bright Red", hex: "#FF1744" },
-  { name: "Cyber Yellow", hex: "#FFE600" },
-  { name: "Electric Purple", hex: "#B026FF" },
-  { name: "Neon Orange", hex: "#FF6D00" },
-  { name: "Laser Blue", hex: "#2979FF" },
-  { name: "Pure White", hex: "#FFFFFF" },
-  { name: "Pitch Black", hex: "#0B0F19" },
-];
-
 const MAX_HISTORY_STEPS = 30;
 const ZOOM_STEPS = [1, 1.25, 1.5] as const;
 
@@ -209,11 +239,23 @@ export default function PixelArtStudio({
     CANVAS_SIZE_OPTIONS.find((item) => item.key === sizeKey) ??
     CANVAS_SIZE_OPTIONS[0];
 
+  const [layers, setLayers] = useState<PixelLayer[]>(() => [createDefaultLayer()]);
+  const [activeLayerId, setActiveLayerId] = useState<string>("layer-1");
+  const layersRef = useRef<PixelLayer[]>(layers);
+  const activeLayerIdRef = useRef<string>(activeLayerId);
+  layersRef.current = layers;
+  activeLayerIdRef.current = activeLayerId;
+
   const [frames, setFrames] = useState<PixelDocumentState[]>(() => {
     const initialOpt =
       CANVAS_SIZE_OPTIONS.find((item) => item.key === (lockedMatrixSize ?? "32x32")) ??
       CANVAS_SIZE_OPTIONS[0];
-    return [createEmptyDocument(initialOpt.width, initialOpt.height)];
+    return [
+      ensureLayeredFrame(
+        createEmptyDocument(initialOpt.width, initialOpt.height),
+        [createDefaultLayer()],
+      ),
+    ];
   });
   const [activeFrameIndex, setActiveFrameIndex] = useState<number>(0);
   const [frameDelayMs, setFrameDelayMs] = useState<number>(100);
@@ -226,7 +268,18 @@ export default function PixelArtStudio({
   framesRef.current = frames;
   activeFrameIndexRef.current = activeFrameIndex;
 
-  const doc = frames[activeFrameIndex] ?? frames[0];
+  const activeFrame = frames[activeFrameIndex] ?? frames[0];
+  const activeLayer = layers.find((l) => l.id === activeLayerId) ?? layers[0];
+  const activeCel = activeFrame.layerContents?.[activeLayer.id] ?? {
+    pixels: activeFrame.pixels,
+    texts: activeFrame.texts,
+  };
+  const doc: PixelDocumentState = {
+    width: activeFrame.width,
+    height: activeFrame.height,
+    pixels: activeCel.pixels,
+    texts: activeCel.texts,
+  };
   const docRef = useRef<PixelDocumentState>(doc);
   docRef.current = doc;
 
@@ -238,17 +291,29 @@ export default function PixelArtStudio({
     setPreviewDoc(next);
   }, []);
 
-  // Undo / Redo stacks storing immutable multi-frame animation snapshots
+  // Undo / Redo stacks storing immutable multi-frame + layer snapshots
   const undoStackRef = useRef<
-    Array<{ frames: PixelDocumentState[]; activeFrameIndex: number }>
+    Array<{
+      frames: PixelDocumentState[];
+      activeFrameIndex: number;
+      layers: PixelLayer[];
+      activeLayerId: string;
+    }>
   >([]);
   const redoStackRef = useRef<
-    Array<{ frames: PixelDocumentState[]; activeFrameIndex: number }>
+    Array<{
+      frames: PixelDocumentState[];
+      activeFrameIndex: number;
+      layers: PixelLayer[];
+      activeLayerId: string;
+    }>
   >([]);
   const [historyMeta, setHistoryMeta] = useState({ undo: 0, redo: 0 });
 
   // Active gesture refs
   const isPointerDownRef = useRef(false);
+  const gestureToolRef = useRef<PixelTool>("PEN");
+  const strokeTouchedRef = useRef<Set<number>>(new Set());
   const strokeStartDocRef = useRef<PixelDocumentState | null>(null);
   const dragStartPixelRef = useRef<PixelPoint | null>(null);
   const lastPixelRef = useRef<PixelPoint | null>(null);
@@ -259,6 +324,8 @@ export default function PixelArtStudio({
     regionWidth: number;
     regionHeight: number;
     data: string[];
+    movingTexts: PixelText[];
+    staticTexts: PixelText[];
   } | null>(null);
 
   // Tool & visual states
@@ -286,13 +353,18 @@ export default function PixelArtStudio({
     data: string[];
   } | null>(null);
 
-  // Palette & RGB/HSV sliders
+  // Palette & RGB/HSV sliders (persisted per character)
   const [selectedColor, setSelectedColor] = useState<string>("#00F5FF");
-  const [paletteSwatches, setPaletteSwatches] =
-    useState<ColorSwatch[]>(DEFAULT_SWATCHES);
+  const [hexInput, setHexInput] = useState<string>("#00F5FF");
+  const [paletteSwatches, setPaletteSwatches] = useState<ColorSwatch[]>(() =>
+    loadCharacterPalette(propCharacterId ?? null),
+  );
+  const [selectedSwatchIdx, setSelectedSwatchIdx] = useState<number>(0);
   const [colorPanelTab, setColorPanelTab] = useState<"SWATCH" | "SLIDERS">(
     "SWATCH",
   );
+  const [shortcutsOpen, setShortcutsOpen] = useState<boolean>(false);
+  const shortcutsMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Text layer editor state
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -333,9 +405,10 @@ export default function PixelArtStudio({
     message: string;
   } | null>(null);
 
-  // Sync props when character context switches
+  // Sync palette & props when character context switches
   useEffect(() => {
     setActiveCharacterId(propCharacterId ?? null);
+    setPaletteSwatches(loadCharacterPalette(propCharacterId ?? null));
     if (initialCharacterName !== undefined) {
       setCharacterName(initialCharacterName);
     }
@@ -344,26 +417,124 @@ export default function PixelArtStudio({
     }
   }, [propCharacterId, initialCharacterName, initialDescription]);
 
+  // Keep Hex text input synced whenever selectedColor changes externally (e.g. sliders, picker, swatches)
+  useEffect(() => {
+    setHexInput(normalizeHex(selectedColor));
+  }, [selectedColor]);
+
+  // Persist character's custom palette automatically
+  useEffect(() => {
+    saveCharacterPalette(activeCharacterId ?? propCharacterId ?? null, paletteSwatches);
+  }, [activeCharacterId, propCharacterId, paletteSwatches]);
+
+  // Close shortcuts popover when clicking outside
+  useEffect(() => {
+    if (!shortcutsOpen) return;
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        shortcutsMenuRef.current &&
+        !shortcutsMenuRef.current.contains(event.target as Node)
+      ) {
+        setShortcutsOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleOutsideClick);
+    return () => window.removeEventListener("mousedown", handleOutsideClick);
+  }, [shortcutsOpen]);
+
   const zoom = ZOOM_STEPS[zoomIdx] ?? 1;
 
-  const updateDocument = useCallback((next: PixelDocumentState) => {
-    const idx = activeFrameIndexRef.current;
-    const nextFrames = framesRef.current.map((f, i) => (i === idx ? next : f));
+  const extractActiveLayerDoc = useCallback(
+    (
+      frame: PixelDocumentState,
+      targetLayerId: string,
+      layerList: PixelLayer[],
+    ): PixelDocumentState => {
+      const targetLayer =
+        layerList.find((l) => l.id === targetLayerId) ?? layerList[0];
+      const cel = frame.layerContents?.[targetLayer.id] ?? {
+        pixels: frame.pixels,
+        texts: frame.texts,
+      };
+      return {
+        width: frame.width,
+        height: frame.height,
+        pixels: cel.pixels,
+        texts: cel.texts,
+      };
+    },
+    [],
+  );
+
+  const updateDocument = useCallback((nextLayerDoc: PixelDocumentState) => {
+    const frameIdx = activeFrameIndexRef.current;
+    const layerList = layersRef.current;
+    const layerId =
+      layerList.find((l) => l.id === activeLayerIdRef.current)?.id ??
+      layerList[0]?.id ??
+      "layer-1";
+
+    const nextFrames = framesRef.current.map((frame, i) => {
+      if (i !== frameIdx) return frame;
+      const ensured = ensureLayeredFrame(frame, layerList);
+      const nextContents = {
+        ...(ensured.layerContents ?? {}),
+        [layerId]: {
+          pixels: nextLayerDoc.pixels,
+          texts: nextLayerDoc.texts,
+        },
+      };
+      return {
+        width: ensured.width,
+        height: ensured.height,
+        pixels: flattenLayersForFrame(ensured.width, ensured.height, layerList, nextContents),
+        texts: [],
+        layerContents: nextContents,
+      };
+    });
+
     framesRef.current = nextFrames;
-    docRef.current = next;
+    docRef.current = nextLayerDoc;
     setFrames(nextFrames);
   }, []);
 
   const applyTimelineState = useCallback(
-    (nextFrames: PixelDocumentState[], nextActiveIdx: number) => {
-      const safeIdx = Math.max(0, Math.min(nextFrames.length - 1, nextActiveIdx));
-      framesRef.current = nextFrames;
+    (
+      nextFrames: PixelDocumentState[],
+      nextActiveIdx: number,
+      nextLayers?: PixelLayer[],
+      nextActiveLayerId?: string,
+    ) => {
+      const resolvedLayers =
+        nextLayers && nextLayers.length > 0 ? nextLayers : layersRef.current;
+      const resolvedLayerId =
+        nextActiveLayerId && resolvedLayers.some((l) => l.id === nextActiveLayerId)
+          ? nextActiveLayerId
+          : resolvedLayers.some((l) => l.id === activeLayerIdRef.current)
+            ? activeLayerIdRef.current
+            : resolvedLayers[0].id;
+
+      const normalizedFrames = nextFrames.map((f) =>
+        ensureLayeredFrame(f, resolvedLayers),
+      );
+      const safeIdx = Math.max(0, Math.min(normalizedFrames.length - 1, nextActiveIdx));
+
+      layersRef.current = resolvedLayers;
+      activeLayerIdRef.current = resolvedLayerId;
+      framesRef.current = normalizedFrames;
       activeFrameIndexRef.current = safeIdx;
-      docRef.current = nextFrames[safeIdx] ?? nextFrames[0];
-      setFrames(nextFrames);
+      docRef.current = extractActiveLayerDoc(
+        normalizedFrames[safeIdx] ?? normalizedFrames[0],
+        resolvedLayerId,
+        resolvedLayers,
+      );
+
+      setLayers(resolvedLayers);
+      setActiveLayerId(resolvedLayerId);
+      setFrames(normalizedFrames);
       setActiveFrameIndex(safeIdx);
     },
-    [],
+    [extractActiveLayerDoc],
   );
 
   const syncHistoryCounts = useCallback(() => {
@@ -374,35 +545,76 @@ export default function PixelArtStudio({
   }, []);
 
   const commitTimelineChange = useCallback(
-    (nextFrames: PixelDocumentState[], nextActiveIdx: number) => {
+    (
+      nextFrames: PixelDocumentState[],
+      nextActiveIdx: number,
+      nextLayers?: PixelLayer[],
+      nextActiveLayerId?: string,
+    ) => {
       userDirtyRef.current = true;
       undoStackRef.current = [
         ...undoStackRef.current.slice(-(MAX_HISTORY_STEPS - 1)),
         {
           frames: framesRef.current,
           activeFrameIndex: activeFrameIndexRef.current,
+          layers: layersRef.current,
+          activeLayerId: activeLayerIdRef.current,
         },
       ];
       redoStackRef.current = [];
       syncHistoryCounts();
-      applyTimelineState(nextFrames, nextActiveIdx);
+      applyTimelineState(nextFrames, nextActiveIdx, nextLayers, nextActiveLayerId);
     },
     [syncHistoryCounts, applyTimelineState],
   );
 
   const commitDocumentChange = useCallback(
-    (previousSnapshot: PixelDocumentState, nextDoc: PixelDocumentState) => {
+    (previousLayerSnapshot: PixelDocumentState, nextLayerDoc: PixelDocumentState) => {
       const idx = activeFrameIndexRef.current;
-      const prevFrames = framesRef.current.map((f, i) => (i === idx ? previousSnapshot : f));
-      const nextFrames = framesRef.current.map((f, i) => (i === idx ? nextDoc : f));
+      const layerList = layersRef.current;
+      const layerId =
+        layerList.find((l) => l.id === activeLayerIdRef.current)?.id ??
+        layerList[0]?.id ??
+        "layer-1";
+
+      const buildFrameWithCel = (
+        baseFrame: PixelDocumentState,
+        celDoc: PixelDocumentState,
+      ): PixelDocumentState => {
+        const ensured = ensureLayeredFrame(baseFrame, layerList);
+        const nextContents = {
+          ...(ensured.layerContents ?? {}),
+          [layerId]: { pixels: celDoc.pixels, texts: celDoc.texts },
+        };
+        return {
+          width: ensured.width,
+          height: ensured.height,
+          pixels: flattenLayersForFrame(ensured.width, ensured.height, layerList, nextContents),
+          texts: [],
+          layerContents: nextContents,
+        };
+      };
+
+      const prevFrames = framesRef.current.map((f, i) =>
+        i === idx ? buildFrameWithCel(f, previousLayerSnapshot) : f,
+      );
+      const nextFrames = framesRef.current.map((f, i) =>
+        i === idx ? buildFrameWithCel(f, nextLayerDoc) : f,
+      );
+
       userDirtyRef.current = true;
       undoStackRef.current = [
         ...undoStackRef.current.slice(-(MAX_HISTORY_STEPS - 1)),
-        { frames: prevFrames, activeFrameIndex: idx },
+        {
+          frames: prevFrames,
+          activeFrameIndex: idx,
+          layers: layerList,
+          activeLayerId: layerId,
+        },
       ];
       redoStackRef.current = [];
       syncHistoryCounts();
-      applyTimelineState(nextFrames, idx);
+      applyTimelineState(nextFrames, idx, layerList, layerId);
     },
     [syncHistoryCounts, applyTimelineState],
   );
@@ -444,7 +656,12 @@ export default function PixelArtStudio({
         setFrameDelayMs(savedDraft.frameDelayMs);
       }
 
-      applyTimelineState(draftFrames, savedDraft.activeFrameIndex ?? 0);
+      applyTimelineState(
+        draftFrames,
+        savedDraft.activeFrameIndex ?? 0,
+        savedDraft.layers ?? [createDefaultLayer()],
+        savedDraft.activeLayerId ?? savedDraft.layers?.[0]?.id ?? "layer-1",
+      );
       setHasLocalDraft(true);
       if (savedDraft.updatedAt) {
         const parsed = new Date(savedDraft.updatedAt);
@@ -475,7 +692,12 @@ export default function PixelArtStudio({
       redoStackRef.current = [];
       syncHistoryCounts();
       setFrameDelayMs(cachedVersionFrames.frameDelayMs);
-      applyTimelineState(cachedVersionFrames.frames, 0);
+      applyTimelineState(
+        cachedVersionFrames.frames,
+        0,
+        cachedVersionFrames.layers ?? [createDefaultLayer()],
+        cachedVersionFrames.layers?.[0]?.id ?? "layer-1",
+      );
       userDirtyRef.current = false;
       setHasLocalDraft(false);
       setDraftSavedLabel(null);
@@ -499,7 +721,12 @@ export default function PixelArtStudio({
         const opt =
           CANVAS_SIZE_OPTIONS.find((item) => item.key === (lockedMatrixSize ?? "32x32")) ??
           CANVAS_SIZE_OPTIONS[0];
-        applyTimelineState([createEmptyDocument(opt.width, opt.height)], 0);
+        applyTimelineState(
+          [createEmptyDocument(opt.width, opt.height)],
+          0,
+          [createDefaultLayer()],
+          "layer-1",
+        );
         setFrameDelayMs(100);
         if (!lockedMatrixSize) {
           setSizeKey("32x32");
@@ -549,6 +776,8 @@ export default function PixelArtStudio({
                 },
               ],
               0,
+              [createDefaultLayer()],
+              "layer-1",
             );
             userDirtyRef.current = false;
             setHasLocalDraft(false);
@@ -608,7 +837,12 @@ export default function PixelArtStudio({
               redoStackRef.current = [];
               syncHistoryCounts();
               setFrameDelayMs(decoded.frameDelayMs);
-              applyTimelineState(decoded.frames, 0);
+              applyTimelineState(
+                decoded.frames,
+                0,
+                [createDefaultLayer()],
+                "layer-1",
+              );
               userDirtyRef.current = false;
               setHasLocalDraft(false);
               setDraftSavedLabel(null);
@@ -656,10 +890,17 @@ export default function PixelArtStudio({
     redoStackRef.current.push({
       frames: framesRef.current,
       activeFrameIndex: activeFrameIndexRef.current,
+      layers: layersRef.current,
+      activeLayerId: activeLayerIdRef.current,
     });
     syncHistoryCounts();
     userDirtyRef.current = true;
-    applyTimelineState(prev.frames, prev.activeFrameIndex);
+    applyTimelineState(
+      prev.frames,
+      prev.activeFrameIndex,
+      prev.layers,
+      prev.activeLayerId,
+    );
   }, [syncHistoryCounts, applyTimelineState]);
 
   const handleRedo = useCallback(() => {
@@ -668,14 +909,40 @@ export default function PixelArtStudio({
     undoStackRef.current.push({
       frames: framesRef.current,
       activeFrameIndex: activeFrameIndexRef.current,
+      layers: layersRef.current,
+      activeLayerId: activeLayerIdRef.current,
     });
     syncHistoryCounts();
     userDirtyRef.current = true;
-    applyTimelineState(next.frames, next.activeFrameIndex);
+    applyTimelineState(
+      next.frames,
+      next.activeFrameIndex,
+      next.layers,
+      next.activeLayerId,
+    );
   }, [syncHistoryCounts, applyTimelineState]);
 
-  // Synchronize main, onion skin, and live 1:1 LED preview <canvas> elements whenever active or preview document updates
-  const displayDocument = previewDoc ?? doc;
+  // Composite display frame (overlays active-layer drag preview or live hover text ghost accurately at the active layer's z-order)
+  const displayDocument: PixelDocumentState = useMemo(() => {
+    const layerDocPreview = previewDoc;
+    if (!layerDocPreview) {
+      return activeFrame;
+    }
+    const ensured = ensureLayeredFrame(activeFrame, layers);
+    const nextContents = {
+      ...(ensured.layerContents ?? {}),
+      [activeLayer.id]: {
+        pixels: layerDocPreview.pixels,
+        texts: layerDocPreview.texts,
+      },
+    };
+    return {
+      width: ensured.width,
+      height: ensured.height,
+      pixels: flattenLayersForFrame(ensured.width, ensured.height, layers, nextContents),
+      texts: [],
+    };
+  }, [activeFrame, activeLayer.id, layers, previewDoc]);
   const renderCompositeToCanvas = useCallback(
     (canvas: HTMLCanvasElement | null, targetDoc: PixelDocumentState) => {
       paintPixelDocumentToCanvas(canvas, targetDoc);
@@ -751,12 +1018,20 @@ export default function PixelArtStudio({
     setSelection(null);
     const current = framesRef.current;
     const idx = activeFrameIndexRef.current;
-    const source = current[idx] ?? docRef.current;
+    const source = ensureLayeredFrame(current[idx] ?? activeFrame, layersRef.current);
+    const clonedContents: NonNullable<PixelDocumentState["layerContents"]> = {};
+    for (const [k, cel] of Object.entries(source.layerContents ?? {})) {
+      clonedContents[k] = {
+        pixels: [...cel.pixels],
+        texts: cel.texts.map((t) => ({ ...t })),
+      };
+    }
     const clone: PixelDocumentState = {
       width: source.width,
       height: source.height,
       pixels: [...source.pixels],
-      texts: source.texts.map((t) => ({ ...t })),
+      texts: [],
+      layerContents: clonedContents,
     };
     const nextFrames = [
       ...current.slice(0, idx + 1),
@@ -764,7 +1039,7 @@ export default function PixelArtStudio({
       ...current.slice(idx + 1),
     ];
     commitTimelineChange(nextFrames, idx + 1);
-  }, [commitTimelineChange, updatePreview]);
+  }, [activeFrame, commitTimelineChange, updatePreview]);
 
   const handleDeleteFrame = useCallback(() => {
     const current = framesRef.current;
@@ -819,8 +1094,224 @@ export default function PixelArtStudio({
     };
   }, [doc.width, doc.height, sizeOption.displayWidth]);
 
+  // Layer management handlers (shared across all GIF frames)
+  const canEditActiveLayer = useCallback((): boolean => {
+    const layer = layersRef.current.find((l) => l.id === activeLayerIdRef.current);
+    if (!layer) return true;
+    if (layer.locked) {
+      setStatusNotice({
+        type: "info",
+        message: `Layer "${layer.name}" đang bị khóa. Mở khóa ở bảng Layers để chỉnh sửa.`,
+      });
+      return false;
+    }
+    if (!layer.visible) {
+      setStatusNotice({
+        type: "info",
+        message: `Layer "${layer.name}" đang bị ẩn. Bật mắt 👁 ở bảng Layers để vẽ.`,
+      });
+      return false;
+    }
+    return true;
+  }, []);
+
+  const handleSelectLayer = useCallback(
+    (id: string) => {
+      updatePreview(null);
+      setSelection(null);
+      applyTimelineState(framesRef.current, activeFrameIndexRef.current, layersRef.current, id);
+    },
+    [applyTimelineState, updatePreview],
+  );
+
+  const handleAddLayer = useCallback(() => {
+    const nextNum = layersRef.current.length + 1;
+    const newId = `layer-${Date.now().toString(36)}`;
+    const newLayer = createDefaultLayer(newId, `Layer ${nextNum}`);
+    const nextLayers = [newLayer, ...layersRef.current];
+    commitTimelineChange(
+      framesRef.current,
+      activeFrameIndexRef.current,
+      nextLayers,
+      newId,
+    );
+  }, [commitTimelineChange]);
+
+  const handleDuplicateLayer = useCallback(() => {
+    const currentLayers = layersRef.current;
+    const idx = Math.max(
+      0,
+      currentLayers.findIndex((l) => l.id === activeLayerIdRef.current),
+    );
+    const src = currentLayers[idx];
+    if (!src) return;
+    const dupId = `layer-${Date.now().toString(36)}`;
+    const dupLayer: PixelLayer = {
+      ...src,
+      id: dupId,
+      name: `${src.name} (Copy)`,
+      locked: false,
+    };
+    const nextLayers = [
+      ...currentLayers.slice(0, idx),
+      dupLayer,
+      ...currentLayers.slice(idx),
+    ];
+    const nextFrames = framesRef.current.map((frame) => {
+      const ensured = ensureLayeredFrame(frame, currentLayers);
+      const srcCel = ensured.layerContents?.[src.id];
+      const nextContents = {
+        ...(ensured.layerContents ?? {}),
+        [dupId]: srcCel
+          ? { pixels: [...srcCel.pixels], texts: srcCel.texts.map((t) => ({ ...t })) }
+          : { pixels: Array<string>(ensured.width * ensured.height).fill(""), texts: [] },
+      };
+      return { ...ensured, layerContents: nextContents };
+    });
+    commitTimelineChange(nextFrames, activeFrameIndexRef.current, nextLayers, dupId);
+  }, [commitTimelineChange]);
+
+  const handleDeleteLayer = useCallback(
+    (id: string) => {
+      const currentLayers = layersRef.current;
+      if (currentLayers.length <= 1) return;
+      const nextLayers = currentLayers.filter((l) => l.id !== id);
+      const nextFrames = framesRef.current.map((frame) => {
+        const ensured = ensureLayeredFrame(frame, currentLayers);
+        const rest = { ...(ensured.layerContents ?? {}) };
+        delete rest[id];
+        return { ...ensured, layerContents: rest };
+      });
+      const nextActiveId =
+        activeLayerIdRef.current === id ? nextLayers[0].id : activeLayerIdRef.current;
+      commitTimelineChange(nextFrames, activeFrameIndexRef.current, nextLayers, nextActiveId);
+    },
+    [commitTimelineChange],
+  );
+
+  const handleMergeDownLayer = useCallback(
+    (id: string) => {
+      const currentLayers = layersRef.current;
+      const idx = currentLayers.findIndex((l) => l.id === id);
+      if (idx < 0 || idx >= currentLayers.length - 1) return;
+      const topLayer = currentLayers[idx];
+      const belowLayer = currentLayers[idx + 1];
+      const nextLayers = currentLayers.filter((l) => l.id !== topLayer.id);
+
+      const nextFrames = framesRef.current.map((frame) => {
+        const ensured = ensureLayeredFrame(frame, currentLayers);
+        const contents = { ...(ensured.layerContents ?? {}) };
+        const mergedPixels = flattenLayersForFrame(
+          ensured.width,
+          ensured.height,
+          [{ ...topLayer, visible: true }, { ...belowLayer, visible: true }],
+          contents,
+        );
+        contents[belowLayer.id] = { pixels: mergedPixels, texts: [] };
+        delete contents[topLayer.id];
+        return { ...ensured, layerContents: contents };
+      });
+
+      commitTimelineChange(
+        nextFrames,
+        activeFrameIndexRef.current,
+        nextLayers,
+        belowLayer.id,
+      );
+    },
+    [commitTimelineChange],
+  );
+
+  const handleMoveLayer = useCallback(
+    (id: string, direction: -1 | 1) => {
+      const currentLayers = layersRef.current;
+      const idx = currentLayers.findIndex((l) => l.id === id);
+      const targetIdx = idx + direction;
+      if (idx < 0 || targetIdx < 0 || targetIdx >= currentLayers.length) return;
+      const nextLayers = [...currentLayers];
+      const [moved] = nextLayers.splice(idx, 1);
+      nextLayers.splice(targetIdx, 0, moved);
+      commitTimelineChange(
+        framesRef.current,
+        activeFrameIndexRef.current,
+        nextLayers,
+        activeLayerIdRef.current,
+      );
+    },
+    [commitTimelineChange],
+  );
+
+  const handleToggleLayerVisible = useCallback(
+    (id: string) => {
+      const nextLayers = layersRef.current.map((l) =>
+        l.id === id ? { ...l, visible: !l.visible } : l,
+      );
+      commitTimelineChange(
+        framesRef.current,
+        activeFrameIndexRef.current,
+        nextLayers,
+        activeLayerIdRef.current,
+      );
+    },
+    [commitTimelineChange],
+  );
+
+  const handleToggleLayerLocked = useCallback((id: string) => {
+    const nextLayers = layersRef.current.map((l) =>
+      l.id === id ? { ...l, locked: !l.locked } : l,
+    );
+    applyTimelineState(
+      framesRef.current,
+      activeFrameIndexRef.current,
+      nextLayers,
+      activeLayerIdRef.current,
+    );
+  }, [applyTimelineState]);
+
+  const handleRenameLayer = useCallback(
+    (id: string, nextName: string) => {
+      const nextLayers = layersRef.current.map((l) =>
+        l.id === id ? { ...l, name: nextName } : l,
+      );
+      commitTimelineChange(
+        framesRef.current,
+        activeFrameIndexRef.current,
+        nextLayers,
+        activeLayerIdRef.current,
+      );
+    },
+    [commitTimelineChange],
+  );
+
+  const handleChangeLayerOpacity = useCallback(
+    (id: string, nextOpacity: number) => {
+      const nextLayers = layersRef.current.map((l) =>
+        l.id === id ? { ...l, opacity: nextOpacity } : l,
+      );
+      applyTimelineState(
+        framesRef.current,
+        activeFrameIndexRef.current,
+        nextLayers,
+        activeLayerIdRef.current,
+      );
+      userDirtyRef.current = true;
+    },
+    [applyTimelineState],
+  );
+
   const hasContent = useMemo(
-    () => frames.some((f) => f.pixels.some(Boolean) || f.texts.length > 0),
+    () =>
+      frames.some(
+        (f) =>
+          f.pixels.some(Boolean) ||
+          f.texts.length > 0 ||
+          Boolean(
+            f.layerContents &&
+              Object.values(f.layerContents).some(
+                (cel) => cel.pixels.some(Boolean) || cel.texts.length > 0,
+              ),
+          ),
+      ),
     [frames],
   );
 
@@ -844,7 +1335,12 @@ export default function PixelArtStudio({
     setSelection(null);
     setHoverPixel(null);
     updatePreview(null);
-    applyTimelineState([createEmptyDocument(opt.width, opt.height)], 0);
+    applyTimelineState(
+      [createEmptyDocument(opt.width, opt.height)],
+      0,
+      [createDefaultLayer()],
+      "layer-1",
+    );
     setStatusNotice(null);
   };
 
@@ -877,27 +1373,27 @@ export default function PixelArtStudio({
     [],
   );
 
-  const beginStrokeAt = (clientX: number, clientY: number) => {
+  const beginStrokeAt = (
+    clientX: number,
+    clientY: number,
+    opts?: { button?: number; altKey?: boolean; shiftKey?: boolean },
+  ) => {
     const point = getGridCoordinates(clientX, clientY);
     if (!point) return;
 
     const currentDoc = docRef.current;
     setHoverPixel(point);
 
-    if (activeTool === "PICKER") {
-      const merged = compositeDocument(currentDoc);
+    // Instant Alt+Click eyedropper anywhere (keeps current tool active)
+    if (opts?.altKey || activeTool === "PICKER") {
+      const mergedFrame = framesRef.current[activeFrameIndexRef.current] ?? currentDoc;
+      const merged = compositeDocument(mergedFrame);
       const picked = merged[point.y * currentDoc.width + point.x];
       if (picked) {
         setSelectedColor(picked);
-        setActiveTool("PEN");
-      }
-      return;
-    }
-
-    if (activeTool === "FILL") {
-      const next = floodFill(currentDoc, point.x, point.y, selectedColor);
-      if (next !== currentDoc) {
-        commitDocumentChange(currentDoc, next);
+        if (activeTool === "PICKER") {
+          setActiveTool("PEN");
+        }
       }
       return;
     }
@@ -929,13 +1425,36 @@ export default function PixelArtStudio({
       return;
     }
 
+    if (activeTool !== "SELECT" && !canEditActiveLayer()) {
+      return;
+    }
+
+    if (activeTool === "FILL") {
+      const next = floodFill(
+        currentDoc,
+        point.x,
+        point.y,
+        selectedColor,
+        mirrorMode,
+        opacity,
+      );
+      if (next !== currentDoc) {
+        commitDocumentChange(currentDoc, next);
+      }
+      return;
+    }
+
+    const gestureTool: PixelTool = opts?.button === 2 ? "ERASER" : activeTool;
+    gestureToolRef.current = gestureTool;
     isPointerDownRef.current = true;
     dragStartPixelRef.current = point;
     lastPixelRef.current = point;
 
-    if (activeTool === "PEN" || activeTool === "ERASER") {
+    if (gestureTool === "PEN" || gestureTool === "ERASER") {
       strokeStartDocRef.current = currentDoc;
-      const color = activeTool === "PEN" ? selectedColor : "";
+      const touched = new Set<number>();
+      strokeTouchedRef.current = touched;
+      const color = gestureTool === "PEN" ? selectedColor : "";
       const next = brushStroke(
         currentDoc,
         point.x,
@@ -945,13 +1464,15 @@ export default function PixelArtStudio({
         color,
         brushSize,
         mirrorMode,
-        activeTool === "PEN" ? opacity : 100,
+        gestureTool === "PEN" ? opacity : 100,
+        currentDoc.pixels,
+        touched,
       );
       updateDocument(next);
       return;
     }
 
-    if (activeTool === "SHAPE") {
+    if (gestureTool === "SHAPE") {
       strokeStartDocRef.current = currentDoc;
       updatePreview(
         drawShape(
@@ -964,17 +1485,19 @@ export default function PixelArtStudio({
           shapeKind,
           shapeFilled,
           mirrorMode,
+          brushSize,
+          opacity,
         ),
       );
       return;
     }
 
-    if (activeTool === "SELECT") {
+    if (gestureTool === "SELECT") {
       setSelection({ x0: point.x, y0: point.y, x1: point.x, y1: point.y });
       return;
     }
 
-    if (activeTool === "MOVE") {
+    if (gestureTool === "MOVE") {
       const activeRect: SelectionRect = selection ?? {
         x0: 0,
         y0: 0,
@@ -987,6 +1510,19 @@ export default function PixelArtStudio({
         activeRect,
       );
       const baseCleared = clearDocumentRegion(currentDoc, activeRect);
+      const movingTexts = currentDoc.texts.filter((block) => {
+        const blockWidth = Math.max(1, block.text.length * (block.glyphWidth + 1) - 1);
+        const blockHeight = Math.max(1, block.glyphHeight);
+        return !(
+          block.x + blockWidth - 1 < norm.left ||
+          block.x > norm.right ||
+          block.y + blockHeight - 1 < norm.top ||
+          block.y > norm.bottom
+        );
+      });
+      const movingIds = new Set(movingTexts.map((b) => b.id));
+      const staticTexts = currentDoc.texts.filter((b) => !movingIds.has(b.id));
+
       strokeStartDocRef.current = currentDoc;
       moveContextRef.current = {
         baseCleared,
@@ -995,6 +1531,8 @@ export default function PixelArtStudio({
         regionWidth,
         regionHeight,
         data,
+        movingTexts,
+        staticTexts,
       };
       updatePreview(
         stampDocumentRegion(
@@ -1008,16 +1546,21 @@ export default function PixelArtStudio({
     }
   };
 
-  const continueStrokeAt = (clientX: number, clientY: number) => {
+  const continueStrokeAt = (
+    clientX: number,
+    clientY: number,
+    opts?: { shiftKey?: boolean },
+  ) => {
     const point = getGridCoordinates(clientX, clientY);
     setHoverPixel(point);
     if (!isPointerDownRef.current || !point) return;
 
     const prevPoint = lastPixelRef.current ?? point;
     lastPixelRef.current = point;
+    const gestureTool = gestureToolRef.current;
 
-    if (activeTool === "PEN" || activeTool === "ERASER") {
-      const color = activeTool === "PEN" ? selectedColor : "";
+    if (gestureTool === "PEN" || gestureTool === "ERASER") {
+      const color = gestureTool === "PEN" ? selectedColor : "";
       const next = brushStroke(
         docRef.current,
         prevPoint.x,
@@ -1027,53 +1570,70 @@ export default function PixelArtStudio({
         color,
         brushSize,
         mirrorMode,
-        activeTool === "PEN" ? opacity : 100,
+        gestureTool === "PEN" ? opacity : 100,
+        strokeStartDocRef.current?.pixels,
+        strokeTouchedRef.current,
       );
       updateDocument(next);
       return;
     }
 
-    if (activeTool === "SHAPE" && strokeStartDocRef.current && dragStartPixelRef.current) {
+    if (gestureTool === "SHAPE" && strokeStartDocRef.current && dragStartPixelRef.current) {
       const start = dragStartPixelRef.current;
+      const target = opts?.shiftKey
+        ? constrainPointByShift(start, point, "SHAPE", shapeKind)
+        : point;
       updatePreview(
         drawShape(
           strokeStartDocRef.current,
           start.x,
           start.y,
-          point.x,
-          point.y,
+          target.x,
+          target.y,
           selectedColor,
           shapeKind,
           shapeFilled,
           mirrorMode,
+          brushSize,
+          opacity,
         ),
       );
       return;
     }
 
-    if (activeTool === "SELECT" && dragStartPixelRef.current) {
+    if (gestureTool === "SELECT" && dragStartPixelRef.current) {
       const start = dragStartPixelRef.current;
       setSelection({ x0: start.x, y0: start.y, x1: point.x, y1: point.y });
       return;
     }
 
-    if (activeTool === "MOVE" && moveContextRef.current && dragStartPixelRef.current) {
+    if (gestureTool === "MOVE" && moveContextRef.current && dragStartPixelRef.current) {
       const ctx = moveContextRef.current;
       const start = dragStartPixelRef.current;
-      const dx = point.x - start.x;
-      const dy = point.y - start.y;
+      const target = opts?.shiftKey
+        ? constrainPointByShift(start, point, "MOVE", shapeKind)
+        : point;
+      const dx = target.x - start.x;
+      const dy = target.y - start.y;
       const nextLeft = ctx.originLeft + dx;
       const nextTop = ctx.originTop + dy;
 
-      updatePreview(
-        stampDocumentRegion(
-          ctx.baseCleared,
-          nextLeft,
-          nextTop,
-          ctx.regionWidth,
-          ctx.data,
-        ),
+      const stamped = stampDocumentRegion(
+        ctx.baseCleared,
+        nextLeft,
+        nextTop,
+        ctx.regionWidth,
+        ctx.data,
       );
+      const shiftedTexts = ctx.movingTexts.map((block) => ({
+        ...block,
+        x: block.x + dx,
+        y: block.y + dy,
+      }));
+      updatePreview({
+        ...stamped,
+        texts: [...ctx.staticTexts, ...shiftedTexts],
+      });
       setSelection({
         x0: nextLeft,
         y0: nextTop,
@@ -1087,31 +1647,60 @@ export default function PixelArtStudio({
     if (!isPointerDownRef.current) return;
     isPointerDownRef.current = false;
 
+    const gestureTool = gestureToolRef.current;
     const startSnap = strokeStartDocRef.current;
     const latestPreview = previewDocRef.current;
 
-    if ((activeTool === "PEN" || activeTool === "ERASER") && startSnap) {
+    if ((gestureTool === "PEN" || gestureTool === "ERASER") && startSnap) {
       const hasDelta = startSnap.pixels.some(
         (px, idx) => px !== docRef.current.pixels[idx],
       );
       if (hasDelta) {
         userDirtyRef.current = true;
         const idx = activeFrameIndexRef.current;
-        const prevFrames = framesRef.current.map((f, i) => (i === idx ? startSnap : f));
+        const layerList = layersRef.current;
+        const layerId =
+          layerList.find((l) => l.id === activeLayerIdRef.current)?.id ??
+          layerList[0]?.id ??
+          "layer-1";
+        const currentFrame = ensureLayeredFrame(framesRef.current[idx], layerList);
+        const prevContents = {
+          ...(currentFrame.layerContents ?? {}),
+          [layerId]: { pixels: startSnap.pixels, texts: startSnap.texts },
+        };
+        const prevFrame: PixelDocumentState = {
+          width: currentFrame.width,
+          height: currentFrame.height,
+          pixels: flattenLayersForFrame(
+            currentFrame.width,
+            currentFrame.height,
+            layerList,
+            prevContents,
+          ),
+          texts: [],
+          layerContents: prevContents,
+        };
+        const prevFrames = framesRef.current.map((f, i) => (i === idx ? prevFrame : f));
         undoStackRef.current = [
           ...undoStackRef.current.slice(-(MAX_HISTORY_STEPS - 1)),
-          { frames: prevFrames, activeFrameIndex: idx },
+          {
+            frames: prevFrames,
+            activeFrameIndex: idx,
+            layers: layerList,
+            activeLayerId: layerId,
+          },
         ];
         redoStackRef.current = [];
         syncHistoryCounts();
       }
     }
 
-    if ((activeTool === "SHAPE" || activeTool === "MOVE") && startSnap && latestPreview) {
+    if ((gestureTool === "SHAPE" || gestureTool === "MOVE") && startSnap && latestPreview) {
       commitDocumentChange(startSnap, latestPreview);
       updatePreview(null);
     }
 
+    strokeTouchedRef.current = new Set();
     strokeStartDocRef.current = null;
     dragStartPixelRef.current = null;
     lastPixelRef.current = null;
@@ -1119,7 +1708,7 @@ export default function PixelArtStudio({
   };
 
   const handleClearCanvas = () => {
-    if (!hasContent) return;
+    if (!hasContent || !canEditActiveLayer()) return;
     commitDocumentChange(
       docRef.current,
       createEmptyDocument(docRef.current.width, docRef.current.height),
@@ -1128,7 +1717,7 @@ export default function PixelArtStudio({
     setStatusNotice(null);
   };
 
-  // Selection Clipboard handlers
+  // Selection Clipboard & Transform handlers
   const handleCopySelection = useCallback(() => {
     if (!selection) return;
     setClipboard(extractRegionPixels(docRef.current, selection));
@@ -1139,24 +1728,80 @@ export default function PixelArtStudio({
   }, [selection]);
 
   const handleCutSelection = useCallback(() => {
-    if (!selection) return;
+    if (!selection || !canEditActiveLayer()) return;
     setClipboard(extractRegionPixels(docRef.current, selection));
     commitDocumentChange(
       docRef.current,
       clearDocumentRegion(docRef.current, selection),
     );
-  }, [selection, commitDocumentChange]);
+  }, [selection, commitDocumentChange, canEditActiveLayer]);
 
   const handleDeleteSelection = useCallback(() => {
-    if (!selection) return;
+    if (!selection || !canEditActiveLayer()) return;
     commitDocumentChange(
       docRef.current,
       clearDocumentRegion(docRef.current, selection),
     );
-  }, [selection, commitDocumentChange]);
+  }, [selection, commitDocumentChange, canEditActiveLayer]);
+
+  const handleFlipSelection = useCallback(
+    (axis: "HORIZONTAL" | "VERTICAL") => {
+      if (!canEditActiveLayer()) return;
+      const next = flipRegionInDocument(docRef.current, selection, axis);
+      commitDocumentChange(docRef.current, next);
+    },
+    [selection, commitDocumentChange, canEditActiveLayer],
+  );
+
+  const handleNudgeSelection = useCallback(
+    (dx: number, dy: number) => {
+      if (!canEditActiveLayer()) return;
+      const currentDoc = docRef.current;
+      const activeRect: SelectionRect = selection ?? {
+        x0: 0,
+        y0: 0,
+        x1: currentDoc.width - 1,
+        y1: currentDoc.height - 1,
+      };
+      const norm = normalizeSelectionRect(activeRect);
+      const { regionWidth, regionHeight, data } = extractRegionPixels(
+        currentDoc,
+        activeRect,
+      );
+      const baseCleared = clearDocumentRegion(currentDoc, activeRect);
+      const stamped = stampDocumentRegion(
+        baseCleared,
+        norm.left + dx,
+        norm.top + dy,
+        regionWidth,
+        data,
+      );
+      const nextTexts = currentDoc.texts.map((block) => {
+        const blockW = Math.max(1, block.text.length * (block.glyphWidth + 1) - 1);
+        const blockH = Math.max(1, block.glyphHeight);
+        const overlaps = !(
+          block.x + blockW - 1 < norm.left ||
+          block.x > norm.right ||
+          block.y + blockH - 1 < norm.top ||
+          block.y > norm.bottom
+        );
+        return overlaps ? { ...block, x: block.x + dx, y: block.y + dy } : block;
+      });
+      commitDocumentChange(currentDoc, { ...stamped, texts: nextTexts });
+      if (selection) {
+        setSelection({
+          x0: norm.left + dx,
+          y0: norm.top + dy,
+          x1: norm.left + dx + regionWidth - 1,
+          y1: norm.top + dy + regionHeight - 1,
+        });
+      }
+    },
+    [selection, commitDocumentChange, canEditActiveLayer],
+  );
 
   const handlePasteClipboard = useCallback(() => {
-    if (!clipboard) return;
+    if (!clipboard || !canEditActiveLayer()) return;
     const origin = selection ? normalizeSelectionRect(selection) : { left: 0, top: 0 };
     const next = stampDocumentRegion(
       docRef.current,
@@ -1172,7 +1817,7 @@ export default function PixelArtStudio({
       x1: origin.left + clipboard.regionWidth - 1,
       y1: origin.top + clipboard.regionHeight - 1,
     });
-  }, [clipboard, selection, commitDocumentChange]);
+  }, [clipboard, selection, commitDocumentChange, canEditActiveLayer]);
 
   // Text block management
   const activeTextPreset = GLYPH_SIZE_PRESETS[textPresetIdx] ?? GLYPH_SIZE_PRESETS[0];
@@ -1192,6 +1837,7 @@ export default function PixelArtStudio({
   );
 
   const handleSaveTextBlock = () => {
+    if (!canEditActiveLayer()) return;
     if (!textInput.trim()) {
       setStatusNotice({ type: "error", message: "Vui lòng nhập nội dung chữ." });
       return;
@@ -1234,6 +1880,7 @@ export default function PixelArtStudio({
   };
 
   const handleDeleteTextBlock = (id: string) => {
+    if (!canEditActiveLayer()) return;
     const currentDoc = docRef.current;
     commitDocumentChange(currentDoc, {
       ...currentDoc,
@@ -1244,6 +1891,21 @@ export default function PixelArtStudio({
     }
   };
 
+  const handleRasterizeTextBlock = (id: string) => {
+    if (!canEditActiveLayer()) return;
+    const currentDoc = docRef.current;
+    const next = rasterizeTextBlockIntoPixels(currentDoc, id);
+    if (next === currentDoc) return;
+    commitDocumentChange(currentDoc, next);
+    if (editingTextId === id) {
+      setEditingTextId(null);
+    }
+    setStatusNotice({
+      type: "success",
+      message: "Đã đóng khối chữ thành điểm ảnh trên layer hiện tại.",
+    });
+  };
+
   // RGB & HSV values derived from selectedColor
   const currentRgb = useMemo(() => hexToRgb(selectedColor), [selectedColor]);
   const currentHsv = useMemo(
@@ -1251,13 +1913,103 @@ export default function PixelArtStudio({
     [currentRgb],
   );
 
+  const handleHexInputChange = (raw: string) => {
+    setHexInput(raw);
+    const trimmed = raw.trim();
+    if (/^#?[0-9a-fA-F]{6}$/.test(trimmed)) {
+      const norm = normalizeHex(trimmed.startsWith("#") ? trimmed : `#${trimmed}`);
+      setSelectedColor(norm);
+      if (activeTool === "ERASER") setActiveTool("PEN");
+    }
+  };
+
+  const handleHexInputCommit = () => {
+    const trimmed = hexInput.trim();
+    if (/^#?[0-9a-fA-F]{6}$/.test(trimmed)) {
+      const norm = normalizeHex(trimmed.startsWith("#") ? trimmed : `#${trimmed}`);
+      setSelectedColor(norm);
+      setHexInput(norm);
+    } else {
+      setHexInput(normalizeHex(selectedColor));
+    }
+  };
+
   const handleAddCustomSwatch = () => {
     const norm = normalizeHex(selectedColor);
-    if (paletteSwatches.some((s) => s.hex.toUpperCase() === norm)) return;
-    setPaletteSwatches((prev) => [
-      ...prev,
-      { name: `Màu tùy chỉnh ${norm}`, hex: norm, custom: true },
-    ]);
+    const existingIdx = paletteSwatches.findIndex(
+      (s) => normalizeHex(s.hex) === norm,
+    );
+    if (existingIdx >= 0) {
+      setSelectedSwatchIdx(existingIdx);
+      return;
+    }
+    setPaletteSwatches((prev) => {
+      const next = [...prev, { name: `Màu ${norm}`, hex: norm, custom: true }];
+      setSelectedSwatchIdx(next.length - 1);
+      return next;
+    });
+  };
+
+  const handleUpdateSelectedSwatch = () => {
+    const norm = normalizeHex(selectedColor);
+    if (selectedSwatchIdx < 0 || selectedSwatchIdx >= paletteSwatches.length) {
+      handleAddCustomSwatch();
+      return;
+    }
+    setPaletteSwatches((prev) =>
+      prev.map((s, idx) =>
+        idx === selectedSwatchIdx
+          ? { ...s, hex: norm, name: s.name || `Màu ${norm}` }
+          : s,
+      ),
+    );
+  };
+
+  const handleDeleteSwatch = (idxToRemove: number) => {
+    setPaletteSwatches((prev) => {
+      const next = prev.filter((_, idx) => idx !== idxToRemove);
+      if (next.length === 0) {
+        setSelectedSwatchIdx(-1);
+      } else if (selectedSwatchIdx >= next.length) {
+        setSelectedSwatchIdx(next.length - 1);
+      } else if (idxToRemove < selectedSwatchIdx) {
+        setSelectedSwatchIdx(Math.max(0, selectedSwatchIdx - 1));
+      }
+      return next;
+    });
+  };
+
+  const handleApplyPalettePreset = (presetId: string) => {
+    const preset = PALETTE_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    const nextSwatches = preset.swatches.map((s) => ({ ...s }));
+    setPaletteSwatches(nextSwatches);
+    setSelectedSwatchIdx(0);
+    if (nextSwatches[0]) {
+      setSelectedColor(nextSwatches[0].hex);
+    }
+    setStatusNotice({
+      type: "success",
+      message: `Đã nạp bộ màu "${preset.label}" cho nhân vật.`,
+    });
+  };
+
+  const handleExtractPalette = () => {
+    const extracted = extractPaletteFromFrames(framesRef.current, 24);
+    if (extracted.length === 0) {
+      setStatusNotice({
+        type: "info",
+        message: "Bảng vẽ chưa có màu nào để trích xuất.",
+      });
+      return;
+    }
+    setPaletteSwatches(extracted);
+    setSelectedSwatchIdx(0);
+    setSelectedColor(extracted[0].hex);
+    setStatusNotice({
+      type: "success",
+      message: `Đã trích ${extracted.length} màu từ bản vẽ hiện tại.`,
+    });
   };
 
   // Image Import preview rasterization
@@ -1338,7 +2090,7 @@ export default function PixelArtStudio({
   };
 
   const handleConfirmImport = () => {
-    if (!previewImportedPixels.length) return;
+    if (!previewImportedPixels.length || !canEditActiveLayer()) return;
     commitDocumentChange(docRef.current, {
       ...docRef.current,
       pixels: previewImportedPixels,
@@ -1347,7 +2099,7 @@ export default function PixelArtStudio({
     setImportedImageEl(null);
     setStatusNotice({
       type: "success",
-      message: "Đã nhập ảnh vào lớp pixel của frame hiện tại (giữ nguyên các khối chữ).",
+      message: "Đã nhập ảnh vào lớp pixel của layer hiện tại (giữ nguyên các khối chữ).",
     });
   };
 
@@ -1371,8 +2123,9 @@ export default function PixelArtStudio({
       );
       ext = "gif";
     } else {
+      const exportTarget = framesRef.current[activeFrameIndexRef.current] ?? docRef.current;
       dataUrl = renderDocumentToDataUrl(
-        docRef.current,
+        exportTarget,
         exportFormat,
         exportScale,
         "#090D14",
@@ -1425,6 +2178,8 @@ export default function PixelArtStudio({
     doc: PixelDocumentState;
     frames: PixelDocumentState[];
     activeFrameIndex: number;
+    layers: PixelLayer[];
+    activeLayerId: string;
     frameDelayMs: number;
     baseVersionId: number | null;
     baseVersionNumber: number | null;
@@ -1438,6 +2193,8 @@ export default function PixelArtStudio({
       doc,
       frames,
       activeFrameIndex,
+      layers,
+      activeLayerId,
       frameDelayMs,
       baseVersionId: currentVersionId ?? null,
       baseVersionNumber: currentVersionNumber ?? null,
@@ -1450,6 +2207,8 @@ export default function PixelArtStudio({
     doc,
     frames,
     activeFrameIndex,
+    layers,
+    activeLayerId,
     frameDelayMs,
     currentVersionId,
     currentVersionNumber,
@@ -1457,7 +2216,17 @@ export default function PixelArtStudio({
 
   useEffect(() => {
     if (!draftHydratedRef.current || isInheriting || !userDirtyRef.current) return;
-    const hasPixelsOrText = frames.some((f) => f.pixels.some(Boolean) || f.texts.length > 0);
+    const hasPixelsOrText = frames.some(
+      (f) =>
+        f.pixels.some(Boolean) ||
+        f.texts.length > 0 ||
+        Boolean(
+          f.layerContents &&
+            Object.values(f.layerContents).some(
+              (cel) => cel.pixels.some(Boolean) || cel.texts.length > 0,
+            ),
+        ),
+    );
     if (!hasPixelsOrText && !hasLocalDraft) return;
 
     setIsAutoSaving(true);
@@ -1468,6 +2237,8 @@ export default function PixelArtStudio({
         doc,
         frames,
         activeFrameIndex,
+        layers,
+        activeLayerId,
         frameDelayMs,
         baseVersionId: currentVersionId ?? null,
         baseVersionNumber: currentVersionNumber ?? null,
@@ -1487,6 +2258,8 @@ export default function PixelArtStudio({
     doc,
     frames,
     activeFrameIndex,
+    layers,
+    activeLayerId,
     frameDelayMs,
     characterName,
     description,
@@ -1503,7 +2276,15 @@ export default function PixelArtStudio({
       const snap = latestDraftSnapshotRef.current;
       if (!snap || !draftHydratedRef.current || !userDirtyRef.current) return;
       const hasPixelsOrText = snap.frames.some(
-        (f) => f.pixels.some(Boolean) || f.texts.length > 0,
+        (f) =>
+          f.pixels.some(Boolean) ||
+          f.texts.length > 0 ||
+          Boolean(
+            f.layerContents &&
+              Object.values(f.layerContents).some(
+                (cel) => cel.pixels.some(Boolean) || cel.texts.length > 0,
+              ),
+          ),
       );
       if (!hasPixelsOrText) return;
       saveStudioDraft(snap.characterId, {
@@ -1512,6 +2293,8 @@ export default function PixelArtStudio({
         doc: snap.doc,
         frames: snap.frames,
         activeFrameIndex: snap.activeFrameIndex,
+        layers: snap.layers,
+        activeLayerId: snap.activeLayerId,
         frameDelayMs: snap.frameDelayMs,
         baseVersionId: snap.baseVersionId,
         baseVersionNumber: snap.baseVersionNumber,
@@ -1534,6 +2317,8 @@ export default function PixelArtStudio({
       doc: docRef.current,
       frames: framesRef.current,
       activeFrameIndex: activeFrameIndexRef.current,
+      layers: layersRef.current,
+      activeLayerId: activeLayerIdRef.current,
       frameDelayMs,
       baseVersionId: currentVersionId ?? null,
       baseVersionNumber: currentVersionNumber ?? null,
@@ -1713,7 +2498,12 @@ export default function PixelArtStudio({
               `character_version_artwork_${createdVersionId}`,
               dataUrl,
             );
-            saveVersionFramesCache(createdVersionId, currentFrames, frameDelayMs);
+            saveVersionFramesCache(
+              createdVersionId,
+              currentFrames,
+              frameDelayMs,
+              layersRef.current,
+            );
           } catch {
             // Ignore quota warning
           }
@@ -1916,9 +2706,23 @@ export default function PixelArtStudio({
       if ((e.key === "Delete" || e.key === "Backspace") && selection) {
         e.preventDefault();
         handleDeleteSelection();
+      } else if (e.key === "Escape" && shortcutsOpen) {
+        e.preventDefault();
+        setShortcutsOpen(false);
       } else if (e.key === "Escape" && selection) {
         e.preventDefault();
         setSelection(null);
+      } else if (
+        activeTool === "MOVE" &&
+        (e.key === "ArrowUp" ||
+          e.key === "ArrowDown" ||
+          e.key === "ArrowLeft" ||
+          e.key === "ArrowRight")
+      ) {
+        e.preventDefault();
+        const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+        const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+        handleNudgeSelection(dx, dy);
       } else if (e.key === " " && framesRef.current.length > 1) {
         e.preventDefault();
         setIsPlaying((prev) => !prev);
@@ -1946,6 +2750,8 @@ export default function PixelArtStudio({
   }, [
     importModalOpen,
     exportModalOpen,
+    shortcutsOpen,
+    activeTool,
     selection,
     clipboard,
     handleSaveDraft,
@@ -1954,6 +2760,7 @@ export default function PixelArtStudio({
     handleCopySelection,
     handleCutSelection,
     handleDeleteSelection,
+    handleNudgeSelection,
     handlePasteClipboard,
     handleSelectFrame,
   ]);
@@ -2283,6 +3090,22 @@ export default function PixelArtStudio({
               </button>
               <button
                 type="button"
+                onClick={() => handleFlipSelection("HORIZONTAL")}
+                title="Lật ngang vùng chọn (hoặc toàn layer nếu chưa chọn vùng)"
+                className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
+              >
+                <FlipHorizontal2 size={12} /> Lật ngang
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFlipSelection("VERTICAL")}
+                title="Lật dọc vùng chọn (hoặc toàn layer nếu chưa chọn vùng)"
+                className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
+              >
+                <FlipVertical2 size={12} /> Lật dọc
+              </button>
+              <button
+                type="button"
                 disabled={!selection}
                 onClick={handleDeleteSelection}
                 className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-red-700"
@@ -2302,17 +3125,17 @@ export default function PixelArtStudio({
           )}
 
           {activeTool === "FILL" && (
-            <span className="text-[#4b554f]">Bấm vào vùng kín trên bảng vẽ để đổ màu.</span>
+            <span className="text-[#4b554f]">Bấm vào vùng kín để đổ màu (hỗ trợ Đối xứng & Độ mờ · Alt+Click để hút màu).</span>
           )}
           {activeTool === "PICKER" && (
             <span className="text-[#4b554f]">Chấm lên điểm ảnh bất kỳ để lấy màu và quay lại bút vẽ.</span>
           )}
           {activeTool === "TEXT" && (
-            <span className="text-[#4b554f]">Nhập nội dung ASCII và tọa độ ở bảng Chữ Pixel bên phải.</span>
+            <span className="text-[#4b554f]">Bấm lên canvas để chọn tọa độ đặt chữ hoặc sửa khối chữ bên phải.</span>
           )}
         </div>
 
-        {/* Right side of Context Bar: Mirror Symmetry, Grid & Undo/Redo */}
+        {/* Right side of Context Bar: Mirror Symmetry, Grid, Undo/Redo & Collapsible Shortcuts */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="font-bold text-[#4b554f]">Đối xứng:</span>
           {(
@@ -2368,6 +3191,58 @@ export default function PixelArtStudio({
           >
             <Redo2 size={12} />
           </button>
+
+          <div ref={shortcutsMenuRef} className="relative">
+            <button
+              type="button"
+              aria-expanded={shortcutsOpen}
+              aria-pressed={shortcutsOpen}
+              onClick={() => setShortcutsOpen((prev) => !prev)}
+              title="Xem bảng phím tắt nhanh"
+              className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
+            >
+              <Keyboard size={12} />
+              Phím tắt
+            </button>
+
+            {shortcutsOpen && (
+              <div
+                role="dialog"
+                aria-label="Bảng phím tắt Studio"
+                className="ase-panel absolute right-0 top-full z-40 mt-1.5 w-72 shadow-xl"
+              >
+                <div className="ase-panel-head flex items-center justify-between px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide">
+                  <span>Phím tắt Studio</span>
+                  <button
+                    type="button"
+                    onClick={() => setShortcutsOpen(false)}
+                    aria-label="Đóng bảng phím tắt"
+                    className="ase-btn p-0.5"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 bg-white p-2.5 font-mono text-[10px] text-[#4b554f]">
+                  <span><strong className="text-[#1f2a24]">B / E</strong> Bút / Tẩy</span>
+                  <span><strong className="text-[#1f2a24]">G / I</strong> Đổ / Hút màu</span>
+                  <span><strong className="text-[#1f2a24]">U / T</strong> Hình / Chữ</span>
+                  <span><strong className="text-[#1f2a24]">M / V</strong> Chọn / Kéo</span>
+                  <span><strong className="text-[#1f2a24]">Chuột phải</strong> Tẩy nhanh</span>
+                  <span><strong className="text-[#1f2a24]">Alt+Click</strong> Hút màu</span>
+                  <span><strong className="text-[#1f2a24]">Shift+Kéo</strong> Vuông / Thẳng</span>
+                  <span><strong className="text-[#1f2a24]">Mũi tên</strong> Dịch 1px (V)</span>
+                  <span><strong className="text-[#1f2a24]">[ ]</strong> Cỡ nét</span>
+                  <span><strong className="text-[#1f2a24]">, / .</strong> Đổi frame</span>
+                  <span><strong className="text-[#1f2a24]">Space</strong> Phát / Dừng GIF</span>
+                  <span><strong className="text-[#1f2a24]">+ / -</strong> Zoom canvas</span>
+                  <span><strong className="text-[#1f2a24]">Ctrl+Z/Y</strong> Undo / Redo</span>
+                  <span><strong className="text-[#1f2a24]">Ctrl+C/X/V</strong> Chép / Cắt / Dán</span>
+                  <span><strong className="text-[#1f2a24]">Ctrl+S</strong> Lưu nháp</span>
+                  <span><strong className="text-[#1f2a24]">Del / Esc</strong> Xóa / Bỏ chọn</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2429,72 +3304,146 @@ export default function PixelArtStudio({
               </div>
             </div>
 
-            <div className="space-y-2.5 p-2.5">
-              {/* Active Color Chip + Hex + Save */}
-              <div className="flex items-center gap-2 border-2 border-[#8a948e] bg-[#f5f7f6] p-1.5">
-                <input
-                  type="color"
-                  value={normalizeHex(selectedColor)}
-                  onChange={(e) => {
-                    setSelectedColor(normalizeHex(e.target.value));
-                    if (activeTool === "ERASER") setActiveTool("PEN");
-                  }}
-                  aria-label="Chọn màu hex"
-                  className="h-7 w-8 shrink-0 cursor-pointer border-2 border-[#1f2a24] bg-transparent p-0"
-                />
-                <span className="min-w-0 flex-1 font-mono text-xs font-black text-[#1f2a24]">
-                  {normalizeHex(selectedColor)}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleAddCustomSwatch}
-                  title="Lưu màu hiện tại vào bảng màu"
-                  className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
-                >
-                  <Plus size={11} /> Lưu
-                </button>
+            <div className="space-y-2 p-2.5">
+              {/* Active Color Chip + Editable Hex + Add / Update Swatch */}
+              <div className="space-y-1.5 border-2 border-[#8a948e] bg-[#f5f7f6] p-1.5">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="color"
+                    value={normalizeHex(selectedColor)}
+                    onChange={(e) => {
+                      setSelectedColor(normalizeHex(e.target.value));
+                      if (activeTool === "ERASER") setActiveTool("PEN");
+                    }}
+                    aria-label="Chọn màu hex"
+                    className="h-7 w-7 shrink-0 cursor-pointer border-2 border-[#1f2a24] bg-transparent p-0"
+                  />
+                  <input
+                    type="text"
+                    value={hexInput}
+                    maxLength={7}
+                    onChange={(e) => handleHexInputChange(e.target.value)}
+                    onBlur={handleHexInputCommit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleHexInputCommit();
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    aria-label="Nhập mã màu Hex"
+                    className="ase-input min-w-0 flex-1 px-1.5 py-0.5 font-mono text-xs font-black uppercase text-[#1f2a24]"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    onClick={handleAddCustomSwatch}
+                    title="Thêm màu hiện tại thành ô màu mới"
+                    className="ase-btn inline-flex items-center justify-center gap-1 px-1.5 py-1 text-[10px] font-bold"
+                  >
+                    <Plus size={10} /> Thêm ô
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUpdateSelectedSwatch}
+                    disabled={
+                      selectedSwatchIdx < 0 || selectedSwatchIdx >= paletteSwatches.length
+                    }
+                    title="Cập nhật ô màu đang chọn bằng màu hiện tại"
+                    className="ase-btn inline-flex items-center justify-center gap-1 px-1.5 py-1 text-[10px] font-bold"
+                  >
+                    <Pencil size={10} /> Sửa ô
+                  </button>
+                </div>
               </div>
 
               {colorPanelTab === "SWATCH" ? (
-                <div className="grid grid-cols-5 gap-1">
-                  {paletteSwatches.map((swatch) => {
-                    const active =
-                      normalizeHex(selectedColor) === normalizeHex(swatch.hex) &&
-                      activeTool !== "ERASER";
-                    return (
-                      <div key={swatch.hex} className="group relative">
-                        <button
-                          type="button"
-                          title={`${swatch.name} (${swatch.hex})`}
-                          aria-label={swatch.name}
-                          onClick={() => {
-                            setSelectedColor(swatch.hex);
-                            if (activeTool === "ERASER") setActiveTool("PEN");
-                          }}
-                          className={`block h-7 w-full cursor-pointer border-2 transition-transform hover:scale-105 ${
-                            active
-                              ? "border-[#111111] ring-2 ring-white ring-inset"
-                              : "border-[#7d8781]"
-                          }`}
-                          style={{ backgroundColor: swatch.hex }}
-                        />
-                        {swatch.custom && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPaletteSwatches((prev) =>
-                                prev.filter((s) => s.hex !== swatch.hex),
-                              )
-                            }
-                            aria-label={`Xóa màu ${swatch.hex}`}
-                            className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 cursor-pointer items-center justify-center border border-black bg-white text-black group-hover:flex"
-                          >
-                            <X size={9} />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="space-y-2">
+                  {/* Palette Preset & Extract from Canvas */}
+                  <div className="flex items-center gap-1">
+                    <select
+                      aria-label="Bộ màu mẫu"
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) handleApplyPalettePreset(e.target.value);
+                      }}
+                      className="ase-input min-w-0 flex-1 px-1.5 py-1 text-[10px] font-bold text-[#1f2a24]"
+                    >
+                      <option value="" disabled>
+                        Nạp bộ màu...
+                      </option>
+                      {PALETTE_PRESETS.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleExtractPalette}
+                      title="Trích bảng màu từ tất cả frame của nhân vật hiện tại"
+                      className="ase-btn inline-flex shrink-0 items-center gap-1 px-2 py-1 text-[10px] font-bold"
+                    >
+                      <Wand2 size={10} /> Trích
+                    </button>
+                  </div>
+
+                  {paletteSwatches.length === 0 ? (
+                    <div className="border border-dashed border-[#9aa49e] bg-[#f7f9f8] p-2.5 text-center text-[10px] text-[#4b554f]">
+                      <p>Khay màu đang trống.</p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPaletteSwatches(DEFAULT_SWATCHES.map((s) => ({ ...s })))
+                        }
+                        className="mt-1 font-bold text-[#2d6a4f] hover:underline"
+                      >
+                        Khôi phục màu mặc định
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-5 gap-1">
+                      {paletteSwatches.map((swatch, idx) => {
+                        const isSelectedIdx = selectedSwatchIdx === idx;
+                        const active =
+                          (isSelectedIdx ||
+                            normalizeHex(selectedColor) === normalizeHex(swatch.hex)) &&
+                          activeTool !== "ERASER";
+                        return (
+                          <div key={`${swatch.hex}-${idx}`} className="group relative">
+                            <button
+                              type="button"
+                              title={`${swatch.name} (${swatch.hex})`}
+                              aria-label={`${swatch.name} ${swatch.hex}`}
+                              onClick={() => {
+                                setSelectedSwatchIdx(idx);
+                                setSelectedColor(swatch.hex);
+                                if (activeTool === "ERASER") setActiveTool("PEN");
+                              }}
+                              className={`block h-7 w-full cursor-pointer border-2 transition-transform hover:scale-105 ${
+                                active
+                                  ? "border-[#111111] ring-2 ring-white ring-inset"
+                                  : "border-[#7d8781]"
+                              }`}
+                              style={{ backgroundColor: swatch.hex }}
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSwatch(idx);
+                              }}
+                              title={`Xóa ô màu ${swatch.hex}`}
+                              aria-label={`Xóa màu ${swatch.hex}`}
+                              className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 cursor-pointer items-center justify-center border border-black bg-white text-black hover:bg-red-50 hover:text-red-700 group-hover:flex"
+                            >
+                              <X size={9} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-1.5 text-[10px] font-bold text-[#4b554f]">
@@ -2625,10 +3574,20 @@ export default function PixelArtStudio({
                   ref={canvasRef}
                   width={doc.width}
                   height={doc.height}
+                  onContextMenu={(e) => e.preventDefault()}
                   onMouseDown={(e) => {
-                    if (e.button === 0) beginStrokeAt(e.clientX, e.clientY);
+                    if (e.button === 0 || e.button === 2) {
+                      if (e.button === 2) e.preventDefault();
+                      beginStrokeAt(e.clientX, e.clientY, {
+                        button: e.button,
+                        altKey: e.altKey,
+                        shiftKey: e.shiftKey,
+                      });
+                    }
                   }}
-                  onMouseMove={(e) => continueStrokeAt(e.clientX, e.clientY)}
+                  onMouseMove={(e) =>
+                    continueStrokeAt(e.clientX, e.clientY, { shiftKey: e.shiftKey })
+                  }
                   onMouseUp={endStroke}
                   onMouseLeave={() => {
                     setHoverPixel(null);
@@ -2643,7 +3602,15 @@ export default function PixelArtStudio({
                     if (t) continueStrokeAt(t.clientX, t.clientY);
                   }}
                   onTouchEnd={endStroke}
-                  className="block h-full w-full cursor-crosshair touch-none select-none"
+                  className={`block h-full w-full touch-none select-none ${
+                    activeTool === "MOVE"
+                      ? "cursor-move"
+                      : activeTool === "TEXT"
+                        ? "cursor-text"
+                        : activeTool === "PICKER"
+                          ? "cursor-cell"
+                          : "cursor-crosshair"
+                  }`}
                   style={{ imageRendering: "pixelated" }}
                 />
 
@@ -3027,6 +3994,22 @@ export default function PixelArtStudio({
                 </div>
               </div>
             </div>
+
+            <StudioLayersPanel
+              layers={layers}
+              activeLayerId={activeLayer.id}
+              onSelectLayer={handleSelectLayer}
+              onAddLayer={handleAddLayer}
+              onDuplicateLayer={handleDuplicateLayer}
+              onDeleteLayer={handleDeleteLayer}
+              onMergeDownLayer={handleMergeDownLayer}
+              onMoveLayer={handleMoveLayer}
+              onToggleVisible={handleToggleLayerVisible}
+              onToggleLocked={handleToggleLayerLocked}
+              onRenameLayer={handleRenameLayer}
+              onChangeOpacity={handleChangeLayerOpacity}
+            />
+
             {activeTool === "TEXT" && (
               <div className="ase-panel">
                 <div className="ase-panel-head flex items-center justify-between px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide">
@@ -3110,7 +4093,7 @@ export default function PixelArtStudio({
                       {doc.texts.map((block) => (
                         <div
                           key={block.id}
-                          className={`flex items-center justify-between border px-2 py-1 text-[11px] ${
+                          className={`flex items-center justify-between gap-1 border px-2 py-1 text-[11px] ${
                             editingTextId === block.id
                               ? "border-[#2d6a4f] bg-[#dcebe2] font-bold text-[#163d2c]"
                               : "border-[#dfe3e0] bg-white text-[#1f2a24]"
@@ -3125,15 +4108,23 @@ export default function PixelArtStudio({
                               setTextY(block.y);
                               setSelectedColor(block.color);
                             }}
-                            className="cursor-pointer truncate text-left"
+                            className="min-w-0 flex-1 cursor-pointer truncate text-left"
                           >
                             "{block.text}" ({block.x},{block.y})
                           </button>
                           <button
                             type="button"
+                            onClick={() => handleRasterizeTextBlock(block.id)}
+                            title="Đóng khối chữ thành điểm ảnh trên layer hiện tại"
+                            className="ase-btn shrink-0 px-1 py-0.5 text-[9px] font-bold text-[#163d2c]"
+                          >
+                            Đóng pixel
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteTextBlock(block.id)}
                             aria-label="Xóa khối chữ"
-                            className="cursor-pointer text-red-600 hover:text-red-800"
+                            className="shrink-0 cursor-pointer text-red-600 hover:text-red-800"
                           >
                             <X size={12} />
                           </button>
@@ -3168,24 +4159,6 @@ export default function PixelArtStudio({
                 >
                   <Redo2 size={13} /> Làm lại ({historyMeta.redo})
                 </button>
-              </div>
-            </div>
-
-            <div className="ase-panel">
-              <div className="ase-panel-head px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide">
-                Phím tắt nhanh
-              </div>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-2.5 font-mono text-[10px] text-[#4b554f]">
-                <span><strong className="text-[#1f2a24]">B / E</strong> Bút / Tẩy</span>
-                <span><strong className="text-[#1f2a24]">G / I</strong> Đổ / Hút màu</span>
-                <span><strong className="text-[#1f2a24]">U / T</strong> Hình / Chữ</span>
-                <span><strong className="text-[#1f2a24]">M / V</strong> Chọn / Kéo</span>
-                <span><strong className="text-[#1f2a24]">[ ]</strong> Cỡ nét</span>
-                <span><strong className="text-[#1f2a24]">, / .</strong> Đổi frame</span>
-                <span><strong className="text-[#1f2a24]">Space</strong> Phát GIF</span>
-                <span><strong className="text-[#1f2a24]">Ctrl+Z/Y</strong> Undo/Redo</span>
-                <span><strong className="text-[#1f2a24]">Ctrl+S</strong> Đồng bộ</span>
-                <span><strong className="text-[#1f2a24]">Del</strong> Xóa vùng</span>
               </div>
             </div>
           </aside>

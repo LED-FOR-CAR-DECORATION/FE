@@ -561,7 +561,8 @@ export default function ManagerDashboard() {
   const [drafts, setDrafts] = useState<StoreDraftItem[]>([]);
   const [selectedDraft, setSelectedDraft] = useState<StoreDraftItem | null>(null);
   const [drilldownQuery, setDrilldownQuery] = useState<RevenueDrilldownQuery | null>(null);
-  const [month, setMonth] = useState(currentMonth);
+  const [month, setMonth] = useState("");
+  const [initialMonth, setInitialMonth] = useState("");
   const [compareWith, setCompareWith] = useState("");
   const [overview, setOverview] = useState<ManagerKpiOverview | null>(null);
   const [compareOverview, setCompareOverview] = useState<ManagerKpiOverview | null>(null);
@@ -571,7 +572,15 @@ export default function ManagerDashboard() {
   const forceRefreshRef = useRef(false);
 
   const isComparing = Boolean(compareWith && compareWith !== month);
-  const recentMonths = [0, -1, -2, -3].map((offset) => shiftYearMonth(currentMonth(), offset));
+  const recentMonths = initialMonth
+    ? [0, -1, -2, -3].map((offset) => shiftYearMonth(initialMonth, offset))
+    : [];
+
+  useEffect(() => {
+    const monthAtVisit = currentMonth();
+    setInitialMonth(monthAtVisit);
+    setMonth(monthAtVisit);
+  }, []);
 
   const triggerFreshReload = () => {
     forceRefreshRef.current = true;
@@ -579,6 +588,7 @@ export default function ManagerDashboard() {
   };
 
   useEffect(() => {
+    if (!month) return;
     let cancelled = false;
     const shouldRefresh = forceRefreshRef.current;
     forceRefreshRef.current = false;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -79,6 +79,12 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("passwordChanged") === "1") {
+      setSuccess("Đổi mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.");
+    }
+  }, []);
 
   const handleQuickFill = (role: UserRole) => {
     const demo = DEMO_ACCOUNTS.find((item) => item.user.role === role);

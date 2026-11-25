@@ -12,7 +12,6 @@ import {
   Loader2,
   ShoppingBag,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -55,7 +54,7 @@ export default function SubscriptionsStorePage() {
     };
   }, []);
 
-  const handleBuyOrAdd = async (plan: CatalogProduct, redirectToCheckout: boolean) => {
+  const handleAddToCart = async (plan: CatalogProduct) => {
     setActionError(null);
     if (!isAuthenticated && !authLoading) {
       router.push("/login?redirect=/subscriptions");
@@ -72,20 +71,15 @@ export default function SubscriptionsStorePage() {
       (c) => c.productId === numericId || String(c.id) === String(plan.id),
     );
 
-    if (alreadyInCart && redirectToCheckout) {
-      router.push("/checkout");
+    if (alreadyInCart) {
       return;
     }
 
     setBusyId(plan.id);
     try {
       await addItem(plan, 1);
-      if (redirectToCheckout) {
-        router.push("/checkout");
-      } else {
-        setAddedId(plan.id);
-        setTimeout(() => setAddedId((prev) => (prev === plan.id ? null : prev)), 3000);
-      }
+      setAddedId(plan.id);
+      setTimeout(() => setAddedId((prev) => (prev === plan.id ? null : prev)), 3000);
     } catch (err) {
       setActionError(
         getApiErrorMessage(err, "Không thể thêm gói hội viên vào giỏ hàng."),
@@ -272,7 +266,7 @@ export default function SubscriptionsStorePage() {
                     </div>
 
                     <div className="mt-6 space-y-2.5 pt-2">
-                      {hasAnyActivePlan ? (
+                      {hasAnyActivePlan && (
                         <Link
                           href={activeSubscription?.allAccessCharacters ? "/profile/gallery" : `/products/${plan.id}`}
                           className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 border-black py-2.5 text-sm font-black ${
@@ -284,30 +278,13 @@ export default function SubscriptionsStorePage() {
                           <Check size={16} />
                           {isCurrentActivePlan ? "Đang sử dụng gói này" : "Tài khoản đã có gói hội viên"}
                         </Link>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => handleBuyOrAdd(plan, true)}
-                          className="btn-primary flex w-full items-center justify-center gap-2 py-2.5 text-sm font-black disabled:opacity-50"
-                        >
-                          {isBusy ? (
-                            <>
-                              <Loader2 size={16} className="animate-spin" /> Đang xử lý...
-                            </>
-                          ) : (
-                            <>
-                              <Zap size={16} /> {inCart ? "Thanh toán ngay" : "Mua gói ngay"}
-                            </>
-                          )}
-                        </button>
                       )}
 
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
                           disabled={isBusy || inCart || hasAnyActivePlan}
-                          onClick={() => handleBuyOrAdd(plan, false)}
+                          onClick={() => handleAddToCart(plan)}
                           className="btn-secondary flex items-center justify-center gap-1.5 py-2 text-xs font-bold disabled:opacity-60"
                         >
                           <ShoppingBag size={14} />

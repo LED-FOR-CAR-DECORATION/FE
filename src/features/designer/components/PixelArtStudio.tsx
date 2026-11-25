@@ -47,8 +47,10 @@ import {
   createDesignerCharacter,
   deleteCharacterVersion,
   formatDesignerApiError,
+  isStoreCharacterType,
   updateDesignerCharacter,
   uploadDesignerAssetFile,
+  type CharacterType,
 } from "@/lib/api/designerCharacters";
 import {
   clearStudioDraft,
@@ -152,6 +154,10 @@ export interface PixelArtStudioProps {
   onCancel?: () => void;
   /** Ẩn nút "Đăng bày bán" (ví dụ character thuộc commission riêng của khách). */
   hideStoreActions?: boolean;
+  /** Loại character (STORE hoặc COMMISSION) */
+  characterType?: CharacterType;
+  /** ID commission liên kết nếu là character COMMISSION */
+  commissionId?: number;
 }
 
 const DEFAULT_SWATCHES: ColorSwatch[] = [
@@ -187,7 +193,10 @@ export default function PixelArtStudio({
   onCharacterSaved,
   onCancel,
   hideStoreActions = false,
+  characterType = "STORE",
+  commissionId,
 }: PixelArtStudioProps) {
+  const effectiveHideStoreActions = hideStoreActions || !isStoreCharacterType(characterType);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1646,6 +1655,8 @@ export default function PixelArtStudio({
           description:
             description.trim() ||
             `Pixel art ${doc.width}x${doc.height} thiết kế trên Pixel Art Studio`,
+          characterType,
+          commissionId: characterType === "COMMISSION" ? commissionId : undefined,
         });
         resolvedCharacterId = createdChar.characterId;
         setActiveCharacterId(createdChar.characterId);
@@ -2108,7 +2119,7 @@ export default function PixelArtStudio({
               Lưu v{primarySaveVersionNumber}
             </button>
 
-            {!hideStoreActions && Boolean(onPublishToStore) && (
+            {!effectiveHideStoreActions && Boolean(onPublishToStore) && (
               <button
                 type="button"
                 onClick={() => void performSaveFlow("PUBLISH")}

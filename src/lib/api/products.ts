@@ -298,6 +298,8 @@ export interface AdminCharacterSummary {
   characterId: number;
   characterName: string;
   description: string | null;
+  characterType?: "STORE" | "COMMISSION";
+  commissionId?: number | null;
   author?: {
     employeeId: number;
     fullName: string;
@@ -310,6 +312,8 @@ export interface AdminCharacterSummary {
 export async function fetchAdminCharacters(params?: {
   query?: string;
   creatorEmployeeId?: number;
+  characterType?: "STORE" | "COMMISSION";
+  commissionId?: number;
   page?: number;
   size?: number;
 }): Promise<AdminCharacterSummary[]> {
@@ -324,12 +328,18 @@ export async function fetchAdminCharacters(params?: {
         params: {
           query: params?.query || undefined,
           creatorEmployeeId: params?.creatorEmployeeId || undefined,
+          characterType: params?.characterType || undefined,
+          commissionId: params?.commissionId || undefined,
           page: params?.page ?? 0,
           size: params?.size ?? 100,
         },
       },
     );
-    return res.data?.data ?? [];
+    return (res.data?.data ?? []).map((item) => ({
+      ...item,
+      characterType: item.characterType ?? "STORE",
+      commissionId: item.commissionId ?? null,
+    }));
   } catch (err) {
     console.warn("fetchAdminCharacters backend call failed:", err);
     return [];

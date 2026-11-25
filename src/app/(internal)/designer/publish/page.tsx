@@ -33,6 +33,7 @@ import { fetchAllPages } from "@/lib/api/paging";
 import {
   fetchMyCharacters,
   formatDesignerApiError,
+  isStoreCharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
@@ -100,12 +101,12 @@ function DesignerPublishWorkspace() {
     setCharactersError(null);
     try {
       const all = await fetchAllPages(async (p) => {
-        const res = await fetchMyCharacters({ page: p, size: 100 });
+        const res = await fetchMyCharacters({ page: p, size: 100, characterType: "STORE" });
         return { items: res.items, totalPages: res.meta.totalPages };
       });
-      // Exclude commission characters — only Designer-created personal characters can be listed on Store
+      // Exclude commission characters — only STORE characters can be listed on Store
       const personalOnly = all.filter(
-        (char) => linkedCommissionId(char.description) === undefined,
+        (char) => isStoreCharacterType(char.characterType) && linkedCommissionId(char.description) === undefined,
       );
       setOwnCharacters(personalOnly);
     } catch (err) {

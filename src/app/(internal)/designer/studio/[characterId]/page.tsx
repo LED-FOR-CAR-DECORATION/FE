@@ -131,7 +131,8 @@ export default function DesignerCharacterStudioPage() {
     );
   }
 
-  const commissionId = linkedCommissionId(character.description);
+  const commissionId = character.commissionId ?? linkedCommissionId(character.description) ?? undefined;
+  const isCommissionCharacter = (character.characterType ?? "STORE") === "COMMISSION" || Boolean(commissionId);
   const backHref = commissionId ? `/designer/commissions/${commissionId}` : "/designer/characters";
   const isCreateNewVersionMode = Boolean(requestedNewVersion && currentVersionId);
 
@@ -153,6 +154,19 @@ export default function DesignerCharacterStudioPage() {
               </h1>
               <span className="inline-flex items-center gap-1 rounded-[2px] border border-[#163d2c] bg-[#2d6a4f] px-2 py-0.5 font-mono text-[11px] font-bold text-white">
                 <Grid size={11} /> {lockedMatrixSize}
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-[2px] border px-2 py-0.5 text-[11px] font-bold ${
+                  isCommissionCharacter
+                    ? "border-amber-400 bg-amber-100 text-amber-900"
+                    : "border-sky-400 bg-sky-100 text-sky-900"
+                }`}
+              >
+                {isCommissionCharacter
+                  ? commissionId
+                    ? `Commission #${commissionId}`
+                    : "Loại: Commission"
+                  : "Loại: Bán Store"}
               </span>
               <span className="inline-flex items-center gap-1 rounded-[2px] border border-[#2d6a4f] bg-[#dcebe2] px-2 py-0.5 text-[11px] font-bold text-[#163d2c]">
                 <Sparkles size={11} />
@@ -199,7 +213,9 @@ export default function DesignerCharacterStudioPage() {
         createNewVersionMode={isCreateNewVersionMode}
         targetVersionNumber={nextVersionNumber}
         lockedMatrixSize={lockedMatrixSize}
-        hideStoreActions={Boolean(commissionId)}
+        characterType={character.characterType ?? (commissionId ? "COMMISSION" : "STORE")}
+        commissionId={commissionId}
+        hideStoreActions={isCommissionCharacter}
         onSaveVersion={() => {
           router.push(
             `/designer/characters?saved=1&name=${encodeURIComponent(character.characterName)}`,

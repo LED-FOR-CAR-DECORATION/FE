@@ -47,10 +47,12 @@ function recalled(commissionId: number) {
 
 /** Tìm character đã liên kết với commission trong thư viện của designer hiện tại. */
 export async function findCommissionCharacter(commissionId: number): Promise<DesignerCharacterItem | undefined> {
-  const { items } = await fetchMyCharacters({ page: 0, size: 100 });
+  const { items } = await fetchMyCharacters({ page: 0, size: 100, characterType: "COMMISSION" });
   const cachedId = recalled(commissionId);
-  const found = items.find((item) => item.characterId === cachedId && linkedCommissionId(item.description) === commissionId)
-    ?? items.find((item) => linkedCommissionId(item.description) === commissionId);
+  const matches = (item: DesignerCharacterItem) =>
+    item.commissionId === commissionId || linkedCommissionId(item.description) === commissionId;
+  const found =
+    items.find((item) => item.characterId === cachedId && matches(item)) ?? items.find(matches);
   if (found) remember(commissionId, found.characterId);
   return found;
 }
@@ -64,7 +66,12 @@ export async function createCommissionCharacter(commission: {
 }) {
   const brief = (commission.description ?? "").trim();
   const description = `${commissionMarker(commission.commissionId)} ${brief}`.slice(0, MAX_DESCRIPTION).trim();
-  const created = await createDesignerCharacter({ characterName: commission.title.slice(0, 120), description });
+  const created = await createDesignerCharacter({
+    characterName: commission.title.slice(0, 120),
+    description,
+    characterType: "COMMISSION",
+    commissionId: commission.commissionId,
+  });
   setStoredMatrixSize(created.characterId, studioMatrixSize(commission.targetMatrixDimensions) ?? "32x32");
   remember(commission.commissionId, created.characterId);
   return created;

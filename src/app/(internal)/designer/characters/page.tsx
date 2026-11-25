@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Store,
   X,
 } from "lucide-react";
 import {
@@ -24,7 +25,7 @@ import {
 import CreateCharacterModal from "@/features/designer/components/CreateCharacterModal";
 import { linkedCommissionId, stripCommissionMarker } from "@/features/designer/commission-link";
 import PublishToStoreModal from "@/features/designer/components/PublishToStoreModal";
-import type { DesignerCharacterItem } from "@/lib/api/designerCharacters";
+import { isStoreCharacterType, type CharacterType, type DesignerCharacterItem } from "@/lib/api/designerCharacters";
 import { getCharacterArtwork } from "@/features/designer/character-artwork";
 import { hasStudioDraft } from "@/features/designer/studio-draft";
 
@@ -37,6 +38,8 @@ function DesignerDashboardContent() {
     page,
     setPage,
     setQuery,
+    characterTypeFilter,
+    setCharacterTypeFilter,
     loading,
     error,
     refreshCharacters,
@@ -148,7 +151,32 @@ function DesignerDashboardContent() {
           </button>
         </form>
 
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div className="inline-flex rounded border border-studio-line bg-studio-wash p-0.5 font-bold">
+            {(
+              [
+                { value: "ALL" as const, label: "Tất cả" },
+                { value: "STORE" as CharacterType, label: "Bán Store" },
+                { value: "COMMISSION" as CharacterType, label: "Commission" },
+              ]
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  setPage(0);
+                  setCharacterTypeFilter(opt.value);
+                }}
+                className={`rounded px-2.5 py-1.5 text-xs transition ${
+                  characterTypeFilter === opt.value
+                    ? "bg-studio-accent text-white shadow-xs"
+                    : "text-slate-600 hover:text-studio-ink"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <span>
             Tổng cộng: <strong className="text-studio-ink">{meta.totalElements}</strong> nhân vật
           </span>
@@ -263,11 +291,19 @@ function DesignerDashboardContent() {
                           #{char.characterId}
                         </span>
                       </div>
-                      {linkedCommissionId(char.description) !== undefined && (
-                        <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-                          Commission #{linkedCommissionId(char.description)}
-                        </span>
-                      )}
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {isStoreCharacterType(char.characterType) ? (
+                          <span className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
+                            Bán Store
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                            {(char.commissionId ?? linkedCommissionId(char.description)) !== undefined
+                              ? `Commission #${char.commissionId ?? linkedCommissionId(char.description)}`
+                              : "Commission"}
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 line-clamp-2 min-h-[32px] text-xs text-slate-500">
                         {stripCommissionMarker(char.description) || "Chưa có mô tả cho nhân vật này."}
                       </p>
@@ -288,17 +324,32 @@ function DesignerDashboardContent() {
                         )}
                       </div>
 
-                      {/* View Versions Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setVersionsModalCharacter(char);
-                        }}
-                        className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded border border-studio-accent bg-studio-wash px-3 py-2 text-xs font-bold text-studio-ink transition hover:bg-studio-accent hover:text-white"
-                      >
-                        <Layers size={14} /> Xem các phiên bản
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {/* View Versions Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setVersionsModalCharacter(char);
+                          }}
+                          className="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border border-studio-accent bg-studio-wash px-3 py-2 text-xs font-bold text-studio-ink transition hover:bg-studio-accent hover:text-white"
+                        >
+                          <Layers size={14} /> Xem phiên bản
+                        </button>
+                        {isStoreCharacterType(char.characterType) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/designer/publish?characterId=${char.characterId}`);
+                            }}
+                            title="Đăng bán lên Store"
+                            className="inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-emerald-600 bg-emerald-600 px-2.5 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
+                          >
+                            <Store size={14} /> Đăng bán
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </article>

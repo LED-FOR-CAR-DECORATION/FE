@@ -9,7 +9,13 @@ import {
 } from "lucide-react";
 import "@/styles/transitions.css";
 import { getApiErrorMessage } from "@/lib/api/auth";
-import { fetchCharacterVersions, fetchMyCharacters, formatDesignerApiError, type CharacterVersionItem, type DesignerCharacterItem } from "@/lib/api/designerCharacters";
+import {
+  fetchCharacterVersions,
+  fetchMyCharacters,
+  formatDesignerApiError,
+  type CharacterVersionItem,
+  type DesignerCharacterItem,
+} from "@/lib/api/designerCharacters";
 import { sortVersionsNewestFirst } from "@/features/designer/context/DesignerCharactersContext";
 import {
   createCommissionCharacter, findCommissionCharacter, linkedCommissionId, studioMatrixSize,
@@ -17,7 +23,6 @@ import {
 import { commissionErrorMessage } from "../errors";
 import { uploadMediaFile } from "@/lib/api/media";
 import CommissionRevisionTimeline from "./CommissionRevisionTimeline";
-import CommissionDraftUpload from "./CommissionDraftUpload";
 import {
   getCommissionQueue, getManagementCommission, uploadCommissionDraft,
   type CommissionManagementDetail, type CommissionQueueItem, type CommissionSubmissionItem,
@@ -137,11 +142,11 @@ export function DesignerCommissionBoard() {
   // Ảnh version hiện hành của character đã liên kết, để thẻ commission có ảnh xem trước giống Dashboard.
   useEffect(() => {
     let active = true;
-    fetchMyCharacters({ page: 0, size: 100 }).then(({ items: list }) => {
+    fetchMyCharacters({ page: 0, size: 100, characterType: "COMMISSION" }).then(({ items: list }) => {
       if (!active) return;
       const map = new Map<number, DesignerCharacterItem>();
       for (const item of list) {
-        const id = linkedCommissionId(item.description);
+        const id = item.commissionId ?? linkedCommissionId(item.description);
         if (id !== undefined && !map.has(id)) map.set(id, item);
       }
       setCharacters(map);
@@ -284,6 +289,7 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
   const [detail, setDetail] = useState<CommissionManagementDetail>();
   const [detailError, setDetailError] = useState("");
   const [character, setCharacter] = useState<DesignerCharacterItem | null>();
+  const [commissionCharacters, setCommissionCharacters] = useState<DesignerCharacterItem[]>([]);
   const [versions, setVersions] = useState<CharacterVersionItem[]>();
   const [characterError, setCharacterError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -315,9 +321,18 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
     let active = true;
     (async () => {
       try {
-        const found = await findCommissionCharacter(commissionId);
+        const [{ items: commissionList }, linked] = await Promise.all([
+          fetchMyCharacters({ page: 0, size: 100, characterType: "COMMISSION" }).catch(() => ({ items: [] as DesignerCharacterItem[] })),
+          findCommissionCharacter(commissionId),
+        ]);
         if (!active) return;
-        setCharacter(found ?? null);
+        const selectable = commissionList.filter((item) => {
+          const itemCommId = item.commissionId ?? linkedCommissionId(item.description);
+          return item.characterType === "COMMISSION" && (itemCommId === undefined || itemCommId === null || itemCommId === commissionId);
+        });
+        setCommissionCharacters(selectable);
+        const found = linked ?? selectable.find((item) => item.commissionId === commissionId) ?? null;
+        setCharacter(found);
         const list = found ? sortVersionsNewestFirst(await fetchCharacterVersions(found.characterId)) : [];
         if (!active) return;
         setVersions(list);
@@ -328,6 +343,20 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
     })();
     return () => { active = false; };
   }, [commissionId, revision]);
+
+  const handleSelectCommissionCharacter = async (nextCharacterId: number) => {
+    const picked = commissionCharacters.find((item) => item.characterId === nextCharacterId);
+    if (!picked) return;
+    setCharacter(picked);
+    setSelectedId(undefined);
+    try {
+      const list = sortVersionsNewestFirst(await fetchCharacterVersions(picked.characterId));
+      setVersions(list);
+      setCharacterError("");
+    } catch (failure) {
+      setCharacterError(formatDesignerApiError(failure, "Không tải được version của character đã chọn."));
+    }
+  };
 
   if (!detail) {
     return detailError ? (
@@ -366,6 +395,10 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
 
   const submit = async () => {
     if (!selected || submitLock.current) return;
+    if (!character || character.characterType !== "COMMISSION") {
+      setSubmitError("Chỉ được nộp bản vẽ từ phiên bản của nhân vật loại Commission.");
+      return;
+    }
     const designerNote = note.trim();
     if (designerNote.length > 2000) return setSubmitError("Ghi chú tối đa 2000 ký tự.");
     if (!isHttpUrl(selected.previewGifUrl)) return setSubmitError("Version này chưa có ảnh trên kho media. Hãy mở Studio và lưu lại version.");
@@ -380,7 +413,11 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
       const uploaded = await uploadMediaFile(file, "COMMISSION_DRAFT", detail.commissionId);
       if (uploaded.localPreviewUrl) URL.revokeObjectURL(uploaded.localPreviewUrl);
       if (!uploaded.objectKey) throw new Error("Không nhận được mã bản nháp.");
-      const { data } = await uploadCommissionDraft(detail.commissionId, { imageUrl: uploaded.objectKey, designerNote: designerNote || undefined });
+      const { data } = await uploadCommissionDraft(detail.commissionId, {
+        imageUrl: uploaded.objectKey,
+        designerNote: designerNote || undefined,
+        characterVersionId: selected.versionId,
+      });
       setSubmitted({ versionNumber: selected.versionNumber, draftVersion: data.versionNumber });
       setSelectedId(undefined);
       setNote("");
@@ -439,7 +476,6 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
       )}
 
       <CommissionRevisionTimeline detail={detail} designer onChanged={reload} />
-      {draftable && <CommissionDraftUpload commissionId={commissionId} onUploaded={reload} />}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className={`${shell} p-5`} aria-labelledby="character-heading">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-studio-line pb-4">
@@ -464,10 +500,52 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
               <button type="button" onClick={() => void createCharacter()} disabled={creating} className={`${primaryBtn} mt-5`}>
                 {creating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} {creating ? "Đang tạo…" : "Tạo character"}
               </button>
+              {commissionCharacters.length > 0 && (
+                <div className="mx-auto mt-4 max-w-sm border-t border-studio-line pt-4 text-left">
+                  <label htmlFor="pick-commission-char" className="block text-xs font-bold text-slate-600">
+                    Hoặc chọn character loại Commission sẵn có:
+                  </label>
+                  <select
+                    id="pick-commission-char"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (val) void handleSelectCommissionCharacter(val);
+                    }}
+                    className="mt-1.5 w-full rounded border border-studio-line bg-white px-3 py-2 text-xs font-semibold text-studio-ink"
+                  >
+                    <option value="" disabled>-- Chọn character Commission --</option>
+                    {commissionCharacters.map((c) => (
+                      <option key={c.characterId} value={c.characterId}>
+                        #{c.characterId} · {c.characterName} ({c.totalVersions} version)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           ) : character && (
             <>
-              <p className="mt-4 text-sm"><span className="font-semibold text-studio-ink">{character.characterName}</span> <span className="text-slate-500">· {versions?.length ?? character.totalVersions} version</span></p>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm">
+                  <span className="font-semibold text-studio-ink">{character.characterName}</span>{" "}
+                  <span className="text-slate-500">· {versions?.length ?? character.totalVersions} version</span>
+                </p>
+                {commissionCharacters.length > 1 && (
+                  <select
+                    aria-label="Chọn character loại Commission"
+                    value={character.characterId}
+                    onChange={(e) => void handleSelectCommissionCharacter(Number(e.target.value))}
+                    className="rounded border border-studio-line bg-white px-2.5 py-1 text-xs font-semibold text-studio-ink"
+                  >
+                    {commissionCharacters.map((c) => (
+                      <option key={c.characterId} value={c.characterId}>
+                        #{c.characterId} · {c.characterName}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
               {!versions ? <div className="mt-4"><SkeletonGrid count={3} /></div> : versions.length === 0 ? (
                 <div className="mt-4 rounded-md border border-dashed border-studio-line p-10 text-center">
                   <Layers size={32} className="mx-auto mb-3 text-studio-muted" />

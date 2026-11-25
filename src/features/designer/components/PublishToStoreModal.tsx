@@ -23,6 +23,7 @@ import Modal from "@/components/ui/Modal";
 import { fetchStoreTags } from "@/lib/api/products";
 import {
   formatDesignerApiError,
+  isStoreCharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
@@ -204,6 +205,10 @@ export default function PublishToStoreModal({
     setError(null);
     setPublishSuccess(null);
 
+    if (!isStoreCharacterType(character.characterType)) {
+      setError("Nhân vật thuộc loại Commission không được phép đăng bán lên Store.");
+      return;
+    }
     if (!selectedVersion) {
       setError("Nhân vật chưa có phiên bản nào để đăng bán lên Store.");
       return;
@@ -290,13 +295,21 @@ export default function PublishToStoreModal({
             <button
               type="submit"
               form="publish-to-store-form"
-              disabled={isSubmitting || isLoading || !selectedVersion || isSelectedVersionListed}
+              disabled={
+                isSubmitting ||
+                isLoading ||
+                !selectedVersion ||
+                isSelectedVersionListed ||
+                !isStoreCharacterType(character.characterType)
+              }
               title={
-                !selectedVersion
-                  ? "Cần có ít nhất 1 phiên bản để đăng bán lên Store"
-                  : isSelectedVersionListed
-                    ? "Phiên bản đang chọn đã được đăng lên Store"
-                    : "Đăng bán phiên bản này lên Store"
+                !isStoreCharacterType(character.characterType)
+                  ? "Nhân vật loại Commission không được đăng bán lên Store"
+                  : !selectedVersion
+                    ? "Cần có ít nhất 1 phiên bản để đăng bán lên Store"
+                    : isSelectedVersionListed
+                      ? "Phiên bản đang chọn đã được đăng lên Store"
+                      : "Đăng bán phiên bản này lên Store"
               }
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-studio-accent px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
             >

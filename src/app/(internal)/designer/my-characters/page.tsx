@@ -36,9 +36,11 @@ import {
   fetchCharacterVersions,
   fetchMyCharacters,
   formatDesignerApiError,
+  isStoreCharacterType,
   readFileAsDataUrl,
   updateDesignerCharacter,
   uploadDesignerAssetFile,
+  type CharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
   type PaginationMeta,
@@ -100,6 +102,7 @@ export default function MyCharactersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [activeQuery, setActiveQuery] = useState("");
   const [filterType, setFilterType] = useState<FilterType>("all");
+  const [characterTypeFilter, setCharacterTypeFilter] = useState<"ALL" | CharacterType>("ALL");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -134,27 +137,35 @@ export default function MyCharactersPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   // Load characters from API
-  const loadCharacters = useCallback(async (targetPage: number, query: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetchMyCharacters({
-        page: targetPage,
-        size: PAGE_SIZE,
-        query: query.trim() || undefined,
-      });
-      setCharacters(res.items);
-      setMeta(res.meta);
-    } catch (err) {
-      setError(formatDesignerApiError(err, "Không thể tải danh sách nhân vật."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadCharacters = useCallback(
+    async (
+      targetPage: number,
+      query: string,
+      charType: "ALL" | CharacterType = characterTypeFilter,
+    ) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetchMyCharacters({
+          page: targetPage,
+          size: PAGE_SIZE,
+          query: query.trim() || undefined,
+          characterType: charType === "ALL" ? undefined : charType,
+        });
+        setCharacters(res.items);
+        setMeta(res.meta);
+      } catch (err) {
+        setError(formatDesignerApiError(err, "Không thể tải danh sách nhân vật."));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [characterTypeFilter],
+  );
 
   useEffect(() => {
-    void loadCharacters(page, activeQuery);
-  }, [loadCharacters, page, activeQuery]);
+    void loadCharacters(page, activeQuery, characterTypeFilter);
+  }, [loadCharacters, page, activeQuery, characterTypeFilter]);
 
   // Handle Search
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -459,6 +470,33 @@ export default function MyCharactersPage() {
 
         {/* Filters and View Switcher */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Character Type Pills */}
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-xs font-bold">
+            {(
+              [
+                { value: "ALL" as const, label: "Mọi loại" },
+                { value: "STORE" as CharacterType, label: "Bán Store" },
+                { value: "COMMISSION" as CharacterType, label: "Commission" },
+              ]
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  setPage(0);
+                  setCharacterTypeFilter(opt.value);
+                }}
+                className={`rounded-lg px-2.5 py-1 transition ${
+                  characterTypeFilter === opt.value
+                    ? "bg-white text-[#198653] shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           {/* Filter Pills */}
           <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-xs font-bold">
             <button
@@ -667,6 +705,18 @@ export default function MyCharactersPage() {
                       </span>
                     </div>
 
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {isStoreCharacterType(c.characterType) ? (
+                        <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-900">
+                          Bán Store
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                          {c.commissionId ? `Commission #${c.commissionId}` : "Commission"}
+                        </span>
+                      )}
+                    </div>
+
                     <p
                       className="mt-1 line-clamp-2 text-xs text-slate-500"
                       title={c.description ?? "Chưa có mô tả."}
@@ -703,13 +753,15 @@ export default function MyCharactersPage() {
                     Phiên bản ({c.totalVersions})
                   </button>
 
-                  <Link
-                    href={`/designer/store-uploads?characterId=${c.characterId}`}
-                    className="inline-flex items-center justify-center rounded-lg border border-[#3f9660] bg-[#eefaf1] p-1.5 text-[#198653] transition hover:bg-[#d8f5df]"
-                    title="Đăng tải phiên bản Store"
-                  >
-                    <Store size={14} />
-                  </Link>
+                  {isStoreCharacterType(c.characterType) && (
+                    <Link
+                      href={`/designer/store-uploads?characterId=${c.characterId}`}
+                      className="inline-flex items-center justify-center rounded-lg border border-[#3f9660] bg-[#eefaf1] p-1.5 text-[#198653] transition hover:bg-[#d8f5df]"
+                      title="Đăng tải phiên bản Store"
+                    >
+                      <Store size={14} />
+                    </Link>
+                  )}
 
                   <button
                     type="button"
@@ -786,7 +838,22 @@ export default function MyCharactersPage() {
                       </td>
 
                       <td className="px-4 py-3">
-                        <p className="font-bold text-slate-900">{c.characterName}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-bold text-slate-900">{c.characterName}</p>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              isStoreCharacterType(c.characterType)
+                                ? "bg-sky-100 text-sky-900"
+                                : "bg-amber-100 text-amber-900"
+                            }`}
+                          >
+                            {isStoreCharacterType(c.characterType)
+                              ? "Store"
+                              : c.commissionId
+                                ? `Commission #${c.commissionId}`
+                                : "Commission"}
+                          </span>
+                        </div>
                         <p className="max-w-xs truncate text-[11px] text-slate-500">
                           {c.description || "—"}
                         </p>
@@ -821,12 +888,14 @@ export default function MyCharactersPage() {
                           >
                             Chi tiết
                           </button>
-                          <Link
-                            href={`/designer/store-uploads?characterId=${c.characterId}`}
-                            className="rounded-lg border border-[#3f9660] bg-[#eefaf1] px-2.5 py-1 text-xs font-bold text-[#198653] hover:bg-[#d8f5df]"
-                          >
-                            Đăng Store
-                          </Link>
+                          {isStoreCharacterType(c.characterType) && (
+                            <Link
+                              href={`/designer/store-uploads?characterId=${c.characterId}`}
+                              className="rounded-lg border border-[#3f9660] bg-[#eefaf1] px-2.5 py-1 text-xs font-bold text-[#198653] hover:bg-[#d8f5df]"
+                            >
+                              Đăng Store
+                            </Link>
+                          )}
                           <button
                             type="button"
                             onClick={() => openEdit(c)}
@@ -938,12 +1007,14 @@ export default function MyCharactersPage() {
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
                     Danh sách phiên bản ({itemVersions.length})
                   </h4>
-                  <Link
-                    href={`/designer/store-uploads?characterId=${viewingItem.characterId}`}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-[#198653] hover:underline"
-                  >
-                    <Store size={13} /> Đi tới trang Đăng tải Store
-                  </Link>
+                  {isStoreCharacterType(viewingItem.characterType) && (
+                    <Link
+                      href={`/designer/store-uploads?characterId=${viewingItem.characterId}`}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-[#198653] hover:underline"
+                    >
+                      <Store size={13} /> Đi tới trang Đăng tải Store
+                    </Link>
+                  )}
                 </div>
 
                 {loadingVersions ? (

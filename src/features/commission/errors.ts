@@ -13,6 +13,8 @@ export function commissionErrorMessage(failure: unknown, fallback: string) {
       return "Trạng thái commission đã thay đổi nên thao tác không còn hợp lệ. Nội dung sẽ được tải lại.";
     case "PAYMENT_SESSION_NOT_CANCELLABLE":
       return "Phiên thanh toán không thể hủy (có thể đã thanh toán hoặc đã hết hạn).";
+    case "CHARACTER_TYPE_NOT_ALLOWED_FOR_COMMISSION":
+      return "Chỉ nhân vật loại Commission (thuộc đúng đơn commission này hoặc chưa gắn đơn khác) mới được nộp làm bản nháp.";
     default:
       return getApiErrorMessage(failure, fallback);
   }

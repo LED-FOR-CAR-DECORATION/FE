@@ -26,6 +26,7 @@ import {
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
+import { fetchAllPages } from "@/lib/api/paging";
 
 function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -74,18 +75,21 @@ function StoreUploadsWorkspace() {
     async (preferCharacterId?: number | null) => {
       setLoadingCharacters(true);
       try {
-        const res = await fetchMyCharacters({ page: 0, size: 50 });
-        setCharacters(res.items);
+        const items = await fetchAllPages(async (page) => {
+          const res = await fetchMyCharacters({ page, size: 50 });
+          return { items: res.items, totalPages: res.meta.totalPages };
+        });
+        setCharacters(items);
 
         setSelectedCharacterId((prev) => {
           const targetId = preferCharacterId ?? prev;
           if (
             targetId &&
-            res.items.some((item) => item.characterId === targetId)
+            items.some((item) => item.characterId === targetId)
           ) {
             return targetId;
           }
-          return res.items[0]?.characterId ?? null;
+          return items[0]?.characterId ?? null;
         });
       } catch (err) {
         setListError(
@@ -143,11 +147,7 @@ function StoreUploadsWorkspace() {
       setPreviewGifUrl(uploaded.publicUrl);
       setLocalPreviewDataUrl(uploaded.previewUrl);
       setByteSize(String(file.size));
-      setUploadHint(
-        uploaded.usedFallback
-          ? `Đã chọn file "${file.name}" (${formatFileSize(file.size)}) và tạo URL mẫu cục bộ.`
-          : `Đã tải "${file.name}" (${formatFileSize(file.size)}) lên CDN thành công.`,
-      );
+      setUploadHint(`Đã tải "${file.name}" (${formatFileSize(file.size)}) lên CDN thành công.`);
     } catch (err) {
       setFormError(
         formatDesignerApiError(err, "Không thể tải tệp hình ảnh lên hệ thống."),

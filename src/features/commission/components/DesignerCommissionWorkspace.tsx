@@ -22,6 +22,7 @@ import {
   getCommissionQueue, getManagementCommission, uploadCommissionDraft,
   type CommissionManagementDetail, type CommissionQueueItem, type CommissionSubmissionItem,
 } from "../services/management-commission.api";
+import { scheduleVisiblePoll } from "@/lib/polling";
 
 // ---------------------------------------------------------------------------
 // Trạng thái
@@ -298,16 +299,16 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
 
   useEffect(() => {
     let active = true;
-    let timer: ReturnType<typeof setTimeout>;
+    let cancelPoll: (() => void) | undefined;
     let query: ReturnType<typeof getManagementCommission>;
     function refresh() {
       query = getManagementCommission(commissionId);
       query.then(({ data }) => { if (active) { setDetail(data); setDetailError(""); } })
         .catch((failure) => { if (active) setDetailError(getApiErrorMessage(failure, "Không tải được commission.")); })
-        .finally(() => { if (active) timer = setTimeout(refresh, 10000); });
+        .finally(() => { if (active) cancelPoll = scheduleVisiblePoll(refresh, 10000); });
     }
     refresh();
-    return () => { active = false; clearTimeout(timer); query?.cancel(); };
+    return () => { active = false; cancelPoll?.(); query?.cancel(); };
   }, [commissionId, revision]);
 
   useEffect(() => {

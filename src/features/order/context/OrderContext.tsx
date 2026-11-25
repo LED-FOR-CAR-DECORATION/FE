@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { CancelOrderResponse } from "@/api_client";
 import type { Address } from "@/features/address/types";
 import type { AuthUser } from "@/features/auth/types";
@@ -17,6 +17,8 @@ import type {
 interface OrderContextValue {
   orders: MockOrder[];
   isLoading: boolean;
+  /** Lỗi của lần tải gần nhất; danh sách cũ được giữ nguyên khi lỗi. */
+  error: string | null;
   refreshOrders: () => Promise<void>;
   createOrder: (input: {
     customer: AuthUser;
@@ -39,6 +41,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [orders, setOrders] = useState<MockOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const refreshOrders = useCallback(async () => {
     if (!isAuthenticated || !user) {
@@ -47,6 +50,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       return;
     }
     setIsLoading(true);
+    setError(null);
     try {
       if (user.role === "CUSTOMER") {
         const remoteOrders = await orderService.fetchCustomerOrders(user);
@@ -57,8 +61,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       } else {
         setOrders([]);
       }
-    } catch {
-      setOrders([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tải được danh sách đơn hàng.");
     } finally {
       setIsLoading(false);
     }
@@ -188,24 +192,25 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     [refreshOrders],
   );
 
-  return (
-    <OrderContext.Provider
-      value={{
-        orders,
-        isLoading,
-        refreshOrders,
-        createOrder,
-        updateOrderStatus,
-        updateOrderDeliveryAddress,
-        createDelivery,
-        dispatchOrder,
-        confirmOrderDelivery,
-        cancelCustomerOrder,
-      }}
-    >
-      {children}
-    </OrderContext.Provider>
+  const value = useMemo<OrderContextValue>(
+    () => ({
+      orders,
+      isLoading,
+      error,
+      refreshOrders,
+      createOrder,
+      updateOrderStatus,
+      updateOrderDeliveryAddress,
+      createDelivery,
+      dispatchOrder,
+      confirmOrderDelivery,
+      cancelCustomerOrder,
+    }),
+    [orders, isLoading, error, refreshOrders, createOrder, updateOrderStatus, updateOrderDeliveryAddress,
+      createDelivery, dispatchOrder, confirmOrderDelivery, cancelCustomerOrder],
   );
+
+  return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;
 }
 
 export function useOrders() {

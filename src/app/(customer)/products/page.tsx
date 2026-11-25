@@ -8,6 +8,7 @@ import Footer from "@/components/layout/Footer";
 import { ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
 import type { CatalogProduct } from "@/features/cart/catalog";
 import { fetchStoreProducts } from "@/lib/api/products";
+import { fetchAllPages } from "@/lib/api/paging";
 
 const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} VNĐ`;
 const PRODUCTS_PER_PAGE = 12;
@@ -20,9 +21,9 @@ export default function ProductsPage() {
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-    fetchStoreProducts({ page: 0, size: 100 })
-      .then((res) => {
-        if (!cancelled) setProducts(res.items);
+    fetchAllPages((page) => fetchStoreProducts({ page, size: 100 }))
+      .then((items) => {
+        if (!cancelled) setProducts(items);
       })
       .catch(() => {
         if (!cancelled) setProducts([]);

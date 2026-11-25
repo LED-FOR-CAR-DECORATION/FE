@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { authService, normalizeUserRole, USE_MOCK_AUTH } from "@/features/auth/services/auth.service";
+import { authService, normalizeUserRole } from "@/features/auth/services/auth.service";
 import type { AuthUser } from "@/features/auth/types";
 import { apiGetMyProfile, apiUpdateMyProfile } from "@/lib/api/addresses";
 import { clearSession, clearTokens, getSessionToken, loadSession, saveSession, SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired);
     (async () => {
       const saved = loadSession();
-      if (saved && !USE_MOCK_AUTH) {
+      if (saved) {
         try {
           const token = await getSessionToken();
           if (isStale()) return;
@@ -87,41 +87,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveSession(nextUser);
     setUser(nextUser);
     setIsLoading(false);
-    if (!USE_MOCK_AUTH) {
-      void apiGetMyProfile()
-        .then((remoteProfile) => {
-          if (!remoteProfile || sessionVersion.current !== version) return;
-          const hydrated = mergeRemoteProfile(nextUser, remoteProfile);
-          saveSession(hydrated);
-          setUser(hydrated);
-        })
-        .catch(() => {});
-    }
+    void apiGetMyProfile()
+      .then((remoteProfile) => {
+        if (!remoteProfile || sessionVersion.current !== version) return;
+        const hydrated = mergeRemoteProfile(nextUser, remoteProfile);
+        saveSession(hydrated);
+        setUser(hydrated);
+      })
+      .catch(() => {});
   }, []);
 
   const updateProfile = useCallback(
     async (profile: Pick<AuthUser, "fullName" | "phoneNumber" | "dateOfBirth">) => {
-      if (!USE_MOCK_AUTH) {
-        try {
-          const updated = await apiUpdateMyProfile({
-            name: profile.fullName,
-            phone: profile.phoneNumber || null,
-          });
-          setUser((currentUser) => {
-            if (!currentUser) return currentUser;
-            const nextUser: AuthUser = {
-              ...currentUser,
-              fullName: updated?.name ?? profile.fullName,
-              phoneNumber: updated?.phone ?? profile.phoneNumber,
-              dateOfBirth: profile.dateOfBirth,
-            };
-            saveSession(nextUser);
-            return nextUser;
-          });
-          return;
-        } catch (err) {
-          console.error("Failed to update profile on backend:", err);
-        }
+      try {
+        const updated = await apiUpdateMyProfile({
+          name: profile.fullName,
+          phone: profile.phoneNumber || null,
+        });
+        setUser((currentUser) => {
+          if (!currentUser) return currentUser;
+          const nextUser: AuthUser = {
+            ...currentUser,
+            fullName: updated?.name ?? profile.fullName,
+            phoneNumber: updated?.phone ?? profile.phoneNumber,
+            dateOfBirth: profile.dateOfBirth,
+          };
+          saveSession(nextUser);
+          return nextUser;
+        });
+        return;
+      } catch (err) {
+        console.error("Failed to update profile on backend:", err);
       }
       setUser((currentUser) => {
         if (!currentUser) return currentUser;

@@ -17,6 +17,7 @@ import {
   formatDesignerApiError,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
+import { fetchAllPages } from "@/lib/api/paging";
 
 export default function DesignerCharacterStudioPage() {
   const params = useParams<{ characterId: string }>();
@@ -44,12 +45,15 @@ export default function DesignerCharacterStudioPage() {
     setLockedMatrixSize(getStoredMatrixSize(characterId));
 
     Promise.all([
-      fetchMyCharacters({ page: 0, size: 100 }),
+      fetchAllPages(async (page) => {
+        const res = await fetchMyCharacters({ page, size: 100 });
+        return { items: res.items, totalPages: res.meta.totalPages };
+      }),
       fetchCharacterVersions(characterId),
     ])
-      .then(([charRes, rawVersions]) => {
+      .then(([characters, rawVersions]) => {
         if (cancelled) return;
-        const found = charRes.items.find((c) => c.characterId === characterId) ?? null;
+        const found = characters.find((c) => c.characterId === characterId) ?? null;
         if (!found) {
           setError("Không tìm thấy Character này trong danh sách của bạn.");
           return;

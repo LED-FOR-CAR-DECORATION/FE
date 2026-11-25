@@ -62,8 +62,9 @@ function useCardAction(onChanged: CardContext["onChanged"]) {
   return { confirming, setConfirming, busy, error, run };
 }
 
-const primaryButton = "min-h-11 rounded-lg px-3 text-sm font-semibold text-white disabled:opacity-50";
-const linkButton = "min-h-11 rounded-lg px-3 text-sm font-semibold underline disabled:opacity-50";
+const primaryButton = "btn-primary min-h-11 px-3 py-2 text-xs font-black uppercase";
+const secondaryButton = "btn-secondary min-h-11 px-3 py-2 text-xs font-black uppercase";
+const dangerButton = "btn-danger min-h-11 px-3 py-2 text-xs font-black uppercase";
 
 // ---------------------------------------------------------------------------
 // DELIVERABLE_CARD — CMS-17 (staff đăng) / CMS-18 (khách chấp nhận)
@@ -84,54 +85,54 @@ export function DeliverableCard({ message, ctx }: { message: CommissionMessage; 
   const accepted = isLatest && info.status === "COMPLETED";
 
   return (
-    <div className="w-72 max-w-full overflow-hidden rounded-xl border-2 border-[#155e59] bg-white">
-      <p className="flex items-center justify-between gap-2 bg-[#155e59] px-3 py-1.5 text-sm font-bold text-white">
+    <div className="w-72 max-w-full overflow-hidden border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
+      <p className="flex items-center justify-between gap-2 border-b-2 border-black bg-primary px-3 py-2 text-xs font-black uppercase text-black">
         <span>Bản xem trước{version !== undefined ? ` · v${version}` : ""}</span>
-        {accepted && <span className="rounded-full bg-white/20 px-2 text-xs font-semibold">Đã chấp nhận</span>}
-        {!isLatest && <span className="rounded-full bg-white/20 px-2 text-xs font-semibold">Bản cũ</span>}
+        {accepted && <span className="border border-black bg-white px-2 py-0.5 text-[10px] font-black uppercase text-primary-ink">Đã chấp nhận</span>}
+        {!isLatest && <span className="border border-black bg-white/80 px-2 py-0.5 text-[10px] font-black uppercase text-black">Bản cũ</span>}
       </p>
       {image && (
-        <a href={image} target="_blank" rel="noreferrer">
+        <a href={image} target="_blank" rel="noreferrer" className="block border-b-2 border-black bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={image} alt={`Bản xem trước${version !== undefined ? ` v${version}` : ""}`} loading="lazy" decoding="async"
             className="h-60 w-full bg-black object-contain [image-rendering:pixelated]" />
         </a>
       )}
-      {message.content && <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm">{message.content}</p>}
+      {message.content && <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm text-text-main">{message.content}</p>}
       {(revisions || (awaitingCustomer && autoComplete)) && (
-        <dl className="space-y-0.5 border-t border-[#cfe3d0] px-3 py-2 text-xs text-[#526159]">
-          {revisions && <div className="flex justify-between gap-2"><dt>Lượt chỉnh sửa đã dùng</dt><dd className="font-semibold">{revisions}</dd></div>}
-          {awaitingCustomer && autoComplete && <div className="flex justify-between gap-2"><dt>Tự hoàn thành lúc</dt><dd className="font-semibold">{autoComplete}</dd></div>}
+        <dl className="space-y-1 border-t-2 border-dashed border-black px-3 py-2 text-xs text-text-muted">
+          {revisions && <div className="flex justify-between gap-2"><dt>Lượt chỉnh sửa đã dùng</dt><dd className="font-bold text-black">{revisions}</dd></div>}
+          {awaitingCustomer && autoComplete && <div className="flex justify-between gap-2"><dt>Tự hoàn thành lúc</dt><dd className="font-bold text-black">{autoComplete}</dd></div>}
         </dl>
       )}
 
       {awaitingCustomer && viewer === "CUSTOMER" && (
-        <div className="space-y-2 border-t border-[#cfe3d0] px-3 py-3">
-          {action.error && <p role="alert" className="text-sm text-red-700">{action.error}</p>}
+        <div className="space-y-2.5 border-t-2 border-black bg-background px-3 py-3">
+          {action.error && <p role="alert" className="border border-red-600 bg-red-50 p-2 text-xs font-bold text-red-700">{action.error}</p>}
           {action.confirming === "approve" ? (
             <>
-              <p className="text-sm">Chấp nhận bản này sẽ <strong>hoàn tất commission</strong> và không thể yêu cầu chỉnh sửa thêm.</p>
+              <p className="text-xs font-medium text-text-main">Chấp nhận bản này sẽ <strong>hoàn tất yêu cầu</strong> và không thể yêu cầu chỉnh sửa thêm.</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={action.busy} className={`${primaryButton} bg-[#155e59] hover:bg-[#0e4b47]`}
+                <button type="button" disabled={action.busy} className={primaryButton}
                   onClick={() => void action.run(() => approveDeliverableCard(info.commissionId), "Không chấp nhận được bản xem trước.",
                     ({ data }) => onChanged(data?.systemMessage ? [data.systemMessage] : undefined))}>
                   {action.busy ? "Đang xử lý…" : "Xác nhận hoàn tất"}
                 </button>
-                <button type="button" disabled={action.busy} className={`${linkButton} text-[#155e59]`} onClick={() => action.setConfirming(null)}>Hủy</button>
+                <button type="button" disabled={action.busy} className={secondaryButton} onClick={() => action.setConfirming(null)}>Hủy</button>
               </div>
             </>
           ) : (
             <>
-              <button type="button" className={`${primaryButton} w-full bg-[#155e59] hover:bg-[#0e4b47]`} onClick={() => action.setConfirming("approve")}>
+              <button type="button" className={`${primaryButton} w-full`} onClick={() => action.setConfirming("approve")}>
                 Chấp nhận bản này
               </button>
-              <p className="text-xs text-[#526159]">Cần chỉnh sửa? Nhắn mô tả cho nhân viên, họ sẽ gửi thẻ yêu cầu chỉnh sửa để bạn xác nhận.</p>
+              <p className="text-xs text-text-muted">Cần chỉnh sửa? Nhắn mô tả cho nhân viên, họ sẽ gửi thẻ yêu cầu chỉnh sửa để bạn xác nhận.</p>
             </>
           )}
         </div>
       )}
       {awaitingCustomer && viewer === "STAFF" && (
-        <p className="border-t border-[#cfe3d0] px-3 py-2 text-xs text-[#526159]">Đang chờ khách chấp nhận hoặc yêu cầu chỉnh sửa.</p>
+        <p className="border-t-2 border-black bg-background px-3 py-2 text-xs font-semibold text-text-muted">Đang chờ khách chấp nhận hoặc yêu cầu chỉnh sửa.</p>
       )}
     </div>
   );
@@ -171,30 +172,30 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
     : `${formatPrice(fee)}${typeof meta?.feePercentage === "number" ? ` · ${meta.feePercentage}% giá ban đầu` : ""}`;
 
   return (
-    <div className="w-72 max-w-full overflow-hidden rounded-xl border-2 border-amber-500 bg-amber-50">
-      <p className="flex items-center justify-between gap-2 bg-amber-500 px-3 py-1.5 text-sm font-bold text-white">
+    <div className="w-72 max-w-full overflow-hidden border-2 border-black bg-amber-50 shadow-[4px_4px_0_0_#000]">
+      <p className="flex items-center justify-between gap-2 border-b-2 border-black bg-amber-300 px-3 py-2 text-xs font-black uppercase text-black">
         <span>Yêu cầu chỉnh sửa</span>
-        <span className="rounded-full bg-white/25 px-2 text-xs font-semibold">{badge}</span>
+        <span className="border border-black bg-white px-2 py-0.5 text-[10px] font-black uppercase text-black">{badge}</span>
       </p>
-      {brief && <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm">{brief}</p>}
-      <dl className="border-t border-amber-200 px-3 py-2 text-xs text-amber-950">
-        <div className="flex justify-between gap-2"><dt>Chi phí</dt><dd className="text-right font-semibold">{feeText}</dd></div>
-        {wasCancelled && cardStatus === "PENDING" && <p className="mt-1 text-amber-800">Lần thanh toán trước đã bị hủy.</p>}
+      {brief && <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm text-text-main">{brief}</p>}
+      <dl className="border-t-2 border-dashed border-black px-3 py-2 text-xs text-amber-950">
+        <div className="flex justify-between gap-2"><dt>Chi phí</dt><dd className="text-right font-black tabular-nums">{feeText}</dd></div>
+        {wasCancelled && cardStatus === "PENDING" && <p className="mt-1 font-semibold text-amber-900">Lần thanh toán trước đã bị hủy.</p>}
       </dl>
 
       {viewer === "CUSTOMER" && (canConfirm || awaitingPayment) && (
-        <div className="space-y-2 border-t border-amber-200 px-3 py-3">
-          {action.error && <p role="alert" className="text-sm text-red-700">{action.error}</p>}
+        <div className="space-y-2.5 border-t-2 border-black bg-white px-3 py-3">
+          {action.error && <p role="alert" className="border border-red-600 bg-red-50 p-2 text-xs font-bold text-red-700">{action.error}</p>}
 
           {canConfirm && (action.confirming === "confirm" ? (
             <>
-              <p className="text-sm">
+              <p className="text-xs font-medium text-text-main">
                 {usesFreeQuota
-                  ? "Yêu cầu dùng 1 lượt miễn phí. Designer sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
-                  : `Bạn sẽ được chuyển tới trang thanh toán ${formatPrice(fee)}. Sau thanh toán, designer sẽ xác nhận thời gian thực hiện.`}
+                  ? "Yêu cầu dùng 1 lượt miễn phí. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
+                  : `Bạn sẽ được chuyển tới trang thanh toán ${formatPrice(fee)}. Sau thanh toán, họa sĩ sẽ xác nhận thời gian thực hiện.`}
               </p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={action.busy} className={`${primaryButton} bg-amber-600 hover:bg-amber-700`}
+                <button type="button" disabled={action.busy} className={primaryButton}
                   onClick={() => void action.run(() => confirmRevisionCard(info.commissionId, message.messageId), "Không xác nhận được yêu cầu chỉnh sửa.",
                     ({ data }) => {
                       onChanged();
@@ -202,38 +203,38 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
                     })}>
                   {action.busy ? "Đang xử lý…" : "Đồng ý"}
                 </button>
-                <button type="button" disabled={action.busy} className={`${linkButton} text-amber-900`} onClick={() => action.setConfirming(null)}>Hủy</button>
+                <button type="button" disabled={action.busy} className={secondaryButton} onClick={() => action.setConfirming(null)}>Hủy</button>
               </div>
             </>
           ) : (
-            <button type="button" className={`${primaryButton} w-full bg-amber-600 hover:bg-amber-700`} onClick={() => action.setConfirming("confirm")}>
+            <button type="button" className={`${primaryButton} w-full`} onClick={() => action.setConfirming("confirm")}>
               {usesFreeQuota ? "Xác nhận chỉnh sửa (miễn phí)" : `Xác nhận & thanh toán ${formatPrice(fee)}`}
             </button>
           ))}
 
           {awaitingPayment && (action.confirming === "cancel" ? (
             <>
-              <p className="text-sm">Hủy thanh toán sẽ đưa commission về trạng thái chờ bạn phản hồi bản xem trước. Bạn có thể xác nhận lại thẻ này sau.</p>
+              <p className="text-xs font-medium text-text-main">Hủy thanh toán sẽ đưa yêu cầu về trạng thái chờ bạn phản hồi bản xem trước. Bạn có thể xác nhận lại thẻ này sau.</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={action.busy} className={`${primaryButton} bg-red-700 hover:bg-red-800`}
+                <button type="button" disabled={action.busy} className={dangerButton}
                   onClick={() => void action.run(() => cancelRevisionCheckout(info.commissionId), "Không hủy được thanh toán.", () => onChanged())}>
                   {action.busy ? "Đang hủy…" : "Hủy thanh toán"}
                 </button>
-                <button type="button" disabled={action.busy} className={`${linkButton} text-amber-900`} onClick={() => action.setConfirming(null)}>Giữ lại</button>
+                <button type="button" disabled={action.busy} className={secondaryButton} onClick={() => action.setConfirming(null)}>Giữ lại</button>
               </div>
             </>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Link href={paymentHref} className={`${primaryButton} inline-flex items-center bg-amber-600 hover:bg-amber-700`}>
+              <Link href={paymentHref} className={`${primaryButton} inline-flex items-center`}>
                 Thanh toán {formatPrice(fee)}
               </Link>
-              <button type="button" className={`${linkButton} text-amber-900`} onClick={() => action.setConfirming("cancel")}>Hủy yêu cầu</button>
+              <button type="button" className={secondaryButton} onClick={() => action.setConfirming("cancel")}>Hủy yêu cầu</button>
             </div>
           ))}
         </div>
       )}
       {viewer === "STAFF" && canConfirm && (
-        <p className="border-t border-amber-200 px-3 py-2 text-xs text-amber-900">Đang chờ khách xác nhận.</p>
+        <p className="border-t-2 border-black bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-950">Đang chờ khách xác nhận.</p>
       )}
     </div>
   );

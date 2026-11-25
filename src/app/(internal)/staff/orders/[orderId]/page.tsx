@@ -44,6 +44,7 @@ import {
   type LinkOrderFulfillmentDeviceResponse,
   type UpdateStaffDeliveryAddressRequest,
 } from "@/lib/api/orders";
+import { fetchAllPages } from "@/lib/api/paging";
 
 function getOrderSteps(orderKind: OrderKind, status: string) {
   if (orderKind === "DIGITAL") {
@@ -310,20 +311,24 @@ export default function OrderDetailPage({
         const [inStockEntries, allModelEntries] = await Promise.all([
           Promise.all(
             uniqueModelIds.map(async (modelId) => {
-              const res = await fetchLedInstances({
-                page: 0,
-                size: 100,
-                modelId,
-                status: LedInstanceFilterRequest.status.IN_STOCK,
-              }).catch(() => ({ items: [] as LedInstanceItem[] }));
-              return [modelId, res.items] as const;
+              const items = await fetchAllPages(async (page) => {
+                const res = await fetchLedInstances({
+                  page,
+                  size: 100,
+                  modelId,
+                  status: LedInstanceFilterRequest.status.IN_STOCK,
+                });
+                return { items: res.items, totalPages: res.meta.totalPages };
+              }).catch(() => [] as LedInstanceItem[]);
+              return [modelId, items] as const;
             }),
           ),
           Promise.all(
             uniqueModelIds.map((modelId) =>
-              fetchLedInstances({ page: 0, size: 100, modelId })
-                .then((res) => res.items)
-                .catch(() => [] as LedInstanceItem[]),
+              fetchAllPages(async (page) => {
+                const res = await fetchLedInstances({ page, size: 100, modelId });
+                return { items: res.items, totalPages: res.meta.totalPages };
+              }).catch(() => [] as LedInstanceItem[]),
             ),
           ),
         ]);

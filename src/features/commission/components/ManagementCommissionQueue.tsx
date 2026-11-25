@@ -15,6 +15,7 @@ import CommissionRequestRejection from "./CommissionRequestRejection";
 import CommissionReferenceImages from "./CommissionReferenceImages";
 import Link from "next/link";
 import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
+import { scheduleVisiblePoll } from "@/lib/polling";
 
 const labels: Record<string, string> = {
   PENDING_REVIEW: "Chờ duyệt", PENDING_PAYMENT: "Chờ thanh toán", PAID: "Đã thanh toán · Chờ phân công",
@@ -46,7 +47,7 @@ export default function ManagementCommissionQueue({ assigned = false }: { assign
 
   useEffect(() => {
     let closed = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let cancelPoll: (() => void) | undefined;
     let query: ReturnType<typeof getCommissionQueue>;
     function load() {
       query = getCommissionQueue(page, assigned);
@@ -57,13 +58,13 @@ export default function ManagementCommissionQueue({ assigned = false }: { assign
       }).catch((failure) => {
         if (!closed) setError(getApiErrorMessage(failure, "Không tải được danh sách Commission."));
       }).finally(() => {
-        if (!closed) timer = setTimeout(load, 10000);
+        if (!closed) cancelPoll = scheduleVisiblePoll(load, 10000);
       });
     }
     load();
     return () => {
       closed = true;
-      clearTimeout(timer);
+      cancelPoll?.();
       query?.cancel();
     };
   }, [assigned, page, revision]);

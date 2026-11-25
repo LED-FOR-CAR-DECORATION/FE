@@ -3,13 +3,17 @@ import { compositeDocument, normalizeHex, type PixelDocumentState } from "./doma
 export interface ColorSwatch {
   name: string;
   hex: string;
+  custom?: boolean;
 }
 
 export interface PalettePreset {
   id: string;
   label: string;
   swatches: ColorSwatch[];
+  custom?: boolean;
 }
+
+const CUSTOM_PRESETS_STORAGE_KEY = "designer_custom_palette_presets";
 
 export const PALETTE_PRESETS: PalettePreset[] = [
   {
@@ -132,4 +136,69 @@ export function extractPaletteFromFrames(
     .sort((a, b) => b[1] - a[1])
     .slice(0, maxColors)
     .map(([hex]) => ({ name: hex, hex }));
+}
+
+function sanitizeSwatchList(raw: unknown): ColorSwatch[] {
+  if (!Array.isArray(raw)) return [];
+  const cleaned: ColorSwatch[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof (item as ColorSwatch).hex !== "string") continue;
+    const hex = normalizeHex((item as ColorSwatch).hex);
+    if (seen.has(hex)) continue;
+    seen.add(hex);
+    const rawName = (item as ColorSwatch).name;
+    cleaned.push({
+      name: typeof rawName === "string" && rawName.trim() ? rawName.trim() : hex,
+      hex,
+    });
+  }
+  return cleaned;
+}
+
+export function loadCustomPalettePresets(): PalettePreset[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_PRESETS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const valid: PalettePreset[] = [];
+    for (const entry of parsed) {
+      if (!entry || typeof entry.id !== "string" || typeof entry.label !== "string") {
+        continue;
+      }
+      const label = entry.label.trim();
+      const swatches = sanitizeSwatchList(entry.swatches);
+      if (!label || swatches.length === 0) continue;
+      valid.push({
+        id: entry.id,
+        label,
+        swatches,
+        custom: true,
+      });
+    }
+    return valid;
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomPalettePresets(presets: PalettePreset[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      CUSTOM_PRESETS_STORAGE_KEY,
+      JSON.stringify(
+        presets.map((p) => ({
+          id: p.id,
+          label: p.label,
+          swatches: sanitizeSwatchList(p.swatches),
+          custom: true,
+        })),
+      ),
+    );
+  } catch {
+    // Ignore quota errors
+  }
 }

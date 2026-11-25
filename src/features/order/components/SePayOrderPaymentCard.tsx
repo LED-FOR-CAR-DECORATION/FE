@@ -13,6 +13,7 @@ import {
   QrCode,
   RefreshCw,
   ShieldCheck,
+  Zap,
 } from "lucide-react";
 import type { PaymentSessionResponse } from "@/api_client";
 import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
@@ -20,9 +21,11 @@ import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import { fetchOrderDetail } from "@/lib/api/orders";
 import { fetchPaymentSession, mockPaymentSuccess } from "@/lib/api/payments";
 import { formatPrice } from "@/lib/currency";
+import { isPageVisible } from "@/lib/polling";
 
 type SePayOrderPaymentCardProps = {
   onPaymentSuccess?: (session: PaymentSessionResponse) => void;
+  onAmountLoaded?: (amount: number) => void;
 } & (
   | { orderId: string; initialPaymentCode?: string; redirectOnSuccess?: boolean; commissionId?: never }
   | { commissionId: number; initialPaymentCode: string; orderId?: never; redirectOnSuccess?: never }
@@ -47,6 +50,7 @@ export default function SePayOrderPaymentCard({
   initialPaymentCode,
   redirectOnSuccess = orderId !== undefined,
   onPaymentSuccess,
+  onAmountLoaded,
 }: SePayOrderPaymentCardProps) {
   const router = useRouter();
   const [resolvedCode, setResolvedCode] = useState(initialPaymentCode?.trim() || "");
@@ -64,6 +68,15 @@ export default function SePayOrderPaymentCard({
   const handledSuccessRef = useRef(false);
   const onPaymentSuccessRef = useRef(onPaymentSuccess);
   onPaymentSuccessRef.current = onPaymentSuccess;
+  const onAmountLoadedRef = useRef(onAmountLoaded);
+  onAmountLoadedRef.current = onAmountLoaded;
+
+  useEffect(() => {
+    const rawAmount = Number(session?.amount);
+    if (Number.isFinite(rawAmount) && rawAmount >= 0) {
+      onAmountLoadedRef.current?.(rawAmount);
+    }
+  }, [session?.amount]);
 
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) {
@@ -176,6 +189,7 @@ export default function SePayOrderPaymentCard({
 
         stopPolling();
         pollIntervalRef.current = setInterval(async () => {
+          if (!isPageVisible()) return;
           try {
             const polled = await fetchPaymentSession(code);
             if (cancelled) return;
@@ -252,28 +266,25 @@ export default function SePayOrderPaymentCard({
     return (
       <section
         id="sepay-payment"
-        className="neo-box-no-hover relative overflow-hidden border-2 border-emerald-600 bg-emerald-50 p-6 text-center"
+        className="neo-box-no-hover relative overflow-hidden bg-white p-6 text-center"
       >
-        <div className="mx-auto mb-4 relative flex h-20 w-20 items-center justify-center">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
-          <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full border-2 border-emerald-700 bg-emerald-500 text-white shadow-md">
-            <CheckCircle2 size={36} />
-          </span>
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center border-2 border-black bg-primary text-black shadow-[3px_3px_0_0_#000]">
+          <CheckCircle2 size={32} />
         </div>
-        <h3 className="text-xl font-black uppercase text-emerald-900">
+        <h3 className="text-xl font-black uppercase text-black">
           Thanh toán thành công!
         </h3>
-        <p className="mt-2 text-sm font-semibold text-emerald-800">
+        <p className="mt-2 text-sm font-semibold text-text-main">
           Hệ thống đã xác nhận giao dịch{" "}
-          <span className="font-mono font-black">{session?.paymentCode || resolvedCode}</span>{" "}
+          <span className="font-mono font-black text-black">{session?.paymentCode || resolvedCode}</span>{" "}
           với số tiền{" "}
-          <span className="font-black">
+          <span className="font-black text-primary-ink">
             {formatPrice(Number(session?.amount ?? 0))}
           </span>
           .
         </p>
         {redirectOnSuccess && (
-          <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-white px-3 py-1 text-xs font-bold text-emerald-800">
+          <p className="mt-4 inline-flex items-center gap-2 border-2 border-black bg-primary/15 px-3 py-1.5 text-xs font-black uppercase text-primary-ink">
             <Loader2 size={13} className="animate-spin" />
             Đang chuyển tới trang xác nhận đơn hàng...
           </p>
@@ -283,15 +294,15 @@ export default function SePayOrderPaymentCard({
   }
 
   return (
-    <section id="sepay-payment" className="neo-box-no-hover bg-white p-6">
+    <section id="sepay-payment" className="neo-box-no-hover bg-white p-5 sm:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-3">
         <div className="flex items-center gap-2">
-          <QrCode size={18} className="text-primary-dark" />
-          <h2 className="font-black uppercase">Thanh toán chuyển khoản SePay VietQR</h2>
+          <QrCode size={18} className="shrink-0 text-primary-ink" />
+          <h2 className="text-base font-black uppercase tracking-tight">Thanh toán chuyển khoản SePay VietQR</h2>
         </div>
         {session?.status === "PENDING" && !isExpired && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-600 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-600" />
+          <span className="inline-flex items-center gap-1.5 border-2 border-black bg-primary/15 px-2.5 py-1 text-[11px] font-black uppercase text-primary-ink">
+            <span className="h-2 w-2 animate-pulse bg-primary-ink" aria-hidden="true" />
             Đang tự động kiểm tra (3s)
           </span>
         )}
@@ -299,11 +310,11 @@ export default function SePayOrderPaymentCard({
 
       {loading ? (
         <div className="flex flex-col items-center justify-center gap-3 py-10 text-sm font-bold text-text-muted">
-          <Loader2 size={28} className="animate-spin text-primary-dark" />
+          <Loader2 size={28} className="animate-spin text-primary-ink" />
           <p>Đang khởi tạo mã QR thanh toán VietQR...</p>
         </div>
       ) : error && !session ? (
-        <div className="border-2 border-red-500 bg-red-50 p-4 text-sm text-red-800">
+        <div className="border-2 border-red-600 bg-red-50 p-4 text-sm text-red-800">
           <div className="flex items-start gap-2 font-bold">
             <AlertCircle size={18} className="mt-0.5 shrink-0" />
             <p>{error}</p>
@@ -311,29 +322,29 @@ export default function SePayOrderPaymentCard({
           <button
             type="button"
             onClick={() => void loadSession(false)}
-            className="btn-secondary mt-3 inline-flex items-center gap-1.5 text-xs"
+            className="btn-secondary mt-3 inline-flex cursor-pointer items-center gap-1.5 text-xs font-black uppercase"
           >
             <RefreshCw size={13} /> Thử tải lại mã thanh toán
           </button>
         </div>
       ) : session ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-5">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
           {/* QR Box */}
-          <div className="flex flex-col items-center justify-center rounded-sm border-2 border-black bg-emerald-50/40 p-4 md:col-span-2">
+          <div className="flex flex-col items-center justify-center border-2 border-black bg-background p-4 md:col-span-5">
             {session.qrUrl && !isExpired && !isCancelledOrFailed ? (
-              <div className="overflow-hidden rounded-sm border-2 border-black bg-white p-2 shadow-sm">
+              <div className="overflow-hidden border-2 border-black bg-white p-2 shadow-[3px_3px_0_0_#000]">
                 <Image
                   src={session.qrUrl}
                   alt={`Mã QR thanh toán ${commissionId === undefined ? `đơn hàng #${orderId}` : `Commission #${commissionId}`}`}
                   width={240}
                   height={240}
                   unoptimized
-                  className="h-56 w-56 object-contain"
+                  className="h-52 w-52 object-contain"
                 />
               </div>
             ) : (
-              <div className="flex h-56 w-56 flex-col items-center justify-center border-2 border-dashed border-gray-400 bg-gray-100 p-4 text-center text-xs font-bold text-gray-600">
-                <AlertCircle size={28} className="mb-2 text-amber-600" />
+              <div className="flex h-52 w-52 flex-col items-center justify-center border-2 border-dashed border-black bg-gray-100 p-4 text-center text-xs font-bold text-text-muted">
+                <AlertCircle size={28} className="mb-2 text-amber-700" />
                 {isExpired
                   ? "Phiên thanh toán đã hết hạn."
                   : isCancelledOrFailed
@@ -344,10 +355,11 @@ export default function SePayOrderPaymentCard({
 
             {countdown && session.status === "PENDING" && (
               <div
-                className={`mt-3 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-xs font-black ${isExpired
-                    ? "border-red-400 bg-red-100 text-red-800"
-                    : "border-amber-400 bg-amber-100 text-amber-900"
-                  }`}
+                className={`mt-3 inline-flex items-center gap-1.5 border-2 border-black px-2.5 py-1 text-xs font-black tabular-nums ${
+                  isExpired
+                    ? "bg-red-100 text-red-800"
+                    : "bg-amber-300 text-black"
+                }`}
               >
                 <Clock size={13} />
                 {isExpired ? "Đã hết hạn thanh toán" : `Hết hạn sau: ${countdown}`}
@@ -356,26 +368,26 @@ export default function SePayOrderPaymentCard({
           </div>
 
           {/* Bank Details */}
-          <div className="flex flex-col justify-between gap-4 md:col-span-3">
+          <div className="flex flex-col justify-between gap-4 md:col-span-7">
             <div className="space-y-2.5 text-sm">
-              <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-2">
-                <span className="text-text-muted">Ngân hàng thụ hưởng</span>
-                <span className="font-black">{session.bankName}</span>
+              <div className="flex items-center justify-between gap-2 border-b-2 border-dashed border-black/20 pb-2">
+                <span className="font-semibold text-text-muted">Ngân hàng thụ hưởng</span>
+                <span className="font-black text-black">{session.bankName}</span>
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-2">
-                <span className="text-text-muted">Chủ tài khoản</span>
-                <span className="font-black uppercase">{session.accountName}</span>
+              <div className="flex items-center justify-between gap-2 border-b-2 border-dashed border-black/20 pb-2">
+                <span className="font-semibold text-text-muted">Chủ tài khoản</span>
+                <span className="font-black uppercase text-black">{session.accountName}</span>
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-2">
-                <span className="text-text-muted">Số tài khoản</span>
+              <div className="flex items-center justify-between gap-2 border-b-2 border-dashed border-black/20 pb-2">
+                <span className="font-semibold text-text-muted">Số tài khoản</span>
                 <div className="flex items-center gap-2">
                   <span className="font-mono font-black text-black">{session.accountNumber}</span>
                   <button
                     type="button"
                     onClick={() => void handleCopy("accountNumber", session.accountNumber)}
-                    className="inline-flex items-center gap-1 rounded border border-black px-2 py-0.5 text-[11px] font-bold hover:bg-primary/20"
+                    className="inline-flex cursor-pointer items-center gap-1 border-2 border-black bg-white px-2 py-0.5 text-[11px] font-black uppercase transition-colors hover:bg-primary/20"
                   >
                     {copiedField === "accountNumber" ? <Check size={11} /> : <Copy size={11} />}
                     {copiedField === "accountNumber" ? "Đã chép" : "Chép"}
@@ -383,16 +395,16 @@ export default function SePayOrderPaymentCard({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-2">
-                <span className="text-text-muted">Số tiền cần chuyển</span>
+              <div className="flex items-center justify-between gap-2 border-b-2 border-dashed border-black/20 pb-2">
+                <span className="font-semibold text-text-muted">Số tiền cần chuyển</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-black text-primary-dark">
+                  <span className="text-base font-black tabular-nums text-primary-ink">
                     {formatPrice(Number(session.amount ?? 0))}
                   </span>
                   <button
                     type="button"
                     onClick={() => void handleCopy("amount", String(Math.round(Number(session.amount ?? 0))))}
-                    className="inline-flex items-center gap-1 rounded border border-black px-2 py-0.5 text-[11px] font-bold hover:bg-primary/20"
+                    className="inline-flex cursor-pointer items-center gap-1 border-2 border-black bg-white px-2 py-0.5 text-[11px] font-black uppercase transition-colors hover:bg-primary/20"
                   >
                     {copiedField === "amount" ? <Check size={11} /> : <Copy size={11} />}
                     {copiedField === "amount" ? "Đã chép" : "Chép"}
@@ -400,29 +412,29 @@ export default function SePayOrderPaymentCard({
                 </div>
               </div>
 
-              <div className="rounded-sm border-2 border-amber-500 bg-amber-50 p-3">
+              <div className="border-2 border-black bg-amber-100 p-3 shadow-[3px_3px_0_0_#000]">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold uppercase text-amber-900">
+                  <span className="text-xs font-black uppercase text-black">
                     Nội dung chuyển khoản (Bắt buộc)
                   </span>
                   <button
                     type="button"
                     onClick={() => void handleCopy("paymentCode", session.paymentCode)}
-                    className="inline-flex items-center gap-1 rounded border border-amber-700 bg-white px-2 py-0.5 text-[11px] font-black text-amber-900 hover:bg-amber-100"
+                    className="inline-flex cursor-pointer items-center gap-1 border-2 border-black bg-white px-2 py-0.5 text-[11px] font-black uppercase text-black transition-colors hover:bg-amber-300"
                   >
                     {copiedField === "paymentCode" ? <Check size={11} /> : <Copy size={11} />}
                     {copiedField === "paymentCode" ? "Đã chép" : "Chép mã"}
                   </button>
                 </div>
-                <p className="mt-1 font-mono text-base font-black tracking-wider text-black">
+                <p className="mt-1.5 font-mono text-base font-black tracking-wider text-black">
                   {session.paymentCode}
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-muted">
-                <ShieldCheck size={14} className="text-emerald-700" />
+                <ShieldCheck size={14} className="shrink-0 text-primary-ink" />
                 Mở app ngân hàng quét mã QR, hệ thống tự xác nhận sau vài giây.
               </p>
               <div className="flex flex-wrap items-center gap-2">
@@ -432,13 +444,13 @@ export default function SePayOrderPaymentCard({
                     type="button"
                     disabled={isMocking || refreshing}
                     onClick={() => void handleMockSuccess()}
-                    className="inline-flex items-center gap-1.5 rounded-sm border-2 border-emerald-600 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 shadow-sm"
+                    className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 border-2 border-black bg-primary px-3 py-1.5 text-xs font-black uppercase text-black shadow-[2px_2px_0_0_#000] transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
                     title="Dành cho Dev/Test: Xác nhận thanh toán mô phỏng"
                   >
                     {isMocking ? (
-                      <Loader2 size={12} className="animate-spin text-emerald-700" />
+                      <Loader2 size={12} className="animate-spin text-black" />
                     ) : (
-                      <span className="text-emerald-600 font-bold">⚡</span>
+                      <Zap size={12} className="text-black" />
                     )}
                     Giả lập thanh toán
                   </button>
@@ -447,7 +459,7 @@ export default function SePayOrderPaymentCard({
                   type="button"
                   disabled={refreshing || isMocking}
                   onClick={() => void loadSession(true)}
-                  className="inline-flex items-center gap-1.5 rounded-sm border border-black px-3 py-1.5 text-xs font-bold hover:bg-primary/20 disabled:opacity-60"
+                  className="btn-secondary inline-flex min-h-9 cursor-pointer items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
                   Kiểm tra ngay
@@ -455,7 +467,7 @@ export default function SePayOrderPaymentCard({
               </div>
             </div>
             {error && (
-              <p className="rounded-sm border border-red-400 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+              <p role="alert" className="border-2 border-red-600 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
                 {error}
               </p>
             )}

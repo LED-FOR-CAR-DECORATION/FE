@@ -20,6 +20,14 @@ export type DesignerCharacterItem = {
      */
     description?: string;
     /**
+     * Character usage type (STORE or COMMISSION)
+     */
+    characterType?: 'STORE' | 'COMMISSION';
+    /**
+     * Bound commission request ID if applicable
+     */
+    commissionId?: number | null;
+    /**
      * Total number of graphic versions created under this character
      */
     totalVersions?: number;

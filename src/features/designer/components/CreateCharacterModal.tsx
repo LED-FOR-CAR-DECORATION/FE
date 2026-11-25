@@ -7,21 +7,28 @@ import {
   useDesignerCharacters,
   type MatrixSize,
 } from "../context/DesignerCharactersContext";
-import { formatDesignerApiError, type DesignerCharacterItem } from "@/lib/api/designerCharacters";
+import { formatDesignerApiError, type CharacterType, type DesignerCharacterItem } from "@/lib/api/designerCharacters";
 
 interface CreateCharacterModalProps {
   onClose: () => void;
   onCreated: (character: DesignerCharacterItem) => void;
+  defaultCharacterType?: CharacterType;
+  lockCharacterType?: boolean;
+  commissionId?: number;
 }
 
 export default function CreateCharacterModal({
   onClose,
   onCreated,
+  defaultCharacterType = "STORE",
+  lockCharacterType = false,
+  commissionId,
 }: CreateCharacterModalProps) {
   const { createCharacter } = useDesignerCharacters();
   const [characterName, setCharacterName] = useState("");
   const [description, setDescription] = useState("");
   const [matrixSize, setMatrixSize] = useState<MatrixSize>("32x32");
+  const [characterType, setCharacterType] = useState<CharacterType>(defaultCharacterType);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +48,8 @@ export default function CreateCharacterModal({
         characterName: trimmedName,
         description: description.trim() || undefined,
         matrixSize,
+        characterType,
+        commissionId: characterType === "COMMISSION" ? commissionId : undefined,
       });
       onCreated(created);
     } catch (err) {
@@ -116,6 +125,49 @@ export default function CreateCharacterModal({
             placeholder="Phong cách pixel art, chủ đề, gợi ý hiển thị trên LED..."
             className="w-full rounded-lg border border-studio-line bg-white px-3 py-2 outline-none focus:border-studio-focus"
           />
+        </div>
+
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 font-bold text-studio-ink">
+            Loại nhân vật (Mục đích sử dụng) <span className="text-red-500">*</span>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                {
+                  value: "STORE" as CharacterType,
+                  title: "Bán trên Store",
+                  desc: "Có thể đăng bán lên cửa hàng công khai",
+                },
+                {
+                  value: "COMMISSION" as CharacterType,
+                  title: "Làm Commission",
+                  desc: "Chỉ dùng nộp cho đơn đặt hàng Commission",
+                },
+              ]
+            ).map((opt) => {
+              const active = characterType === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={lockCharacterType || isSubmitting}
+                  onClick={() => setCharacterType(opt.value)}
+                  className={`rounded-lg border px-3 py-2 text-left transition ${
+                    active
+                      ? "border-studio-accent bg-studio-accent/10 text-studio-ink ring-1 ring-studio-accent"
+                      : "border-studio-line bg-white text-slate-600 hover:bg-slate-50"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <div className="text-xs font-bold">{opt.title}</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-slate-500">{opt.desc}</div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-amber-700">
+            <Lock size={12} /> Loại nhân vật cố định sau khi tạo: chỉ nhân vật Store mới được đăng bán lên cửa hàng.
+          </p>
         </div>
 
         <div>

@@ -183,7 +183,15 @@ export default function InternalShell({ children }: { children: React.ReactNode 
           </button>
         </nav>
 
-        <main className={`manager-main min-w-0 flex-1 overflow-y-auto ${isStudio ? "p-0" : "p-6"}`}>{children}</main>
+        <main
+          className={`manager-main min-w-0 flex-1 ${
+            isStudio
+              ? "flex flex-col overflow-y-auto p-0 lg:overflow-hidden"
+              : "overflow-y-auto p-6"
+          }`}
+        >
+          {children}
+        </main>
       </div>
 
       <footer className="ps-statusbar flex h-6 shrink-0 items-center gap-4 px-3 text-[11px]">

@@ -47,7 +47,7 @@ function ResultContent() {
               <Link href={orderId ? `/profile/orders/${orderId}` : "/profile/orders"} className="btn-primary">
                 Xem chi tiết đơn hàng
               </Link>
-              <Link href="/" className="btn-secondary">
+              <Link href="/products" className="btn-secondary">
                 Tiếp tục mua sắm
               </Link>
             </div>

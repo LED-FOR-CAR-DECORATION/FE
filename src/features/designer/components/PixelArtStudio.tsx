@@ -4,23 +4,30 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Circle,
   ClipboardPaste,
   Copy,
+  CopyPlus,
   Download,
   Eraser,
   FlipHorizontal2,
   FlipVertical2,
   ImagePlus,
+  Layers,
   LayoutGrid,
   Loader2,
   Minus,
   Move,
   PaintBucket,
+  Pause,
   Pen,
   Pipette,
+  Play,
   Plus,
   Redo2,
+  RotateCcw,
   Save,
   Scan,
   Scissors,
@@ -38,9 +45,25 @@ import {
 import {
   createCharacterVersion,
   createDesignerCharacter,
+  deleteCharacterVersion,
   formatDesignerApiError,
+  isStoreCharacterType,
+  updateDesignerCharacter,
   uploadDesignerAssetFile,
+  type CharacterType,
 } from "@/lib/api/designerCharacters";
+import {
+  clearStudioDraft,
+  loadStudioDraft,
+  loadVersionFramesCache,
+  saveStudioDraft,
+  saveVersionFramesCache,
+} from "../studio-draft";
+import {
+  decodeGifBytesToFrames,
+  encodeFramesToGifBlob,
+  encodeFramesToGifDataUrl,
+} from "../domain/gifCodec";
 import { apiCreateStoreProduct } from "@/lib/api/products";
 import { CreateStoreProductRequest } from "@/api_client/models/CreateStoreProductRequest";
 import { saveCreatedStoreProduct } from "@/features/store-listing/services/store-listing.service";
@@ -109,6 +132,14 @@ export interface PixelArtStudioProps {
   initialArtworkUrl?: string | null;
   /** Data URL dự phòng cục bộ nếu URL ảnh từ CDN bị chặn CORS khi nạp lên Canvas */
   fallbackArtworkUrl?: string | null;
+  /** ID phiên bản hiện tại (mới nhất) nếu đã chốt ít nhất 1 phiên bản */
+  currentVersionId?: number | null;
+  /** Số phiên bản hiện tại (ví dụ 1 cho v1) */
+  currentVersionNumber?: number | null;
+  /** Phiên bản hiện tại đã gắn sản phẩm trên Store (nếu true sẽ không ghi đè, chỉ chốt bản mới) */
+  currentVersionListedOnStore?: boolean;
+  /** Chế độ tạo phiên bản mới thay vì ghi đè phiên bản hiện tại */
+  createNewVersionMode?: boolean;
   /** Số phiên bản kế tiếp (ví dụ v2, v3) */
   targetVersionNumber?: number;
   /** Khóa cố định kích thước ma trận của Character (32x32, 64x32 hoặc 64x64) */
@@ -123,6 +154,10 @@ export interface PixelArtStudioProps {
   onCancel?: () => void;
   /** Ẩn nút "Đăng bày bán" (ví dụ character thuộc commission riêng của khách). */
   hideStoreActions?: boolean;
+  /** Loại character (STORE hoặc COMMISSION) */
+  characterType?: CharacterType;
+  /** ID commission liên kết nếu là character COMMISSION */
+  commissionId?: number;
 }
 
 const DEFAULT_SWATCHES: ColorSwatch[] = [
@@ -147,6 +182,10 @@ export default function PixelArtStudio({
   initialDescription = "",
   initialArtworkUrl = null,
   fallbackArtworkUrl = null,
+  currentVersionId = null,
+  currentVersionNumber = null,
+  currentVersionListedOnStore = false,
+  createNewVersionMode = false,
   targetVersionNumber,
   lockedMatrixSize,
   onSaveVersion,
@@ -154,7 +193,10 @@ export default function PixelArtStudio({
   onCharacterSaved,
   onCancel,
   hideStoreActions = false,
+  characterType = "STORE",
+  commissionId,
 }: PixelArtStudioProps) {
+  const effectiveHideStoreActions = hideStoreActions || !isStoreCharacterType(characterType);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -167,13 +209,27 @@ export default function PixelArtStudio({
     CANVAS_SIZE_OPTIONS.find((item) => item.key === sizeKey) ??
     CANVAS_SIZE_OPTIONS[0];
 
-  const [doc, setDoc] = useState<PixelDocumentState>(() => {
+  const [frames, setFrames] = useState<PixelDocumentState[]>(() => {
     const initialOpt =
       CANVAS_SIZE_OPTIONS.find((item) => item.key === (lockedMatrixSize ?? "32x32")) ??
       CANVAS_SIZE_OPTIONS[0];
-    return createEmptyDocument(initialOpt.width, initialOpt.height);
+    return [createEmptyDocument(initialOpt.width, initialOpt.height)];
   });
+  const [activeFrameIndex, setActiveFrameIndex] = useState<number>(0);
+  const [frameDelayMs, setFrameDelayMs] = useState<number>(100);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [playbackFrameIndex, setPlaybackFrameIndex] = useState<number>(0);
+  const [showOnionSkin, setShowOnionSkin] = useState<boolean>(false);
+
+  const framesRef = useRef<PixelDocumentState[]>(frames);
+  const activeFrameIndexRef = useRef<number>(activeFrameIndex);
+  framesRef.current = frames;
+  activeFrameIndexRef.current = activeFrameIndex;
+
+  const doc = frames[activeFrameIndex] ?? frames[0];
   const docRef = useRef<PixelDocumentState>(doc);
+  docRef.current = doc;
+
   const [previewDoc, setPreviewDoc] = useState<PixelDocumentState | null>(null);
   const previewDocRef = useRef<PixelDocumentState | null>(null);
 
@@ -182,9 +238,13 @@ export default function PixelArtStudio({
     setPreviewDoc(next);
   }, []);
 
-  // Undo / Redo stacks storing immutable PixelDocumentState snapshots
-  const undoStackRef = useRef<PixelDocumentState[]>([]);
-  const redoStackRef = useRef<PixelDocumentState[]>([]);
+  // Undo / Redo stacks storing immutable multi-frame animation snapshots
+  const undoStackRef = useRef<
+    Array<{ frames: PixelDocumentState[]; activeFrameIndex: number }>
+  >([]);
+  const redoStackRef = useRef<
+    Array<{ frames: PixelDocumentState[]; activeFrameIndex: number }>
+  >([]);
   const [historyMeta, setHistoryMeta] = useState({ undo: 0, redo: 0 });
 
   // Active gesture refs
@@ -210,7 +270,13 @@ export default function PixelArtStudio({
   const [shapeFilled, setShapeFilled] = useState<boolean>(false);
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [zoomIdx, setZoomIdx] = useState<number>(0);
+  const [previewScale, setPreviewScale] = useState<1 | 2 | 4>(2);
   const [hoverPixel, setHoverPixel] = useState<PixelPoint | null>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const onionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pasteboardRef = useRef<HTMLDivElement | null>(null);
+  const [fittedCanvasWidth, setFittedCanvasWidth] = useState<number | null>(null);
+  const [isAutoSaving, setIsAutoSaving] = useState<boolean>(false);
 
   // Selection & clipboard state
   const [selection, setSelection] = useState<SelectionRect | null>(null);
@@ -256,6 +322,12 @@ export default function PixelArtStudio({
   );
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isInheriting, setIsInheriting] = useState<boolean>(false);
+  const [hasLocalDraft, setHasLocalDraft] = useState<boolean>(false);
+  const [draftSavedLabel, setDraftSavedLabel] = useState<string | null>(null);
+  const [reloadVersionNonce, setReloadVersionNonce] = useState<number>(0);
+  const draftHydratedRef = useRef<boolean>(false);
+  const userDirtyRef = useRef<boolean>(false);
+  const skipDraftOnLoadRef = useRef<boolean>(false);
   const [statusNotice, setStatusNotice] = useState<{
     type: "success" | "error" | "info";
     message: string;
@@ -275,9 +347,24 @@ export default function PixelArtStudio({
   const zoom = ZOOM_STEPS[zoomIdx] ?? 1;
 
   const updateDocument = useCallback((next: PixelDocumentState) => {
+    const idx = activeFrameIndexRef.current;
+    const nextFrames = framesRef.current.map((f, i) => (i === idx ? next : f));
+    framesRef.current = nextFrames;
     docRef.current = next;
-    setDoc(next);
+    setFrames(nextFrames);
   }, []);
+
+  const applyTimelineState = useCallback(
+    (nextFrames: PixelDocumentState[], nextActiveIdx: number) => {
+      const safeIdx = Math.max(0, Math.min(nextFrames.length - 1, nextActiveIdx));
+      framesRef.current = nextFrames;
+      activeFrameIndexRef.current = safeIdx;
+      docRef.current = nextFrames[safeIdx] ?? nextFrames[0];
+      setFrames(nextFrames);
+      setActiveFrameIndex(safeIdx);
+    },
+    [],
+  );
 
   const syncHistoryCounts = useCallback(() => {
     setHistoryMeta({
@@ -286,31 +373,140 @@ export default function PixelArtStudio({
     });
   }, []);
 
-  const commitDocumentChange = useCallback(
-    (previousSnapshot: PixelDocumentState, nextDoc: PixelDocumentState) => {
+  const commitTimelineChange = useCallback(
+    (nextFrames: PixelDocumentState[], nextActiveIdx: number) => {
+      userDirtyRef.current = true;
       undoStackRef.current = [
         ...undoStackRef.current.slice(-(MAX_HISTORY_STEPS - 1)),
-        previousSnapshot,
+        {
+          frames: framesRef.current,
+          activeFrameIndex: activeFrameIndexRef.current,
+        },
       ];
       redoStackRef.current = [];
       syncHistoryCounts();
-      updateDocument(nextDoc);
+      applyTimelineState(nextFrames, nextActiveIdx);
     },
-    [syncHistoryCounts, updateDocument],
+    [syncHistoryCounts, applyTimelineState],
   );
 
-  // Design Inheritance: Load previous version's artwork onto Canvas
+  const commitDocumentChange = useCallback(
+    (previousSnapshot: PixelDocumentState, nextDoc: PixelDocumentState) => {
+      const idx = activeFrameIndexRef.current;
+      const prevFrames = framesRef.current.map((f, i) => (i === idx ? previousSnapshot : f));
+      const nextFrames = framesRef.current.map((f, i) => (i === idx ? nextDoc : f));
+      userDirtyRef.current = true;
+      undoStackRef.current = [
+        ...undoStackRef.current.slice(-(MAX_HISTORY_STEPS - 1)),
+        { frames: prevFrames, activeFrameIndex: idx },
+      ];
+      redoStackRef.current = [];
+      syncHistoryCounts();
+      applyTimelineState(nextFrames, idx);
+    },
+    [syncHistoryCounts, applyTimelineState],
+  );
+
+  // Restore local draft if available; otherwise load committed version frames/GIF onto Canvas
   useEffect(() => {
+    const draftKeyId = propCharacterId ?? null;
+    const savedDraft = skipDraftOnLoadRef.current ? null : loadStudioDraft(draftKeyId);
+    skipDraftOnLoadRef.current = false;
+
+    const draftFrames = savedDraft?.frames?.length
+      ? savedDraft.frames
+      : savedDraft?.doc
+        ? [savedDraft.doc]
+        : [];
+    const draftHasArtwork = draftFrames.some(
+      (f) => f.pixels.some(Boolean) || f.texts.length > 0,
+    );
+
+    if (savedDraft && draftHasArtwork) {
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      syncHistoryCounts();
+
+      const firstFrame = draftFrames[0];
+      const matchingOpt = CANVAS_SIZE_OPTIONS.find(
+        (opt) => opt.width === firstFrame.width && opt.height === firstFrame.height,
+      );
+      if (!lockedMatrixSize && matchingOpt) {
+        setSizeKey(matchingOpt.key);
+      }
+      if (savedDraft.characterName.trim()) {
+        setCharacterName(savedDraft.characterName);
+      }
+      if (savedDraft.description) {
+        setDescription(savedDraft.description);
+      }
+      if (savedDraft.frameDelayMs) {
+        setFrameDelayMs(savedDraft.frameDelayMs);
+      }
+
+      applyTimelineState(draftFrames, savedDraft.activeFrameIndex ?? 0);
+      setHasLocalDraft(true);
+      if (savedDraft.updatedAt) {
+        const parsed = new Date(savedDraft.updatedAt);
+        if (!Number.isNaN(parsed.getTime())) {
+          setDraftSavedLabel(
+            parsed.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+          );
+        }
+      }
+      userDirtyRef.current = true;
+      draftHydratedRef.current = true;
+      setIsInheriting(false);
+      setStatusNotice({
+        type: "info",
+        message: currentVersionNumber
+          ? `Đã khôi phục bản nháp gần nhất từ v${currentVersionNumber} (${draftFrames.length} frame). Bấm "Khôi phục v${currentVersionNumber}" nếu muốn quay lại bản đã chốt.`
+          : `Đã khôi phục bản nháp phác thảo gần nhất (${draftFrames.length} frame).`,
+      });
+      return;
+    }
+
+    // Check lossless cached version frames (for multi-frame GIF versions)
+    const cachedVersionFrames = currentVersionId
+      ? loadVersionFramesCache(currentVersionId)
+      : null;
+    if (cachedVersionFrames && cachedVersionFrames.frames.length > 0) {
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      syncHistoryCounts();
+      setFrameDelayMs(cachedVersionFrames.frameDelayMs);
+      applyTimelineState(cachedVersionFrames.frames, 0);
+      userDirtyRef.current = false;
+      setHasLocalDraft(false);
+      setDraftSavedLabel(null);
+      draftHydratedRef.current = true;
+      setIsInheriting(false);
+      setStatusNotice({
+        type: "success",
+        message: currentVersionNumber
+          ? `Đã nạp v${currentVersionNumber} (${cachedVersionFrames.frames.length} frame · ${cachedVersionFrames.frameDelayMs}ms).`
+          : `Đã nạp dữ liệu pixel (${cachedVersionFrames.frames.length} frame).`,
+      });
+      return;
+    }
+
     const primaryUrl = initialArtworkUrl || fallbackArtworkUrl;
     if (!primaryUrl) {
-      if (!propCharacterId) {
-        // Reset to clean blank canvas when in "Create New Character" mode
+      if (!propCharacterId || reloadVersionNonce > 0) {
         undoStackRef.current = [];
         redoStackRef.current = [];
         syncHistoryCounts();
-        updateDocument(createEmptyDocument(32, 32));
-        setSizeKey("32x32");
+        const opt =
+          CANVAS_SIZE_OPTIONS.find((item) => item.key === (lockedMatrixSize ?? "32x32")) ??
+          CANVAS_SIZE_OPTIONS[0];
+        applyTimelineState([createEmptyDocument(opt.width, opt.height)], 0);
+        setFrameDelayMs(100);
+        if (!lockedMatrixSize) {
+          setSizeKey("32x32");
+        }
       }
+      userDirtyRef.current = false;
+      draftHydratedRef.current = true;
       return;
     }
 
@@ -319,7 +515,9 @@ export default function PixelArtStudio({
     setIsInheriting(true);
     setStatusNotice({
       type: "info",
-      message: `Đang nạp dữ liệu pixel phiên bản mới nhất (${initialCharacterName || "Nhân vật"})...`,
+      message: currentVersionNumber
+        ? `Đang nạp phiên bản v${currentVersionNumber} (${initialCharacterName || "Nhân vật"})...`
+        : `Đang nạp dữ liệu pixel (${initialCharacterName || "Nhân vật"})...`,
     });
 
     const loadImageToCanvas = (srcUrl: string) => {
@@ -339,15 +537,30 @@ export default function PixelArtStudio({
             100,
           );
           if (inheritedPixels && inheritedPixels.length > 0) {
-            commitDocumentChange(docRef.current, {
-              ...docRef.current,
-              pixels: inheritedPixels,
-            });
+            undoStackRef.current = [];
+            redoStackRef.current = [];
+            syncHistoryCounts();
+            applyTimelineState(
+              [
+                {
+                  ...docRef.current,
+                  pixels: inheritedPixels,
+                  texts: [],
+                },
+              ],
+              0,
+            );
+            userDirtyRef.current = false;
+            setHasLocalDraft(false);
+            setDraftSavedLabel(null);
             setStatusNotice({
               type: "success",
-              message: `Đã nạp phiên bản mới nhất lên bảng vẽ! Bạn có thể tiếp tục vẽ để tạo phiên bản mới.`,
+              message: currentVersionNumber
+                ? `Đã nạp v${currentVersionNumber}. Bạn có thể chỉnh sửa tiếp hoặc thêm frame tạo GIF.`
+                : "Đã nạp dữ liệu pixel lên bảng vẽ.",
             });
           }
+          draftHydratedRef.current = true;
           setIsInheriting(false);
         } catch (err) {
           console.warn("Failed to rasterize inherited artwork:", err);
@@ -355,6 +568,7 @@ export default function PixelArtStudio({
             triedFallback = true;
             loadImageToCanvas(fallbackArtworkUrl);
           } else {
+            draftHydratedRef.current = true;
             setIsInheriting(false);
           }
         }
@@ -366,6 +580,7 @@ export default function PixelArtStudio({
           loadImageToCanvas(fallbackArtworkUrl);
           return;
         }
+        draftHydratedRef.current = true;
         setIsInheriting(false);
         setStatusNotice({
           type: "info",
@@ -375,7 +590,47 @@ export default function PixelArtStudio({
       img.src = srcUrl;
     };
 
-    loadImageToCanvas(primaryUrl);
+    const tryGifDecodeThenFallback = async () => {
+      const looksLikeGif =
+        primaryUrl.startsWith("data:image/gif") || /\.gif(\?|$)/i.test(primaryUrl);
+      if (looksLikeGif) {
+        try {
+          const resp = await fetch(primaryUrl);
+          if (resp.ok) {
+            const buf = await resp.arrayBuffer();
+            const decoded = decodeGifBytesToFrames(
+              new Uint8Array(buf),
+              docRef.current.width,
+              docRef.current.height,
+            );
+            if (decoded && decoded.frames.length > 0 && !isCancelled) {
+              undoStackRef.current = [];
+              redoStackRef.current = [];
+              syncHistoryCounts();
+              setFrameDelayMs(decoded.frameDelayMs);
+              applyTimelineState(decoded.frames, 0);
+              userDirtyRef.current = false;
+              setHasLocalDraft(false);
+              setDraftSavedLabel(null);
+              draftHydratedRef.current = true;
+              setIsInheriting(false);
+              setStatusNotice({
+                type: "success",
+                message: `Đã nạp ảnh GIF (${decoded.frames.length} frame · ${decoded.frameDelayMs}ms).`,
+              });
+              return;
+            }
+          }
+        } catch {
+          // Fall through to normal image rasterizer
+        }
+      }
+      if (!isCancelled) {
+        loadImageToCanvas(primaryUrl);
+      }
+    };
+
+    void tryGifDecodeThenFallback();
 
     return () => {
       isCancelled = true;
@@ -384,52 +639,189 @@ export default function PixelArtStudio({
     initialArtworkUrl,
     fallbackArtworkUrl,
     propCharacterId,
-    commitDocumentChange,
+    lockedMatrixSize,
+    currentVersionId,
+    currentVersionNumber,
+    currentVersionListedOnStore,
+    targetVersionNumber,
+    reloadVersionNonce,
     initialCharacterName,
     syncHistoryCounts,
-    updateDocument,
+    applyTimelineState,
   ]);
 
   const handleUndo = useCallback(() => {
     const prev = undoStackRef.current.pop();
     if (!prev) return;
-    redoStackRef.current.push(docRef.current);
+    redoStackRef.current.push({
+      frames: framesRef.current,
+      activeFrameIndex: activeFrameIndexRef.current,
+    });
     syncHistoryCounts();
-    updateDocument(prev);
-  }, [syncHistoryCounts, updateDocument]);
+    userDirtyRef.current = true;
+    applyTimelineState(prev.frames, prev.activeFrameIndex);
+  }, [syncHistoryCounts, applyTimelineState]);
 
   const handleRedo = useCallback(() => {
     const next = redoStackRef.current.pop();
     if (!next) return;
-    undoStackRef.current.push(docRef.current);
+    undoStackRef.current.push({
+      frames: framesRef.current,
+      activeFrameIndex: activeFrameIndexRef.current,
+    });
     syncHistoryCounts();
-    updateDocument(next);
-  }, [syncHistoryCounts, updateDocument]);
+    userDirtyRef.current = true;
+    applyTimelineState(next.frames, next.activeFrameIndex);
+  }, [syncHistoryCounts, applyTimelineState]);
 
-  // Synchronize HTML5 <canvas> whenever active or preview document updates
+  // Synchronize main, onion skin, and live 1:1 LED preview <canvas> elements whenever active or preview document updates
   const displayDocument = previewDoc ?? doc;
+  const renderCompositeToCanvas = useCallback(
+    (canvas: HTMLCanvasElement | null, targetDoc: PixelDocumentState) => {
+      paintPixelDocumentToCanvas(canvas, targetDoc);
+    },
+    [],
+  );
+
+  const effectivePlaying = isPlaying && frames.length > 1;
+
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!effectivePlaying) return;
+    const intervalId = window.setInterval(() => {
+      setPlaybackFrameIndex((prev) => (prev + 1) % frames.length);
+    }, Math.max(40, frameDelayMs));
+    return () => window.clearInterval(intervalId);
+  }, [effectivePlaying, frames.length, frameDelayMs]);
 
-    const merged = compositeDocument(displayDocument);
-    ctx.clearRect(0, 0, displayDocument.width, displayDocument.height);
+  useEffect(() => {
+    renderCompositeToCanvas(canvasRef.current, displayDocument);
+    const previewSource = effectivePlaying
+      ? frames[playbackFrameIndex % frames.length] ?? displayDocument
+      : displayDocument;
+    renderCompositeToCanvas(previewCanvasRef.current, previewSource);
 
-    for (let y = 0; y < displayDocument.height; y++) {
-      for (let x = 0; x < displayDocument.width; x++) {
-        const hex = merged[y * displayDocument.width + x];
-        if (!hex) continue;
-        ctx.fillStyle = hex;
-        ctx.fillRect(x, y, 1, 1);
-      }
+    if (showOnionSkin && activeFrameIndex > 0 && frames[activeFrameIndex - 1]) {
+      renderCompositeToCanvas(onionCanvasRef.current, frames[activeFrameIndex - 1]);
+    } else if (onionCanvasRef.current) {
+      const ctx = onionCanvasRef.current.getContext("2d");
+      ctx?.clearRect(0, 0, doc.width, doc.height);
     }
-  }, [displayDocument]);
+  }, [
+    displayDocument,
+    effectivePlaying,
+    frames,
+    playbackFrameIndex,
+    showOnionSkin,
+    activeFrameIndex,
+    doc.width,
+    doc.height,
+    renderCompositeToCanvas,
+  ]);
+
+  // Frame management handlers
+  const handleSelectFrame = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= framesRef.current.length) return;
+      setIsPlaying(false);
+      updatePreview(null);
+      setSelection(null);
+      applyTimelineState(framesRef.current, index);
+    },
+    [applyTimelineState, updatePreview],
+  );
+
+  const handleAddFrame = useCallback(() => {
+    setIsPlaying(false);
+    updatePreview(null);
+    setSelection(null);
+    const current = framesRef.current;
+    const insertAt = activeFrameIndexRef.current + 1;
+    const blank = createEmptyDocument(docRef.current.width, docRef.current.height);
+    const nextFrames = [
+      ...current.slice(0, insertAt),
+      blank,
+      ...current.slice(insertAt),
+    ];
+    commitTimelineChange(nextFrames, insertAt);
+  }, [commitTimelineChange, updatePreview]);
+
+  const handleDuplicateFrame = useCallback(() => {
+    setIsPlaying(false);
+    updatePreview(null);
+    setSelection(null);
+    const current = framesRef.current;
+    const idx = activeFrameIndexRef.current;
+    const source = current[idx] ?? docRef.current;
+    const clone: PixelDocumentState = {
+      width: source.width,
+      height: source.height,
+      pixels: [...source.pixels],
+      texts: source.texts.map((t) => ({ ...t })),
+    };
+    const nextFrames = [
+      ...current.slice(0, idx + 1),
+      clone,
+      ...current.slice(idx + 1),
+    ];
+    commitTimelineChange(nextFrames, idx + 1);
+  }, [commitTimelineChange, updatePreview]);
+
+  const handleDeleteFrame = useCallback(() => {
+    const current = framesRef.current;
+    if (current.length <= 1) return;
+    setIsPlaying(false);
+    updatePreview(null);
+    setSelection(null);
+    const idx = activeFrameIndexRef.current;
+    const nextFrames = current.filter((_, i) => i !== idx);
+    commitTimelineChange(nextFrames, Math.min(idx, nextFrames.length - 1));
+  }, [commitTimelineChange, updatePreview]);
+
+  const handleMoveFrame = useCallback(
+    (direction: -1 | 1) => {
+      const current = framesRef.current;
+      const idx = activeFrameIndexRef.current;
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= current.length) return;
+      setIsPlaying(false);
+      const nextFrames = [...current];
+      const [moved] = nextFrames.splice(idx, 1);
+      nextFrames.splice(targetIdx, 0, moved);
+      commitTimelineChange(nextFrames, targetIdx);
+    },
+    [commitTimelineChange],
+  );
+
+  // Fit canvas cleanly inside available pasteboard height & width at 100% zoom (no scrollbars even on 64x64)
+  useEffect(() => {
+    const el = pasteboardRef.current;
+    if (!el) return;
+
+    const recomputeFit = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const availableW = Math.max(180, rect.width - 36);
+      const availableH = Math.max(180, rect.height - 36);
+      const ratio = doc.width / doc.height;
+      const fitted = Math.floor(
+        Math.max(180, Math.min(sizeOption.displayWidth, availableW, availableH * ratio)),
+      );
+      setFittedCanvasWidth(fitted);
+    };
+
+    recomputeFit();
+    const observer = new ResizeObserver(recomputeFit);
+    observer.observe(el);
+    window.addEventListener("resize", recomputeFit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", recomputeFit);
+    };
+  }, [doc.width, doc.height, sizeOption.displayWidth]);
 
   const hasContent = useMemo(
-    () => doc.pixels.some(Boolean) || doc.texts.length > 0,
-    [doc.pixels, doc.texts.length],
+    () => frames.some((f) => f.pixels.some(Boolean) || f.texts.length > 0),
+    [frames],
   );
 
   const handleSizePresetChange = (nextKey: "32x32" | "64x32" | "64x64") => {
@@ -445,13 +837,14 @@ export default function PixelArtStudio({
       return;
     }
     setSizeKey(nextKey);
+    setIsPlaying(false);
     undoStackRef.current = [];
     redoStackRef.current = [];
     syncHistoryCounts();
     setSelection(null);
     setHoverPixel(null);
     updatePreview(null);
-    updateDocument(createEmptyDocument(opt.width, opt.height));
+    applyTimelineState([createEmptyDocument(opt.width, opt.height)], 0);
     setStatusNotice(null);
   };
 
@@ -702,9 +1095,12 @@ export default function PixelArtStudio({
         (px, idx) => px !== docRef.current.pixels[idx],
       );
       if (hasDelta) {
+        userDirtyRef.current = true;
+        const idx = activeFrameIndexRef.current;
+        const prevFrames = framesRef.current.map((f, i) => (i === idx ? startSnap : f));
         undoStackRef.current = [
           ...undoStackRef.current.slice(-(MAX_HISTORY_STEPS - 1)),
-          startSnap,
+          { frames: prevFrames, activeFrameIndex: idx },
         ];
         redoStackRef.current = [];
         syncHistoryCounts();
@@ -733,33 +1129,33 @@ export default function PixelArtStudio({
   };
 
   // Selection Clipboard handlers
-  const handleCopySelection = () => {
+  const handleCopySelection = useCallback(() => {
     if (!selection) return;
     setClipboard(extractRegionPixels(docRef.current, selection));
     setStatusNotice({
       type: "success",
       message: "Đã sao chép vùng pixel đang chọn.",
     });
-  };
+  }, [selection]);
 
-  const handleCutSelection = () => {
+  const handleCutSelection = useCallback(() => {
     if (!selection) return;
     setClipboard(extractRegionPixels(docRef.current, selection));
     commitDocumentChange(
       docRef.current,
       clearDocumentRegion(docRef.current, selection),
     );
-  };
+  }, [selection, commitDocumentChange]);
 
-  const handleDeleteSelection = () => {
+  const handleDeleteSelection = useCallback(() => {
     if (!selection) return;
     commitDocumentChange(
       docRef.current,
       clearDocumentRegion(docRef.current, selection),
     );
-  };
+  }, [selection, commitDocumentChange]);
 
-  const handlePasteClipboard = () => {
+  const handlePasteClipboard = useCallback(() => {
     if (!clipboard) return;
     const origin = selection ? normalizeSelectionRect(selection) : { left: 0, top: 0 };
     const next = stampDocumentRegion(
@@ -776,7 +1172,7 @@ export default function PixelArtStudio({
       x1: origin.left + clipboard.regionWidth - 1,
       y1: origin.top + clipboard.regionHeight - 1,
     });
-  };
+  }, [clipboard, selection, commitDocumentChange]);
 
   // Text block management
   const activeTextPreset = GLYPH_SIZE_PRESETS[textPresetIdx] ?? GLYPH_SIZE_PRESETS[0];
@@ -901,8 +1297,33 @@ export default function PixelArtStudio({
     }
   }, [doc.height, doc.width, importModalOpen, previewImportedPixels]);
 
-  const handleImportFileChosen = (file: File | undefined) => {
+  const handleImportFileChosen = async (file: File | undefined) => {
     if (!file) return;
+
+    // If an animated GIF is uploaded, extract all frames onto the timeline directly
+    if (file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif")) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const decoded = decodeGifBytesToFrames(
+          new Uint8Array(buffer),
+          docRef.current.width,
+          docRef.current.height,
+        );
+        if (decoded && decoded.frames.length > 1) {
+          setIsPlaying(false);
+          setFrameDelayMs(decoded.frameDelayMs);
+          commitTimelineChange(decoded.frames, 0);
+          setStatusNotice({
+            type: "success",
+            message: `Đã nhập ảnh GIF động (${decoded.frames.length} frame · ${decoded.frameDelayMs}ms) vào Timeline!`,
+          });
+          return;
+        }
+      } catch {
+        // Fallback to single-frame image import dialog
+      }
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== "string") return;
@@ -926,27 +1347,40 @@ export default function PixelArtStudio({
     setImportedImageEl(null);
     setStatusNotice({
       type: "success",
-      message: "Đã nhập ảnh vào lớp pixel (giữ nguyên các khối chữ).",
+      message: "Đã nhập ảnh vào lớp pixel của frame hiện tại (giữ nguyên các khối chữ).",
     });
   };
 
-  // Download Export Handler (PNG / JPEG with 1x or 16x nearest-neighbor scaling)
+  // Download Export Handler (Animated GIF / PNG / JPEG with nearest-neighbor scaling)
   const handleConfirmDownloadExport = () => {
-    const dataUrl = renderDocumentToDataUrl(
-      docRef.current,
-      exportFormat,
-      exportScale,
-      "#090D14",
-    );
-    if (!dataUrl) return;
-
     const slug =
       characterName
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9-_]+/gi, "-")
         .replace(/^-|-$/g, "") || `pixel-art-${doc.width}x${doc.height}`;
-    const ext = exportFormat === "PNG" ? "png" : "jpg";
+
+    let dataUrl = "";
+    let ext = "png";
+
+    if (exportFormat === "GIF") {
+      dataUrl = encodeFramesToGifDataUrl(
+        framesRef.current,
+        frameDelayMs,
+        exportScale,
+      );
+      ext = "gif";
+    } else {
+      dataUrl = renderDocumentToDataUrl(
+        docRef.current,
+        exportFormat,
+        exportScale,
+        "#090D14",
+      );
+      ext = exportFormat === "PNG" ? "png" : "jpg";
+    }
+
+    if (!dataUrl) return;
 
     const link = document.createElement("a");
     link.href = dataUrl;
@@ -956,7 +1390,10 @@ export default function PixelArtStudio({
     setExportModalOpen(false);
     setStatusNotice({
       type: "success",
-      message: `Đã xuất file ${slug}.${ext} (${doc.width * exportScale}×${doc.height * exportScale} px).`,
+      message:
+        exportFormat === "GIF"
+          ? `Đã xuất ảnh động ${slug}.gif (${framesRef.current.length} frame · ${doc.width * exportScale}×${doc.height * exportScale} px).`
+          : `Đã xuất file ${slug}.${ext} (${doc.width * exportScale}×${doc.height * exportScale} px).`,
     });
   };
 
@@ -980,9 +1417,178 @@ export default function PixelArtStudio({
    *    ```
    * 4. Persist the resulting `blobPublicUrl` and character metadata to your backend DB.
    */
-  async function performSaveFlow(publishToStore: boolean): Promise<void> {
+  // Word-style continuous local auto-save (includes all frames & GIF delay) + synchronous flush on close/unmount
+  const latestDraftSnapshotRef = useRef<{
+    characterId: number | null;
+    characterName: string;
+    description: string;
+    doc: PixelDocumentState;
+    frames: PixelDocumentState[];
+    activeFrameIndex: number;
+    frameDelayMs: number;
+    baseVersionId: number | null;
+    baseVersionNumber: number | null;
+  } | null>(null);
+
+  useEffect(() => {
+    latestDraftSnapshotRef.current = {
+      characterId: activeCharacterId ?? propCharacterId ?? null,
+      characterName,
+      description,
+      doc,
+      frames,
+      activeFrameIndex,
+      frameDelayMs,
+      baseVersionId: currentVersionId ?? null,
+      baseVersionNumber: currentVersionNumber ?? null,
+    };
+  }, [
+    activeCharacterId,
+    propCharacterId,
+    characterName,
+    description,
+    doc,
+    frames,
+    activeFrameIndex,
+    frameDelayMs,
+    currentVersionId,
+    currentVersionNumber,
+  ]);
+
+  useEffect(() => {
+    if (!draftHydratedRef.current || isInheriting || !userDirtyRef.current) return;
+    const hasPixelsOrText = frames.some((f) => f.pixels.some(Boolean) || f.texts.length > 0);
+    if (!hasPixelsOrText && !hasLocalDraft) return;
+
+    setIsAutoSaving(true);
+    const timer = window.setTimeout(() => {
+      const saved = saveStudioDraft(activeCharacterId ?? propCharacterId ?? null, {
+        characterName,
+        description,
+        doc,
+        frames,
+        activeFrameIndex,
+        frameDelayMs,
+        baseVersionId: currentVersionId ?? null,
+        baseVersionNumber: currentVersionNumber ?? null,
+      });
+      setIsAutoSaving(false);
+      if (saved) {
+        setHasLocalDraft(true);
+        const parsed = new Date(saved.updatedAt);
+        setDraftSavedLabel(
+          parsed.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+        );
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    doc,
+    frames,
+    activeFrameIndex,
+    frameDelayMs,
+    characterName,
+    description,
+    activeCharacterId,
+    propCharacterId,
+    currentVersionId,
+    currentVersionNumber,
+    hasLocalDraft,
+    isInheriting,
+  ]);
+
+  useEffect(() => {
+    const flushPendingDraft = () => {
+      const snap = latestDraftSnapshotRef.current;
+      if (!snap || !draftHydratedRef.current || !userDirtyRef.current) return;
+      const hasPixelsOrText = snap.frames.some(
+        (f) => f.pixels.some(Boolean) || f.texts.length > 0,
+      );
+      if (!hasPixelsOrText) return;
+      saveStudioDraft(snap.characterId, {
+        characterName: snap.characterName,
+        description: snap.description,
+        doc: snap.doc,
+        frames: snap.frames,
+        activeFrameIndex: snap.activeFrameIndex,
+        frameDelayMs: snap.frameDelayMs,
+        baseVersionId: snap.baseVersionId,
+        baseVersionNumber: snap.baseVersionNumber,
+      });
+    };
+
+    window.addEventListener("beforeunload", flushPendingDraft);
+    window.addEventListener("pagehide", flushPendingDraft);
+    return () => {
+      flushPendingDraft();
+      window.removeEventListener("beforeunload", flushPendingDraft);
+      window.removeEventListener("pagehide", flushPendingDraft);
+    };
+  }, []);
+
+  const handleSaveDraft = useCallback(() => {
+    const saved = saveStudioDraft(activeCharacterId ?? propCharacterId ?? null, {
+      characterName,
+      description,
+      doc: docRef.current,
+      frames: framesRef.current,
+      activeFrameIndex: activeFrameIndexRef.current,
+      frameDelayMs,
+      baseVersionId: currentVersionId ?? null,
+      baseVersionNumber: currentVersionNumber ?? null,
+    });
+    setIsAutoSaving(false);
+    if (saved) {
+      userDirtyRef.current = true;
+      setHasLocalDraft(true);
+      const parsed = new Date(saved.updatedAt);
+      const hhmm = parsed.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setDraftSavedLabel(hhmm);
+      setStatusNotice({
+        type: "success",
+        message: `Đã tự động đồng bộ bản nháp (${framesRef.current.length} frame) lúc ${hhmm}.`,
+      });
+    }
+  }, [
+    activeCharacterId,
+    propCharacterId,
+    characterName,
+    description,
+    frameDelayMs,
+    currentVersionId,
+    currentVersionNumber,
+  ]);
+
+  const handleDiscardDraftToCommitted = useCallback(() => {
+    clearStudioDraft(activeCharacterId ?? propCharacterId ?? null);
+    setIsPlaying(false);
+    userDirtyRef.current = false;
+    skipDraftOnLoadRef.current = true;
+    setIsAutoSaving(false);
+    setHasLocalDraft(false);
+    setDraftSavedLabel(null);
+    setCharacterName(initialCharacterName);
+    setDescription(initialDescription);
+    setReloadVersionNonce((n) => n + 1);
+  }, [activeCharacterId, propCharacterId, initialCharacterName, initialDescription]);
+
+  async function performSaveFlow(
+    mode: "UPDATE_CURRENT" | "NEW_VERSION" | "PUBLISH",
+  ): Promise<void> {
     const canvas = canvasRef.current;
     if (!canvas || isSaving || isInheriting) return;
+
+    const publishToStore = mode === "PUBLISH";
+    const canOverwriteCurrent = Boolean(
+      mode === "UPDATE_CURRENT" &&
+        activeCharacterId &&
+        currentVersionId &&
+        !currentVersionListedOnStore,
+    );
 
     const trimmedName = characterName.trim();
     if (!trimmedName) {
@@ -1004,28 +1610,42 @@ export default function PixelArtStudio({
     setStatusNotice(null);
 
     try {
-      const dataUrl = canvas.toDataURL("image/png");
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
+      const currentFrames = framesRef.current;
+      const isAnimatedGif = currentFrames.length > 1;
       const safeSlug =
         trimmedName.toLowerCase().replace(/[^a-z0-9-_]+/gi, "-") ||
         "pixel-character";
-      const pngFile = new File([blob], `${safeSlug}.png`, { type: "image/png" });
+
+      let dataUrl = "";
+      let blob: Blob;
+      let uploadFile: File;
+
+      if (isAnimatedGif) {
+        blob = encodeFramesToGifBlob(currentFrames, frameDelayMs, 1);
+        dataUrl = encodeFramesToGifDataUrl(currentFrames, frameDelayMs, 1);
+        uploadFile = new File([blob], `${safeSlug}.gif`, { type: "image/gif" });
+      } else {
+        dataUrl = canvas.toDataURL("image/png");
+        const response = await fetch(dataUrl);
+        blob = await response.blob();
+        uploadFile = new File([blob], `${safeSlug}.png`, { type: "image/png" });
+      }
 
       // 1. Upload asset to backend
       let publicUrl = "";
       try {
         const uploadedAsset = await uploadDesignerAssetFile(
-          pngFile,
+          uploadFile,
           "CHARACTER_ASSET",
         );
         publicUrl = uploadedAsset.publicUrl;
       } catch (uploadErr) {
         console.warn("Asset upload fallback notice:", uploadErr);
-        publicUrl = `https://cdn.lumintra.com/characters/${safeSlug}-${Date.now()}.png`;
+        const fallbackExt = isAnimatedGif ? "gif" : "png";
+        publicUrl = `https://cdn.lumintra.com/characters/${safeSlug}-${Date.now()}.${fallbackExt}`;
       }
 
-      // 2. Ensure Character exists (Create character if activeCharacterId is null)
+      // 2. Ensure Character exists (or sync updated name/description if modifying an existing character)
       let resolvedCharacterId = activeCharacterId;
       let isNewCharacter = false;
 
@@ -1035,17 +1655,27 @@ export default function PixelArtStudio({
           description:
             description.trim() ||
             `Pixel art ${doc.width}x${doc.height} thiết kế trên Pixel Art Studio`,
+          characterType,
+          commissionId: characterType === "COMMISSION" ? commissionId : undefined,
         });
         resolvedCharacterId = createdChar.characterId;
         setActiveCharacterId(createdChar.characterId);
         isNewCharacter = true;
+      } else if (
+        trimmedName !== initialCharacterName.trim() ||
+        description.trim() !== initialDescription.trim()
+      ) {
+        await updateDesignerCharacter(resolvedCharacterId, {
+          characterName: trimmedName,
+          description: description.trim() || undefined,
+        });
       }
 
-      // Đảm bảo previewGifUrl luôn là HTTP/HTTPS URL hợp lệ dưới 500 ký tự theo quy định của Backend
+      const fallbackExt = isAnimatedGif ? "gif" : "png";
       const safePreviewGifUrl =
         publicUrl && publicUrl.startsWith("http")
           ? publicUrl
-          : `https://cdn.lumintra.com/characters/${safeSlug}-${Date.now()}.png`;
+          : `https://cdn.lumintra.com/characters/${safeSlug}-${Date.now()}.${fallbackExt}`;
 
       // Cache artwork locally for fast designer preview
       if (typeof window !== "undefined") {
@@ -1059,23 +1689,31 @@ export default function PixelArtStudio({
         }
       }
 
-      // 3. Create Version in backend database
+      // 3. When updating current unlisted version (e.g. refining v1), replace it cleanly before recreating
+      if (canOverwriteCurrent && currentVersionId) {
+        await deleteCharacterVersion(resolvedCharacterId, currentVersionId);
+      }
+
+      // 4. Create Version in backend database (saving accurate frameCount & frameDelayMs)
       let createdVersionId: number | undefined;
+      let createdVersionNumber: number | undefined;
       try {
         const versionRes = await createCharacterVersion(resolvedCharacterId, {
           previewGifUrl: safePreviewGifUrl,
-          frameCount: 1,
-          frameDelayMs: 100,
-          byteSize: Math.max(1, pngFile.size),
+          frameCount: currentFrames.length,
+          frameDelayMs,
+          byteSize: Math.max(1, uploadFile.size),
           isCurrent: true,
         });
         createdVersionId = versionRes.versionId;
+        createdVersionNumber = versionRes.versionNumber;
         if (createdVersionId && typeof window !== "undefined") {
           try {
             window.localStorage.setItem(
               `character_version_artwork_${createdVersionId}`,
               dataUrl,
             );
+            saveVersionFramesCache(createdVersionId, currentFrames, frameDelayMs);
           } catch {
             // Ignore quota warning
           }
@@ -1085,9 +1723,17 @@ export default function PixelArtStudio({
         throw verErr;
       }
 
-      // 4. Handle "Publish to Store" (Button 2) vs "Save Version" (Button 1)
+      // Clear local draft now that this work is committed in Version Control
+      clearStudioDraft(resolvedCharacterId);
+      if (propCharacterId !== resolvedCharacterId) {
+        clearStudioDraft(propCharacterId ?? null);
+      }
+      userDirtyRef.current = false;
+      setHasLocalDraft(false);
+      setDraftSavedLabel(null);
+
+      // 5. Handle "Publish to Store" vs "Save Version / Update Current"
       if (publishToStore) {
-        // Automatically create or register store listing with status hardcoded to UNPUBLISHED
         try {
           const productPayload: CreateStoreProductRequest = {
             productName: trimmedName,
@@ -1102,8 +1748,7 @@ export default function PixelArtStudio({
             ...createdProduct,
             status: "UNPUBLISHED" as any,
           });
-        } catch (storeErr) {
-          // If 403 (e.g. Designer role without direct manager permission) or client-side storage:
+        } catch {
           saveCreatedStoreProduct({
             productId: resolvedCharacterId,
             productName: trimmedName,
@@ -1117,7 +1762,7 @@ export default function PixelArtStudio({
           } as any);
         }
 
-        const successMsg = `Đã lưu phiên bản và đăng lên Cửa hàng ở trạng thái CHƯA CÔNG KHAI (Chờ Manager phê duyệt)!`;
+        const successMsg = `Đã chốt v${createdVersionNumber ?? targetVersionNumber ?? 1} và đăng lên Cửa hàng ở trạng thái CHƯA CÔNG KHAI (Chờ Manager phê duyệt)!`;
         setStatusNotice({ type: "success", message: successMsg });
 
         onPublishToStore?.({
@@ -1132,10 +1777,14 @@ export default function PixelArtStudio({
           isNewCharacter,
         });
       } else {
-        // Button 1: Save Version purely internal
+        const versionLabel = canOverwriteCurrent
+          ? `v${createdVersionNumber ?? currentVersionNumber ?? 1}`
+          : `v${createdVersionNumber ?? targetVersionNumber ?? 1}`;
         const successMsg = isNewCharacter
-          ? `Đã tạo nhân vật "${trimmedName}" (#${resolvedCharacterId}) và lưu phiên bản v1 (Lưu trữ nội bộ).`
-          : `Đã lưu phiên bản mới cho nhân vật "${trimmedName}" (#${resolvedCharacterId}) (Lưu trữ nội bộ).`;
+          ? `Đã tạo nhân vật "${trimmedName}" (#${resolvedCharacterId}) và chốt phiên bản ${versionLabel}.`
+          : canOverwriteCurrent
+            ? `Đã cập nhật phiên bản ${versionLabel} cho "${trimmedName}" (#${resolvedCharacterId}).`
+            : `Đã chốt phiên bản hoàn thiện mới ${versionLabel} cho "${trimmedName}" (#${resolvedCharacterId}).`;
         setStatusNotice({ type: "success", message: successMsg });
 
         onSaveVersion?.({
@@ -1180,73 +1829,220 @@ export default function PixelArtStudio({
   const toolsMeta: Array<{
     key: PixelTool;
     label: string;
+    shortcut: string;
     icon: React.ReactNode;
   }> = [
-    { key: "PEN", label: "Bút vẽ", icon: <Pen size={14} /> },
-    { key: "ERASER", label: "Tẩy", icon: <Eraser size={14} /> },
-    { key: "FILL", label: "Đổ màu", icon: <PaintBucket size={14} /> },
-    { key: "PICKER", label: "Hút màu", icon: <Pipette size={14} /> },
-    { key: "SHAPE", label: "Hình học", icon: <Square size={14} /> },
-    { key: "TEXT", label: "Chữ pixel", icon: <Type size={14} /> },
-    { key: "SELECT", label: "Chọn vùng", icon: <Scan size={14} /> },
-    { key: "MOVE", label: "Di chuyển", icon: <Move size={14} /> },
+    { key: "PEN", label: "Bút vẽ", shortcut: "B", icon: <Pen size={14} /> },
+    { key: "ERASER", label: "Tẩy", shortcut: "E", icon: <Eraser size={14} /> },
+    { key: "FILL", label: "Đổ màu", shortcut: "G", icon: <PaintBucket size={14} /> },
+    { key: "PICKER", label: "Hút màu", shortcut: "I", icon: <Pipette size={14} /> },
+    { key: "SHAPE", label: "Hình học", shortcut: "U", icon: <Square size={14} /> },
+    { key: "TEXT", label: "Chữ pixel", shortcut: "T", icon: <Type size={14} /> },
+    { key: "SELECT", label: "Chọn vùng", shortcut: "M", icon: <Scan size={14} /> },
+    { key: "MOVE", label: "Di chuyển", shortcut: "V", icon: <Move size={14} /> },
   ];
+
+  // Aseprite-style keyboard shortcuts (paused when typing in inputs or inside modals)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTypingField = Boolean(
+        target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.tagName === "SELECT" ||
+            target.isContentEditable),
+      );
+
+      if (importModalOpen || exportModalOpen) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setImportModalOpen(false);
+          setExportModalOpen(false);
+        }
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+
+      if ((e.ctrlKey || e.metaKey) && key === "s") {
+        e.preventDefault();
+        handleSaveDraft();
+        return;
+      }
+
+      if (isTypingField) return;
+
+      if (e.ctrlKey || e.metaKey) {
+        if (key === "z" && !e.shiftKey) {
+          e.preventDefault();
+          handleUndo();
+        } else if (key === "y" || (key === "z" && e.shiftKey)) {
+          e.preventDefault();
+          handleRedo();
+        } else if (key === "c" && selection) {
+          e.preventDefault();
+          handleCopySelection();
+        } else if (key === "x" && selection) {
+          e.preventDefault();
+          handleCutSelection();
+        } else if (key === "v" && clipboard) {
+          e.preventDefault();
+          handlePasteClipboard();
+        }
+        return;
+      }
+
+      if (e.altKey) return;
+
+      const toolShortcuts: Record<string, PixelTool> = {
+        b: "PEN",
+        e: "ERASER",
+        g: "FILL",
+        i: "PICKER",
+        u: "SHAPE",
+        t: "TEXT",
+        m: "SELECT",
+        v: "MOVE",
+      };
+
+      const matchedTool = toolShortcuts[key];
+      if (matchedTool) {
+        e.preventDefault();
+        setActiveTool(matchedTool);
+        return;
+      }
+
+      if ((e.key === "Delete" || e.key === "Backspace") && selection) {
+        e.preventDefault();
+        handleDeleteSelection();
+      } else if (e.key === "Escape" && selection) {
+        e.preventDefault();
+        setSelection(null);
+      } else if (e.key === " " && framesRef.current.length > 1) {
+        e.preventDefault();
+        setIsPlaying((prev) => !prev);
+      } else if (e.key === ",") {
+        e.preventDefault();
+        handleSelectFrame(Math.max(0, activeFrameIndexRef.current - 1));
+      } else if (e.key === ".") {
+        e.preventDefault();
+        handleSelectFrame(
+          Math.min(framesRef.current.length - 1, activeFrameIndexRef.current + 1),
+        );
+      } else if (e.key === "[") {
+        setBrushSize((s) => Math.max(1, s - 1));
+      } else if (e.key === "]") {
+        setBrushSize((s) => Math.min(4, s + 1));
+      } else if (e.key === "=" || e.key === "+") {
+        setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1));
+      } else if (e.key === "-") {
+        setZoomIdx((i) => Math.max(0, i - 1));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    importModalOpen,
+    exportModalOpen,
+    selection,
+    clipboard,
+    handleSaveDraft,
+    handleUndo,
+    handleRedo,
+    handleCopySelection,
+    handleCutSelection,
+    handleDeleteSelection,
+    handlePasteClipboard,
+    handleSelectFrame,
+  ]);
+
+  const shouldUpdateCurrent =
+    !createNewVersionMode &&
+    Boolean(activeCharacterId && currentVersionId && !currentVersionListedOnStore);
+  const primarySaveVersionNumber = shouldUpdateCurrent
+    ? (currentVersionNumber ?? 1)
+    : (targetVersionNumber ?? 1);
 
   return (
     <section
       aria-label="Pixel Art Studio"
-      className="ps-studio flex flex-col overflow-hidden bg-[var(--ps-app)] text-[var(--ps-text)]"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--ps-chrome)] text-[var(--ps-text)]"
     >
-      {/* Options bar (Photoshop-style) */}
-      <div className="flex flex-col gap-2 border-b border-slate-200 bg-[var(--ps-panel)] px-3 py-1.5 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-[4px] bg-[#2d6a4f] text-white">
-            <Sparkles size={15} />
+      {/* 1. Top Document & Action Bar */}
+      <div className="ase-bar flex flex-col gap-2 px-3 py-1.5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-[2px] border border-[#163d2c] bg-[#2d6a4f] text-white">
+            <Sparkles size={14} />
           </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-[13px] font-semibold tracking-tight text-slate-900">
-                Pixel Art Studio
-              </h2>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                {doc.width}×{doc.height} px
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xs font-black uppercase tracking-wider text-[#1f2a24]">
+              Aseprite Studio
+            </h2>
+            <span className="rounded-[2px] border border-[#8a948e] bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-[#1f2a24]">
+              {doc.width}×{doc.height} px
+            </span>
+            {activeCharacterId ? (
+              <span className="rounded-[2px] border border-[#2d6a4f] bg-[#dcebe2] px-2 py-0.5 text-[11px] font-bold text-[#163d2c]">
+                {createNewVersionMode && currentVersionNumber
+                  ? `Bản mới v${targetVersionNumber ?? currentVersionNumber + 1}`
+                  : currentVersionNumber
+                    ? `Đang mở v${currentVersionNumber}`
+                    : "Chưa lưu v1"}
               </span>
-              {activeCharacterId ? (
-                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700">
-                  Thêm phiên bản mới (Kế thừa v{targetVersionNumber ? targetVersionNumber - 1 : "trước"})
-                </span>
-              ) : (
-                <span className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-0.5 text-[11px] font-bold text-purple-700">
-                  Tạo nhân vật mới (Canvas trống)
-                </span>
-              )}
-            </div>
-            <p className="hidden text-[11px] text-slate-500 2xl:block">
-              Đổ màu · Hình học · Đối xứng · Chữ pixel · Nhập/Xuất ảnh
-            </p>
+            ) : (
+              <span className="rounded-[2px] border border-[#8a948e] bg-white px-2 py-0.5 text-[11px] font-bold text-[#4b554f]">
+                Nhân vật mới
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 rounded-[2px] border border-[#9aa49e] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#4b554f]">
+              {isAutoSaving
+                ? "Đang tự động lưu..."
+                : hasLocalDraft
+                  ? `Tự động lưu · ${draftSavedLabel ?? "Đã lưu"}`
+                  : "Tự động lưu bật"}
+            </span>
+            {hasLocalDraft && currentVersionId && (
+              <button
+                type="button"
+                onClick={handleDiscardDraftToCommitted}
+                title={`Bỏ thay đổi nháp hiện tại và nạp lại v${currentVersionNumber}`}
+                className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-[#1f2a24]"
+              >
+                <RotateCcw size={12} />
+                Khôi phục v{currentVersionNumber}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Metadata Inputs & Top-Right Actions */}
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+        {/* Metadata Inputs & File Actions */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
           <input
             type="text"
             value={characterName}
-            onChange={(e) => setCharacterName(e.target.value)}
+            onChange={(e) => {
+              userDirtyRef.current = true;
+              setCharacterName(e.target.value);
+            }}
             maxLength={255}
             placeholder="Tên nhân vật (VD: Cyber Cat)..."
             aria-label="Tên nhân vật"
-            className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-emerald-600 focus:bg-white sm:w-44"
+            className="ase-input w-full px-2.5 py-1.5 text-xs font-semibold sm:w-44"
           />
 
           <input
             type="text"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => {
+              userDirtyRef.current = true;
+              setDescription(e.target.value);
+            }}
             maxLength={255}
             placeholder="Mô tả ngắn..."
             aria-label="Mô tả nhân vật"
-            className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-emerald-600 focus:bg-white sm:w-40"
+            className="ase-input w-full px-2.5 py-1.5 text-xs sm:w-40"
           />
 
           <select
@@ -1261,7 +2057,7 @@ export default function PixelArtStudio({
               handleSizePresetChange(e.target.value as "32x32" | "64x32" | "64x64")
             }
             aria-label="Kích thước bảng vẽ"
-            className="rounded border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+            className="ase-input cursor-pointer px-2 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:bg-[#e1e6e3] disabled:text-[#6b756f]"
           >
             {CANVAS_SIZE_OPTIONS.map((opt) => (
               <option key={opt.key} value={opt.key}>
@@ -1270,7 +2066,7 @@ export default function PixelArtStudio({
             ))}
           </select>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <input
               ref={importInputRef}
               type="file"
@@ -1284,59 +2080,68 @@ export default function PixelArtStudio({
             <button
               type="button"
               onClick={() => importInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="ase-btn inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold"
             >
-              <ImagePlus size={15} />
+              <ImagePlus size={14} />
               Nhập ảnh
             </button>
 
             <button
               type="button"
-              onClick={() => setExportModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                setExportFormat(frames.length > 1 ? "GIF" : "PNG");
+                setExportModalOpen(true);
+              }}
+              className="ase-btn inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold"
             >
-              <Download size={15} />
-              Xuất PNG/JPG
+              <Download size={14} />
+              Xuất file
             </button>
 
-            {/* Button 1: Save Version (Lưu phiên bản) */}
             <button
               type="button"
-              onClick={() => void performSaveFlow(false)}
+              onClick={() =>
+                void performSaveFlow(shouldUpdateCurrent ? "UPDATE_CURRENT" : "NEW_VERSION")
+              }
               disabled={isSaving || isInheriting}
-              title="Trích xuất dữ liệu pixel và lưu thành phiên bản mới trong cơ sở dữ liệu nội bộ (không lên Store)"
-              className="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
-            >
-              {isSaving ? (
-                <Loader2 size={14} className="animate-spin text-slate-500" />
-              ) : (
-                <Save size={14} className="text-slate-600" />
-              )}
-              Lưu phiên bản
-            </button>
-
-            {/* Button 2: Publish to Store (Đăng bày bán) */}
-            {!hideStoreActions && <button
-              type="button"
-              onClick={() => void performSaveFlow(true)}
-              disabled={isSaving || isInheriting}
-              title="Lưu phiên bản và tự động tạo niêm yết Cửa hàng ở trạng thái CHƯA CÔNG KHAI (Chờ Manager phê duyệt)"
-              className="inline-flex items-center gap-1.5 rounded bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:from-emerald-700 hover:to-teal-700 disabled:cursor-wait disabled:opacity-60"
+              title={
+                shouldUpdateCurrent
+                  ? `Lưu bản vẽ hiện tại vào v${primarySaveVersionNumber}`
+                  : `Lưu bản vẽ thành phiên bản hoàn thiện v${primarySaveVersionNumber}`
+              }
+              className="ase-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold disabled:cursor-wait"
             >
               {isSaving ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
-                <Store size={14} />
+                <Save size={14} />
               )}
-              Đăng bày bán
-            </button>}
+              Lưu v{primarySaveVersionNumber}
+            </button>
+
+            {!effectiveHideStoreActions && Boolean(onPublishToStore) && (
+              <button
+                type="button"
+                onClick={() => void performSaveFlow("PUBLISH")}
+                disabled={isSaving || isInheriting}
+                title="Chốt phiên bản và tự động tạo niêm yết Cửa hàng ở trạng thái CHƯA CÔNG KHAI (Chờ Manager phê duyệt)"
+                className="ase-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold disabled:cursor-wait"
+              >
+                {isSaving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Store size={14} />
+                )}
+                Đăng bày bán
+              </button>
+            )}
 
             {onCancel && (
               <button
                 type="button"
                 onClick={onCancel}
                 disabled={isSaving}
-                className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                className="ase-btn inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold"
               >
                 <X size={14} />
                 Đóng
@@ -1346,70 +2151,212 @@ export default function PixelArtStudio({
         </div>
       </div>
 
-      {statusNotice && (
-        <div
-          role={statusNotice.type === "error" ? "alert" : "status"}
-          className={`flex items-center justify-between gap-2 border-b px-5 py-2.5 text-xs font-semibold ${
-            statusNotice.type === "error"
-              ? "border-red-200 bg-red-50 text-red-700"
-              : "border-emerald-200 bg-emerald-50 text-emerald-800"
-          }`}
-        >
-          <span className="flex items-center gap-2">
-            {statusNotice.type === "error" ? (
-              <AlertCircle size={15} className="shrink-0" />
-            ) : (
-              <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
-            )}
-            {statusNotice.message}
+      {/* 2. Aseprite Context Bar (Active Tool Options + Symmetry + Grid + Undo/Redo) */}
+      <div
+        aria-label="Thanh tùy chỉnh nhanh công cụ"
+        className="ase-bar flex flex-wrap items-center justify-between gap-2 bg-[#f5f7f6] px-3 py-1.5 text-[11px]"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-[2px] border border-[#8a948e] bg-[#e1e6e3] px-2 py-0.5 font-mono text-[11px] font-black uppercase text-[#1f2a24]">
+            {toolsMeta.find((tool) => tool.key === activeTool)?.label ?? activeTool}
           </span>
-          <button
-            type="button"
-            onClick={() => setStatusNotice(null)}
-            aria-label="Đóng thông báo"
-            className="rounded p-0.5 hover:bg-black/5"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
 
-      {/* Workspace — Photoshop-style: tool rail | canvas | panel dock */}
-      <div className="relative flex min-h-[calc(100dvh-7.5rem)] flex-col bg-[var(--ps-app)] lg:flex-row">
-        {/* Left tool rail */}
-        <aside
-          aria-label="Thanh công cụ vẽ"
-          className="flex shrink-0 flex-row flex-wrap items-center gap-0.5 border-b border-slate-200 bg-[var(--ps-chrome)] p-1 lg:w-11 lg:flex-col lg:flex-nowrap lg:border-b-0 lg:border-r"
-        >
-          {toolsMeta.map((tool) => (
-            <button
-              key={tool.key}
-              type="button"
-              onClick={() => setActiveTool(tool.key)}
-              title={tool.label}
-              aria-label={tool.label}
-              aria-pressed={activeTool === tool.key}
-              className="ps-rail-btn group relative flex h-8 w-8 items-center justify-center rounded-[4px] transition-colors [&_svg]:h-[17px] [&_svg]:w-[17px]"
-            >
-              {tool.icon}
-              <span
-                role="tooltip"
-                className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-[3px] border border-black/60 bg-[#1b1b1b] px-2 py-1 text-[11px] font-medium text-[#e3e3e3] opacity-0 shadow-lg transition-opacity group-hover:opacity-100 lg:block"
+          {(activeTool === "PEN" || activeTool === "ERASER") && (
+            <>
+              <span className="font-bold text-[#4b554f]">Cỡ nét:</span>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4].map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    aria-pressed={brushSize === sz}
+                    onClick={() => setBrushSize(sz)}
+                    className="ase-btn px-2 py-0.5 font-mono text-[11px] font-bold"
+                  >
+                    {sz}px
+                  </button>
+                ))}
+                <input
+                  type="range"
+                  min={1}
+                  max={8}
+                  value={brushSize}
+                  onChange={(e) => setBrushSize(Number(e.target.value))}
+                  aria-label="Thanh trượt cỡ nét"
+                  className="ml-1 w-20 accent-[#2d6a4f]"
+                />
+                <span className="w-8 font-mono font-bold text-[#2d6a4f]">{brushSize}px</span>
+              </div>
+              {activeTool === "PEN" && (
+                <label className="ml-2 flex items-center gap-1.5 border-l border-[#9aa49e] pl-2 font-bold text-[#4b554f]">
+                  <span>Độ đậm</span>
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={opacity}
+                    onChange={(e) => setOpacity(Number(e.target.value))}
+                    className="w-20 accent-[#2d6a4f]"
+                  />
+                  <span className="w-8 font-mono text-[#1f2a24]">{opacity}%</span>
+                </label>
+              )}
+            </>
+          )}
+
+          {activeTool === "SHAPE" && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(
+                [
+                  { key: "LINE", label: "Đường", icon: <Minus size={12} /> },
+                  { key: "RECTANGLE", label: "Chữ nhật", icon: <Square size={12} /> },
+                  { key: "ELLIPSE", label: "Elip", icon: <Circle size={12} /> },
+                  { key: "STAR", label: "Ngôi sao", icon: <Star size={12} /> },
+                ] as const
+              ).map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={shapeKind === item.key}
+                  onClick={() => setShapeKind(item.key)}
+                  className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+              {shapeKind !== "LINE" && (
+                <div className="ml-1 flex items-center gap-1 border-l border-[#9aa49e] pl-2">
+                  <button
+                    type="button"
+                    aria-pressed={!shapeFilled}
+                    onClick={() => setShapeFilled(false)}
+                    className="ase-btn px-2 py-0.5 text-[11px] font-bold"
+                  >
+                    Viền rỗng
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={shapeFilled}
+                    onClick={() => setShapeFilled(true)}
+                    className="ase-btn px-2 py-0.5 text-[11px] font-bold"
+                  >
+                    Tô đặc
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {(activeTool === "SELECT" || activeTool === "MOVE") && (
+            <div className="flex flex-wrap items-center gap-1">
+              {normalizedSelection && (
+                <span className="mr-1 font-mono font-bold text-[#2d6a4f]">
+                  {normalizedSelection.right - normalizedSelection.left + 1}×
+                  {normalizedSelection.bottom - normalizedSelection.top + 1}
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={!selection}
+                onClick={handleCopySelection}
+                className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
               >
-                {tool.label}
-              </span>
+                <Copy size={12} /> Chép
+              </button>
+              <button
+                type="button"
+                disabled={!selection}
+                onClick={handleCutSelection}
+                className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
+              >
+                <Scissors size={12} /> Cắt
+              </button>
+              <button
+                type="button"
+                disabled={!clipboard}
+                onClick={handlePasteClipboard}
+                className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
+              >
+                <ClipboardPaste size={12} /> Dán
+              </button>
+              <button
+                type="button"
+                disabled={!selection}
+                onClick={handleDeleteSelection}
+                className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-red-700"
+              >
+                <Trash size={12} /> Xóa
+              </button>
+              {selection && (
+                <button
+                  type="button"
+                  onClick={() => setSelection(null)}
+                  className="ase-btn px-2 py-0.5 text-[11px] font-semibold"
+                >
+                  Bỏ chọn
+                </button>
+              )}
+            </div>
+          )}
+
+          {activeTool === "FILL" && (
+            <span className="text-[#4b554f]">Bấm vào vùng kín trên bảng vẽ để đổ màu.</span>
+          )}
+          {activeTool === "PICKER" && (
+            <span className="text-[#4b554f]">Chấm lên điểm ảnh bất kỳ để lấy màu và quay lại bút vẽ.</span>
+          )}
+          {activeTool === "TEXT" && (
+            <span className="text-[#4b554f]">Nhập nội dung ASCII và tọa độ ở bảng Chữ Pixel bên phải.</span>
+          )}
+        </div>
+
+        {/* Right side of Context Bar: Mirror Symmetry, Grid & Undo/Redo */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-bold text-[#4b554f]">Đối xứng:</span>
+          {(
+            [
+              { key: "NONE", label: "Tắt", icon: null },
+              { key: "HORIZONTAL", label: "Ngang", icon: <FlipHorizontal2 size={12} /> },
+              { key: "VERTICAL", label: "Dọc", icon: <FlipVertical2 size={12} /> },
+              { key: "BOTH", label: "2 Trục", icon: null },
+            ] as const
+          ).map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              aria-pressed={mirrorMode === m.key}
+              onClick={() => setMirrorMode(m.key)}
+              className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
+            >
+              {m.icon}
+              {m.label}
             </button>
           ))}
-          <div className="mx-1 h-6 w-px bg-white/10 lg:my-1 lg:h-px lg:w-6" aria-hidden="true" />
+
+          <span className="mx-1 h-4 w-px bg-[#9aa49e]" aria-hidden="true" />
+
+          <button
+            type="button"
+            onClick={() => setShowGrid((prev) => !prev)}
+            aria-pressed={showGrid}
+            title={showGrid ? "Ẩn lưới điểm ảnh" : "Hiện lưới điểm ảnh"}
+            className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
+          >
+            <LayoutGrid size={12} />
+            Lưới
+          </button>
+
           <button
             type="button"
             onClick={handleUndo}
             disabled={historyMeta.undo === 0}
             title="Hoàn tác"
             aria-label="Hoàn tác"
-            className="ps-rail-btn flex h-8 w-8 items-center justify-center rounded-[4px] disabled:opacity-30"
+            className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
           >
-            <Undo2 size={16} />
+            <Undo2 size={12} />
           </button>
           <button
             type="button"
@@ -1417,590 +2364,697 @@ export default function PixelArtStudio({
             disabled={historyMeta.redo === 0}
             title="Làm lại"
             aria-label="Làm lại"
-            className="ps-rail-btn flex h-8 w-8 items-center justify-center rounded-[4px] disabled:opacity-30"
+            className="ase-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold"
           >
-            <Redo2 size={16} />
+            <Redo2 size={12} />
           </button>
+        </div>
+      </div>
+
+      {statusNotice && (
+        <div
+          role={statusNotice.type === "error" ? "alert" : "status"}
+          className={`flex items-center justify-between gap-2 border-b-2 px-4 py-2 text-xs font-bold ${
+            statusNotice.type === "error"
+              ? "border-red-600 bg-red-50 text-red-700"
+              : "border-[#2d6a4f] bg-[#dcebe2] text-[#163d2c]"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            {statusNotice.type === "error" ? (
+              <AlertCircle size={15} className="shrink-0" />
+            ) : (
+              <CheckCircle2 size={15} className="shrink-0 text-[#2d6a4f]" />
+            )}
+            {statusNotice.message}
+          </span>
           <button
             type="button"
-            onClick={() => setShowGrid((prev) => !prev)}
-            title={showGrid ? "Ẩn lưới" : "Hiện lưới"}
-            aria-label={showGrid ? "Ẩn lưới" : "Hiện lưới"}
-            aria-pressed={showGrid}
-            className="ps-rail-btn flex h-8 w-8 items-center justify-center rounded-[4px]"
+            onClick={() => setStatusNotice(null)}
+            aria-label="Đóng thông báo"
+            className="ase-btn p-0.5"
           >
-            <LayoutGrid size={16} />
+            <X size={13} />
           </button>
-          {/* Foreground colour chip, like Photoshop's colour well */}
-          <div className="ml-auto flex items-center lg:mt-auto lg:ml-0 lg:pb-1" title={`Màu đang chọn ${selectedColor}`}>
-            <span
-              className="block h-7 w-7 rounded-[3px] border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,.35)]"
-              style={{ backgroundColor: selectedColor }}
-              aria-label={`Màu đang chọn ${selectedColor}`}
-            />
-          </div>
-        </aside>
-        {/* Centered Canvas Artboard */}
-        <div className="flex w-full min-w-0 flex-1 flex-col">
-          <div className="flex items-end gap-px border-b border-slate-200 bg-[var(--ps-chrome)] px-2 pt-1">
-            <span className="ps-doc-tab max-w-[60%] truncate rounded-t-[3px] px-3 py-1 text-[11px]">
-              {characterName.trim() || "Chưa đặt tên"}.led @ {Math.round(zoom * 100)}% (RGB/8)
-            </span>
-          </div>
-          <div className="ps-pasteboard flex flex-1 items-center justify-center overflow-auto p-6">
-          <div className="max-w-full rounded-[2px] bg-[var(--ps-panel)] p-3 shadow-[0_8px_24px_rgba(15,23,42,.12)] ring-1 ring-slate-200">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-slate-500">
-              <span>Mô phỏng LED Matrix</span>
-              <div className="flex items-center gap-2">
+        </div>
+      )}
+
+      {/* 3. Main Aseprite 3-Pane Workspace: Left Palette | Center Canvas + Status | Right Tool Rail + Inspector */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--ps-chrome)] lg:flex-row">
+        {/* Left Pane: Fixed Aseprite Color Palette Dock */}
+        <aside
+          aria-label="Bảng màu Aseprite"
+          className="ase-dock order-2 flex w-full shrink-0 flex-col gap-2.5 border-t-2 p-2 lg:order-1 lg:w-[236px] lg:overflow-y-auto lg:border-r-2 lg:border-t-0"
+        >
+          <div className="ase-panel">
+            <div className="ase-panel-head flex items-center justify-between px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide">
+              <span>Bảng màu</span>
+              <div className="flex gap-1">
                 <button
                   type="button"
-                  onClick={() => setZoomIdx((i) => Math.max(0, i - 1))}
-                  disabled={zoomIdx === 0}
-                  aria-label="Thu nhỏ"
-                  className="rounded-lg border border-slate-200 p-1 text-slate-600 disabled:opacity-40"
+                  aria-pressed={colorPanelTab === "SWATCH"}
+                  onClick={() => setColorPanelTab("SWATCH")}
+                  className="ase-btn px-1.5 py-0.5 text-[10px] font-bold"
                 >
-                  <ZoomOut size={13} />
+                  Mẫu
                 </button>
-                <span className="font-mono font-bold text-slate-700">
-                  {Math.round(zoom * 100)}%
-                </span>
                 <button
                   type="button"
-                  onClick={() =>
-                    setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1))
-                  }
-                  disabled={zoomIdx === ZOOM_STEPS.length - 1}
-                  aria-label="Phóng to"
-                  className="rounded-lg border border-slate-200 p-1 text-slate-600 disabled:opacity-40"
+                  aria-pressed={colorPanelTab === "SLIDERS"}
+                  onClick={() => setColorPanelTab("SLIDERS")}
+                  className="ase-btn px-1.5 py-0.5 text-[10px] font-bold"
                 >
-                  <ZoomIn size={13} />
+                  RGB/HSV
                 </button>
-                <span className="ml-1 font-mono">
-                  {doc.width}×{doc.height} px
-                </span>
               </div>
             </div>
 
-            <div
-              className="relative mx-auto overflow-hidden rounded border border-slate-800 bg-[#090d14] shadow-inner"
-              style={{
-                width: `${Math.round(sizeOption.displayWidth * zoom)}px`,
-                maxWidth: "100%",
-                aspectRatio: `${doc.width} / ${doc.height}`,
-              }}
-            >
-              {isInheriting && (
-                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/75 backdrop-blur-xs text-white">
-                  <Loader2 size={24} className="animate-spin text-emerald-400 mb-2" />
-                  <p className="text-xs font-bold text-emerald-200">Kế thừa thiết kế phiên bản trước...</p>
-                  <p className="text-[10px] text-slate-300 mt-0.5">Đang nạp và ánh xạ điểm ảnh lên canvas</p>
-                </div>
-              )}
-              <canvas
-                ref={canvasRef}
-                width={doc.width}
-                height={doc.height}
-                onMouseDown={(e) => {
-                  if (e.button === 0) beginStrokeAt(e.clientX, e.clientY);
-                }}
-                onMouseMove={(e) => continueStrokeAt(e.clientX, e.clientY)}
-                onMouseUp={endStroke}
-                onMouseLeave={() => {
-                  setHoverPixel(null);
-                  endStroke();
-                }}
-                onTouchStart={(e) => {
-                  const t = e.touches[0];
-                  if (t) beginStrokeAt(t.clientX, t.clientY);
-                }}
-                onTouchMove={(e) => {
-                  const t = e.touches[0];
-                  if (t) continueStrokeAt(t.clientX, t.clientY);
-                }}
-                onTouchEnd={endStroke}
-                className="block h-full w-full cursor-crosshair touch-none select-none"
-                style={{ imageRendering: "pixelated" }}
-              />
-
-              {/* Subtle 1px Overlay Grid */}
-              {showGrid && (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(to right, rgba(255, 255, 255, 0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.12) 1px, transparent 1px)",
-                    backgroundSize: `${100 / doc.width}% ${100 / doc.height}%`,
+            <div className="space-y-2.5 p-2.5">
+              {/* Active Color Chip + Hex + Save */}
+              <div className="flex items-center gap-2 border-2 border-[#8a948e] bg-[#f5f7f6] p-1.5">
+                <input
+                  type="color"
+                  value={normalizeHex(selectedColor)}
+                  onChange={(e) => {
+                    setSelectedColor(normalizeHex(e.target.value));
+                    if (activeTool === "ERASER") setActiveTool("PEN");
                   }}
+                  aria-label="Chọn màu hex"
+                  className="h-7 w-8 shrink-0 cursor-pointer border-2 border-[#1f2a24] bg-transparent p-0"
                 />
-              )}
+                <span className="min-w-0 flex-1 font-mono text-xs font-black text-[#1f2a24]">
+                  {normalizeHex(selectedColor)}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddCustomSwatch}
+                  title="Lưu màu hiện tại vào bảng màu"
+                  className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
+                >
+                  <Plus size={11} /> Lưu
+                </button>
+              </div>
 
-              {/* Mirror Symmetry Guide Lines */}
-              {(mirrorMode === "HORIZONTAL" || mirrorMode === "BOTH") && (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 left-1/2 w-px border-l border-dashed border-cyan-400/70"
-                />
-              )}
-              {(mirrorMode === "VERTICAL" || mirrorMode === "BOTH") && (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-1/2 h-px border-t border-dashed border-cyan-400/70"
-                />
-              )}
-
-              {/* Selection Marquee Overlay */}
-              {normalizedSelection && (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute border-2 border-dashed border-amber-300 bg-amber-300/10"
-                  style={{
-                    left: `${(Math.max(0, normalizedSelection.left) / doc.width) * 100}%`,
-                    top: `${(Math.max(0, normalizedSelection.top) / doc.height) * 100}%`,
-                    width: `${
-                      ((Math.min(doc.width - 1, normalizedSelection.right) -
-                        Math.max(0, normalizedSelection.left) +
-                        1) /
-                        doc.width) *
-                      100
-                    }%`,
-                    height: `${
-                      ((Math.min(doc.height - 1, normalizedSelection.bottom) -
-                        Math.max(0, normalizedSelection.top) +
-                        1) /
-                        doc.height) *
-                      100
-                    }%`,
-                  }}
-                />
-              )}
-
-              {/* Hover Pixel / Brush Cursor Preview */}
-              {hoverPixel && (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute border border-white/85 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
-                  style={{
-                    left: `${
-                      ((hoverPixel.x -
-                        (activeTool === "PEN" || activeTool === "ERASER"
-                          ? Math.floor((brushSize - 1) / 2)
-                          : 0)) /
-                        doc.width) *
-                      100
-                    }%`,
-                    top: `${
-                      ((hoverPixel.y -
-                        (activeTool === "PEN" || activeTool === "ERASER"
-                          ? Math.floor((brushSize - 1) / 2)
-                          : 0)) /
-                        doc.height) *
-                      100
-                    }%`,
-                    width: `${
-                      ((activeTool === "PEN" || activeTool === "ERASER"
-                        ? brushSize
-                        : 1) /
-                        doc.width) *
-                      100
-                    }%`,
-                    height: `${
-                      ((activeTool === "PEN" || activeTool === "ERASER"
-                        ? brushSize
-                        : 1) /
-                        doc.height) *
-                      100
-                    }%`,
-                  }}
-                />
-              )}
-            </div>
-
-            <p className="mt-2.5 text-center text-[11px] text-slate-400">
-              Nhấn giữ chuột trái hoặc chạm kéo để thao tác · Chế độ{" "}
-              <span className="font-bold text-slate-600">{activeTool}</span>
-              {mirrorMode !== "NONE" ? ` · Đối xứng: ${mirrorMode}` : ""}
-            </p>
-          </div>
-          </div>
-        </div>
-        {/* Right panel dock */}
-        <aside
-          aria-label="Bảng điều khiển"
-          className="ps-dock w-full shrink-0 overflow-y-auto border-t border-slate-200 lg:w-[300px] lg:border-l lg:border-t-0"
-        >
-          <StudioPanel title="Màu sắc">
-              {/* 5. Color Palette (Swatches + RGB / HSV Sliders) */}
-              <div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                    Bảng màu LED
-                  </p>
-                  <div className="flex rounded-lg border border-slate-200 p-0.5 text-[10px] font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setColorPanelTab("SWATCH")}
-                      className={`rounded-md px-2 py-0.5 ${
-                        colorPanelTab === "SWATCH"
-                          ? "bg-slate-900 text-white"
-                          : "text-slate-600"
-                      }`}
-                    >
-                      Mẫu màu
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setColorPanelTab("SLIDERS")}
-                      className={`rounded-md px-2 py-0.5 ${
-                        colorPanelTab === "SLIDERS"
-                          ? "bg-slate-900 text-white"
-                          : "text-slate-600"
-                      }`}
-                    >
-                      RGB/HSV
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-2 flex items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-                  <input
-                    type="color"
-                    value={normalizeHex(selectedColor)}
-                    onChange={(e) => {
-                      setSelectedColor(normalizeHex(e.target.value));
-                      if (activeTool === "ERASER") setActiveTool("PEN");
-                    }}
-                    aria-label="Chọn màu hex"
-                    className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0"
-                  />
-                  <span className="flex-1 font-mono text-xs font-bold text-slate-800">
-                    {normalizeHex(selectedColor)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddCustomSwatch}
-                    title="Lưu màu hiện tại vào bảng màu"
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100"
-                  >
-                    <Plus size={11} /> Lưu
-                  </button>
-                </div>
-
-                {colorPanelTab === "SWATCH" ? (
-                  <div className="mt-2.5 grid grid-cols-5 gap-2">
-                    {paletteSwatches.map((swatch) => {
-                      const active =
-                        normalizeHex(selectedColor) === normalizeHex(swatch.hex) &&
-                        activeTool !== "ERASER";
-                      return (
-                        <div key={swatch.hex} className="group relative">
+              {colorPanelTab === "SWATCH" ? (
+                <div className="grid grid-cols-5 gap-1">
+                  {paletteSwatches.map((swatch) => {
+                    const active =
+                      normalizeHex(selectedColor) === normalizeHex(swatch.hex) &&
+                      activeTool !== "ERASER";
+                    return (
+                      <div key={swatch.hex} className="group relative">
+                        <button
+                          type="button"
+                          title={`${swatch.name} (${swatch.hex})`}
+                          aria-label={swatch.name}
+                          onClick={() => {
+                            setSelectedColor(swatch.hex);
+                            if (activeTool === "ERASER") setActiveTool("PEN");
+                          }}
+                          className={`block h-7 w-full cursor-pointer border-2 transition-transform hover:scale-105 ${
+                            active
+                              ? "border-[#111111] ring-2 ring-white ring-inset"
+                              : "border-[#7d8781]"
+                          }`}
+                          style={{ backgroundColor: swatch.hex }}
+                        />
+                        {swatch.custom && (
                           <button
                             type="button"
-                            title={`${swatch.name} (${swatch.hex})`}
-                            aria-label={swatch.name}
-                            onClick={() => {
-                              setSelectedColor(swatch.hex);
-                              if (activeTool === "ERASER") setActiveTool("PEN");
-                            }}
-                            className={`h-7 w-full rounded-lg border transition-transform hover:scale-105 ${
-                              active
-                                ? "border-slate-900 ring-2 ring-emerald-600 ring-offset-1"
-                                : "border-slate-300"
-                            }`}
-                            style={{ backgroundColor: swatch.hex }}
-                          />
-                          {swatch.custom && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPaletteSwatches((prev) =>
-                                  prev.filter((s) => s.hex !== swatch.hex),
-                                )
-                              }
-                              aria-label={`Xóa màu ${swatch.hex}`}
-                              className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-900 text-white group-hover:flex"
-                            >
-                              <X size={9} />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="mt-2.5 space-y-1.5 text-[10px] font-bold text-slate-600">
-                    {(
-                      [
-                        { label: "R", val: currentRgb.r, max: 255, set: (v: number) => setSelectedColor(rgbToHex(v, currentRgb.g, currentRgb.b)) },
-                        { label: "G", val: currentRgb.g, max: 255, set: (v: number) => setSelectedColor(rgbToHex(currentRgb.r, v, currentRgb.b)) },
-                        { label: "B", val: currentRgb.b, max: 255, set: (v: number) => setSelectedColor(rgbToHex(currentRgb.r, currentRgb.g, v)) },
-                      ] as const
-                    ).map((ch) => (
-                      <label key={ch.label} className="flex items-center gap-2">
-                        <span className="w-3 font-mono">{ch.label}</span>
-                        <input
-                          type="range"
-                          min={0}
-                          max={ch.max}
-                          value={ch.val}
-                          onChange={(e) => ch.set(Number(e.target.value))}
-                          className="flex-1 accent-emerald-600"
-                        />
-                        <span className="w-7 text-right font-mono">{ch.val}</span>
-                      </label>
-                    ))}
-                    <div className="h-px bg-slate-200" />
-                    {(
-                      [
-                        {
-                          label: "H",
-                          val: currentHsv.h,
-                          max: 360,
-                          unit: "°",
-                          set: (v: number) => {
-                            const rgb = hsvToRgb(v, currentHsv.s, currentHsv.v);
-                            setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
-                          },
-                        },
-                        {
-                          label: "S",
-                          val: currentHsv.s,
-                          max: 100,
-                          unit: "%",
-                          set: (v: number) => {
-                            const rgb = hsvToRgb(currentHsv.h, v, currentHsv.v);
-                            setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
-                          },
-                        },
-                        {
-                          label: "V",
-                          val: currentHsv.v,
-                          max: 100,
-                          unit: "%",
-                          set: (v: number) => {
-                            const rgb = hsvToRgb(currentHsv.h, currentHsv.s, v);
-                            setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
-                          },
-                        },
-                      ] as const
-                    ).map((ch) => (
-                      <label key={ch.label} className="flex items-center gap-2">
-                        <span className="w-3 font-mono">{ch.label}</span>
-                        <input
-                          type="range"
-                          min={0}
-                          max={ch.max}
-                          value={ch.val}
-                          onChange={(e) => ch.set(Number(e.target.value))}
-                          className="flex-1 accent-emerald-600"
-                        />
-                        <span className="w-8 text-right font-mono">
-                          {ch.val}
-                          {ch.unit}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-          </StudioPanel>
-          <StudioPanel title={`Thuộc tính · ${toolsMeta.find((tool) => tool.key === activeTool)?.label ?? activeTool}`}>
-              {/* 2. Contextual Tool Properties */}
-              {(activeTool === "PEN" || activeTool === "ERASER") && (
-                <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                    <span>Cỡ nét ({activeTool === "PEN" ? "Bút" : "Tẩy"})</span>
-                    <span className="font-mono text-emerald-700">{brushSize} px</span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-4 gap-1.5">
-                    {[1, 2, 3, 4].map((sz) => (
-                      <button
-                        key={sz}
-                        type="button"
-                        onClick={() => setBrushSize(sz)}
-                        className={`rounded-lg border py-1 text-xs font-bold ${
-                          brushSize === sz
-                            ? "border-emerald-600 bg-emerald-600 text-white"
-                            : "border-slate-200 bg-white text-slate-700"
-                        }`}
-                      >
-                        {sz}px
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    type="range"
-                    min={1}
-                    max={8}
-                    value={brushSize}
-                    onChange={(e) => setBrushSize(Number(e.target.value))}
-                    className="mt-2 w-full accent-emerald-600"
-                  />
-                  {activeTool === "PEN" && (
-                    <div className="mt-2.5 border-t border-slate-200 pt-2">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                        <span>Độ đậm nét</span>
-                        <span className="font-mono">{opacity}%</span>
+                            onClick={() =>
+                              setPaletteSwatches((prev) =>
+                                prev.filter((s) => s.hex !== swatch.hex),
+                              )
+                            }
+                            aria-label={`Xóa màu ${swatch.hex}`}
+                            className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 cursor-pointer items-center justify-center border border-black bg-white text-black group-hover:flex"
+                          >
+                            <X size={9} />
+                          </button>
+                        )}
                       </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-1.5 text-[10px] font-bold text-[#4b554f]">
+                  {(
+                    [
+                      { label: "R", val: currentRgb.r, max: 255, set: (v: number) => setSelectedColor(rgbToHex(v, currentRgb.g, currentRgb.b)) },
+                      { label: "G", val: currentRgb.g, max: 255, set: (v: number) => setSelectedColor(rgbToHex(currentRgb.r, v, currentRgb.b)) },
+                      { label: "B", val: currentRgb.b, max: 255, set: (v: number) => setSelectedColor(rgbToHex(currentRgb.r, currentRgb.g, v)) },
+                    ] as const
+                  ).map((ch) => (
+                    <label key={ch.label} className="flex items-center gap-2">
+                      <span className="w-3 font-mono">{ch.label}</span>
                       <input
                         type="range"
-                        min={10}
-                        max={100}
-                        step={5}
-                        value={opacity}
-                        onChange={(e) => setOpacity(Number(e.target.value))}
-                        className="mt-1 w-full accent-emerald-600"
+                        min={0}
+                        max={ch.max}
+                        value={ch.val}
+                        onChange={(e) => ch.set(Number(e.target.value))}
+                        className="flex-1 accent-[#2d6a4f]"
                       />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeTool === "SHAPE" && (
-                <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-[11px] font-bold text-slate-700">
-                    Loại hình khối (kéo để xem trước)
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-1.5">
-                    {(
-                      [
-                        { key: "LINE", label: "Đường", icon: <Minus size={13} /> },
-                        { key: "RECTANGLE", label: "Chữ nhật", icon: <Square size={13} /> },
-                        { key: "ELLIPSE", label: "Elip", icon: <Circle size={13} /> },
-                        { key: "STAR", label: "Ngôi sao", icon: <Star size={13} /> },
-                      ] as const
-                    ).map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => setShapeKind(item.key)}
-                        className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-bold ${
-                          shapeKind === item.key
-                            ? "border-emerald-600 bg-emerald-600 text-white"
-                            : "border-slate-200 bg-white text-slate-700"
-                        }`}
-                      >
-                        {item.icon}
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  {shapeKind !== "LINE" && (
-                    <div className="mt-2 flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setShapeFilled(false)}
-                        className={`flex-1 rounded-lg border py-1 text-[11px] font-bold ${
-                          !shapeFilled
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white text-slate-700"
-                        }`}
-                      >
-                        Viền rỗng
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShapeFilled(true)}
-                        className={`flex-1 rounded-lg border py-1 text-[11px] font-bold ${
-                          shapeFilled
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white text-slate-700"
-                        }`}
-                      >
-                        Tô đặc
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {(activeTool === "SELECT" || activeTool === "MOVE" || selection || clipboard) && (
-                <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                    <span>Vùng chọn</span>
-                    {normalizedSelection && (
-                      <span className="font-mono text-[10px] text-slate-500">
-                        {normalizedSelection.right - normalizedSelection.left + 1}×
-                        {normalizedSelection.bottom - normalizedSelection.top + 1}
+                      <span className="w-7 text-right font-mono text-[#1f2a24]">{ch.val}</span>
+                    </label>
+                  ))}
+                  <div className="h-px bg-[#dfe3e0]" />
+                  {(
+                    [
+                      {
+                        label: "H",
+                        val: currentHsv.h,
+                        max: 360,
+                        unit: "°",
+                        set: (v: number) => {
+                          const rgb = hsvToRgb(v, currentHsv.s, currentHsv.v);
+                          setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
+                        },
+                      },
+                      {
+                        label: "S",
+                        val: currentHsv.s,
+                        max: 100,
+                        unit: "%",
+                        set: (v: number) => {
+                          const rgb = hsvToRgb(currentHsv.h, v, currentHsv.v);
+                          setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
+                        },
+                      },
+                      {
+                        label: "V",
+                        val: currentHsv.v,
+                        max: 100,
+                        unit: "%",
+                        set: (v: number) => {
+                          const rgb = hsvToRgb(currentHsv.h, currentHsv.s, v);
+                          setSelectedColor(rgbToHex(rgb.r, rgb.g, rgb.b));
+                        },
+                      },
+                    ] as const
+                  ).map((ch) => (
+                    <label key={ch.label} className="flex items-center gap-2">
+                      <span className="w-3 font-mono">{ch.label}</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={ch.max}
+                        value={ch.val}
+                        onChange={(e) => ch.set(Number(e.target.value))}
+                        className="flex-1 accent-[#2d6a4f]"
+                      />
+                      <span className="w-8 text-right font-mono text-[#1f2a24]">
+                        {ch.val}
+                        {ch.unit}
                       </span>
-                    )}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleClearCanvas}
+            disabled={!hasContent}
+            className="ase-btn flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold text-red-700"
+          >
+            <Trash size={13} /> Xóa toàn bộ bảng vẽ
+          </button>
+        </aside>
+
+        {/* Center Pane: Canvas Pasteboard + Bottom Status Bar */}
+        <div className="order-1 flex min-h-0 w-full min-w-0 flex-1 flex-col lg:order-2">
+          <div
+            ref={pasteboardRef}
+            className={`ps-pasteboard flex min-h-0 flex-1 items-center justify-center p-2.5 sm:p-3 ${
+              zoom > 1 ? "overflow-auto" : "overflow-hidden"
+            }`}
+          >
+            <div className="ase-panel max-w-full p-2">
+              <div
+                className="relative mx-auto overflow-hidden border-2 border-[#1f2a24] bg-[#090d14]"
+                style={{
+                  width: fittedCanvasWidth
+                    ? `${Math.round(fittedCanvasWidth * zoom)}px`
+                    : `min(${sizeOption.displayWidth}px, 100%, calc((100dvh - 22rem) * ${doc.width} / ${doc.height}))`,
+                  maxWidth: "100%",
+                  aspectRatio: `${doc.width} / ${doc.height}`,
+                }}
+              >
+                {isInheriting && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/75 text-white backdrop-blur-xs">
+                    <Loader2 size={24} className="mb-2 animate-spin text-[#89c89b]" />
+                    <p className="text-xs font-bold text-[#a3d7b2]">Kế thừa thiết kế phiên bản trước...</p>
+                    <p className="mt-0.5 text-[10px] text-slate-300">Đang nạp và ánh xạ điểm ảnh lên canvas</p>
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                )}
+                {/* Onion Skin overlay showing previous frame faintly behind active frame */}
+                {showOnionSkin && activeFrameIndex > 0 && (
+                  <canvas
+                    ref={onionCanvasRef}
+                    width={doc.width}
+                    height={doc.height}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 block h-full w-full opacity-25"
+                    style={{ imageRendering: "pixelated" }}
+                  />
+                )}
+                <canvas
+                  ref={canvasRef}
+                  width={doc.width}
+                  height={doc.height}
+                  onMouseDown={(e) => {
+                    if (e.button === 0) beginStrokeAt(e.clientX, e.clientY);
+                  }}
+                  onMouseMove={(e) => continueStrokeAt(e.clientX, e.clientY)}
+                  onMouseUp={endStroke}
+                  onMouseLeave={() => {
+                    setHoverPixel(null);
+                    endStroke();
+                  }}
+                  onTouchStart={(e) => {
+                    const t = e.touches[0];
+                    if (t) beginStrokeAt(t.clientX, t.clientY);
+                  }}
+                  onTouchMove={(e) => {
+                    const t = e.touches[0];
+                    if (t) continueStrokeAt(t.clientX, t.clientY);
+                  }}
+                  onTouchEnd={endStroke}
+                  className="block h-full w-full cursor-crosshair touch-none select-none"
+                  style={{ imageRendering: "pixelated" }}
+                />
+
+                {/* Subtle 1px Overlay Grid */}
+                {showGrid && (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(to right, rgba(255, 255, 255, 0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.14) 1px, transparent 1px)",
+                      backgroundSize: `${100 / doc.width}% ${100 / doc.height}%`,
+                    }}
+                  />
+                )}
+
+                {/* Mirror Symmetry Guide Lines */}
+                {(mirrorMode === "HORIZONTAL" || mirrorMode === "BOTH") && (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-y-0 left-1/2 w-px border-l border-dashed border-cyan-400/70"
+                  />
+                )}
+                {(mirrorMode === "VERTICAL" || mirrorMode === "BOTH") && (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 top-1/2 h-px border-t border-dashed border-cyan-400/70"
+                  />
+                )}
+
+                {/* Selection Marquee Overlay */}
+                {normalizedSelection && (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute border-2 border-dashed border-amber-300 bg-amber-300/10"
+                    style={{
+                      left: `${(Math.max(0, normalizedSelection.left) / doc.width) * 100}%`,
+                      top: `${(Math.max(0, normalizedSelection.top) / doc.height) * 100}%`,
+                      width: `${
+                        ((Math.min(doc.width - 1, normalizedSelection.right) -
+                          Math.max(0, normalizedSelection.left) +
+                          1) /
+                          doc.width) *
+                        100
+                      }%`,
+                      height: `${
+                        ((Math.min(doc.height - 1, normalizedSelection.bottom) -
+                          Math.max(0, normalizedSelection.top) +
+                          1) /
+                          doc.height) *
+                        100
+                      }%`,
+                    }}
+                  />
+                )}
+
+                {/* Hover Pixel / Brush Cursor Preview */}
+                {hoverPixel && (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute border border-white/85 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
+                    style={{
+                      left: `${
+                        ((hoverPixel.x -
+                          (activeTool === "PEN" || activeTool === "ERASER"
+                            ? Math.floor((brushSize - 1) / 2)
+                            : 0)) /
+                          doc.width) *
+                        100
+                      }%`,
+                      top: `${
+                        ((hoverPixel.y -
+                          (activeTool === "PEN" || activeTool === "ERASER"
+                            ? Math.floor((brushSize - 1) / 2)
+                            : 0)) /
+                          doc.height) *
+                        100
+                      }%`,
+                      width: `${
+                        ((activeTool === "PEN" || activeTool === "ERASER"
+                          ? brushSize
+                          : 1) /
+                          doc.width) *
+                        100
+                      }%`,
+                      height: `${
+                        ((activeTool === "PEN" || activeTool === "ERASER"
+                          ? brushSize
+                          : 1) /
+                          doc.height) *
+                        100
+                      }%`,
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Aseprite GIF Animation Timeline Strip */}
+          <div
+            aria-label="Timeline khung hình GIF"
+            className="flex flex-wrap items-center gap-2 border-t-2 border-[#8a948e] bg-[#dfe4e1] px-2.5 py-1.5"
+          >
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                disabled={frames.length <= 1}
+                onClick={() => setIsPlaying((p) => !p)}
+                title={
+                  frames.length <= 1
+                    ? "Thêm ít nhất 2 frame để chạy thử GIF (Space)"
+                    : effectivePlaying
+                      ? "Dừng phát thử (Space)"
+                      : "Phát thử GIF trên Live LED Preview (Space)"
+                }
+                aria-pressed={effectivePlaying}
+                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold"
+              >
+                {effectivePlaying ? <Pause size={12} /> : <Play size={12} />}
+                {effectivePlaying ? "Dừng" : "Phát GIF"}
+              </button>
+
+              <select
+                value={frameDelayMs}
+                onChange={(e) => {
+                  userDirtyRef.current = true;
+                  setFrameDelayMs(Number(e.target.value));
+                }}
+                aria-label="Tốc độ khung hình GIF"
+                title="Thời gian trễ mỗi frame (GIF frame delay)"
+                className="ase-input cursor-pointer px-1.5 py-1 font-mono text-[10px] font-bold"
+              >
+                <option value={60}>60ms (16fps)</option>
+                <option value={100}>100ms (10fps)</option>
+                <option value={150}>150ms (6.7fps)</option>
+                <option value={200}>200ms (5fps)</option>
+                <option value={300}>300ms (3.3fps)</option>
+                <option value={500}>500ms (2fps)</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => setShowOnionSkin((v) => !v)}
+                aria-pressed={showOnionSkin}
+                title="Hiển thị mờ frame trước đó phía sau bảng vẽ"
+                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
+              >
+                <Layers size={11} />
+                Onion
+              </button>
+
+              <span className="mx-0.5 h-4 w-px bg-[#9aa49e]" aria-hidden="true" />
+
+              <button
+                type="button"
+                onClick={handleAddFrame}
+                title="Thêm frame trống mới"
+                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
+              >
+                <Plus size={11} /> Frame
+              </button>
+              <button
+                type="button"
+                onClick={handleDuplicateFrame}
+                title="Nhân bản frame hiện tại để sửa tiếp chuyển động"
+                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
+              >
+                <CopyPlus size={11} /> Nhân bản
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMoveFrame(-1)}
+                disabled={activeFrameIndex === 0}
+                title="Đưa frame sang trái"
+                aria-label="Đưa frame sang trái"
+                className="ase-btn p-1"
+              >
+                <ChevronLeft size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMoveFrame(1)}
+                disabled={activeFrameIndex >= frames.length - 1}
+                title="Đưa frame sang phải"
+                aria-label="Đưa frame sang phải"
+                className="ase-btn p-1"
+              >
+                <ChevronRight size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteFrame}
+                disabled={frames.length <= 1}
+                title="Xóa frame hiện tại"
+                aria-label="Xóa frame hiện tại"
+                className="ase-btn p-1 text-red-700"
+              >
+                <Trash size={11} />
+              </button>
+            </div>
+
+            {/* Frame Thumbnails Strip */}
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-0.5">
+              {frames.map((frameDoc, idx) => {
+                const isSelected = idx === activeFrameIndex;
+                const isPlaybackHighlight =
+                  effectivePlaying && idx === playbackFrameIndex % frames.length;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleSelectFrame(idx)}
+                    title={`Frame ${idx + 1}`}
+                    className={`ase-btn relative flex shrink-0 items-center gap-1.5 px-1.5 py-1 ${
+                      isPlaybackHighlight ? "ring-2 ring-[#2d6a4f]" : ""
+                    }`}
+                  >
+                    <FrameMiniCanvas frameDoc={frameDoc} />
+                    <span className="font-mono text-[10px] font-black text-[#1f2a24]">
+                      F{idx + 1}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Aseprite Bottom Status Bar */}
+          <footer
+            aria-label="Thanh trạng thái bảng vẽ"
+            className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-[#8a948e] bg-[#e9ecea] px-3 py-1 font-mono text-[11px] font-bold text-[#1f2a24]"
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="min-w-[84px]">
+                {hoverPixel ? `X:${hoverPixel.x} Y:${hoverPixel.y}` : "X:— Y:—"}
+              </span>
+              <span className="border-l border-[#9aa49e] pl-3">
+                {activeTool}
+                {(activeTool === "PEN" || activeTool === "ERASER") ? ` (${brushSize}px)` : ""}
+              </span>
+              {mirrorMode !== "NONE" && (
+                <span className="border-l border-[#9aa49e] pl-3 text-[#2d6a4f]">
+                  MIRROR:{mirrorMode}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="mr-1 text-[#4b554f]">
+                {doc.width}×{doc.height}
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomIdx((i) => Math.max(0, i - 1))}
+                disabled={zoomIdx === 0}
+                aria-label="Thu nhỏ"
+                className="ase-btn p-1"
+              >
+                <ZoomOut size={12} />
+              </button>
+              <span className="min-w-11 text-center">{Math.round(zoom * 100)}%</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setZoomIdx((i) => Math.min(ZOOM_STEPS.length - 1, i + 1))
+                }
+                disabled={zoomIdx === ZOOM_STEPS.length - 1}
+                aria-label="Phóng to"
+                className="ase-btn p-1"
+              >
+                <ZoomIn size={12} />
+              </button>
+            </div>
+          </footer>
+        </div>
+
+        {/* Right Pane: Vertical Tool Rail + Inspector */}
+        <div className="order-3 flex shrink-0 flex-col lg:flex-row">
+          {/* Aseprite Tool Rail (adjacent to canvas right edge on desktop) */}
+          <aside
+            aria-label="Thanh công cụ vẽ"
+            className="ase-dock flex shrink-0 flex-row flex-wrap items-center gap-1 border-t-2 p-1.5 lg:w-12 lg:flex-col lg:flex-nowrap lg:border-l-2 lg:border-t-0"
+          >
+            {toolsMeta.map((tool) => (
+              <button
+                key={tool.key}
+                type="button"
+                onClick={() => setActiveTool(tool.key)}
+                title={`${tool.label} (${tool.shortcut})`}
+                aria-label={`${tool.label} (${tool.shortcut})`}
+                aria-pressed={activeTool === tool.key}
+                className="ase-btn group relative flex h-8 w-8 items-center justify-center [&_svg]:h-[16px] [&_svg]:w-[16px]"
+              >
+                {tool.icon}
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute right-full z-50 mr-2 hidden whitespace-nowrap border-2 border-[#1f2a24] bg-[#1b1b1b] px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 lg:block"
+                >
+                  {tool.label} <span className="font-mono text-[#89c89b]">({tool.shortcut})</span>
+                </span>
+              </button>
+            ))}
+
+            {/* Active foreground swatch indicator */}
+            <div
+              className="ml-auto flex items-center lg:ml-0 lg:mt-auto lg:pb-1"
+              title={`Màu đang chọn ${selectedColor}`}
+            >
+              <span
+                className="block h-7 w-7 border-2 border-[#1f2a24] shadow-[inset_0_0_0_2px_#ffffff]"
+                style={{ backgroundColor: selectedColor }}
+                aria-label={`Màu đang chọn ${selectedColor}`}
+              />
+            </div>
+          </aside>
+
+          {/* Right Inspector Dock (Live 1:1 LED Preview + Text Pixel + History + Shortcuts) */}
+          <aside
+            aria-label="Bảng thông số phụ trợ"
+            className="ase-dock flex w-full shrink-0 flex-col gap-2.5 border-t-2 p-2 lg:w-[236px] lg:overflow-y-auto lg:border-l-2 lg:border-t-0"
+          >
+            {/* Live 1:1 LED Preview Window */}
+            <div className="ase-panel">
+              <div className="ase-panel-head flex items-center justify-between px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide">
+                <span>Live LED Preview</span>
+                <div className="flex items-center gap-1">
+                  {frames.length > 1 && (
                     <button
                       type="button"
-                      disabled={!selection}
-                      onClick={handleCopySelection}
-                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
+                      onClick={() => setIsPlaying((p) => !p)}
+                      aria-pressed={effectivePlaying}
+                      title={effectivePlaying ? "Dừng phát GIF" : "Phát thử GIF"}
+                      aria-label={effectivePlaying ? "Dừng phát GIF" : "Phát thử GIF"}
+                      className="ase-btn px-1.5 py-0.5 text-[10px] font-bold"
                     >
-                      <Copy size={12} /> Sao chép
+                      {effectivePlaying ? <Pause size={10} /> : <Play size={10} />}
                     </button>
+                  )}
+                  {([1, 2, 4] as const).map((scale) => (
                     <button
+                      key={scale}
                       type="button"
-                      disabled={!selection}
-                      onClick={handleCutSelection}
-                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
+                      aria-pressed={previewScale === scale}
+                      onClick={() => setPreviewScale(scale)}
+                      title={`Xem trước LED ở tỉ lệ ${scale}×`}
+                      className="ase-btn px-1.5 py-0.5 font-mono text-[10px] font-bold"
                     >
-                      <Scissors size={12} /> Cắt
+                      {scale}×
                     </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center gap-1.5 p-2">
+                <div className="flex min-h-[104px] w-full items-center justify-center overflow-hidden border-2 border-[#1f2a24] bg-[#090d14] p-2">
+                  <canvas
+                    ref={previewCanvasRef}
+                    width={doc.width}
+                    height={doc.height}
+                    aria-label="Xem trước màn LED tỉ lệ thực"
+                    className="block shrink-0 border border-white/10"
+                    style={{
+                      width: `${Math.min(184, doc.width * previewScale)}px`,
+                      maxWidth: "100%",
+                      aspectRatio: `${doc.width} / ${doc.height}`,
+                      imageRendering: "pixelated",
+                    }}
+                  />
+                </div>
+                <div className="flex w-full items-center justify-between font-mono text-[10px] font-bold text-[#4b554f]">
+                  <span>
+                    {frames.length > 1
+                      ? `F${(effectivePlaying ? playbackFrameIndex % frames.length : activeFrameIndex) + 1}/${frames.length} · ${frameDelayMs}ms`
+                      : `${doc.width}×${doc.height} LED`}
+                  </span>
+                  <span>
+                    {previewScale === 1 ? "1:1 Thực" : `Zoom ${previewScale}× · Không lưới`}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {activeTool === "TEXT" && (
+              <div className="ase-panel">
+                <div className="ase-panel-head flex items-center justify-between px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide">
+                  <span>Chữ Pixel (ASCII)</span>
+                  {editingTextId && (
                     <button
                       type="button"
-                      disabled={!clipboard}
-                      onClick={handlePasteClipboard}
-                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-bold text-slate-700 disabled:opacity-40"
+                      onClick={() => setEditingTextId(null)}
+                      className="text-[10px] font-bold text-[#2d6a4f] hover:underline"
                     >
-                      <ClipboardPaste size={12} /> Dán
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!selection}
-                      onClick={handleDeleteSelection}
-                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-white py-1.5 text-[11px] font-bold text-red-600 disabled:opacity-40"
-                    >
-                      <Trash size={12} /> Xóa vùng
-                    </button>
-                  </div>
-                  {selection && (
-                    <button
-                      type="button"
-                      onClick={() => setSelection(null)}
-                      className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
-                    >
-                      Bỏ vùng chọn
+                      + Khối mới
                     </button>
                   )}
                 </div>
-              )}
 
-              {activeTool === "TEXT" && (
-                <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-700">
-                      Lớp chữ Pixel (ASCII)
-                    </span>
-                    {editingTextId && (
-                      <button
-                        type="button"
-                        onClick={() => setEditingTextId(null)}
-                        className="text-[10px] font-bold text-emerald-700 hover:underline"
-                      >
-                        + Khối mới
-                      </button>
-                    )}
-                  </div>
-
+                <div className="space-y-2 p-2.5">
                   <input
                     type="text"
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
                     placeholder="VD: HI, VIP, GO..."
-                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-emerald-600"
+                    className="ase-input w-full px-2 py-1.5 text-xs"
                   />
 
                   <select
                     value={textPresetIdx}
                     onChange={(e) => setTextPresetIdx(Number(e.target.value))}
-                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none"
+                    className="ase-input w-full px-2 py-1.5 text-xs font-bold"
                   >
                     {GLYPH_SIZE_PRESETS.map((preset, idx) => (
                       <option key={preset.label} value={idx}>
@@ -2009,19 +3063,19 @@ export default function PixelArtStudio({
                     ))}
                   </select>
 
-                  <div className="mt-2 grid grid-cols-2 gap-1.5">
-                    <label className="block text-[10px] font-bold text-slate-600">
-                      X (nhấn bảng vẽ)
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <label className="block text-[10px] font-bold text-[#4b554f]">
+                      X (bảng vẽ)
                       <input
                         type="number"
                         min={0}
                         max={doc.width - 1}
                         value={textX}
                         onChange={(e) => setTextX(Number(e.target.value))}
-                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                        className="ase-input mt-0.5 w-full px-2 py-1 text-xs"
                       />
                     </label>
-                    <label className="block text-[10px] font-bold text-slate-600">
+                    <label className="block text-[10px] font-bold text-[#4b554f]">
                       Y
                       <input
                         type="number"
@@ -2029,13 +3083,13 @@ export default function PixelArtStudio({
                         max={doc.height - 1}
                         value={textY}
                         onChange={(e) => setTextY(Number(e.target.value))}
-                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                        className="ase-input mt-0.5 w-full px-2 py-1 text-xs"
                       />
                     </label>
                   </div>
 
                   {!isTextAsciiValid && (
-                    <p className="mt-1.5 text-[10px] font-semibold text-red-600">
+                    <p className="text-[10px] font-bold text-red-700">
                       Chỉ hỗ trợ ký tự ASCII không dấu.
                     </p>
                   )}
@@ -2043,23 +3097,23 @@ export default function PixelArtStudio({
                   <button
                     type="button"
                     onClick={handleSaveTextBlock}
-                    className="mt-2.5 w-full rounded-lg bg-emerald-600 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                    className="ase-btn-primary w-full py-1.5 text-xs font-bold"
                   >
                     {editingTextId ? "Cập nhật khối chữ" : "Thêm khối chữ lên canvas"}
                   </button>
 
                   {doc.texts.length > 0 && (
-                    <div className="mt-2.5 space-y-1 border-t border-slate-200 pt-2">
-                      <p className="text-[10px] font-bold text-slate-500">
+                    <div className="space-y-1 border-t border-[#dfe3e0] pt-2">
+                      <p className="text-[10px] font-bold text-[#4b554f]">
                         Các khối chữ ({doc.texts.length})
                       </p>
                       {doc.texts.map((block) => (
                         <div
                           key={block.id}
-                          className={`flex items-center justify-between rounded-lg px-2 py-1 text-[11px] ${
+                          className={`flex items-center justify-between border px-2 py-1 text-[11px] ${
                             editingTextId === block.id
-                              ? "bg-emerald-100 font-bold text-emerald-900"
-                              : "bg-white text-slate-700"
+                              ? "border-[#2d6a4f] bg-[#dcebe2] font-bold text-[#163d2c]"
+                              : "border-[#dfe3e0] bg-white text-[#1f2a24]"
                           }`}
                         >
                           <button
@@ -2071,7 +3125,7 @@ export default function PixelArtStudio({
                               setTextY(block.y);
                               setSelectedColor(block.color);
                             }}
-                            className="truncate text-left"
+                            className="cursor-pointer truncate text-left"
                           >
                             "{block.text}" ({block.x},{block.y})
                           </button>
@@ -2079,7 +3133,7 @@ export default function PixelArtStudio({
                             type="button"
                             onClick={() => handleDeleteTextBlock(block.id)}
                             aria-label="Xóa khối chữ"
-                            className="text-red-500 hover:text-red-700"
+                            className="cursor-pointer text-red-600 hover:text-red-800"
                           >
                             <X size={12} />
                           </button>
@@ -2088,117 +3142,88 @@ export default function PixelArtStudio({
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* 3. Mirror Symmetry */}
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                  Đối xứng gương
-                </p>
-                <div className="mt-1.5 grid grid-cols-4 gap-1">
-                  {(
-                    [
-                      { key: "NONE", label: "Tắt", icon: null },
-                      { key: "HORIZONTAL", label: "Ngang", icon: <FlipHorizontal2 size={12} /> },
-                      { key: "VERTICAL", label: "Dọc", icon: <FlipVertical2 size={12} /> },
-                      { key: "BOTH", label: "2 Trục", icon: null },
-                    ] as const
-                  ).map((m) => (
-                    <button
-                      key={m.key}
-                      type="button"
-                      onClick={() => setMirrorMode(m.key)}
-                      className={`flex items-center justify-center gap-1 rounded-lg border py-1.5 text-[10px] font-bold ${
-                        mirrorMode === m.key
-                          ? "border-emerald-600 bg-emerald-50 text-emerald-800"
-                          : "border-slate-200 bg-white text-slate-600"
-                      }`}
-                    >
-                      {m.icon}
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
               </div>
+            )}
 
-          </StudioPanel>
-          <StudioPanel title="Lịch sử & thông tin">
-              {/* 4. History & Grid Controls */}
-              <div className="grid grid-cols-2 gap-1.5">
+            <div className="ase-panel">
+              <div className="ase-panel-head px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide">
+                Lịch sử thao tác
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 p-2.5 text-xs font-bold">
                 <button
                   type="button"
                   onClick={handleUndo}
                   disabled={historyMeta.undo === 0}
-                  className="flex items-center justify-center gap-1.5 rounded border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                  title="Hoàn tác (Ctrl+Z)"
+                  className="ase-btn flex items-center justify-center gap-1 py-1.5"
                 >
-                  <Undo2 size={14} /> Hoàn tác
+                  <Undo2 size={13} /> Hoàn tác ({historyMeta.undo})
                 </button>
                 <button
                   type="button"
                   onClick={handleRedo}
                   disabled={historyMeta.redo === 0}
-                  className="flex items-center justify-center gap-1.5 rounded border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                  title="Làm lại (Ctrl+Y)"
+                  className="ase-btn flex items-center justify-center gap-1 py-1.5"
                 >
-                  <Redo2 size={14} /> Làm lại
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowGrid((prev) => !prev)}
-                  className={`flex items-center justify-center gap-1.5 rounded border py-2 text-xs font-bold ${
-                    showGrid
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-700"
-                  }`}
-                >
-                  <LayoutGrid size={14} /> {showGrid ? "Ẩn lưới" : "Hiện lưới"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearCanvas}
-                  disabled={!hasContent}
-                  className="flex items-center justify-center gap-1.5 rounded border border-red-200 bg-red-50/70 py-2 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-40"
-                >
-                  <Trash size={14} /> Clear All
+                  <Redo2 size={13} /> Làm lại ({historyMeta.redo})
                 </button>
               </div>
+            </div>
 
-              <div className="flex items-center justify-between rounded bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
-                <span>Tọa độ con trỏ</span>
-                <span className="font-mono font-bold text-slate-900">
-                  {hoverPixel ? `X:${hoverPixel.x} Y:${hoverPixel.y}` : "—"}
-                </span>
+            <div className="ase-panel">
+              <div className="ase-panel-head px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide">
+                Phím tắt nhanh
               </div>
-          </StudioPanel>
-        </aside>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-2.5 font-mono text-[10px] text-[#4b554f]">
+                <span><strong className="text-[#1f2a24]">B / E</strong> Bút / Tẩy</span>
+                <span><strong className="text-[#1f2a24]">G / I</strong> Đổ / Hút màu</span>
+                <span><strong className="text-[#1f2a24]">U / T</strong> Hình / Chữ</span>
+                <span><strong className="text-[#1f2a24]">M / V</strong> Chọn / Kéo</span>
+                <span><strong className="text-[#1f2a24]">[ ]</strong> Cỡ nét</span>
+                <span><strong className="text-[#1f2a24]">, / .</strong> Đổi frame</span>
+                <span><strong className="text-[#1f2a24]">Space</strong> Phát GIF</span>
+                <span><strong className="text-[#1f2a24]">Ctrl+Z/Y</strong> Undo/Redo</span>
+                <span><strong className="text-[#1f2a24]">Ctrl+S</strong> Đồng bộ</span>
+                <span><strong className="text-[#1f2a24]">Del</strong> Xóa vùng</span>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
 
-      {/* Import Image Modal */}
+      {/* Import Image Modal (Aseprite Pixel-Bevel Dialog) */}
       {importModalOpen && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="import-image-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
         >
-          <div className="w-full max-w-lg rounded-md border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 id="import-image-title" className="text-base font-semibold text-slate-900">
+          <div className="ase-panel w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="ase-panel-head flex items-center justify-between px-3 py-2">
+              <h3
+                id="import-image-title"
+                className="text-xs font-black uppercase tracking-wide text-[#1f2a24]"
+              >
                 Nhập ảnh thành Pixel Art ({doc.width}×{doc.height})
               </h3>
               <button
                 type="button"
                 onClick={() => setImportModalOpen(false)}
-                className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+                aria-label="Đóng hộp thoại nhập ảnh"
+                className="ase-btn p-1 text-[#1f2a24]"
               >
-                <X size={18} />
+                <X size={14} />
               </button>
             </div>
 
-            <div className="mt-4 flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-4 p-4">
               <div
-                className="overflow-hidden rounded border border-slate-800 bg-[#090d14] p-2"
+                className="overflow-hidden border-2 border-[#1f2a24] bg-[#090d14] p-2"
                 style={{
                   width: "288px",
+                  maxWidth: "100%",
                   aspectRatio: `${doc.width} / ${doc.height}`,
                 }}
               >
@@ -2222,20 +3247,17 @@ export default function PixelArtStudio({
                   <button
                     key={mode.key}
                     type="button"
+                    aria-pressed={importFit === mode.key}
                     onClick={() => setImportFit(mode.key)}
-                    className={`rounded border py-2 text-xs font-bold ${
-                      importFit === mode.key
-                        ? "border-emerald-600 bg-emerald-50 text-emerald-800"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
+                    className="ase-btn py-2 text-xs font-bold"
                   >
                     {mode.label}
                   </button>
                 ))}
               </div>
 
-              <div className="grid w-full grid-cols-2 gap-4 text-xs font-bold text-slate-700">
-                <label>
+              <div className="grid w-full grid-cols-2 gap-4 text-xs font-bold text-[#1f2a24]">
+                <label className="block">
                   Độ sáng ({importBrightness}%)
                   <input
                     type="range"
@@ -2243,10 +3265,10 @@ export default function PixelArtStudio({
                     max={220}
                     value={importBrightness}
                     onChange={(e) => setImportBrightness(Number(e.target.value))}
-                    className="mt-1 w-full accent-emerald-600"
+                    className="mt-1.5 w-full accent-[#2d6a4f]"
                   />
                 </label>
-                <label>
+                <label className="block">
                   Tương phản ({importContrast}%)
                   <input
                     type="range"
@@ -2254,24 +3276,24 @@ export default function PixelArtStudio({
                     max={220}
                     value={importContrast}
                     onChange={(e) => setImportContrast(Number(e.target.value))}
-                    className="mt-1 w-full accent-emerald-600"
+                    className="mt-1.5 w-full accent-[#2d6a4f]"
                   />
                 </label>
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <div className="flex justify-end gap-2 border-t-2 border-[#8a948e] bg-[#e9ecea] px-4 py-2.5">
               <button
                 type="button"
                 onClick={() => setImportModalOpen(false)}
-                className="rounded border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700"
+                className="ase-btn px-4 py-1.5 text-xs font-bold"
               >
                 Hủy
               </button>
               <button
                 type="button"
                 onClick={handleConfirmImport}
-                className="rounded bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                className="ase-btn-primary px-4 py-1.5 text-xs font-bold"
               >
                 Áp dụng vào Canvas
               </button>
@@ -2280,65 +3302,74 @@ export default function PixelArtStudio({
         </div>
       )}
 
-      {/* Export File Dialog (PNG / JPEG) */}
+      {/* Export File Dialog (Aseprite Pixel-Bevel Dialog) */}
       {exportModalOpen && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="export-image-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
         >
-          <div className="w-full max-w-md rounded-md border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 id="export-image-title" className="text-base font-semibold text-slate-900">
+          <div className="ase-panel w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="ase-panel-head flex items-center justify-between px-3 py-2">
+              <h3
+                id="export-image-title"
+                className="text-xs font-black uppercase tracking-wide text-[#1f2a24]"
+              >
                 Xuất file thiết kế ({doc.width}×{doc.height})
               </h3>
               <button
                 type="button"
                 onClick={() => setExportModalOpen(false)}
-                className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+                aria-label="Đóng hộp thoại xuất file"
+                className="ase-btn p-1 text-[#1f2a24]"
               >
-                <X size={18} />
+                <X size={14} />
               </button>
             </div>
 
-            <div className="mt-4 space-y-4">
+            <div className="space-y-4 p-4">
               <div>
-                <p className="text-xs font-semibold text-slate-700">Định dạng ảnh</p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <p className="text-xs font-bold text-[#1f2a24]">Định dạng ảnh</p>
+                <div className="mt-2 grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setExportFormat("PNG")}
-                    className={`rounded border p-3 text-left ${
-                      exportFormat === "PNG"
-                        ? "border-emerald-600 bg-emerald-50 text-emerald-900"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
+                    aria-pressed={exportFormat === "GIF"}
+                    onClick={() => setExportFormat("GIF")}
+                    className="ase-btn p-2.5 text-left"
                   >
-                    <p className="text-xs font-semibold">PNG (.png)</p>
-                    <p className="mt-0.5 text-[11px] opacity-80">
-                      Nền trong suốt, sắc nét chuẩn pixel
+                    <p className="text-xs font-black">GIF (.gif)</p>
+                    <p className="mt-0.5 text-[10px] opacity-85">
+                      {frames.length} frame · {frameDelayMs}ms
                     </p>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setExportFormat("JPEG")}
-                    className={`rounded border p-3 text-left ${
-                      exportFormat === "JPEG"
-                        ? "border-emerald-600 bg-emerald-50 text-emerald-900"
-                        : "border-slate-200 bg-white text-slate-700"
-                    }`}
+                    aria-pressed={exportFormat === "PNG"}
+                    onClick={() => setExportFormat("PNG")}
+                    className="ase-btn p-2.5 text-left"
                   >
-                    <p className="text-xs font-semibold">JPEG (.jpg)</p>
-                    <p className="mt-0.5 text-[11px] opacity-80">
-                      Nền tối LED cố định, dễ chia sẻ
+                    <p className="text-xs font-black">PNG (.png)</p>
+                    <p className="mt-0.5 text-[10px] opacity-85">
+                      Frame hiện tại, nền trong suốt
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={exportFormat === "JPEG"}
+                    onClick={() => setExportFormat("JPEG")}
+                    className="ase-btn p-2.5 text-left"
+                  >
+                    <p className="text-xs font-black">JPEG (.jpg)</p>
+                    <p className="mt-0.5 text-[10px] opacity-85">
+                      Nền tối LED cố định
                     </p>
                   </button>
                 </div>
               </div>
 
               <div>
-                <p className="text-xs font-semibold text-slate-700">Độ phóng đại xuất file</p>
+                <p className="text-xs font-bold text-[#1f2a24]">Độ phóng đại xuất file</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {[
                     { scale: 1, label: `1× Gốc (${doc.width}×${doc.height})` },
@@ -2350,12 +3381,9 @@ export default function PixelArtStudio({
                     <button
                       key={opt.scale}
                       type="button"
+                      aria-pressed={exportScale === opt.scale}
                       onClick={() => setExportScale(opt.scale)}
-                      className={`rounded border py-2 text-xs font-bold ${
-                        exportScale === opt.scale
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700"
-                      }`}
+                      className="ase-btn py-2 text-xs font-bold"
                     >
                       {opt.label}
                     </button>
@@ -2364,18 +3392,18 @@ export default function PixelArtStudio({
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <div className="flex justify-end gap-2 border-t-2 border-[#8a948e] bg-[#e9ecea] px-4 py-2.5">
               <button
                 type="button"
                 onClick={() => setExportModalOpen(false)}
-                className="rounded border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700"
+                className="ase-btn px-4 py-1.5 text-xs font-bold"
               >
                 Hủy
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDownloadExport}
-                className="inline-flex items-center gap-1.5 rounded bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                className="ase-btn-primary inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold"
               >
                 <Download size={14} />
                 Tải file về máy
@@ -2388,16 +3416,40 @@ export default function PixelArtStudio({
   );
 }
 
-function StudioPanel({ title, children }: { title: string; children: React.ReactNode }) {
+function paintPixelDocumentToCanvas(
+  canvas: HTMLCanvasElement | null,
+  targetDoc: PixelDocumentState,
+) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const merged = compositeDocument(targetDoc);
+  ctx.clearRect(0, 0, targetDoc.width, targetDoc.height);
+  for (let y = 0; y < targetDoc.height; y++) {
+    for (let x = 0; x < targetDoc.width; x++) {
+      const hex = merged[y * targetDoc.width + x];
+      if (!hex) continue;
+      ctx.fillStyle = hex;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+}
+
+function FrameMiniCanvas({ frameDoc }: { frameDoc: PixelDocumentState }) {
+  const miniRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    paintPixelDocumentToCanvas(miniRef.current, frameDoc);
+  }, [frameDoc]);
+
   return (
-    <details open className="ps-panel group/panel">
-      <summary className="flex cursor-pointer select-none items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide">
-        <svg className="ps-chevron h-3 w-3 text-[#9b9b9b]" viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-        {title}
-      </summary>
-      <div className="flex flex-col gap-3.5 p-3">{children}</div>
-    </details>
+    <canvas
+      ref={miniRef}
+      width={frameDoc.width}
+      height={frameDoc.height}
+      aria-hidden="true"
+      className="block h-6 w-6 shrink-0 border border-[#1f2a24] bg-[#090d14]"
+      style={{ imageRendering: "pixelated" }}
+    />
   );
 }

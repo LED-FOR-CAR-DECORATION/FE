@@ -1,13 +1,13 @@
-import axios from "axios";
 import { ApiError } from "@/api_client";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "./client";
 import { buildSignedPutHeaders } from "./media";
 
-const USE_MOCK_AUTH = process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true";
+export type CharacterType = "STORE" | "COMMISSION";
 
-const CHARACTERS_STORAGE_KEY = "mirage_designer_characters_v1";
-const VERSIONS_STORAGE_KEY = "mirage_designer_character_versions_v1";
+export function isStoreCharacterType(characterType?: CharacterType | null): boolean {
+  return (characterType ?? "STORE") === "STORE";
+}
 
 export interface CurrentVersionSummary {
   versionId: number;
@@ -19,6 +19,8 @@ export interface DesignerCharacterItem {
   characterId: number;
   characterName: string;
   description: string | null;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   totalVersions: number;
   currentVersion: CurrentVersionSummary | null;
   createdAt: string;
@@ -27,6 +29,8 @@ export interface DesignerCharacterItem {
 export interface CreateCharacterRequest {
   characterName: string;
   description?: string;
+  characterType?: CharacterType;
+  commissionId?: number;
 }
 
 export interface UpdateCharacterRequest {
@@ -39,6 +43,8 @@ export interface CreateCharacterResponse {
   characterName: string;
   description: string | null;
   creatorEmployeeId: number;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   createdAt: string;
 }
 
@@ -46,6 +52,8 @@ export interface UpdateCharacterResponse {
   characterId: number;
   characterName: string;
   description: string | null;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   updatedAt: string;
 }
 
@@ -106,35 +114,6 @@ interface SignedUploadUrlResponse {
 export interface UploadedDesignerAsset {
   publicUrl: string;
   previewUrl?: string;
-  usedFallback: boolean;
-}
-
-interface MockStoredCharacter {
-  characterId: number;
-  characterName: string;
-  description: string | null;
-  createdAt: string;
-}
-
-interface MockStoredVersion extends CharacterVersionItem {
-  characterId: number;
-}
-
-function isNetworkOrMissingConfigError(error: unknown): boolean {
-  if (error instanceof ApiError) return false;
-  if (axios.isAxiosError(error)) {
-    return !error.response;
-  }
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return (
-      msg.includes("network") ||
-      msg.includes("failed to fetch") ||
-      msg.includes("econnrefused") ||
-      msg.includes("thiếu cấu hình next_public_api_url")
-    );
-  }
-  return false;
 }
 
 function normalizePaginationMeta(
@@ -167,40 +146,6 @@ function normalizePaginationMeta(
     hasNext,
     hasPrevious,
   };
-}
-
-function readMockCharacters(): MockStoredCharacter[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(CHARACTERS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as MockStoredCharacter[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeMockCharacters(items: MockStoredCharacter[]): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CHARACTERS_STORAGE_KEY, JSON.stringify(items));
-}
-
-function readMockVersions(): MockStoredVersion[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(VERSIONS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as MockStoredVersion[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeMockVersions(items: MockStoredVersion[]): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(VERSIONS_STORAGE_KEY, JSON.stringify(items));
 }
 
 export function readFileAsDataUrl(file: File): Promise<string | undefined> {
@@ -254,6 +199,12 @@ export function formatDesignerApiError(
       return serverMessage || "Dữ liệu đang được sử dụng trên cửa hàng, không thể thực hiện.";
     }
     if (error.status === 400) {
+      if (code === "CHARACTER_TYPE_NOT_ALLOWED_FOR_STORE") {
+        return "Nhân vật thuộc loại Commission không được phép đăng bán lên cửa hàng.";
+      }
+      if (code === "CHARACTER_TYPE_NOT_ALLOWED_FOR_COMMISSION") {
+        return "Nhân vật này không hợp lệ để nộp vào Commission.";
+      }
       return firstDetail || serverMessage || "Dữ liệu gửi lên không hợp lệ.";
     }
     if (serverMessage) return serverMessage;
@@ -267,6 +218,8 @@ export function formatDesignerApiError(
 
 export async function fetchMyCharacters(params: {
   query?: string;
+  characterType?: CharacterType;
+  commissionId?: number;
   page?: number;
   size?: number;
 } = {}): Promise<{ items: DesignerCharacterItem[]; meta: PaginationMeta }> {
@@ -274,129 +227,52 @@ export async function fetchMyCharacters(params: {
   const size = params.size ?? 10;
   const trimmedQuery = params.query?.trim();
 
-  const runMock = () => {
-    const characters = readMockCharacters();
-    const versions = readMockVersions();
-    const filtered = characters.filter((char) => {
-      if (!trimmedQuery) return true;
-      const needle = trimmedQuery.toLowerCase();
-      return (
-        char.characterName.toLowerCase().includes(needle) ||
-        (char.description ?? "").toLowerCase().includes(needle)
-      );
-    });
-    const sorted = [...filtered].sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
-    );
-    const start = page * size;
-    const paged = sorted.slice(start, start + size);
-    const mapped: DesignerCharacterItem[] = paged.map((char) => {
-      const charVersions = versions
-        .filter((v) => v.characterId === char.characterId)
-        .sort((a, b) => b.versionNumber - a.versionNumber);
-      const active = charVersions.find((v) => v.isCurrent) ?? charVersions[0];
-      return {
-        characterId: char.characterId,
-        characterName: char.characterName,
-        description: char.description,
-        totalVersions: charVersions.length,
-        currentVersion: active
-          ? {
-              versionId: active.versionId,
-              versionNumber: active.versionNumber,
-              previewGifUrl: active.previewGifUrl,
-            }
-          : null,
-        createdAt: char.createdAt,
-      };
-    });
-    const totalElements = sorted.length;
-    const totalPages = Math.max(1, Math.ceil(totalElements / Math.max(1, size)));
-    return {
-      items: mapped,
-      meta: {
-        page,
-        size,
-        totalElements,
-        totalPages,
-        hasNext: page + 1 < totalPages,
-        hasPrevious: page > 0,
-      },
-    };
+  const res = await request<ApiEnvelope<DesignerCharacterItem[]>>(OpenAPI, {
+    method: "GET",
+    url: "/api/management/designer/characters/my",
+    query: {
+      query: trimmedQuery ? trimmedQuery : undefined,
+      characterType: params.characterType,
+      commissionId: params.commissionId,
+      page,
+      size,
+    },
+  });
+  const items = (res.data ?? []).map((item) => ({
+    ...item,
+    characterType: item.characterType ?? "STORE",
+    commissionId: item.commissionId ?? null,
+  }));
+  return {
+    items,
+    meta: normalizePaginationMeta(res.meta, page, size, items.length),
   };
-
-  if (USE_MOCK_AUTH) {
-    return runMock();
-  }
-
-  try {
-    const res = await request<ApiEnvelope<DesignerCharacterItem[]>>(OpenAPI, {
-      method: "GET",
-      url: "/api/management/designer/characters/my",
-      query: {
-        query: trimmedQuery ? trimmedQuery : undefined,
-        page,
-        size,
-      },
-    });
-    const items = res.data ?? [];
-    return {
-      items,
-      meta: normalizePaginationMeta(res.meta, page, size, items.length),
-    };
-  } catch (error) {
-    if (isNetworkOrMissingConfigError(error)) {
-      return runMock();
-    }
-    throw error;
-  }
 }
 
 export async function createDesignerCharacter(
   payload: CreateCharacterRequest,
 ): Promise<CreateCharacterResponse> {
+  const characterType = payload.characterType ?? "STORE";
   const cleanPayload: CreateCharacterRequest = {
     characterName: payload.characterName.trim(),
     description: payload.description?.trim() || undefined,
+    characterType,
+    commissionId:
+      characterType === "COMMISSION" && payload.commissionId != null
+        ? payload.commissionId
+        : undefined,
   };
 
-  const runMock = (): CreateCharacterResponse => {
-    const existing = readMockCharacters();
-    const nextId = existing.reduce((max, item) => Math.max(max, item.characterId), 0) + 1;
-    const created: MockStoredCharacter = {
-      characterId: nextId,
-      characterName: cleanPayload.characterName,
-      description: cleanPayload.description ?? null,
-      createdAt: new Date().toISOString(),
-    };
-    writeMockCharacters([created, ...existing]);
-    return {
-      ...created,
-      creatorEmployeeId: 1,
-    };
-  };
-
-  if (USE_MOCK_AUTH) {
-    return runMock();
+  const res = await request<ApiEnvelope<CreateCharacterResponse>>(OpenAPI, {
+    method: "POST",
+    url: "/api/management/characters",
+    body: cleanPayload,
+    mediaType: "application/json",
+  });
+  if (!res.data) {
+    throw new Error("Không nhận được dữ liệu nhân vật sau khi tạo.");
   }
-
-  try {
-    const res = await request<ApiEnvelope<CreateCharacterResponse>>(OpenAPI, {
-      method: "POST",
-      url: "/api/management/characters",
-      body: cleanPayload,
-      mediaType: "application/json",
-    });
-    if (!res.data) {
-      throw new Error("Không nhận được dữ liệu nhân vật sau khi tạo.");
-    }
-    return res.data;
-  } catch (error) {
-    if (isNetworkOrMissingConfigError(error)) {
-      return runMock();
-    }
-    throw error;
-  }
+  return res.data;
 }
 
 export async function updateDesignerCharacter(
@@ -408,115 +284,36 @@ export async function updateDesignerCharacter(
     description: payload.description?.trim() || undefined,
   };
 
-  const runMock = (): UpdateCharacterResponse => {
-    const existing = readMockCharacters();
-    const target = existing.find((item) => item.characterId === characterId);
-    if (!target) {
-      throw new Error(`Không tìm thấy nhân vật #${characterId}.`);
-    }
-    const updated: MockStoredCharacter = {
-      ...target,
-      characterName: cleanPayload.characterName,
-      description: cleanPayload.description ?? null,
-    };
-    writeMockCharacters(
-      existing.map((item) => (item.characterId === characterId ? updated : item)),
-    );
-    return {
-      characterId: updated.characterId,
-      characterName: updated.characterName,
-      description: updated.description,
-      updatedAt: new Date().toISOString(),
-    };
-  };
-
-  if (USE_MOCK_AUTH) {
-    return runMock();
+  const res = await request<ApiEnvelope<UpdateCharacterResponse>>(OpenAPI, {
+    method: "PUT",
+    url: "/api/management/characters/{id}",
+    path: { id: characterId },
+    body: cleanPayload,
+    mediaType: "application/json",
+  });
+  if (!res.data) {
+    throw new Error("Không nhận được dữ liệu sau khi cập nhật nhân vật.");
   }
-
-  try {
-    const res = await request<ApiEnvelope<UpdateCharacterResponse>>(OpenAPI, {
-      method: "PUT",
-      url: "/api/management/characters/{id}",
-      path: { id: characterId },
-      body: cleanPayload,
-      mediaType: "application/json",
-    });
-    if (!res.data) {
-      throw new Error("Không nhận được dữ liệu sau khi cập nhật nhân vật.");
-    }
-    return res.data;
-  } catch (error) {
-    if (isNetworkOrMissingConfigError(error)) {
-      return runMock();
-    }
-    throw error;
-  }
+  return res.data;
 }
 
 export async function deleteDesignerCharacter(characterId: number): Promise<void> {
-  const runMock = (): void => {
-    const versions = readMockVersions();
-    const hasListed = versions.some(
-      (v) => v.characterId === characterId && v.isListedOnStore,
-    );
-    if (hasListed) {
-      throw new Error(
-        "Không thể xóa nhân vật vì có phiên bản đã được Manager đưa lên cửa hàng.",
-      );
-    }
-    writeMockCharacters(
-      readMockCharacters().filter((item) => item.characterId !== characterId),
-    );
-    writeMockVersions(versions.filter((v) => v.characterId !== characterId));
-  };
-
-  if (USE_MOCK_AUTH) {
-    runMock();
-    return;
-  }
-
-  try {
-    await request<void>(OpenAPI, {
-      method: "DELETE",
-      url: "/api/management/characters/{id}",
-      path: { id: characterId },
-    });
-  } catch (error) {
-    if (isNetworkOrMissingConfigError(error)) {
-      runMock();
-      return;
-    }
-    throw error;
-  }
+  await request<void>(OpenAPI, {
+    method: "DELETE",
+    url: "/api/management/characters/{id}",
+    path: { id: characterId },
+  });
 }
 
 export async function fetchCharacterVersions(
   characterId: number,
 ): Promise<CharacterVersionItem[]> {
-  const runMock = (): CharacterVersionItem[] => {
-    return readMockVersions()
-      .filter((v) => v.characterId === characterId)
-      .sort((a, b) => b.versionNumber - a.versionNumber);
-  };
-
-  if (USE_MOCK_AUTH) {
-    return runMock();
-  }
-
-  try {
-    const res = await request<ApiEnvelope<CharacterVersionItem[]>>(OpenAPI, {
-      method: "GET",
-      url: "/api/management/characters/{id}/versions",
-      path: { id: characterId },
-    });
-    return res.data ?? [];
-  } catch (error) {
-    if (isNetworkOrMissingConfigError(error)) {
-      return runMock();
-    }
-    throw error;
-  }
+  const res = await request<ApiEnvelope<CharacterVersionItem[]>>(OpenAPI, {
+    method: "GET",
+    url: "/api/management/characters/{id}/versions",
+    path: { id: characterId },
+  });
+  return res.data ?? [];
 }
 
 export async function createCharacterVersion(
@@ -532,112 +329,28 @@ export async function createCharacterVersion(
     isCurrent,
   };
 
-  const runMock = (): CreateCharacterVersionResponse => {
-    const allVersions = readMockVersions();
-    const charVersions = allVersions.filter((v) => v.characterId === characterId);
-    const nextVersionNumber =
-      charVersions.reduce((max, item) => Math.max(max, item.versionNumber), 0) + 1;
-    const nextVersionId =
-      allVersions.reduce((max, item) => Math.max(max, item.versionId), 0) + 1;
-    const createdAt = new Date().toISOString();
-
-    const updatedAll = allVersions.map((v) =>
-      v.characterId === characterId && isCurrent ? { ...v, isCurrent: false } : v,
-    );
-
-    const nextVersion: MockStoredVersion = {
-      characterId,
-      versionId: nextVersionId,
-      versionNumber: nextVersionNumber,
-      previewGifUrl: cleanPayload.previewGifUrl,
-      frameCount: cleanPayload.frameCount,
-      frameDelayMs: cleanPayload.frameDelayMs,
-      byteSize: cleanPayload.byteSize,
-      isCurrent,
-      isListedOnStore: false,
-      productId: null,
-      productStatus: null,
-      createdAt,
-    };
-
-    writeMockVersions([nextVersion, ...updatedAll]);
-    return {
-      versionId: nextVersion.versionId,
-      characterId,
-      versionNumber: nextVersion.versionNumber,
-      previewGifUrl: nextVersion.previewGifUrl,
-      isCurrent: nextVersion.isCurrent,
-      isListedOnStore: false,
-      createdAt,
-    };
-  };
-
-  if (USE_MOCK_AUTH) {
-    return runMock();
+  const res = await request<ApiEnvelope<CreateCharacterVersionResponse>>(OpenAPI, {
+    method: "POST",
+    url: "/api/management/characters/{id}/versions",
+    path: { id: characterId },
+    body: cleanPayload,
+    mediaType: "application/json",
+  });
+  if (!res.data) {
+    throw new Error("Không nhận được dữ liệu phiên bản sau khi đăng tải.");
   }
-
-  try {
-    const res = await request<ApiEnvelope<CreateCharacterVersionResponse>>(OpenAPI, {
-      method: "POST",
-      url: "/api/management/characters/{id}/versions",
-      path: { id: characterId },
-      body: cleanPayload,
-      mediaType: "application/json",
-    });
-    if (!res.data) {
-      throw new Error("Không nhận được dữ liệu phiên bản sau khi đăng tải.");
-    }
-    return res.data;
-  } catch (error) {
-    if (isNetworkOrMissingConfigError(error)) {
-      return runMock();
-    }
-    throw error;
-  }
+  return res.data;
 }
 
 export async function deleteCharacterVersion(
   characterId: number,
   versionId: number,
 ): Promise<void> {
-  const runMock = (): void => {
-    const versions = readMockVersions();
-    const target = versions.find(
-      (v) => v.characterId === characterId && v.versionId === versionId,
-    );
-    if (!target) {
-      throw new Error(`Không tìm thấy phiên bản #${versionId}.`);
-    }
-    if (target.isListedOnStore) {
-      throw new Error(
-        "Không thể xóa phiên bản vì phiên bản này đã được Manager đưa lên cửa hàng.",
-      );
-    }
-    writeMockVersions(
-      versions.filter(
-        (v) => !(v.characterId === characterId && v.versionId === versionId),
-      ),
-    );
-  };
-
-  if (USE_MOCK_AUTH) {
-    runMock();
-    return;
-  }
-
-  try {
-    await request<void>(OpenAPI, {
-      method: "DELETE",
-      url: "/api/management/characters/{characterId}/versions/{versionId}",
-      path: { characterId, versionId },
-    });
-  } catch (error) {
-    if (isNetworkOrMissingConfigError(error)) {
-      runMock();
-      return;
-    }
-    throw error;
-  }
+  await request<void>(OpenAPI, {
+    method: "DELETE",
+    url: "/api/management/characters/{characterId}/versions/{versionId}",
+    path: { characterId, versionId },
+  });
 }
 
 export async function uploadDesignerAssetFile(
@@ -655,63 +368,42 @@ export async function uploadDesignerAssetFile(
   }
 
   const previewUrl = await readFileAsDataUrl(file);
-  const fallbackUrl = `https://cdn.lumintra.shop/characters/${Date.now()}-${encodeURIComponent(file.name)}`;
 
-  if (USE_MOCK_AUTH) {
-    return {
-      publicUrl: fallbackUrl,
-      previewUrl,
-      usedFallback: true,
-    };
+  const res = await request<ApiEnvelope<SignedUploadUrlResponse>>(OpenAPI, {
+    method: "POST",
+    url: "/api/media/upload-url",
+    body: {
+      fileName: file.name.slice(0, 255),
+      contentType: file.type,
+      fileSize: file.size,
+      purpose,
+      targetId,
+    },
+    mediaType: "application/json",
+  });
+
+  const signedData = res.data;
+  if (!signedData?.signedUploadUrl || !signedData?.publicUrl) {
+    throw new Error("Máy chủ không trả về liên kết tải tệp hợp lệ.");
   }
 
-  try {
-    const res = await request<ApiEnvelope<SignedUploadUrlResponse>>(OpenAPI, {
-      method: "POST",
-      url: "/api/media/upload-url",
-      body: {
-        fileName: file.name.slice(0, 255),
-        contentType: file.type,
-        fileSize: file.size,
-        purpose,
-        targetId,
-      },
-      mediaType: "application/json",
-    });
+  // BE trả uploadHeaders (nằm trong chữ ký) → phải gửi nguyên văn khi PUT
+  const putHeaders =
+    signedData.uploadHeaders ?? buildSignedPutHeaders(signedData.signedUploadUrl, file.type);
 
-    const signedData = res.data;
-    if (!signedData?.signedUploadUrl || !signedData?.publicUrl) {
-      throw new Error("Máy chủ không trả về liên kết tải tệp hợp lệ.");
-    }
+  const putResponse = await fetch(signedData.signedUploadUrl, {
+    method: "PUT",
+    headers: putHeaders,
+    body: file,
+  });
 
-    // BE trả uploadHeaders (nằm trong chữ ký) → phải gửi nguyên văn khi PUT
-    const putHeaders =
-      signedData.uploadHeaders ?? buildSignedPutHeaders(signedData.signedUploadUrl, file.type);
-
-    const putResponse = await fetch(signedData.signedUploadUrl, {
-      method: "PUT",
-      headers: putHeaders,
-      body: file,
-    });
-
-    if (!putResponse.ok) {
-      throw new Error(`Tải tệp lên kho lưu trữ thất bại (HTTP ${putResponse.status}).`);
-    }
-
-    return {
-      publicUrl: signedData.publicUrl,
-      previewUrl,
-      usedFallback: false,
-    };
-  } catch (error) {
-    // Khi môi trường dev cục bộ chưa kết nối Google Cloud Storage signed URL (500) hoặc mất mạng,
-    // sử dụng fallback CDN URL hợp lệ để các API tạo phiên bản backend không bị lỗi 400 URL validation.
-    console.warn("Cloud storage upload unavailable, using CDN fallback URL:", error);
-    return {
-      publicUrl: fallbackUrl,
-      previewUrl,
-      usedFallback: true,
-    };
+  if (!putResponse.ok) {
+    throw new Error(`Tải tệp lên kho lưu trữ thất bại (HTTP ${putResponse.status}).`);
   }
+
+  return {
+    publicUrl: signedData.publicUrl,
+    previewUrl,
+  };
 }
 

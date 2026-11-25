@@ -196,7 +196,8 @@ function DashboardContent() {
                 ))
               : recent.map((character) => {
                   const image = artwork[character.characterId];
-                  const commissionId = linkedCommissionId(character.description);
+                  const commissionId = character.commissionId ?? linkedCommissionId(character.description);
+                  const isCommissionChar = (character.characterType ?? "STORE") === "COMMISSION" || commissionId !== undefined;
                   return (
                     <button
                       key={character.characterId}
@@ -213,9 +214,13 @@ function DashboardContent() {
                             <Grid size={22} className="opacity-60" />
                           </div>
                         )}
-                        {commissionId !== undefined && (
+                        {isCommissionChar ? (
                           <span className="absolute left-2 top-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
-                            #{commissionId}
+                            {commissionId !== undefined ? `Commission #${commissionId}` : "Commission"}
+                          </span>
+                        ) : (
+                          <span className="absolute left-2 top-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-900">
+                            Store
                           </span>
                         )}
                       </div>

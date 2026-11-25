@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff, KeyRound, Lock, Mail, User } from "lucide-react";
-import { authService, USE_MOCK_AUTH } from "../services/auth.service";
+import { authService } from "../services/auth.service";
 import AuthField from "./AuthField";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -52,9 +52,8 @@ export default function RegisterForm() {
     event.preventDefault();
     if (isSubmitting) return;
     const email = form.email.trim();
-    // Backend không nhận họ tên khi đăng ký nên chỉ bắt buộc ở chế độ mock.
-    if ((USE_MOCK_AUTH && !form.fullName.trim()) || !emailPattern.test(email)) {
-      setMessage({ text: "Vui lòng nhập đúng định dạng email" + (USE_MOCK_AUTH ? " và họ tên." : "."), error: true });
+    if (!emailPattern.test(email)) {
+      setMessage({ text: "Vui lòng nhập đúng định dạng email.", error: true });
       return;
     }
     if (!passwordPattern.test(form.password)) {
@@ -75,7 +74,7 @@ export default function RegisterForm() {
         setPendingEmail(email);
         setMessage({ text: `Đăng ký thành công! Mã OTP 6 số đã được gửi tới ${email}.`, error: false });
       } else {
-        setMessage({ text: "Đăng ký đang được mô phỏng. Chưa có tài khoản thật được tạo cho đến khi backend được kết nối.", error: false });
+        setMessage({ text: "Đăng ký thành công! Bạn có thể đăng nhập ngay.", error: false });
       }
     } catch (error) {
       setIsSuccess(false);
@@ -136,7 +135,6 @@ export default function RegisterForm() {
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
       {messageBox}
-      {USE_MOCK_AUTH && <AuthField id="reg-name" label="Họ tên hiển thị" value={form.fullName} onChange={update("fullName")} placeholder="Nguyễn Văn A" icon={<User size={15} />} />}
       <AuthField id="reg-email" label="Địa chỉ Email" value={form.email} onChange={update("email")} placeholder="vd: tenban@gmail.com" icon={<Mail size={15} />} />
       <AuthField id="reg-password" label="Mật khẩu" value={form.password} onChange={update("password")} type={showPassword ? "text" : "password"} placeholder="••••••••" icon={<Lock size={15} />}
         action={<button type="button" onClick={() => setShowPassword((value) => !value)} aria-label="Hiện hoặc ẩn mật khẩu" className="text-text-muted">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>} />

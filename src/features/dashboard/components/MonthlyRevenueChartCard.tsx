@@ -58,8 +58,11 @@ export default function MonthlyRevenueChartCard({
   const normalizedPoints = useMemo(() => {
     if (points && points.length > 0) return points;
     const [yearStr, monthStr] = month.split("-");
-    const year = Number(yearStr) || new Date().getFullYear();
-    const m = Number(monthStr) || new Date().getMonth() + 1;
+    const year = Number(yearStr);
+    const m = Number(monthStr);
+    if (!Number.isInteger(year) || year < 1 || !Number.isInteger(m) || m < 1 || m > 12) {
+      return [];
+    }
     const days = new Date(year, m, 0).getDate();
     return Array.from({ length: days }, (_, idx) => {
       const d = idx + 1;

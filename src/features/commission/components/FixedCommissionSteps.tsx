@@ -1,5 +1,6 @@
 import type { ChangeEvent, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { CheckCircle2, Plus, Trash2, Upload } from "lucide-react";
 import {
   COMMISSION_DESIGN_FIELDS, MAX_COMMISSION_FRAMES, MIN_COMMISSION_FRAMES,
   formatCommissionMoney, type CommissionDesign, type CommissionDesignField,
@@ -66,36 +67,119 @@ export function CommissionBrief({ note, onNote, references, onFiles, onRemove, e
   error: string;
   maxNoteLength?: number;
 }) {
+  const fileInputId = useId();
+
   function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     onFiles(Array.from(event.currentTarget.files ?? []));
     event.currentTarget.value = "";
   }
+
   return (
-    <div className="space-y-4">
-      <label className="block">
-        Brief thiết kế (bắt buộc)
-        <textarea className="mt-1 block w-full p-2.5 border-2 border-black bg-white text-text-main focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60" rows={5} maxLength={maxNoteLength} required value={note}
+    <div className="space-y-5">
+      <div>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <label htmlFor="commission-brief-note" className="block text-xs font-bold uppercase text-text-main">
+            Mô tả ý tưởng thiết kế <span aria-hidden className="text-red-600">*</span>
+          </label>
+          <span className="text-xs font-semibold tabular-nums text-text-muted">
+            {note.length}/{maxNoteLength}
+          </span>
+        </div>
+        <textarea
+          id="commission-brief-note"
+          className="block w-full border-2 border-black bg-gray-50 p-3 text-sm font-medium text-text-main transition-colors focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60"
+          rows={5}
+          maxLength={maxNoteLength}
+          required
+          value={note}
           onChange={(event) => onNote(event.target.value)}
-          placeholder="Ghi tên đối tượng, biểu cảm (vui, giận, ngạc nhiên), tư thế (vẫy tay, giơ ngón cái), màu chủ đạo và đặc điểm phải giữ như kính, tóc hoặc mũ. Với ma trận 32×32, ghi rõ chi tiết nhỏ có thể lược bỏ." />
-      </label>
-      <label className="block">
-        Ảnh tham khảo (không bắt buộc, tối đa 5 ảnh, 5 MB mỗi ảnh)
-        <span className="mt-1 block text-sm">Chọn ảnh gốc của đối tượng hoặc mẫu pixel art thể hiện nét vẽ và cách đổ bóng bạn muốn.</span>
-        <input className="mt-1 block min-h-11 w-full cursor-pointer text-sm border-2 border-black bg-white text-text-main focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60 file:mr-3 file:min-h-11 file:cursor-pointer file:border-0 file:border-r-2 file:border-black file:bg-primary file:px-3 file:font-bold" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif"
-          onChange={chooseFiles} disabled={references.length >= 5} />
-      </label>
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      {references.length > 0 && (
-        <ul className="space-y-2">
-          {references.map((file, index) => (
-            <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3">
-              <ReferenceThumbnail file={file} />
-              <span className="min-w-0 flex-1 break-all">{file.name}</span>
-              <button type="button" className="min-h-11 shrink-0 cursor-pointer px-2 font-bold text-red-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-                aria-label={`Xóa ${file.name}`} onClick={() => onRemove(index)}>Xóa</button>
-            </li>
-          ))}
-        </ul>
+          placeholder="Ghi tên đối tượng, biểu cảm (vui, giận, ngạc nhiên), tư thế (vẫy tay, giơ ngón cái), màu chủ đạo và đặc điểm cần giữ (kính, tóc, mũ)..."
+        />
+        <p className="mt-1.5 text-xs text-text-muted">
+          Mẹo: Với ma trận 32×32 trở xuống, hãy ghi rõ các chi tiết nhỏ có thể giản lược để hiển thị nét trên LED.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-bold uppercase text-text-main">
+            Ảnh tham khảo ({references.length}/5 · tối đa 5 MB/ảnh)
+          </span>
+
+          {references.length > 0 && references.length < 5 && (
+            <label
+              htmlFor={fileInputId}
+              className="btn-secondary inline-flex min-h-9 cursor-pointer items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase"
+            >
+              <Plus size={14} />
+              Thêm ảnh
+            </label>
+          )}
+
+          {references.length >= 5 && (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 border border-black bg-primary/15 px-2.5 py-1 text-xs font-bold text-primary-ink"
+            >
+              <CheckCircle2 size={14} className="shrink-0" />
+              Đã đủ tối đa 5/5 ảnh tham khảo
+            </span>
+          )}
+        </div>
+
+        <input
+          id={fileInputId}
+          className="sr-only"
+          type="file"
+          multiple
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          onChange={chooseFiles}
+          disabled={references.length >= 5}
+        />
+
+        {references.length === 0 ? (
+          <label
+            htmlFor={fileInputId}
+            className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 border-2 border-dashed border-black bg-gray-50 p-4 text-center transition-colors hover:bg-primary/10"
+          >
+            <Upload size={20} className="text-primary-ink" />
+            <span className="text-xs font-black uppercase text-black">
+              Chọn ảnh mẫu từ thiết bị
+            </span>
+            <span className="text-xs text-text-muted">
+              Hỗ trợ JPG, PNG, WEBP, GIF (tối đa 5 ảnh)
+            </span>
+          </label>
+        ) : (
+          <ul className="grid gap-2.5 sm:grid-cols-2">
+            {references.map((file, index) => (
+              <li
+                key={`${file.name}-${index}`}
+                className="flex items-center justify-between gap-3 border-2 border-black bg-white p-2.5 shadow-[2px_2px_0_0_#000]"
+              >
+                <ReferenceThumbnail file={file} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-bold text-black">{file.name}</p>
+                  <p className="text-xs text-text-muted">{(file.size / 1024).toFixed(0)} KB</p>
+                </div>
+                <button
+                  type="button"
+                  className="grid min-h-11 min-w-11 shrink-0 cursor-pointer place-items-center border-2 border-black bg-white text-red-600 transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  aria-label={`Xóa ${file.name}`}
+                  onClick={() => onRemove(index)}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {error && (
+        <p role="alert" className="border-2 border-red-600 bg-red-50 p-3 text-xs font-bold text-red-700">
+          {error}
+        </p>
       )}
     </div>
   );

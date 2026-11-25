@@ -18,6 +18,7 @@ import Modal from "@/components/ui/Modal";
 import { ApiError } from "@/api_client/core/ApiError";
 import {
   formatDesignerApiError,
+  isStoreCharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
@@ -107,20 +108,22 @@ export default function CharacterDetailsModal({
           </button>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Button B: Publish to Store */}
-            <button
-              type="button"
-              disabled={isLoading || Boolean(historyError) || !versions.some((version) => !version.isListedOnStore)}
-              onClick={() => onOpenPublish(character, versions)}
-              title={
-                versions.length === 0
-                  ? "Cần có ít nhất 1 phiên bản trước khi đăng bán lên Store"
-                  : "Chọn 1 phiên bản để gửi duyệt bán lên Store"
-              }
-              className="inline-flex items-center gap-2 rounded-lg border border-studio-accent bg-white px-4 py-2 text-sm font-bold text-studio-ink transition hover:bg-studio-wash disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Store size={15} /> Publish to Store
-            </button>
+            {/* Button B: Publish to Store (chỉ hiển thị cho nhân vật loại STORE) */}
+            {isStoreCharacterType(character.characterType) && (
+              <button
+                type="button"
+                disabled={isLoading || Boolean(historyError) || !versions.some((version) => !version.isListedOnStore)}
+                onClick={() => onOpenPublish(character, versions)}
+                title={
+                  versions.length === 0
+                    ? "Cần có ít nhất 1 phiên bản trước khi đăng bán lên Store"
+                    : "Chọn 1 phiên bản để gửi duyệt bán lên Store"
+                }
+                className="inline-flex items-center gap-2 rounded-lg border border-studio-accent bg-white px-4 py-2 text-sm font-bold text-studio-ink transition hover:bg-studio-wash disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Store size={15} /> Publish to Store
+              </button>
+            )}
 
             {/* Button A: Draw New Version */}
             <button

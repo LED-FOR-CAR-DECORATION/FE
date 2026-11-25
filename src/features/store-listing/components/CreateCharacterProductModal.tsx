@@ -29,6 +29,7 @@ import {
 import {
   fetchCharacterVersions,
   fetchMyCharacters,
+  isStoreCharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
@@ -86,14 +87,16 @@ export default function CreateCharacterProductModal({
     setIsLoadingCharacters(true);
     setError(null);
     try {
-      let list = await fetchAdminCharacters();
+      let list = await fetchAdminCharacters({ characterType: "STORE", size: 100 });
       if (!list || list.length === 0) {
         // Fallback to designer endpoint for local/mock compatibility
-        const designerRes = await fetchMyCharacters({ size: 100 });
+        const designerRes = await fetchMyCharacters({ characterType: "STORE", size: 100 });
         list = designerRes.items.map((item: DesignerCharacterItem) => ({
           characterId: item.characterId,
           characterName: item.characterName,
           description: item.description,
+          characterType: item.characterType ?? "STORE",
+          commissionId: item.commissionId ?? null,
           author: {
             employeeId: 1,
             fullName: "Designer",
@@ -103,7 +106,7 @@ export default function CreateCharacterProductModal({
           createdAt: item.createdAt,
         }));
       }
-      setCharacters(list);
+      setCharacters(list.filter((item) => isStoreCharacterType(item.characterType)));
     } catch (err: any) {
       console.error("Failed to load designer characters:", err);
       setError("Không thể tải danh sách Character của Designer. Vui lòng thử lại.");

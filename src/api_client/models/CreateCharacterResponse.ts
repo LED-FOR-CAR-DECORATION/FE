@@ -23,6 +23,14 @@ export type CreateCharacterResponse = {
      */
     creatorEmployeeId?: number;
     /**
+     * Character usage type (STORE or COMMISSION)
+     */
+    characterType?: 'STORE' | 'COMMISSION';
+    /**
+     * Bound commission request ID if applicable
+     */
+    commissionId?: number | null;
+    /**
      * Timestamp when character was created
      */
     createdAt?: string;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import CustomerCommissionPayment from "@/features/commission/components/CustomerCommissionPayment";
@@ -14,9 +15,15 @@ export default async function CommissionPaymentPage({ params }: {
   return (
     <>
       <Header />
-      <main className="flex-1 bg-[#f5f5f5] py-6 text-[#26352f] md:py-8">
-        <div className="mx-auto w-full max-w-4xl px-4">
-          <Link href="/commission" className="mb-5 inline-block font-semibold text-[#155e59] underline">Về danh sách Commission</Link>
+      <main className="flex-1 bg-background py-6 text-text-main md:py-10">
+        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+          <Link
+            href="/commission"
+            className="btn-secondary mb-6 inline-flex min-h-11 items-center gap-2 text-xs font-black uppercase"
+          >
+            <ArrowLeft size={15} />
+            Quay lại danh sách
+          </Link>
           <CustomerCommissionPayment commissionId={id} />
         </div>
       </main>

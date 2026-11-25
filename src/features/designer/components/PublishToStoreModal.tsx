@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   Check,
@@ -11,6 +12,8 @@ import {
   Layers,
   Loader2,
   Lock,
+  Palette,
+  Plus,
   ShieldCheck,
   Store,
   Tag,
@@ -20,6 +23,7 @@ import Modal from "@/components/ui/Modal";
 import { fetchStoreTags } from "@/lib/api/products";
 import {
   formatDesignerApiError,
+  isStoreCharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
@@ -28,6 +32,7 @@ import type { CreatedStoreProductResponse, TagItem } from "@/api_client";
 
 interface PublishToStoreModalProps {
   character: DesignerCharacterItem;
+  mode?: "versions" | "publish";
   onClose: () => void;
   onSuccess?: (created: CreatedStoreProductResponse, version: CharacterVersionItem) => void;
 }
@@ -54,9 +59,11 @@ function getVersionArtwork(
 
 export default function PublishToStoreModal({
   character,
+  mode = "publish",
   onClose,
   onSuccess,
 }: PublishToStoreModalProps) {
+  const isVersionsOnly = mode === "versions";
   const {
     versionsByCharacter,
     loadingVersions,
@@ -143,6 +150,8 @@ export default function PublishToStoreModal({
     selectedVersion &&
       (selectedVersion.isListedOnStore || locallyPublishedIds.has(selectedVersion.versionId)),
   );
+  const nextVersionNumber =
+    versions.length > 0 ? Math.max(...versions.map((v) => v.versionNumber)) + 1 : 1;
 
   const previewArtwork = getVersionArtwork(
     selectedVersion,
@@ -196,6 +205,10 @@ export default function PublishToStoreModal({
     setError(null);
     setPublishSuccess(null);
 
+    if (!isStoreCharacterType(character.characterType)) {
+      setError("Nhân vật thuộc loại Commission không được phép đăng bán lên Store.");
+      return;
+    }
     if (!selectedVersion) {
       setError("Nhân vật chưa có phiên bản nào để đăng bán lên Store.");
       return;
@@ -242,7 +255,11 @@ export default function PublishToStoreModal({
   return (
     <Modal
       onClose={onClose}
-      title={`Đăng bán lên Store: ${character.characterName}`}
+      title={
+        isVersionsOnly
+          ? `Xem các phiên bản: ${character.characterName}`
+          : `Đăng bán lên Store: ${character.characterName}`
+      }
       description={`Kích thước ma trận: ${matrixSize} • ID: #${character.characterId}`}
       size="xl"
       busy={isSubmitting}
@@ -252,35 +269,61 @@ export default function PublishToStoreModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            className="cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
             Đóng
           </button>
 
-          {/* Bottom-right Publish to Store button */}
-          <button
-            type="submit"
-            form="publish-to-store-form"
-            disabled={isSubmitting || isLoading || !selectedVersion || isSelectedVersionListed}
-            title={
-              !selectedVersion
-                ? "Cần có ít nhất 1 phiên bản để đăng bán lên Store"
-                : isSelectedVersionListed
-                  ? "Phiên bản đang chọn đã được đăng lên Store"
-                  : "Đăng bán phiên bản này lên Store"
-            }
-            className="inline-flex items-center gap-2 rounded-lg bg-studio-accent px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 size={15} className="animate-spin" /> Đang publish...
-              </>
-            ) : (
-              <>
-                <Store size={15} /> Gửi yêu cầu đăng bán
-              </>
-            )}
-          </button>
+          {isVersionsOnly ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/designer/studio/${character.characterId}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-studio-line bg-white px-4 py-2 text-sm font-bold text-studio-ink transition hover:bg-studio-wash"
+              >
+                <Palette size={15} /> {versions.length > 0 ? "Mở Studio chỉnh sửa" : "Mở Studio vẽ v1"}
+              </Link>
+              {versions.length > 0 && (
+                <Link
+                  href={`/designer/studio/${character.characterId}?newVersion=1`}
+                  className="inline-flex items-center gap-2 rounded-lg bg-studio-accent px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover"
+                >
+                  <Plus size={15} /> Tạo thêm phiên bản (v{nextVersionNumber})
+                </Link>
+              )}
+            </div>
+          ) : (
+            <button
+              type="submit"
+              form="publish-to-store-form"
+              disabled={
+                isSubmitting ||
+                isLoading ||
+                !selectedVersion ||
+                isSelectedVersionListed ||
+                !isStoreCharacterType(character.characterType)
+              }
+              title={
+                !isStoreCharacterType(character.characterType)
+                  ? "Nhân vật loại Commission không được đăng bán lên Store"
+                  : !selectedVersion
+                    ? "Cần có ít nhất 1 phiên bản để đăng bán lên Store"
+                    : isSelectedVersionListed
+                      ? "Phiên bản đang chọn đã được đăng lên Store"
+                      : "Đăng bán phiên bản này lên Store"
+              }
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-studio-accent px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" /> Đang publish...
+                </>
+              ) : (
+                <>
+                  <Store size={15} /> Gửi yêu cầu đăng bán
+                </>
+              )}
+            </button>
+          )}
         </div>
       }
     >
@@ -307,15 +350,17 @@ export default function PublishToStoreModal({
           </div>
         )}
 
-        <div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
-          <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-700" />
-          <div>
-            <p className="font-bold">Chờ manager duyệt</p>
-            <p className="mt-0.5 text-sky-800">
-              Yêu cầu được tạo với giá tạm 0 VNĐ. Manager sẽ đặt giá trước khi đăng bán.
-            </p>
+        {!isVersionsOnly && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+            <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-700" />
+            <div>
+              <p className="font-bold">Chờ manager duyệt</p>
+              <p className="mt-0.5 text-sky-800">
+                Yêu cầu được tạo với giá tạm 0 VNĐ. Manager sẽ đặt giá trước khi đăng bán.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {historyError ? (
           <div className="space-y-2 rounded border border-red-200 bg-red-50 p-5 text-center">
@@ -410,7 +455,7 @@ export default function PublishToStoreModal({
               </div>
 
               {/* Store Listing Inputs */}
-              {selectedVersion && (
+              {!isVersionsOnly && selectedVersion && (
                 <div className="space-y-3 rounded border border-studio-line bg-studio-wash p-4">
                   <div>
                     <label className="mb-1 block text-xs font-bold text-studio-ink">

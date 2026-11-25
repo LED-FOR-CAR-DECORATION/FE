@@ -19,6 +19,14 @@ export type UpdateCharacterResponse = {
      */
     description?: string;
     /**
+     * Character usage type (STORE or COMMISSION)
+     */
+    characterType?: 'STORE' | 'COMMISSION';
+    /**
+     * Bound commission request ID if applicable
+     */
+    commissionId?: number | null;
+    /**
      * Timestamp when the character was last updated
      */
     updatedAt?: string;

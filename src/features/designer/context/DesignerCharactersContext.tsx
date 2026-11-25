@@ -10,6 +10,8 @@ import {
   fetchCharacterVersions,
   fetchMyCharacters,
   formatDesignerApiError,
+  isStoreCharacterType,
+  type CharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
   type PaginationMeta,
@@ -56,6 +58,8 @@ interface DesignerCharactersContextValue {
   setPage: (page: number) => void;
   query: string;
   setQuery: (query: string) => void;
+  characterTypeFilter: CharacterType | "ALL";
+  setCharacterTypeFilter: (characterType: CharacterType | "ALL") => void;
   loading: boolean;
   error: string;
   versionsByCharacter: Record<number, CharacterVersionItem[]>;
@@ -66,6 +70,8 @@ interface DesignerCharactersContextValue {
     characterName: string;
     description?: string;
     matrixSize: MatrixSize;
+    characterType?: CharacterType;
+    commissionId?: number;
   }) => Promise<DesignerCharacterItem>;
   loadVersions: (characterId: number) => Promise<void>;
   deleteVersion: (characterId: number, versionId: number) => Promise<void>;
@@ -87,6 +93,7 @@ export function DesignerCharactersProvider({ children }: { children: React.React
   });
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState("");
+  const [characterTypeFilter, setCharacterTypeFilter] = useState<CharacterType | "ALL">("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [versionsByCharacter, setVersionsByCharacter] = useState<
@@ -104,6 +111,7 @@ export function DesignerCharactersProvider({ children }: { children: React.React
         page,
         size: PAGE_SIZE,
         query: query.trim() || undefined,
+        characterType: characterTypeFilter === "ALL" ? undefined : characterTypeFilter,
       });
       setCharacters(res.items);
       setMeta(res.meta);
@@ -118,7 +126,7 @@ export function DesignerCharactersProvider({ children }: { children: React.React
     } finally {
       setLoading(false);
     }
-  }, [page, query]);
+  }, [page, query, characterTypeFilter]);
 
   useEffect(() => {
     void refreshCharacters();
@@ -136,14 +144,20 @@ export function DesignerCharactersProvider({ children }: { children: React.React
       characterName,
       description,
       matrixSize,
+      characterType = "STORE",
+      commissionId,
     }: {
       characterName: string;
       description?: string;
       matrixSize: MatrixSize;
+      characterType?: CharacterType;
+      commissionId?: number;
     }): Promise<DesignerCharacterItem> => {
       const created = await createDesignerCharacter({
         characterName: characterName.trim(),
         description: description?.trim() || undefined,
+        characterType,
+        commissionId,
       });
 
       setStoredMatrixSize(created.characterId, matrixSize);
@@ -153,6 +167,8 @@ export function DesignerCharactersProvider({ children }: { children: React.React
         characterId: created.characterId,
         characterName: created.characterName,
         description: created.description ?? null,
+        characterType: created.characterType ?? characterType,
+        commissionId: created.commissionId ?? commissionId ?? null,
         totalVersions: 0,
         currentVersion: null,
         createdAt: created.createdAt ?? new Date().toISOString(),
@@ -204,6 +220,9 @@ export function DesignerCharactersProvider({ children }: { children: React.React
       description,
       tagIds,
     }: PublishToStoreInput): Promise<CreatedStoreProductResponse> => {
+      if (!isStoreCharacterType(character.characterType)) {
+        throw new Error("Nhân vật thuộc loại Commission không thể đăng bán lên Store.");
+      }
       if (version.isListedOnStore) {
         throw new Error("Phiên bản này đã được đăng bán trên Store trước đó.");
       }
@@ -251,6 +270,8 @@ export function DesignerCharactersProvider({ children }: { children: React.React
         setPage,
         query,
         setQuery,
+        characterTypeFilter,
+        setCharacterTypeFilter,
         loading,
         error,
         versionsByCharacter,

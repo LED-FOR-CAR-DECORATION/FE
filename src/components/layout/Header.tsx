@@ -59,10 +59,10 @@ function UserDropdown() {
       active: pathname.startsWith("/profile/warranty"),
     },
     {
-      href: "/commission",
+      href: "/profile/commissions",
       label: "Yêu cầu thiết kế",
       icon: Sparkles,
-      active: pathname.startsWith("/commission"),
+      active: pathname.startsWith("/profile/commissions") || pathname.startsWith("/commission"),
     },
     {
       href: "/messages",

@@ -190,57 +190,66 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
   const unreadCount = (conversations ?? []).filter(isUnread).length;
 
   return (
-    <div className={`flex min-h-[520px] overflow-hidden rounded-2xl border border-[#d8e6dc] bg-white shadow-xs ${className}`}>
+    <div className={`neo-box-no-hover flex min-h-[520px] overflow-hidden bg-white ${className}`}>
       {/* Danh sách hội thoại */}
       <section aria-label="Danh sách hội thoại"
-        className={`${selectedId ? "hidden md:flex" : "flex"} w-full min-w-0 flex-col border-r border-[#e3ece4] md:w-[340px] md:shrink-0`}>
-        <div className="space-y-3 border-b border-[#e3ece4] p-4">
+        className={`${selectedId ? "hidden md:flex" : "flex"} w-full min-w-0 flex-col border-black md:w-[340px] md:shrink-0 md:border-r-2`}>
+        <div className="space-y-3 border-b-2 border-black bg-white p-4">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="flex items-center gap-2 text-xl font-black text-[#1f432b]">
+            <h1 className="flex items-center gap-2 text-xl font-black uppercase tracking-tight text-black">
               Tin nhắn
-              {unreadCount > 0 && <span className="rounded-full bg-red-600 px-2 text-xs font-bold text-white" aria-label={`${unreadCount} hội thoại chưa đọc`}>{unreadCount}</span>}
+              {unreadCount > 0 && (
+                <span className="border border-black bg-red-600 px-2 py-0.5 text-xs font-black text-white" aria-label={`${unreadCount} hội thoại chưa đọc`}>
+                  {unreadCount}
+                </span>
+              )}
             </h1>
             <button type="button" aria-label="Làm mới danh sách" disabled={refreshing}
               onClick={() => { setRefreshing(true); setRevision((value) => value + 1); }}
-              className="flex h-11 w-11 items-center justify-center rounded-full text-[#1f432b] hover:bg-[#f0f6f1] disabled:opacity-50">
+              className="grid h-11 w-11 cursor-pointer place-items-center border-2 border-black bg-white text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50">
               <RefreshCw size={17} className={refreshing ? "animate-spin" : ""} />
             </button>
           </div>
           <label className="relative block">
             <span className="sr-only">Tìm hội thoại</span>
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={viewer === "CUSTOMER" ? "Tìm theo tên commission hoặc #mã" : "Tìm theo tên commission, #mã hoặc khách"}
-              className="min-h-11 w-full rounded-full border border-[#d8e6dc] bg-[#f7fbf8] pl-9 pr-3 text-sm outline-none focus:border-[#439660] focus:bg-white" />
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-primary-ink" />
+            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)}
+              placeholder={viewer === "CUSTOMER" ? "Tìm theo tên yêu cầu hoặc #mã" : "Tìm theo tên commission, #mã hoặc khách"}
+              className="min-h-11 w-full border-2 border-black bg-gray-50 pl-9 pr-3 text-sm font-medium text-text-main transition-colors focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black" />
           </label>
-          <div role="tablist" aria-label="Lọc hội thoại" className="flex gap-1.5 overflow-x-auto">
+          <div role="tablist" aria-label="Lọc hội thoại" className="flex gap-1.5 overflow-x-auto pb-1">
             {filters.map((entry) => (
               <button key={entry.key} type="button" role="tab" aria-selected={filter === entry.key} onClick={() => setFilter(entry.key)}
-                className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-bold transition ${filter === entry.key ? "bg-[#1f432b] text-white" : "bg-[#eef5f0] text-[#1f432b] hover:bg-[#e2efe5]"}`}>
+                className={`min-h-9 shrink-0 cursor-pointer border-2 border-black px-2.5 text-xs uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                  filter === entry.key
+                    ? "bg-primary font-black text-black shadow-[2px_2px_0_0_#000]"
+                    : "bg-white font-bold text-black hover:bg-gray-50"
+                }`}>
                 {entry.label}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {error && <p role="alert" className="m-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+          {error && <p role="alert" className="m-4 border-2 border-red-600 bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
           {!conversations && !error ? (
-            <ul className="t-skel-skeleton is-pulsing space-y-1 p-2" style={{ "--pulse-count": "infinite" } as CSSProperties} aria-busy="true">
+            <ul className="t-skel-skeleton is-pulsing space-y-2 p-3" style={{ "--pulse-count": "infinite" } as CSSProperties} aria-busy="true">
               <li className="sr-only" role="status">Đang tải hội thoại…</li>
               {Array.from({ length: 6 }, (_, index) => (
-                <li key={index} className="flex items-center gap-3 rounded-xl p-3" aria-hidden="true">
-                  <span className="h-12 w-12 shrink-0 rounded-full bg-[#e4ece6]" />
-                  <span className="flex-1 space-y-2"><span className="block h-3 w-2/3 rounded bg-[#e4ece6]" /><span className="block h-3 w-1/2 rounded bg-[#e4ece6]" /></span>
+                <li key={index} className="flex items-center gap-3 border-2 border-black/20 bg-white p-3" aria-hidden="true">
+                  <span className="h-12 w-12 shrink-0 bg-gray-200" />
+                  <span className="flex-1 space-y-2"><span className="block h-3 w-2/3 bg-gray-200" /><span className="block h-3 w-1/2 bg-gray-200" /></span>
                 </li>
               ))}
             </ul>
           ) : visible.length === 0 ? (
-            <div className="p-8 text-center text-sm text-slate-500">
-              <MessageCircle size={32} className="mx-auto mb-2 text-[#88b998]" />
-              {conversations?.length ? "Không có hội thoại khớp bộ lọc." : emptyText}
+            <div className="p-8 text-center text-sm text-text-muted">
+              <MessageCircle size={32} className="mx-auto mb-2 text-primary-ink" />
+              <p className="font-semibold">{conversations?.length ? "Không có hội thoại khớp bộ lọc." : emptyText}</p>
             </div>
           ) : (
-            <ul className="p-2">
+            <ul className="space-y-2 p-2.5">
               {visible.map((entry) => {
                 const { item, last } = entry;
                 const unread = isUnread(entry);
@@ -248,19 +257,25 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
                 return (
                   <li key={item.commissionId}>
                     <button type="button" onClick={() => select(item.commissionId)} aria-current={active ? "true" : undefined}
-                      className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6a4f] ${active ? "bg-[#e9f5ed]" : "hover:bg-[#f4f8f5]"}`}>
+                      className={`flex w-full cursor-pointer items-center gap-3 border-2 p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                        active
+                          ? "border-black bg-primary/15 shadow-[3px_3px_0_0_#000]"
+                          : "border-black/20 bg-white hover:border-black hover:bg-gray-50"
+                      }`}>
                       <CommissionAvatar commissionId={item.commissionId} badge={item.status === "INTERNAL_REVIEW"} />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-baseline justify-between gap-2">
-                          <span className={`truncate text-sm ${unread ? "font-black text-[#14281c]" : "font-bold text-[#1f432b]"}`}>{item.title}</span>
-                          <span className={`shrink-0 text-[11px] ${unread ? "font-bold text-[#155e59]" : "text-slate-400"}`}>{shortTime(last?.createdAt)}</span>
+                          <span className={`truncate text-sm ${unread ? "font-black text-black" : "font-bold text-black"}`}>{item.title}</span>
+                          <span className={`shrink-0 text-[11px] tabular-nums ${unread ? "font-black text-primary-ink" : "font-semibold text-text-muted"}`}>{shortTime(last?.createdAt)}</span>
                         </span>
-                        {item.subtitle && <span className="block truncate text-xs text-slate-500">{item.subtitle}</span>}
+                        {item.subtitle && <span className="block truncate text-xs font-medium text-text-muted">{item.subtitle}</span>}
                         <span className="mt-0.5 flex items-center gap-2">
-                          <span className={`min-w-0 flex-1 truncate text-xs ${unread ? "font-bold text-[#14281c]" : "text-slate-500"}`}>{previewText(viewer, last)}</span>
-                          {unread && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#2d6a4f]" aria-label="Chưa đọc" />}
+                          <span className={`min-w-0 flex-1 truncate text-xs ${unread ? "font-bold text-black" : "text-text-muted"}`}>{previewText(viewer, last)}</span>
+                          {unread && <span className="h-2.5 w-2.5 shrink-0 border border-black bg-primary-ink" aria-label="Chưa đọc" />}
                         </span>
-                        <span className="mt-1 inline-flex rounded-full bg-[#f0f6f1] px-2 text-[10px] font-bold text-[#1f432b]">{commissionStatusLabel(item.status)}</span>
+                        <span className="mt-1.5 inline-flex border border-black bg-white px-2 py-0.5 text-[10px] font-black uppercase text-black">
+                          {commissionStatusLabel(item.status)}
+                        </span>
                       </span>
                     </button>
                   </li>
@@ -272,15 +287,15 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
       </section>
 
       {/* Phòng chat */}
-      <section aria-label="Cuộc trò chuyện" className={`${selectedId ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col`}>
+      <section aria-label="Cuộc trò chuyện" className={`${selectedId ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col bg-white`}>
         {selectedId ? (
           <CommissionChatRoom key={selectedId} commissionId={selectedId} viewer={viewer} variant="messenger" onBack={() => select(undefined)} />
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-slate-500">
-            {conversations ? <MessageCircle size={44} className="text-[#88b998]" /> : <Loader2 size={28} className="animate-spin text-[#2d6a4f]" />}
-            <p className="font-bold text-[#1f432b]">Chọn một cuộc trò chuyện</p>
-            <p className="max-w-xs text-sm">{viewer === "CUSTOMER"
-              ? "Trao đổi với nhân viên LUMINTRA, xem bản xem trước và xác nhận chỉnh sửa cho từng commission."
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-background p-8 text-center text-text-muted">
+            {conversations ? <MessageCircle size={44} className="text-primary-ink" /> : <Loader2 size={28} className="animate-spin text-primary-ink" />}
+            <p className="text-base font-black uppercase text-black">Chọn một cuộc trò chuyện</p>
+            <p className="max-w-xs text-xs font-medium">{viewer === "CUSTOMER"
+              ? "Trao đổi với nhân viên LUMINTRA, xem bản xem trước và xác nhận chỉnh sửa cho từng yêu cầu thiết kế riêng."
               : "Tin nhắn với khách, bản nháp chờ duyệt và thẻ chỉnh sửa của từng commission nằm ở đây."}</p>
           </div>
         )}

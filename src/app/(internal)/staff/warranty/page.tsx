@@ -31,6 +31,7 @@ import {
   type ManagementWarrantyClaimItem,
   type WarrantyTicketStatus,
 } from "@/lib/api/warranty";
+import { fetchAllPages } from "@/lib/api/paging";
 
 const STATUS_CONFIG: Record<
   WarrantyTicketStatus,
@@ -84,21 +85,27 @@ export default function StaffWarrantyManagementPage() {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const res = await getManagementWarrantyClaims({
-        status: selectedStatus === "ALL" ? undefined : selectedStatus,
-        search: searchTerm.trim() || undefined,
-        page: 0,
-        size: 50,
+      const claimItems = await fetchAllPages(async (page) => {
+        const res = await getManagementWarrantyClaims({
+          status: selectedStatus === "ALL" ? undefined : selectedStatus,
+          search: searchTerm.trim() || undefined,
+          page,
+          size: 50,
+        });
+        return { items: res.items || [], totalPages: res.totalPages };
       });
-      setClaims(res.items || []);
+      setClaims(claimItems);
 
       // Keep stats counts accurate even when a specific status filter is active
       if (selectedStatus !== "ALL" || searchTerm.trim()) {
-        getManagementWarrantyClaims({ page: 0, size: 100 })
-          .then((unfiltered) => setStatsData(unfiltered.items || []))
+        fetchAllPages(async (page) => {
+          const res = await getManagementWarrantyClaims({ page, size: 100 });
+          return { items: res.items || [], totalPages: res.totalPages };
+        })
+          .then((unfiltered) => setStatsData(unfiltered))
           .catch(() => {});
       } else {
-        setStatsData(res.items || []);
+        setStatsData(claimItems);
       }
     } catch (err: any) {
       console.error("Failed to load warranty claims", err);

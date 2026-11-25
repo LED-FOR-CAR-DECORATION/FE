@@ -57,6 +57,7 @@ import {
 import LedModelFormModal from "@/features/product/components/LedModelFormModal";
 import DeprecateLedModelModal from "@/features/product/components/DeprecateLedModelModal";
 import StockInLedInstancesModal from "@/features/product/components/StockInLedInstancesModal";
+import { fetchAllPages } from "@/lib/api/paging";
 
 type InstanceStatusValue =
   | LedInstanceItem.status
@@ -231,14 +232,16 @@ export default function InventoryPage() {
   // Load summary metrics
   useEffect(() => {
     let cancelled = false;
-    fetchLedModelsPage({ page: 0, size: 100 })
-      .then((res) => {
+    fetchAllPages(async (page) => {
+      const res = await fetchLedModelsPage({ page, size: 100 });
+      return { items: res.items, totalPages: res.meta.totalPages };
+    })
+      .then((list) => {
         if (cancelled) return;
-        const list = res.items;
         const nonDeprecated = list.filter((m) => m.status !== LedModelItem.status.DEPRECATED);
         setSummaryStats({
           totalStock: nonDeprecated.reduce((sum, m) => sum + (m.stockQuantity ?? 0), 0),
-          totalModels: res.meta.totalElements,
+          totalModels: list.length,
           lowStockCount: nonDeprecated.filter((m) => m.isLowStock).length,
           activeCount: list.filter((m) => m.status === LedModelItem.status.ACTIVE).length,
           linkedProductCount: list.filter((m) => m.productId != null).length,

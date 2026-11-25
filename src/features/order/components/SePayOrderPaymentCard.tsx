@@ -20,6 +20,7 @@ import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import { fetchOrderDetail } from "@/lib/api/orders";
 import { fetchPaymentSession, mockPaymentSuccess } from "@/lib/api/payments";
 import { formatPrice } from "@/lib/currency";
+import { isPageVisible } from "@/lib/polling";
 
 type SePayOrderPaymentCardProps = {
   onPaymentSuccess?: (session: PaymentSessionResponse) => void;
@@ -176,6 +177,7 @@ export default function SePayOrderPaymentCard({
 
         stopPolling();
         pollIntervalRef.current = setInterval(async () => {
+          if (!isPageVisible()) return;
           try {
             const polled = await fetchPaymentSession(code);
             if (cancelled) return;

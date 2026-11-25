@@ -9,64 +9,21 @@ import {
   Check,
   Eye,
   EyeOff,
-  KeyRound,
   Loader2,
   Lock,
   Mail,
   Palette,
   ShieldAlert,
-  ShieldCheck,
   User,
 } from "lucide-react";
-import { authService, USE_MOCK_AUTH } from "../services/auth.service";
+import { authService } from "../services/auth.service";
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { DEMO_ACCOUNTS } from "@/features/auth/mock-auth";
 import type { UserRole } from "@/features/auth/types";
 import AuthField from "./AuthField";
 import ForgotPasswordModal from "./ForgotPasswordModal";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const ROLE_META: Record<
-  UserRole,
-  { label: string; badge: string; icon: React.ReactNode; bg: string; border: string }
-> = {
-  MANAGER: {
-    label: "Quản lý",
-    badge: "Quản lý",
-    icon: <ShieldCheck size={13} />,
-    bg: "bg-emerald-50 text-emerald-800",
-    border: "border-emerald-300 hover:border-emerald-600",
-  },
-  DESIGNER: {
-    label: "Thiết kế",
-    badge: "Thiết kế",
-    icon: <Palette size={13} />,
-    bg: "bg-purple-50 text-purple-800",
-    border: "border-purple-300 hover:border-purple-600",
-  },
-  CUSTOMER: {
-    label: "Khách hàng",
-    badge: "Khách hàng",
-    icon: <User size={13} />,
-    bg: "bg-blue-50 text-blue-800",
-    border: "border-blue-300 hover:border-blue-600",
-  },
-  STAFF: {
-    label: "Nhân viên",
-    badge: "Nhân viên",
-    icon: <Briefcase size={13} />,
-    bg: "bg-amber-50 text-amber-800",
-    border: "border-amber-300 hover:border-amber-600",
-  },
-  ADMIN: {
-    label: "Quản trị",
-    badge: "Quản trị",
-    icon: <ShieldAlert size={13} />,
-    bg: "bg-rose-50 text-rose-800",
-    border: "border-rose-300 hover:border-rose-600",
-  },
-};
 
 export default function LoginForm({ redirectTo }: { redirectTo: string }) {
   const { login } = useAuth();
@@ -74,7 +31,6 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
@@ -86,14 +42,6 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
     }
   }, []);
 
-  const handleQuickFill = (role: UserRole) => {
-    const demo = DEMO_ACCOUNTS.find((item) => item.user.role === role);
-    if (!demo) return;
-    setEmail(demo.email);
-    setPassword(demo.password);
-    setSelectedRole(role);
-    setErrors({});
-  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -168,53 +116,10 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
       <div className="border-b border-[#e3efe6] pb-3 text-left">
         <h2 className="text-xl font-black text-[#173b28] tracking-tight">Đăng nhập tài khoản</h2>
         <p className="mt-0.5 text-xs font-medium text-text-muted">
-          {USE_MOCK_AUTH
-            ? "Nhập thông tin hoặc chọn tài khoản mẫu bên dưới để thử nghiệm nhanh các vai trò."
-            : "Nhập email và mật khẩu đã đăng ký để đăng nhập."}
+          "Nhập email và mật khẩu đã đăng ký để đăng nhập."
         </p>
       </div>
 
-      {/* Quick Account Switcher (chỉ hiện ở chế độ mock) */}
-      {USE_MOCK_AUTH && (
-      <div className="rounded-xl border border-[#d8e6dc] bg-[#f9fcfa] p-3 text-left">
-        <div className="flex items-center justify-between mb-2">
-          <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-[#173b28]">
-            <KeyRound size={13} className="text-[#198653]" />
-            Đăng nhập nhanh theo vai trò
-          </span>
-          {selectedRole && (
-            <span className="text-[10px] font-bold text-[#198653] flex items-center gap-1 animate-fadeIn">
-              <Check size={11} /> Đã điền {ROLE_META[selectedRole].label}
-            </span>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-          {(["MANAGER", "DESIGNER", "CUSTOMER", "STAFF", "ADMIN"] as UserRole[]).map((role) => {
-            const meta = ROLE_META[role];
-            const isSelected = selectedRole === role;
-            return (
-              <button
-                key={role}
-                type="button"
-                onClick={() => handleQuickFill(role)}
-                className={`flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all text-left ${
-                  isSelected
-                    ? "border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5"
-                    : `${meta.bg} ${meta.border} hover:-translate-y-0.5 hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,0.8)]`
-                }`}
-              >
-                <span className="flex items-center gap-1.5 truncate">
-                  {meta.icon}
-                  <span className="truncate">{meta.label}</span>
-                </span>
-                <span className="text-[9px] font-black uppercase opacity-70 shrink-0">{meta.badge}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      )}
 
       {/* Main form */}
       <form onSubmit={submit} className="flex flex-col gap-3.5 text-left" noValidate>
@@ -244,7 +149,6 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
           value={email}
           onChange={(val) => {
             setEmail(val);
-            if (selectedRole) setSelectedRole(null);
           }}
           placeholder="vd: tenban@gmail.com"
           error={errors.email}
@@ -258,7 +162,6 @@ export default function LoginForm({ redirectTo }: { redirectTo: string }) {
           value={password}
           onChange={(val) => {
             setPassword(val);
-            if (selectedRole) setSelectedRole(null);
           }}
           type={showPassword ? "text" : "password"}
           placeholder="Nhập mật khẩu..."

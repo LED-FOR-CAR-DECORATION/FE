@@ -57,25 +57,26 @@ export default function CommissionChatRoom({ commissionId, viewer, variant = "pa
 }) {
   const messenger = variant === "messenger";
   const room = useCommissionRoom(commissionId, viewer);
-  const { info, infoError, messages, addMessages, refreshInfo } = room;
+  const { info, infoError, messages, addMessages, refreshInfo, refreshHistory } = room;
   const cardIds = useMemo(() => latestCardIds(messages), [messages]);
   const onCardChanged = useCallback((incoming?: CommissionMessage[]) => {
     if (incoming?.length) addMessages(incoming);
     void refreshInfo();
-  }, [addMessages, refreshInfo]);
+    void refreshHistory();
+  }, [addMessages, refreshInfo, refreshHistory]);
   const backHref = viewer === "CUSTOMER" ? "/commission" : "/staff/commission";
 
   if (!info) {
     return infoError ? (
-      <div className="space-y-3 rounded-xl border border-[#cfe3d0] bg-white p-5" role="alert">
-        <p>{infoError}</p>
-        <div className="flex gap-4">
-          <button type="button" className="font-semibold text-[#155e59] underline" onClick={room.reload}>Thử lại</button>
-          <Link href={backHref} className="font-semibold text-[#155e59] underline">Về danh sách</Link>
+      <div className="neo-box-no-hover space-y-3 border-l-8 border-l-red-600 bg-white p-5" role="alert">
+        <p className="text-sm font-bold text-red-700">{infoError}</p>
+        <div className="flex flex-wrap gap-3">
+          <button type="button" className="btn-secondary min-h-11 text-xs font-black uppercase" onClick={room.reload}>Thử lại</button>
+          <Link href={backHref} className="btn-secondary inline-flex min-h-11 items-center text-xs font-black uppercase">Về danh sách</Link>
         </div>
       </div>
     ) : (
-      <p role="status" className={`flex items-center gap-2 ${messenger ? "p-6" : ""}`}><Loader2 className="animate-spin" size={16} /> Đang mở phòng chat…</p>
+      <p role="status" className={`flex items-center gap-2 text-sm font-bold text-text-muted ${messenger ? "p-6" : ""}`}><Loader2 className="animate-spin text-primary-ink" size={16} /> Đang mở phòng trao đổi…</p>
     );
   }
 
@@ -96,9 +97,9 @@ export default function CommissionChatRoom({ commissionId, viewer, variant = "pa
     return (
       <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,1fr)_320px]">
         <ChatPanel room={room} info={info} viewer={viewer} cardCtx={cardCtx} variant="messenger" onBack={onBack} />
-        <aside aria-label="Thông tin commission" className="hidden min-h-0 space-y-4 overflow-y-auto border-l border-[#e3ece4] bg-[#fafcf9] p-4 lg:block">
+        <aside aria-label="Thông tin yêu cầu" className="hidden min-h-0 space-y-4 overflow-y-auto border-l-2 border-black bg-background p-4 lg:block">
           {staffPanels}
-          <div className="rounded-xl border border-[#e3ece4] bg-white p-4"><CommissionInfoPanel info={info} viewer={viewer} /></div>
+          <div className="border-2 border-black bg-white p-4 shadow-[3px_3px_0_0_#000]"><CommissionInfoPanel info={info} viewer={viewer} /></div>
         </aside>
       </div>
     );
@@ -109,10 +110,10 @@ export default function CommissionChatRoom({ commissionId, viewer, variant = "pa
       <ChatPanel room={room} info={info} viewer={viewer} cardCtx={cardCtx} />
       <aside className="order-first space-y-4 lg:order-none">
         {staffPanels}
-        <InfoAccordion title={<>Thông tin Commission #{info.commissionId} <span className="text-sm font-normal">({commissionStatusLabel(info.status)})</span></>}>
+        <InfoAccordion title={<>Thông tin #{info.commissionId} <span className="text-xs font-bold text-text-muted">({commissionStatusLabel(info.status)})</span></>}>
           <CommissionInfoPanel info={info} viewer={viewer} />
         </InfoAccordion>
-        <div className="sticky top-4 hidden rounded-xl border border-[#cfe3d0] bg-white p-5 lg:block">
+        <div className="neo-box-no-hover sticky top-4 hidden bg-white p-5 lg:block">
           <CommissionInfoPanel info={info} viewer={viewer} />
         </div>
       </aside>
@@ -124,8 +125,8 @@ export default function CommissionChatRoom({ commissionId, viewer, variant = "pa
 function InfoAccordion({ title, children }: { title: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="t-acc rounded-xl border border-[#cfe3d0] bg-white lg:hidden" data-open={String(open)}>
-      <button type="button" className="t-acc-head flex min-h-11 w-full items-center justify-between gap-3 p-4 text-left font-bold text-[#155e59]"
+    <div className="t-acc neo-box-no-hover bg-white lg:hidden" data-open={String(open)}>
+      <button type="button" className="t-acc-head flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 p-4 text-left text-sm font-black uppercase text-black"
         aria-expanded={open} aria-controls="commission-info-panel" onClick={() => setOpen((value) => !value)}>
         <span>{title}</span>
         <span className="t-acc-chevron" aria-hidden="true">
@@ -135,7 +136,7 @@ function InfoAccordion({ title, children }: { title: ReactNode; children: ReactN
         </span>
       </button>
       <div className="t-acc-panel" id="commission-info-panel">
-        <div className="t-acc-panel-inner"><div className="border-t border-[#cfe3d0] p-4">{children}</div></div>
+        <div className="t-acc-panel-inner"><div className="border-t-2 border-black p-4">{children}</div></div>
       </div>
     </div>
   );
@@ -216,39 +217,39 @@ function ChatPanel({ room, info, viewer, cardCtx, variant = "page", onBack }: {
   }, [messages]);
 
   return (
-    <section aria-label="Phòng chat Commission" className={variant === "messenger"
+    <section aria-label="Phòng chat thiết kế riêng" className={variant === "messenger"
       ? "flex h-full min-h-0 flex-col overflow-hidden bg-white"
-      : "flex h-[calc(100vh-180px)] min-h-[480px] flex-col overflow-hidden rounded-xl border border-[#cfe3d0] bg-white"}>
-      <header className="flex items-center justify-between gap-3 border-b border-[#cfe3d0] px-4 py-3">
+      : "neo-box-no-hover flex h-[calc(100vh-180px)] min-h-[480px] flex-col overflow-hidden bg-white"}>
+      <header className="flex items-center justify-between gap-3 border-b-2 border-black bg-white px-4 py-3">
         {onBack && (
           <button type="button" onClick={onBack} aria-label="Về danh sách hội thoại"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#155e59] hover:bg-[#eaf5e8] lg:hidden">
-            <ArrowLeft size={20} />
+            className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center border-2 border-black bg-white text-black shadow-[2px_2px_0_0_#000] hover:bg-gray-50 lg:hidden">
+            <ArrowLeft size={18} />
           </button>
         )}
         {variant === "messenger" && <CommissionAvatar commissionId={info.commissionId} size="sm" />}
         <div className="min-w-0 flex-1">
           {variant === "messenger" ? (
             <>
-              <h2 className="truncate font-black text-[#155e59]">{info.title}</h2>
-              <p className="truncate text-sm text-[#526159]">#{info.commissionId} · Khách: {counterpart} · {commissionStatusLabel(info.status)}</p>
+              <h2 className="truncate font-black uppercase text-black">{info.title}</h2>
+              <p className="truncate text-xs font-semibold text-text-muted">#{info.commissionId} · {counterpart} · {commissionStatusLabel(info.status)}</p>
             </>
           ) : (
             <>
-              <h1 className="truncate font-black text-[#155e59]">{info.title}</h1>
-              <p className="truncate text-sm text-[#526159]">Trao đổi với {counterpart} · #{info.commissionId}</p>
+              <h1 className="truncate font-black uppercase text-black">{info.title}</h1>
+              <p className="truncate text-xs font-semibold text-text-muted">Trao đổi với {counterpart} · #{info.commissionId}</p>
             </>
           )}
         </div>
         {readable && (
-          <span className="flex shrink-0 items-center gap-1.5 text-xs text-[#526159]" role="status">
+          <span className="flex shrink-0 items-center gap-1.5 border border-black bg-gray-50 px-2.5 py-1 text-xs font-bold text-black" role="status">
             <span className={`h-2 w-2 rounded-full ${realtime === "connected" ? "bg-emerald-500" : realtime === "connecting" ? "bg-amber-400" : "bg-gray-400"}`} />
-            {realtime === "connected" ? "Trực tuyến" : realtime === "connecting" ? "Đang kết nối…" : "Mất kết nối, đang thử lại"}
+            {realtime === "connected" ? "Trực tuyến" : realtime === "connecting" ? "Đang kết nối…" : "Mất kết nối"}
           </span>
         )}
       </header>
 
-      <div ref={listRef} onScroll={onScroll} className="flex-1 space-y-3 overflow-y-auto overscroll-contain bg-[#f7faf6] px-4 py-4"
+      <div ref={listRef} onScroll={onScroll} className="flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background px-4 py-4"
         aria-live="polite" aria-busy={readable && !historyLoaded}>
         {!readable ? (
           <ChatNotReady info={info} viewer={viewer} />
@@ -257,20 +258,24 @@ function ChatPanel({ room, info, viewer, cardCtx, variant = "page", onBack }: {
         ) : (
           <>
             {historyError && (
-              <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
-                {historyError} <button type="button" className="font-semibold underline" onClick={room.reload}>Tải lại</button>
+              <div role="alert" className="border-2 border-red-600 bg-red-50 p-3 text-xs font-bold text-red-700">
+                {historyError} <button type="button" className="ml-2 underline" onClick={room.reload}>Tải lại</button>
               </div>
             )}
             {messages.length === 0 && pending.length === 0 && !historyError && (
-              <p className="py-8 text-center text-sm text-[#526159]">
+              <p className="py-8 text-center text-xs font-semibold text-text-muted">
                 {viewer === "CUSTOMER"
-                  ? "Phòng chat đã mở. Hãy gửi lời chào và mô tả thêm ý tưởng cho nhân viên LUMINTRA nhé!"
+                  ? "Phòng trao đổi đã mở. Hãy gửi lời chào và mô tả thêm ý tưởng cho nhân viên LUMINTRA nhé!"
                   : "Chưa có tin nhắn. Hãy chào khách và xác nhận yêu cầu."}
               </p>
             )}
             {grouped.map((group) => (
               <div key={group.day} className="space-y-3">
-                <div className="flex justify-center"><span className="rounded-full bg-white px-3 py-0.5 text-xs text-[#526159] shadow-sm">{group.day}</span></div>
+                <div className="flex justify-center">
+                  <span className="border-2 border-black bg-white px-3 py-0.5 text-xs font-black uppercase text-black shadow-[2px_2px_0_0_#000]">
+                    {group.day}
+                  </span>
+                </div>
                 {group.items.map((message) => (
                   <MessageItem key={message.messageId} message={message} viewer={viewer} info={info} animate={liveIds.has(message.messageId)} cardCtx={cardCtx} />
                 ))}
@@ -286,10 +291,10 @@ function ChatPanel({ room, info, viewer, cardCtx, variant = "page", onBack }: {
       {readable && (canSend ? (
         <Composer onSend={(text, file) => { stickToBottom.current = true; room.send(text, file); }} />
       ) : (
-        <p className="border-t border-[#cfe3d0] bg-[#f4f4f4] px-4 py-3 text-center text-sm text-[#526159]">
+        <p className="border-t-2 border-black bg-gray-100 px-4 py-3 text-center text-xs font-bold text-text-muted">
           {info.status === "COMPLETED"
-            ? "Commission đã hoàn thành. Bạn vẫn có thể xem lại lịch sử trao đổi."
-            : "Phòng chat không còn hoạt động ở trạng thái hiện tại."}
+            ? "Yêu cầu thiết kế đã hoàn thành. Bạn vẫn có thể xem lại lịch sử trao đổi."
+            : "Phòng trao đổi không còn hoạt động ở trạng thái hiện tại."}
         </p>
       ))}
     </section>
@@ -304,7 +309,7 @@ function MessagesSkeleton() {
       <span className="sr-only" role="status">Đang tải tin nhắn…</span>
       {rows.map(([align, width], index) => (
         <div key={index} className={`flex flex-col ${align}`} aria-hidden="true">
-          <div className={`h-10 ${width} max-w-[80%] rounded-2xl bg-[#dfe9dd]`} />
+          <div className={`h-10 ${width} max-w-[80%] border-2 border-black/20 bg-gray-200`} />
         </div>
       ))}
     </div>
@@ -315,19 +320,21 @@ function ChatNotReady({ info, viewer }: { info: CommissionRoomInfo; viewer: Chat
   const waiting = info.status === "PENDING_PAYMENT" || info.status === "PENDING_REVIEW";
   return (
     <div className="mx-auto max-w-md space-y-3 py-10 text-center">
-      {waiting && <Loader2 className="mx-auto animate-spin text-[#155e59]" size={28} aria-hidden="true" />}
-      <p className="font-semibold" role="status">
+      {waiting && <Loader2 className="mx-auto animate-spin text-primary-ink" size={28} aria-hidden="true" />}
+      <p className="font-bold text-black" role="status">
         {info.status === "PENDING_PAYMENT"
           ? <Shimmer text="Đang chờ xác nhận thanh toán…" />
           : info.status === "PENDING_REVIEW"
-            ? "Yêu cầu đang chờ nhân viên duyệt. Phòng chat mở sau khi thanh toán."
-            : `Phòng chat không khả dụng (${commissionStatusLabel(info.status)}).`}
+            ? "Yêu cầu đang chờ nhân viên duyệt. Phòng trao đổi mở sau khi thanh toán."
+            : `Phòng trao đổi không khả dụng (${commissionStatusLabel(info.status)}).`}
       </p>
       {info.status === "PENDING_PAYMENT" && (
-        <p className="text-sm text-[#526159]">Phòng chat sẽ tự mở ngay khi hệ thống ghi nhận giao dịch.</p>
+        <p className="text-xs font-medium text-text-muted">Phòng trao đổi sẽ tự mở ngay khi hệ thống ghi nhận giao dịch.</p>
       )}
       {viewer === "CUSTOMER" && info.status === "PENDING_PAYMENT" && (
-        <Link href={`/commission/${info.commissionId}/payment`} className="inline-block font-semibold text-[#155e59] underline">Quay lại trang thanh toán</Link>
+        <Link href={`/commission/${info.commissionId}/payment`} className="btn-primary inline-flex min-h-11 items-center text-xs font-black uppercase">
+          Quay lại trang thanh toán
+        </Link>
       )}
     </div>
   );
@@ -350,8 +357,8 @@ function MessageItem({ message, viewer, info, animate, cardCtx }: {
   if (message.messageType === "SYSTEM" || message.senderRole === "SYSTEM") {
     return (
       <Reveal animate={animate} className="flex justify-center">
-        <p className="t-stagger-line t-stagger-line--1 max-w-[85%] rounded-lg bg-[#e6f0e4] px-3 py-1.5 text-center text-xs text-[#26352f]">
-          {message.content} <span className="text-[#526159]">· {formatTime(message.createdAt)}</span>
+        <p className="t-stagger-line t-stagger-line--1 max-w-[85%] border-2 border-black bg-primary/10 px-3 py-1.5 text-center text-xs font-bold text-black">
+          {message.content} <span className="font-semibold text-text-muted">· {formatTime(message.createdAt)}</span>
         </p>
       </Reveal>
     );
@@ -362,23 +369,23 @@ function MessageItem({ message, viewer, info, animate, cardCtx }: {
 
   return (
     <Reveal animate={animate} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-      {!mine && <span className="t-stagger-line t-stagger-line--1 mb-0.5 px-1 text-xs text-[#526159]">{senderLabel(message, viewer, info)}</span>}
+      {!mine && <span className="t-stagger-line t-stagger-line--1 mb-1 px-1 text-xs font-bold text-text-muted">{senderLabel(message, viewer, info)}</span>}
       {message.messageType === "DELIVERABLE_CARD" ? (
         <div className="t-stagger-line t-stagger-line--2"><DeliverableCard message={message} ctx={cardCtx} /></div>
       ) : message.messageType === "EXTRA_FEE_CARD" ? (
         <div className="t-stagger-line t-stagger-line--2"><RevisionCard message={message} ctx={cardCtx} /></div>
       ) : (
-        <div className={`t-stagger-line t-stagger-line--2 max-w-[80%] overflow-hidden rounded-2xl ${mine ? "rounded-br-sm bg-[#155e59] text-white" : "rounded-bl-sm border border-[#cfe3d0] bg-white"}`}>
+        <div className={`t-stagger-line t-stagger-line--2 max-w-[80%] overflow-hidden border-2 border-black shadow-[3px_3px_0_0_#000] ${mine ? "bg-primary text-black" : "bg-white text-text-main"}`}>
           {message.messageType === "IMAGE" && isHttpUrl(message.mediaUrl) && (
-            <a href={message.mediaUrl} target="_blank" rel="noreferrer">
+            <a href={message.mediaUrl} target="_blank" rel="noreferrer" className="block border-b border-black/20">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={message.mediaUrl} alt={message.content || "Ảnh đính kèm"} loading="lazy" decoding="async" className="h-60 w-72 max-w-full bg-black/5 object-contain [image-rendering:pixelated]" />
+              <img src={message.mediaUrl} alt={message.content || "Ảnh đính kèm"} loading="lazy" decoding="async" className="h-60 w-72 max-w-full bg-white object-contain [image-rendering:pixelated]" />
             </a>
           )}
-          {message.content && <p className="whitespace-pre-wrap break-words px-3 py-2">{message.content}</p>}
+          {message.content && <p className="whitespace-pre-wrap break-words px-3.5 py-2 text-sm font-medium">{message.content}</p>}
         </div>
       )}
-      <span className="t-stagger-line t-stagger-line--3 mt-0.5 px-1 text-[11px] text-[#5f6f67]">{formatTime(message.createdAt)}</span>
+      <span className="t-stagger-line t-stagger-line--3 mt-1 px-1 text-[11px] font-semibold text-text-muted">{formatTime(message.createdAt)}</span>
     </Reveal>
   );
 }
@@ -386,21 +393,21 @@ function MessageItem({ message, viewer, info, animate, cardCtx }: {
 function PendingItem({ item, onRetry, onDiscard }: { item: PendingMessage; onRetry: () => void; onDiscard: () => void }) {
   return (
     <Reveal animate className="flex flex-col items-end">
-      <div className={`t-stagger-line t-stagger-line--1 max-w-[80%] overflow-hidden rounded-2xl rounded-br-sm bg-[#155e59] text-white ${item.failed ? "opacity-60" : "opacity-80"}`}>
+      <div className={`t-stagger-line t-stagger-line--1 max-w-[80%] overflow-hidden border-2 border-black bg-primary text-black shadow-[3px_3px_0_0_#000] ${item.failed ? "opacity-60" : "opacity-80"}`}>
         {item.previewUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.previewUrl} alt="Ảnh đang gửi" className="h-60 w-72 max-w-full object-contain" />
+          <img src={item.previewUrl} alt="Ảnh đang gửi" className="h-60 w-72 max-w-full bg-white object-contain" />
         )}
-        {item.content && <p className="whitespace-pre-wrap break-words px-3 py-2">{item.content}</p>}
+        {item.content && <p className="whitespace-pre-wrap break-words px-3.5 py-2 text-sm font-medium">{item.content}</p>}
       </div>
       {item.failed ? (
-        <span className="t-stagger-line t-stagger-line--2 mt-0.5 flex flex-wrap items-center justify-end gap-x-2 px-1 text-xs text-red-700" role="alert">
+        <span className="t-stagger-line t-stagger-line--2 mt-1 flex flex-wrap items-center justify-end gap-x-2 px-1 text-xs font-bold text-red-700" role="alert">
           {item.failed}
-          <button type="button" onClick={onRetry} className="flex min-h-11 items-center gap-1 px-1 font-semibold underline"><RotateCcw size={14} aria-hidden="true" />Thử lại</button>
-          <button type="button" onClick={onDiscard} className="flex min-h-11 items-center gap-1 px-1 font-semibold underline"><Trash2 size={14} aria-hidden="true" />Xóa</button>
+          <button type="button" onClick={onRetry} className="flex min-h-11 cursor-pointer items-center gap-1 px-1 underline"><RotateCcw size={14} aria-hidden="true" />Thử lại</button>
+          <button type="button" onClick={onDiscard} className="flex min-h-11 cursor-pointer items-center gap-1 px-1 underline"><Trash2 size={14} aria-hidden="true" />Xóa</button>
         </span>
       ) : (
-        <span className="t-stagger-line t-stagger-line--2 mt-0.5 px-1 text-[11px]" role="status"><Shimmer text="Đang gửi…" /></span>
+        <span className="t-stagger-line t-stagger-line--2 mt-1 px-1 text-[11px] font-semibold text-text-muted" role="status"><Shimmer text="Đang gửi…" /></span>
       )}
     </Reveal>
   );
@@ -485,33 +492,33 @@ function Composer({ onSend }: { onSend: (text: string, file?: File) => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="border-t border-[#cfe3d0] bg-white p-3">
+    <form onSubmit={submit} className="border-t-2 border-black bg-white p-3">
       {preview && (
-        <div className="relative mb-2 inline-block">
+        <div className="relative mb-2.5 inline-block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="Ảnh sẽ gửi" className="h-20 rounded-lg border border-[#cfe3d0] object-contain" />
-          <button type="button" onClick={clearFile} aria-label="Bỏ ảnh" className="absolute -right-2 -top-2 rounded-full bg-black p-0.5 text-white"><X size={14} /></button>
+          <img src={preview} alt="Ảnh sẽ gửi" className="h-20 border-2 border-black bg-gray-50 object-contain" />
+          <button type="button" onClick={clearFile} aria-label="Bỏ ảnh" className="absolute -right-2 -top-2 grid h-6 w-6 cursor-pointer place-items-center border-2 border-black bg-white text-black shadow-[2px_2px_0_0_#000] hover:bg-red-50"><X size={12} /></button>
         </div>
       )}
-      <p role="alert" className={`mb-2 text-sm text-red-700 ${error ? "" : "sr-only"}`}>{error}</p>
+      <p role="alert" className={`mb-2 text-xs font-bold text-red-700 ${error ? "" : "sr-only"}`}>{error}</p>
       <div ref={shakeTarget} className="t-input flex items-end gap-2">
         <input ref={fileInput} type="file" accept={ALLOWED_IMAGE_TYPES.join(",")} className="hidden" onChange={(event) => pickFile(event.target.files?.[0])} />
         <button type="button" onClick={() => fileInput.current?.click()} aria-label="Đính kèm ảnh"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#cfe3d0] text-[#155e59] hover:bg-[#eaf5e8]">
-          <ImagePlus size={20} />
+          className="btn-secondary flex h-11 w-11 shrink-0 items-center justify-center p-0">
+          <ImagePlus size={18} />
         </button>
         <label className="sr-only" htmlFor="commission-chat-input">Tin nhắn</label>
         <textarea id="commission-chat-input" rows={1} value={text} onChange={(event) => { setText(event.target.value); if (error) clearError(); }} onKeyDown={onKeyDown}
           aria-invalid={Boolean(error) || tooLong}
           placeholder={file ? "Thêm chú thích cho ảnh (không bắt buộc)…" : "Nhập tin nhắn… (Enter để gửi, Shift+Enter xuống dòng)"}
-          className={`max-h-40 min-h-11 flex-1 resize-y rounded-lg border px-3 py-2.5 transition-[border-color] duration-150 ${error || tooLong ? "border-red-600" : "border-[#819e8c]"} focus:outline-none focus:ring-2 focus:ring-[#155e59]`} />
+          className={`max-h-40 min-h-11 flex-1 resize-y border-2 bg-gray-50 px-3 py-2.5 text-sm font-medium text-text-main transition-colors focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${error || tooLong ? "border-red-600" : "border-black"}`} />
         <button type="submit" disabled={!file && trimmed.length === 0} aria-label="Gửi"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#155e59] text-white hover:bg-[#0e4b47] disabled:opacity-40">
+          className="btn-primary flex h-11 w-11 shrink-0 items-center justify-center p-0">
           <Send size={18} />
         </button>
       </div>
       {trimmed.length > MAX_MESSAGE_LENGTH * 0.9 && (
-        <p className={`mt-1 text-right text-xs ${tooLong ? "text-red-700" : "text-[#526159]"}`}>{trimmed.length}/{MAX_MESSAGE_LENGTH}</p>
+        <p className={`mt-1 text-right text-xs font-bold ${tooLong ? "text-red-700" : "text-text-muted"}`}>{trimmed.length}/{MAX_MESSAGE_LENGTH}</p>
       )}
     </form>
   );
@@ -540,25 +547,25 @@ function CommissionInfoPanel({ info, viewer }: { info: CommissionRoomInfo; viewe
   ];
 
   return (
-    <div className="space-y-4 text-sm">
-      <div>
-        <h2 className="break-words text-lg font-black text-[#155e59]">{info.title}</h2>
-        <span className="mt-1 inline-block rounded-full bg-[#eaf5e8] px-2.5 py-0.5 text-xs font-semibold text-[#155e59]">
+    <div className="space-y-4 text-xs">
+      <div className="border-b-2 border-black pb-3">
+        <h2 className="break-words text-base font-black uppercase text-black">{info.title}</h2>
+        <span className="mt-1.5 inline-block border border-black bg-primary/15 px-2 py-0.5 text-[11px] font-black uppercase text-primary-ink">
           {commissionStatusLabel(info.status)}
         </span>
       </div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2">
         {rows.filter(([, value]) => value).map(([label, value]) => (
           <div key={label} className="contents">
-            <dt className="text-[#526159]">{label}</dt>
-            <dd className="text-right font-semibold">{value}</dd>
+            <dt className="font-semibold text-text-muted">{label}</dt>
+            <dd className="text-right font-black text-black">{value}</dd>
           </div>
         ))}
       </dl>
       {info.description && (
-        <div>
-          <h3 className="mb-1 font-bold">Mô tả yêu cầu</h3>
-          <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-[#f7faf6] p-2">{info.description}</p>
+        <div className="border-t-2 border-dashed border-black pt-3">
+          <h3 className="mb-1.5 font-black uppercase text-black">Mô tả yêu cầu</h3>
+          <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words border-2 border-black bg-background p-2.5 text-xs leading-relaxed text-text-main">{info.description}</p>
         </div>
       )}
       {info.attachments.length > 0 && (
@@ -579,12 +586,12 @@ function ImageGrid({ title, items }: { title: string; items: { key: number; url:
   const safe = items.filter((item) => isHttpUrl(item.url));
   if (safe.length === 0) return null;
   return (
-    <div>
-      <h3 className="mb-1 font-bold">{title}</h3>
+    <div className="border-t-2 border-dashed border-black pt-3">
+      <h3 className="mb-2 font-black uppercase text-black">{title}</h3>
       <ul className="grid grid-cols-3 gap-2">
         {safe.map((item) => (
           <li key={item.key}>
-            <a href={item.url} target="_blank" rel="noreferrer" title={item.label} className="block overflow-hidden rounded-lg border border-[#cfe3d0]">
+            <a href={item.url} target="_blank" rel="noreferrer" title={item.label} className="block overflow-hidden border-2 border-black bg-white shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={item.url} alt={item.label} loading="lazy" decoding="async" className="aspect-square w-full bg-black object-contain [image-rendering:pixelated]" />
             </a>

@@ -16,6 +16,7 @@ import type {
 } from "@/api_client";
 import { ApiError, OrdersService } from "@/api_client";
 import { request } from "@/api_client/core/request";
+import { fetchAllPages } from "./paging";
 import { OpenAPI } from "./client";
 
 export interface FetchOrdersParams {
@@ -252,23 +253,26 @@ export async function fetchStaffOrders(params: {
   if (params.allStatuses !== false && !params.status) {
     const responses = await Promise.all(
       ALL_STAFF_ORDER_STATUSES.map((orderStatus) =>
-        request<{ data: BackendStaffOrderSummary[]; meta?: any }>(OpenAPI, {
-          method: "GET",
-          url: "/api/management/staff/orders",
-          query: {
-            status: orderStatus,
-            paymentStatus: params.paymentStatus,
-            deliveryStatus: params.deliveryStatus,
-            page: 0,
-            size: params.size ?? 50,
-          },
-        }).catch(() => ({ data: [] as BackendStaffOrderSummary[] })),
+        fetchAllPages(async (page) => {
+          const res = await request<{ data: BackendStaffOrderSummary[]; meta?: any }>(OpenAPI, {
+            method: "GET",
+            url: "/api/management/staff/orders",
+            query: {
+              status: orderStatus,
+              paymentStatus: params.paymentStatus,
+              deliveryStatus: params.deliveryStatus,
+              page,
+              size: params.size ?? 50,
+            },
+          });
+          return { items: res.data ?? [], totalPages: res.meta?.totalPages ?? 1 };
+        }),
       ),
     );
 
     const uniqueById = new Map<number, BackendStaffOrderSummary>();
-    for (const res of responses) {
-      for (const item of res.data ?? []) {
+    for (const items of responses) {
+      for (const item of items) {
         uniqueById.set(item.orderId, item);
       }
     }

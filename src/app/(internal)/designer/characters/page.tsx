@@ -15,7 +15,6 @@ import {
   RefreshCw,
   Search,
   Sparkles,
-  Store,
   X,
 } from "lucide-react";
 import {
@@ -27,6 +26,7 @@ import { linkedCommissionId, stripCommissionMarker } from "@/features/designer/c
 import PublishToStoreModal from "@/features/designer/components/PublishToStoreModal";
 import type { DesignerCharacterItem } from "@/lib/api/designerCharacters";
 import { getCharacterArtwork } from "@/features/designer/character-artwork";
+import { hasStudioDraft } from "@/features/designer/studio-draft";
 
 function DesignerDashboardContent() {
   const router = useRouter();
@@ -45,7 +45,7 @@ function DesignerDashboardContent() {
 
   const [searchInput, setSearchInput] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [publishCharacter, setPublishCharacter] = useState<DesignerCharacterItem | null>(null);
+  const [versionsModalCharacter, setVersionsModalCharacter] = useState<DesignerCharacterItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Open Create Character modal if ?create=1 is passed from Sidebar
@@ -93,8 +93,8 @@ function DesignerDashboardContent() {
         <div>
           <h1 className="text-2xl font-semibold text-studio-ink">Danh sách nhân vật</h1>
           <p className="mt-1 text-xs text-slate-500">
-            Bấm trực tiếp vào thẻ nhân vật để mở Pixel Art Studio vẽ phiên bản mới, hoặc bấm{" "}
-            <strong>Đăng bán (Publish)</strong> để quản lý phiên bản và đăng lên Store.
+            Bấm trực tiếp vào thẻ nhân vật để mở Pixel Art Studio chỉnh sửa bản hiện tại hoặc phác thảo tiếp, hoặc bấm{" "}
+            <strong>Xem các phiên bản</strong> để kiểm tra và quản lý các bản đã chốt.
           </p>
         </div>
 
@@ -195,6 +195,7 @@ function DesignerDashboardContent() {
               const artwork = getCharacterArtwork(char);
               const matrixSize = getMatrixSize(char.characterId);
               const hasVersions = char.totalVersions > 0;
+              const hasDraft = hasStudioDraft(char.characterId);
 
               return (
                 <article
@@ -226,16 +227,27 @@ function DesignerDashboardContent() {
                       </div>
                     )}
 
-                    {/* Matrix Size Badge */}
-                    <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/75 px-2.5 py-1 font-mono text-[11px] font-bold text-white backdrop-blur-xs">
-                      <Grid size={11} /> {matrixSize}
-                    </span>
+                    {/* Matrix Size & Draft Badges */}
+                    <div className="absolute left-3 right-3 top-3 flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-black/75 px-2.5 py-1 font-mono text-[11px] font-bold text-white backdrop-blur-xs">
+                        <Grid size={11} /> {matrixSize}
+                      </span>
+                      {hasDraft && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/95 px-2.5 py-0.5 text-[10px] font-bold text-slate-950 shadow-xs">
+                          Có bản nháp
+                        </span>
+                      )}
+                    </div>
 
                     {/* Hover Hint: Open Pixel Art Studio */}
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-3 pt-8 opacity-0 transition-opacity group-hover:opacity-100">
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-studio-accent px-3 py-1 text-[11px] font-bold text-white shadow-xs">
                         <Palette size={12} />
-                        {hasVersions ? "Mở Studio vẽ phiên bản mới" : "Mở Studio tạo bản vẽ v1"}
+                        {hasDraft
+                          ? "Tiếp tục bản nháp trong Studio"
+                          : hasVersions
+                            ? `Mở Studio chỉnh sửa v${char.currentVersion?.versionNumber ?? char.totalVersions}`
+                            : "Mở Studio phác thảo v1"}
                       </span>
                     </div>
                   </div>
@@ -276,16 +288,16 @@ function DesignerDashboardContent() {
                         )}
                       </div>
 
-                      {/* Publish to Store Button (Opens Publish Modal without navigating to Studio) */}
+                      {/* View Versions Button */}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setPublishCharacter(char);
+                          setVersionsModalCharacter(char);
                         }}
-                        className="inline-flex w-full items-center justify-center gap-1.5 rounded border border-studio-accent bg-studio-wash px-3 py-2 text-xs font-bold text-studio-ink transition hover:bg-studio-accent hover:text-white"
+                        className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded border border-studio-accent bg-studio-wash px-3 py-2 text-xs font-bold text-studio-ink transition hover:bg-studio-accent hover:text-white"
                       >
-                        <Store size={14} /> Đăng bán (Publish)
+                        <Layers size={14} /> Xem các phiên bản
                       </button>
                     </div>
                   </div>
@@ -336,12 +348,13 @@ function DesignerDashboardContent() {
         />
       )}
 
-      {/* Publish to Store Modal (Replaces old Character Details Modal) */}
-      {publishCharacter && (
+      {/* Character Versions Modal */}
+      {versionsModalCharacter && (
         <PublishToStoreModal
-          key={publishCharacter.characterId}
-          character={publishCharacter}
-          onClose={() => setPublishCharacter(null)}
+          key={versionsModalCharacter.characterId}
+          character={versionsModalCharacter}
+          mode="versions"
+          onClose={() => setVersionsModalCharacter(null)}
           onSuccess={(created) => {
             setNotice(
               `Đã gửi “${created.productName}” (#${created.productId}) để manager đặt giá và duyệt đăng bán.`,

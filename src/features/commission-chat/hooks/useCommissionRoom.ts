@@ -18,6 +18,7 @@ import {
   type CommissionMessage,
 } from "../services/commission-messages.api";
 import { buildStompUrl, subscribeStomp, type StompStatus } from "../services/stomp-client";
+import { isPageVisible, scheduleVisiblePoll } from "@/lib/polling";
 
 export type ChatViewer = "CUSTOMER" | "STAFF";
 
@@ -150,17 +151,17 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
 
   useEffect(() => {
     let active = true;
-    let timer: ReturnType<typeof setTimeout>;
+    let cancelPoll: (() => void) | undefined;
     async function run() {
       const next = await loadInfo();
       if (!active) return;
       const waitingForChat = next && (next.status === "PENDING_PAYMENT" || next.status === "PENDING_REVIEW");
-      if (waitingForChat) timer = setTimeout(run, STATUS_POLL_MS);
+      if (waitingForChat) cancelPoll = scheduleVisiblePoll(() => void run(), STATUS_POLL_MS);
     }
     void run();
     return () => {
       active = false;
-      clearTimeout(timer);
+      cancelPoll?.();
     };
   }, [loadInfo, reloadKey]);
 
@@ -168,8 +169,18 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
   const loadHistory = useCallback(async () => {
     try {
       const { data } = await listCommissionMessages(commissionId);
-      setMessages((current) => mergeMessages(current, data ?? []));
+      const list = data ?? [];
+      const hasNewStateCard = list.some(
+        (m) =>
+          !knownIds.current.has(m.messageId) &&
+          m.messageType !== "TEXT" &&
+          m.messageType !== "IMAGE",
+      );
+      setMessages((current) => mergeMessages(current, list));
       setHistoryError("");
+      if (hasNewStateCard) {
+        void loadInfo();
+      }
     } catch (error) {
       if (errorCode(error) === "INVALID_COMMISSION_STATUS_TRANSITION") {
         setHistoryError("Phòng chat chưa được mở cho trạng thái hiện tại.");
@@ -179,7 +190,7 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
     } finally {
       setHistoryLoaded(true);
     }
-  }, [commissionId]);
+  }, [commissionId, loadInfo]);
 
   useEffect(() => {
     if (readable) void loadHistory();
@@ -189,7 +200,7 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
   const infoRefreshTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const scheduleInfoRefresh = useCallback(() => {
     clearTimeout(infoRefreshTimer.current);
-    infoRefreshTimer.current = setTimeout(() => void loadInfo(), 600);
+    infoRefreshTimer.current = setTimeout(() => void loadInfo(), 120);
   }, [loadInfo]);
   useEffect(() => () => clearTimeout(infoRefreshTimer.current), []);
 
@@ -211,6 +222,7 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
       onConnected: () => {
         errors = 0;
         void loadHistory(); // bù các tin bị lỡ trong lúc mất kết nối
+        void loadInfo();
       },
       onError: async () => {
         errors += 1;
@@ -238,14 +250,19 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
       },
     });
     return unsubscribe;
-  }, [readable, commissionId, loadHistory, scheduleInfoRefresh]);
+  }, [readable, commissionId, loadHistory, loadInfo, scheduleInfoRefresh]);
 
-  // Dự phòng khi WebSocket không kết nối được: poll lịch sử định kỳ.
+  // Dự phòng khi WebSocket không kết nối được: poll lịch sử & trạng thái commission định kỳ.
   useEffect(() => {
     if (!readable || realtime === "connected") return;
-    const timer = setInterval(() => void loadHistory(), FALLBACK_POLL_MS);
+    const timer = setInterval(() => {
+      if (isPageVisible()) {
+        void loadHistory();
+        void loadInfo();
+      }
+    }, FALLBACK_POLL_MS);
     return () => clearInterval(timer);
-  }, [readable, realtime, loadHistory]);
+  }, [readable, realtime, loadHistory, loadInfo]);
 
   // ---- Gửi tin
   const deliver = useCallback(async (item: PendingMessage) => {
@@ -316,6 +333,6 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
 
   return {
     info, infoError, messages, liveIds, historyLoaded, historyError, pending, realtime,
-    readable, canSend, send, retry, discard, reload, refreshInfo: loadInfo, addMessages,
+    readable, canSend, send, retry, discard, reload, refreshInfo: loadInfo, refreshHistory: loadHistory, addMessages,
   };
 }

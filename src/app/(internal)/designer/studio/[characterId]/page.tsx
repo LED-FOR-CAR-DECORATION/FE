@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Grid, Loader2, Sparkles } from "lucide-react";
 import PixelArtStudio from "@/features/designer/components/PixelArtStudio";
 import { linkedCommissionId } from "@/features/designer/commission-link";
@@ -17,15 +17,21 @@ import {
   formatDesignerApiError,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
+import { fetchAllPages } from "@/lib/api/paging";
 
 export default function DesignerCharacterStudioPage() {
   const params = useParams<{ characterId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const characterId = Number(params?.characterId);
+  const requestedNewVersion = searchParams?.get("newVersion") === "1";
 
   const [character, setCharacter] = useState<DesignerCharacterItem | null>(null);
   const [latestArtworkUrl, setLatestArtworkUrl] = useState<string | null>(null);
   const [fallbackArtworkUrl, setFallbackArtworkUrl] = useState<string | null>(null);
+  const [currentVersionId, setCurrentVersionId] = useState<number | null>(null);
+  const [currentVersionNumber, setCurrentVersionNumber] = useState<number | null>(null);
+  const [currentVersionListedOnStore, setCurrentVersionListedOnStore] = useState<boolean>(false);
   const [nextVersionNumber, setNextVersionNumber] = useState<number>(1);
   const [lockedMatrixSize, setLockedMatrixSize] = useState<MatrixSize>("32x32");
   const [loading, setLoading] = useState(true);
@@ -44,12 +50,15 @@ export default function DesignerCharacterStudioPage() {
     setLockedMatrixSize(getStoredMatrixSize(characterId));
 
     Promise.all([
-      fetchMyCharacters({ page: 0, size: 100 }),
+      fetchAllPages(async (page) => {
+        const res = await fetchMyCharacters({ page, size: 100 });
+        return { items: res.items, totalPages: res.meta.totalPages };
+      }),
       fetchCharacterVersions(characterId),
     ])
-      .then(([charRes, rawVersions]) => {
+      .then(([characters, rawVersions]) => {
         if (cancelled) return;
-        const found = charRes.items.find((c) => c.characterId === characterId) ?? null;
+        const found = characters.find((c) => c.characterId === characterId) ?? null;
         if (!found) {
           setError("Không tìm thấy Character này trong danh sách của bạn.");
           return;
@@ -71,11 +80,17 @@ export default function DesignerCharacterStudioPage() {
 
           setLatestArtworkUrl(newest.previewGifUrl || localFallback);
           setFallbackArtworkUrl(localFallback);
+          setCurrentVersionId(newest.versionId);
+          setCurrentVersionNumber(newest.versionNumber);
+          setCurrentVersionListedOnStore(Boolean(newest.isListedOnStore || newest.productId));
           setNextVersionNumber(newest.versionNumber + 1);
         } else {
           // Empty Character (0 versions) -> blank canvas
           setLatestArtworkUrl(null);
           setFallbackArtworkUrl(null);
+          setCurrentVersionId(null);
+          setCurrentVersionNumber(null);
+          setCurrentVersionListedOnStore(false);
           setNextVersionNumber(1);
         }
       })
@@ -118,52 +133,70 @@ export default function DesignerCharacterStudioPage() {
 
   const commissionId = linkedCommissionId(character.description);
   const backHref = commissionId ? `/designer/commissions/${commissionId}` : "/designer/characters";
+  const isCreateNewVersionMode = Boolean(requestedNewVersion && currentVersionId);
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Studio document bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-[var(--ps-chrome)] px-3 py-1.5">
-        <div className="flex items-center gap-3">
+      <div className="ase-bar flex flex-wrap items-center justify-between gap-3 px-3 py-1.5">
+        <div className="flex flex-wrap items-center gap-3">
           <Link
             href={backHref}
-            className="inline-flex items-center gap-1.5 rounded-[3px] border border-studio-line px-2.5 py-1 text-[11px] font-semibold text-studio-ink hover:bg-slate-100"
+            className="ase-btn inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-[#1f2a24]"
           >
             <ArrowLeft size={14} /> {commissionId ? `Về Commission #${commissionId}` : "Quay lại danh sách"}
           </Link>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-[13px] font-semibold text-studio-ink">{character.characterName}</h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-studio-accent-hover px-2.5 py-0.5 font-mono text-[11px] font-bold text-white">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[13px] font-black uppercase tracking-tight text-[#1f2a24]">
+                {character.characterName}
+              </h1>
+              <span className="inline-flex items-center gap-1 rounded-[2px] border border-[#163d2c] bg-[#2d6a4f] px-2 py-0.5 font-mono text-[11px] font-bold text-white">
                 <Grid size={11} /> {lockedMatrixSize}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
-                <Sparkles size={11} /> Tạo phiên bản mới v{nextVersionNumber}
+              <span className="inline-flex items-center gap-1 rounded-[2px] border border-[#2d6a4f] bg-[#dcebe2] px-2 py-0.5 text-[11px] font-bold text-[#163d2c]">
+                <Sparkles size={11} />
+                {isCreateNewVersionMode && currentVersionNumber
+                  ? `Tạo phiên bản mới v${nextVersionNumber} (từ v${currentVersionNumber})`
+                  : currentVersionNumber
+                    ? currentVersionListedOnStore
+                      ? `v${currentVersionNumber} (Đã lên Store) → Lưu mới v${nextVersionNumber}`
+                      : `Đang chỉnh sửa v${currentVersionNumber}`
+                    : "Chưa có phiên bản · Bản nháp v1"}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500">
-              {latestArtworkUrl
-                ? "Bản mới nhất đã được hiển thị trên bảng vẽ để bạn tiếp tục vẽ phiên bản mới."
-                : `Nhân vật chưa có phiên bản nào — Bảng vẽ trống ${lockedMatrixSize} để tạo v1.`}
+            <p className="mt-0.5 text-[11px] text-[#4b554f]">
+              {isCreateNewVersionMode && currentVersionNumber
+                ? `Đang phác thảo phiên bản mới v${nextVersionNumber} từ v${currentVersionNumber}. Tự động lưu nháp liên tục; bấm "Lưu v${nextVersionNumber}" khi hoàn thành.`
+                : currentVersionNumber
+                  ? currentVersionListedOnStore
+                    ? `v${currentVersionNumber} đã niêm yết trên Store nên được bảo vệ. Tự động lưu nháp khi vẽ và bấm "Lưu v${nextVersionNumber}" khi hoàn thành.`
+                    : `Đang chỉnh sửa v${currentVersionNumber}. Tự động lưu nháp liên tục như Word; bấm "Lưu v${currentVersionNumber}" để cập nhật bản vẽ.`
+                  : `Nhân vật chưa có phiên bản hoàn thiện — tự động lưu nháp khi vẽ trên khung ${lockedMatrixSize} và bấm "Lưu v1" khi hoàn thành.`}
             </p>
           </div>
         </div>
         {commissionId && (
-          <p className="max-w-sm text-[11px] text-slate-500">
-            Character của <strong className="text-studio-ink">Commission #{commissionId}</strong>. Lưu bao nhiêu version tùy ý,
+          <p className="max-w-sm text-[11px] text-[#4b554f]">
+            Character của <strong className="text-[#1f2a24]">Commission #{commissionId}</strong>. Lưu bao nhiêu version tùy ý,
             rồi{" "}
-            <Link href={backHref} className="font-bold text-studio-link underline">quay lại commission</Link> để chọn version nộp staff duyệt.
+            <Link href={backHref} className="font-bold text-[#2d6a4f] underline">quay lại commission</Link> để chọn version nộp staff duyệt.
           </p>
         )}
       </div>
 
       {/* Pixel Art Studio Canvas */}
       <PixelArtStudio
-        key={`${character.characterId}-${lockedMatrixSize}-${nextVersionNumber}`}
+        key={`${character.characterId}-${lockedMatrixSize}-${currentVersionId ?? 0}-${isCreateNewVersionMode ? "new" : "edit"}`}
         characterId={character.characterId}
         initialCharacterName={character.characterName}
         initialDescription={character.description ?? ""}
         initialArtworkUrl={latestArtworkUrl}
         fallbackArtworkUrl={fallbackArtworkUrl}
+        currentVersionId={currentVersionId}
+        currentVersionNumber={currentVersionNumber}
+        currentVersionListedOnStore={currentVersionListedOnStore}
+        createNewVersionMode={isCreateNewVersionMode}
         targetVersionNumber={nextVersionNumber}
         lockedMatrixSize={lockedMatrixSize}
         hideStoreActions={Boolean(commissionId)}

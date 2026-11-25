@@ -92,7 +92,7 @@ export default function ProductDetailPage() {
             <p className="mt-2 text-xs font-semibold text-text-muted">
               Sản phẩm bạn đang tìm kiếm có thể đã được gỡ hoặc không tồn tại.
             </p>
-            <Link href="/" className="btn-primary mt-5 inline-block text-xs font-black uppercase">
+            <Link href="/products" className="btn-primary mt-5 inline-block text-xs font-black uppercase">
               Quay lại cửa hàng
             </Link>
           </div>
@@ -212,11 +212,18 @@ export default function ProductDetailPage() {
               Trang chủ
             </Link>
             <span>›</span>
-            <Link href="/" className="cursor-pointer hover:text-primary-ink hover:underline">
+            <Link href="/products" className="cursor-pointer hover:text-primary-ink hover:underline">
+              Cửa hàng
+            </Link>
+            <span>›</span>
+            <Link
+              href={`/products?type=${item.productType}`}
+              className="cursor-pointer hover:text-primary-ink hover:underline"
+            >
               {productTypeLabel}
             </Link>
             <span>›</span>
-            <span className="text-black font-black truncate">{item.name}</span>
+            <span className="truncate font-black text-black">{item.name}</span>
           </nav>
 
           {/* Main Product Layout */}
@@ -463,7 +470,7 @@ export default function ProductDetailPage() {
                 <h2 className="text-base font-black uppercase tracking-wider text-black">
                   Sản phẩm tương tự
                 </h2>
-                <Link href="/" className="cursor-pointer text-xs font-black uppercase text-primary-ink hover:underline">
+                <Link href={`/products?type=${item.productType}`} className="cursor-pointer text-xs font-black uppercase text-primary-ink hover:underline">
                   Xem tất cả ›
                 </Link>
               </div>

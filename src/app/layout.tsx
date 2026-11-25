@@ -4,12 +4,11 @@ import "./globals.css";
 import { AuthProvider } from "@/features/auth/context/AuthContext";
 import { CartProvider } from "@/features/cart/context/CartContext";
 import { AddressProvider } from "@/features/address/context/AddressContext";
-import { OrderProvider } from "@/features/order/context/OrderContext";
 import { GalleryProvider } from "@/features/character/context/GalleryContext";
 
 const inter = Inter({
   variable: "--font-inter",
-  subsets: ["latin"],
+  subsets: ["latin", "vietnamese"],
   display: "swap",
 });
 
@@ -27,7 +26,7 @@ export default function RootLayout({
     <html lang="vi" suppressHydrationWarning className={`${inter.variable} font-sans antialiased`}>
       <body suppressHydrationWarning className="min-h-screen bg-gray-50 flex flex-col text-gray-900">
         <AuthProvider>
-          <CartProvider><AddressProvider><OrderProvider><GalleryProvider>{children}</GalleryProvider></OrderProvider></AddressProvider></CartProvider>
+          <CartProvider><AddressProvider><GalleryProvider>{children}</GalleryProvider></AddressProvider></CartProvider>
         </AuthProvider>
       </body>
     </html>

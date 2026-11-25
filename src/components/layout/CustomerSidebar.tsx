@@ -27,7 +27,8 @@ export default function CustomerSidebar() {
   const isOrdersActive = pathname.startsWith("/profile/orders");
   const isGalleryActive = pathname.startsWith("/profile/gallery");
   const isWarrantyActive = pathname.startsWith("/profile/warranty");
-  const isCommissionActive = pathname.startsWith("/commission");
+  const isCommissionActive =
+    pathname.startsWith("/profile/commissions") || pathname.startsWith("/commission");
   const isMessagesActive = pathname.startsWith("/messages");
 
   const navItems = [
@@ -56,7 +57,7 @@ export default function CustomerSidebar() {
       icon: <ShieldCheck size={16} className={isWarrantyActive ? "text-black" : "text-primary-ink"} />,
     },
     {
-      href: "/commission",
+      href: "/profile/commissions",
       label: "Yêu cầu thiết kế",
       active: isCommissionActive,
       icon: <Sparkles size={16} className={isCommissionActive ? "text-black" : "text-primary-ink"} />,

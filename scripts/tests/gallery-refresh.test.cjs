@@ -56,6 +56,7 @@ function createGallery() {
       if (name.includes("order.service")) return { ORDERS_CHANGED_EVENT: "orders" };
       if (name.includes("customerCharacters")) return {
         fetchCustomerGallery: () => new Promise((resolve, reject) => requests.push({ resolve, reject })),
+        fetchActiveCustomerSubscription: async () => null,
         formatOwnedCharactersError: () => "Load failed",
       };
       throw new Error(`Unexpected dependency: ${name}`);

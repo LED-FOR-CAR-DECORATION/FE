@@ -422,7 +422,7 @@ export default function OrderHistoryPage() {
                     : "Chưa có đơn hàng nào trong mục này."}
                 </p>
                 <Link
-                  href="/"
+                  href="/products"
                   className="mt-5 inline-flex items-center gap-1.5 rounded-xs bg-[#155e59] px-5 py-2 text-xs font-bold text-white transition-opacity hover:opacity-90"
                 >
                   <Store size={14} /> Khám phá cửa hàng
@@ -454,7 +454,7 @@ export default function OrderHistoryPage() {
                           </span>
                           <span className="text-sm font-bold text-gray-900">Đơn hàng #{order.id}</span>
                           <Link
-                            href="/"
+                            href="/products"
                             className="inline-flex items-center gap-1 rounded-xs border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-50"
                           >
                             <Store size={11} /> Xem Shop

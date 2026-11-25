@@ -1,122 +1,753 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Grid2X2,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Store,
+  Tag,
+  X,
+} from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
+import type { TagItem } from "@/api_client";
 import type { CatalogProduct } from "@/features/cart/catalog";
-import { fetchStoreProducts } from "@/lib/api/products";
+import type { ProductType } from "@/features/cart/types";
+import { useCart } from "@/features/cart/context/CartContext";
+import { useGallery } from "@/features/character/context/GalleryContext";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import { getRoleHomePath } from "@/features/auth/services/auth.service";
+import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchAllPages } from "@/lib/api/paging";
+import { fetchStoreProducts, fetchStoreTags } from "@/lib/api/products";
+import {
+  ProductCard,
+  StoreCartToast,
+  isProductOwned,
+} from "@/features/storefront/components/ProductCard";
 
-const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} VNĐ`;
 const PRODUCTS_PER_PAGE = 12;
+const ALL_PRODUCT_TYPES: ProductType[] = ["LED_MODEL", "CHARACTER", "BUNDLE", "SUBSCRIPTION"];
 
-export default function ProductsPage() {
+function parseTypeParam(raw: string | null): ProductType | null {
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+  return ALL_PRODUCT_TYPES.includes(upper as ProductType) ? (upper as ProductType) : null;
+}
+
+function scrollToCatalogTop() {
+  if (typeof window === "undefined") return;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollTo({ top: 0, behavior: reduced ? "instant" : "smooth" });
+}
+
+function StorefrontContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeSearchQuery = searchParams.get("search")?.trim() ?? "";
+  const urlType = parseTypeParam(searchParams.get("type"));
+
+  const { items: cartItems, addItem } = useCart();
+  const { ownedCharacters, activeSubscription } = useGallery();
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const isInternalUser = isAuthenticated && Boolean(user?.role) && user?.role !== "CUSTOMER";
+
   const [products, setProducts] = useState<CatalogProduct[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [storeTags, setStoreTags] = useState<TagItem[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [activeCategory, setActiveCategory] = useState<"all" | ProductType>(urlType ?? "all");
+  const [sort, setSort] = useState("Phổ biến");
+  const [toastNotice, setToastNotice] = useState<{ title: string; desc: string } | null>(null);
+
+  const [selectedTypes, setSelectedTypes] = useState<ProductType[]>(
+    urlType ? [urlType] : ALL_PRODUCT_TYPES,
+  );
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<("IN_STOCK" | "OUT_OF_STOCK")[]>([
+    "IN_STOCK",
+  ]);
+  const [minPriceInput, setMinPriceInput] = useState("");
+  const [maxPriceInput, setMaxPriceInput] = useState("");
+  const [minPrice, setMinPrice] = useState<number | null>(null);
+  const [maxPrice, setMaxPrice] = useState<number | null>(null);
+  const [priceError, setPriceError] = useState("");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
+    setActiveCategory(urlType ?? "all");
+    setSelectedTypes(urlType ? [urlType] : ALL_PRODUCT_TYPES);
+  }, [urlType]);
+
+  useEffect(() => {
+    if (!isLoading && isInternalUser) {
+      router.replace(getRoleHomePath(user?.role));
+    }
+  }, [isInternalUser, isLoading, router, user?.role]);
+
+  useEffect(() => {
+    if (isLoading || isInternalUser) return;
     let cancelled = false;
-    setIsLoading(true);
-    fetchAllPages((page) => fetchStoreProducts({ page, size: 100 }))
-      .then((items) => {
-        if (!cancelled) setProducts(items);
+    setLoadingProducts(true);
+    Promise.all([
+      fetchAllPages((pageIdx) => fetchStoreProducts({ page: pageIdx, size: 100 })),
+      fetchStoreTags(),
+    ])
+      .then(([allItems, tagsRes]) => {
+        if (!cancelled) {
+          setProducts(allItems);
+          setStoreTags(tagsRes);
+        }
       })
       .catch(() => {
         if (!cancelled) setProducts([]);
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) setLoadingProducts(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isInternalUser, isLoading]);
 
-  const pageCount = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
-  const paginatedProducts = products.slice((page - 1) * PRODUCTS_PER_PAGE, page * PRODUCTS_PER_PAGE);
+  const toggleType = (type: ProductType) => {
+    setSelectedTypes((current) =>
+      current.includes(type) ? current.filter((v) => v !== type) : [...current, type],
+    );
+  };
+
+  const toggleTag = (tagName: string) => {
+    setSelectedTags((current) =>
+      current.includes(tagName) ? current.filter((v) => v !== tagName) : [...current, tagName],
+    );
+  };
+
+  const toggleStatus = (status: "IN_STOCK" | "OUT_OF_STOCK") => {
+    setSelectedStatuses((current) =>
+      current.includes(status) ? current.filter((v) => v !== status) : [...current, status],
+    );
+  };
+
+  const applyPriceFilter = () => {
+    const nextMin = minPriceInput === "" ? null : Number(minPriceInput);
+    const nextMax = maxPriceInput === "" ? null : Number(maxPriceInput);
+    if (
+      (nextMin !== null && (!Number.isFinite(nextMin) || nextMin < 0)) ||
+      (nextMax !== null && (!Number.isFinite(nextMax) || nextMax < 0)) ||
+      (nextMin !== null && nextMax !== null && nextMin > nextMax)
+    ) {
+      setPriceError("Vui lòng nhập khoảng giá hợp lệ.");
+      return;
+    }
+    setPriceError("");
+    setMinPrice(nextMin);
+    setMaxPrice(nextMax);
+  };
+
+  const clearFilters = () => {
+    setActiveCategory("all");
+    setSelectedTypes(ALL_PRODUCT_TYPES);
+    setSelectedTags([]);
+    setSelectedStatuses(["IN_STOCK"]);
+    setMinPriceInput("");
+    setMaxPriceInput("");
+    setMinPrice(null);
+    setMaxPrice(null);
+    setPriceError("");
+    if (activeSearchQuery || urlType) {
+      router.push("/products");
+    }
+  };
+
+  const selectCategory = (value: "all" | ProductType) => {
+    setActiveCategory(value);
+    if (value === "all") {
+      setSelectedTypes(ALL_PRODUCT_TYPES);
+    } else {
+      setSelectedTypes([value]);
+    }
+  };
+
+  const availableTags = useMemo(() => {
+    const tagMap = new Map<string, { name: string; count: number }>();
+    for (const tag of storeTags) {
+      const trimmed = tag.name?.trim();
+      if (trimmed) {
+        tagMap.set(trimmed.toLowerCase(), { name: trimmed, count: 0 });
+      }
+    }
+    for (const product of products) {
+      const seenInProduct = new Set<string>();
+      for (const tag of product.tags ?? []) {
+        const trimmed = tag.name?.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (seenInProduct.has(key)) continue;
+        seenInProduct.add(key);
+        const existing = tagMap.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          tagMap.set(key, { name: trimmed, count: 1 });
+        }
+      }
+    }
+    return Array.from(tagMap.values())
+      .filter((t) => t.count > 0)
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "vi"));
+  }, [products, storeTags]);
+
+  const filteredProducts = products.filter((product) => {
+    const query = activeSearchQuery.toLowerCase();
+    const matchesSearch =
+      !query ||
+      product.name.toLowerCase().includes(query) ||
+      product.description?.toLowerCase().includes(query) ||
+      product.tags?.some((t) => t.name?.toLowerCase().includes(query));
+    const matchesCategory = activeCategory === "all" || product.productType === activeCategory;
+    const matchesType = selectedTypes.includes(product.productType);
+    const matchesTags =
+      selectedTags.length === 0 ||
+      selectedTags.some((selected) =>
+        product.tags?.some((t) => t.name?.trim().toLowerCase() === selected.toLowerCase()),
+      );
+    const isInStock = true;
+    const matchesStatus =
+      (isInStock && selectedStatuses.includes("IN_STOCK")) ||
+      (!isInStock && selectedStatuses.includes("OUT_OF_STOCK"));
+    const matchesMinPrice = minPrice === null || product.price >= minPrice;
+    const matchesMaxPrice = maxPrice === null || product.price <= maxPrice;
+
+    return (
+      matchesSearch &&
+      matchesCategory &&
+      matchesType &&
+      matchesTags &&
+      matchesStatus &&
+      matchesMinPrice &&
+      matchesMaxPrice
+    );
+  });
+
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    if (sort === "Tên A → Z") return a.name.localeCompare(b.name, "vi");
+    if (sort === "Tên Z → A") return b.name.localeCompare(a.name, "vi");
+    if (sort === "Giá thấp") return a.price - b.price;
+    if (sort === "Giá cao") return b.price - a.price;
+    return 0;
+  });
+
+  const pageCount = Math.max(1, Math.ceil(sortedProducts.length / PRODUCTS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const paginatedProducts = sortedProducts.slice(
+    (currentPage - 1) * PRODUCTS_PER_PAGE,
+    currentPage * PRODUCTS_PER_PAGE,
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeCategory, maxPrice, minPrice, selectedStatuses, selectedTags, selectedTypes, sort, activeSearchQuery]);
 
   const handlePageChange = (nextPage: number) => {
     const clampedPage = Math.min(pageCount, Math.max(1, nextPage));
     setPage(clampedPage);
     if (typeof window !== "undefined") {
-      window.requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      });
+      window.requestAnimationFrame(() => scrollToCatalogTop());
     }
   };
+
+  const addProduct = async (product: CatalogProduct) => {
+    try {
+      await addItem(product);
+      setToastNotice({
+        title: "Đã thêm vào giỏ hàng",
+        desc: product.name,
+      });
+    } catch (err) {
+      setToastNotice({
+        title: "Không thể thêm",
+        desc: getApiErrorMessage(err, "Vui lòng thử lại."),
+      });
+    }
+    window.setTimeout(() => setToastNotice(null), 3500);
+  };
+
+  if (isInternalUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background text-sm font-bold uppercase text-text-muted">
+        Đang chuyển đến khu vực làm việc...
+      </main>
+    );
+  }
 
   return (
     <>
       <Header />
-      <main className="flex-1 bg-background py-10">
-        <div className="container mx-auto max-w-6xl px-4">
-          <div className="mb-8">
-            <p className="text-sm font-bold text-primary-dark">LUMINTRA STORE</p>
-            <h1 className="text-3xl font-black uppercase">Sản phẩm</h1>
-            <p className="mt-2 text-text-muted">Chọn bảng LED và sprite phù hợp cho thiết kế của bạn.</p>
+      <main className="flex-1 bg-background text-text-main">
+        <section aria-label="Cửa hàng sản phẩm" className="mx-auto w-full max-w-[1320px] px-4 py-8 lg:px-8">
+          {/* Breadcrumb */}
+          <div className="mb-5 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-text-muted">
+            <Link href="/" className="cursor-pointer hover:text-primary-ink hover:underline">
+              Trang chủ
+            </Link>
+            <span>›</span>
+            <Link href="/products" className="cursor-pointer text-black hover:underline">
+              Cửa hàng sản phẩm
+            </Link>
+            {activeSearchQuery && (
+              <>
+                <span>›</span>
+                <span className="flex items-center gap-1 border border-black bg-primary px-2 py-0.5 text-[10px] font-black text-black">
+                  Tìm: &ldquo;{activeSearchQuery}&rdquo;
+                  <button
+                    type="button"
+                    onClick={() => router.push("/products")}
+                    className="ml-1 cursor-pointer text-black hover:text-red-700"
+                    aria-label="Hủy tìm kiếm"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              </>
+            )}
           </div>
-          {isLoading ? (
-            <div className="neo-box-no-hover bg-white p-12 text-center text-sm font-bold text-text-muted">
-              Đang tải sản phẩm từ hệ thống...
-            </div>
-          ) : products.length === 0 ? (
-            <div className="neo-box-no-hover bg-white p-12 text-center text-sm font-bold text-text-muted">
-              Chưa có sản phẩm nào được mở bán trên cửa hàng.
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                {paginatedProducts.map((product) => (
-                  <article key={product.id} className="neo-box bg-white transition-transform hover:-translate-y-1">
-                    <Link href={`/products/${product.id}`}>
-                      <div className="relative aspect-square overflow-hidden border-b-2 border-black bg-transparent">
-                        {product.previewUrl ? (
-                          <Image src={product.previewUrl} alt={product.name} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" className="object-cover" />
-                        ) : (
-                          <div className="grid h-full place-items-center text-xs font-bold text-gray-500">[Ảnh sản phẩm]</div>
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <h2 className="font-black">{product.name}</h2>
-                        <p className="mt-2 min-h-10 text-sm text-text-muted line-clamp-2">{product.description}</p>
-                        <div className="mt-4 flex items-center justify-between">
-                          <strong className="text-xl text-primary-dark">{formatPrice(product.price)}</strong>
-                          <span className="rounded-full bg-primary/20 p-2">
-                            <ShoppingBag size={16} />
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
-                  </article>
-                ))}
+
+          {/* Compact Store Header Banner (MOKB In-stock inspired) */}
+          <div className="neo-box-no-hover mb-6 flex flex-wrap items-center justify-between gap-4 border-l-8 border-l-primary bg-white p-5">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
+                  HÀNG CÓ SẴN
+                </span>
+                <span className="text-xs font-bold uppercase text-text-muted">
+                  Giao nhanh toàn quốc · Kích hoạt nhân vật tức thì
+                </span>
               </div>
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-text-muted">
-                  Hiển thị {(page - 1) * PRODUCTS_PER_PAGE + 1} - {Math.min(page * PRODUCTS_PER_PAGE, products.length)} / {products.length} sản phẩm
-                </p>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => handlePageChange(page - 1)} disabled={page === 1} className="border border-gray-300 p-2 disabled:opacity-40" aria-label="Trang trước">
-                    <ChevronLeft size={16} />
-                  </button>
-                  {Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
-                    <button key={pageNumber} type="button" onClick={() => handlePageChange(pageNumber)} className={`min-w-8 border px-2 py-1 text-xs font-bold ${page === pageNumber ? "border-primary-dark bg-primary/20 text-primary-dark" : "border-gray-300"}`}>
-                      {pageNumber}
-                    </button>
-                  ))}
-                  <button type="button" onClick={() => handlePageChange(page + 1)} disabled={page === pageCount} className="border border-gray-300 p-2 disabled:opacity-40" aria-label="Trang sau">
-                    <ChevronRight size={16} />
-                  </button>
+              <div className="flex items-center gap-2.5">
+                <Store size={26} className="shrink-0 text-primary-ink" />
+                <h1 className="text-2xl font-black uppercase tracking-tight text-black sm:text-3xl">
+                  Cửa hàng Lumintra
+                </h1>
+              </div>
+              <p className="text-xs font-medium text-text-muted sm:text-sm">
+                Chọn thiết bị LED ma trận, bộ sưu tập nhân vật Pixel Art, gói combo và thẻ hội viên chính hãng.
+              </p>
+            </div>
+
+            <Link
+              href="/commission/new"
+              className="btn-secondary inline-flex min-h-11 shrink-0 items-center gap-2 text-xs font-black uppercase"
+            >
+              <Sparkles size={15} className="text-primary-ink" />
+              Đặt thiết kế riêng
+            </Link>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
+            {/* ── Sidebar (Filter & Categories) ── */}
+            <aside className="neo-box-no-hover h-fit bg-white p-5 lg:sticky lg:top-24">
+              {/* Category section */}
+              <div className="mb-6">
+                <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 text-xs font-black uppercase tracking-wider text-black">
+                  <Grid2X2 size={16} className="text-primary-ink" /> Danh mục
+                </h2>
+                <div className="flex flex-col gap-1.5">
+                  {[
+                    { label: "Tất cả sản phẩm", count: products.length, value: "all" as const },
+                    {
+                      label: "Thiết bị LED",
+                      count: products.filter((p) => p.productType === "LED_MODEL").length,
+                      value: "LED_MODEL" as const,
+                    },
+                    {
+                      label: "Nhân vật",
+                      count: products.filter((p) => p.productType === "CHARACTER").length,
+                      value: "CHARACTER" as const,
+                    },
+                    {
+                      label: "Gói sản phẩm",
+                      count: products.filter((p) => p.productType === "BUNDLE").length,
+                      value: "BUNDLE" as const,
+                    },
+                    {
+                      label: "Gói thành viên",
+                      count: products.filter((p) => p.productType === "SUBSCRIPTION").length,
+                      value: "SUBSCRIPTION" as const,
+                    },
+                  ].map((category) => {
+                    const isActive = activeCategory === category.value;
+                    return (
+                      <button
+                        key={category.value}
+                        type="button"
+                        onClick={() => selectCategory(category.value)}
+                        className={`flex w-full cursor-pointer items-center justify-between border-2 p-2.5 text-xs font-bold uppercase transition-all ${
+                          isActive
+                            ? "border-black bg-primary text-black shadow-[2px_2px_0_0_#000]"
+                            : "border-transparent text-text-main hover:border-black hover:bg-gray-50"
+                        }`}
+                      >
+                        <span className="truncate">{category.label}</span>
+                        <span
+                          className={`ml-2 px-1.5 py-0.5 text-[10px] font-black ${
+                            isActive
+                              ? "border border-black bg-white text-black"
+                              : "border border-gray-200 bg-gray-100 text-text-muted"
+                          }`}
+                        >
+                          {category.count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </>
-          )}
-        </div>
+
+              <hr className="my-5 border-t-2 border-black" />
+
+              {/* Filters section */}
+              <div>
+                <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 text-xs font-black uppercase tracking-wider text-black">
+                  <SlidersHorizontal size={16} className="text-primary-ink" /> Bộ lọc
+                </h2>
+
+                {/* Price range */}
+                <p className="mb-2 text-xs font-bold uppercase text-text-main">Khoảng giá (VNĐ)</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={minPriceInput}
+                    onChange={(e) => setMinPriceInput(e.target.value)}
+                    placeholder="Từ"
+                    className="w-1/2 border-2 border-black bg-gray-50 px-2.5 py-2 text-xs font-bold text-text-main focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  />
+                  <span className="font-bold text-black">-</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={maxPriceInput}
+                    onChange={(e) => setMaxPriceInput(e.target.value)}
+                    placeholder="Đến"
+                    className="w-1/2 border-2 border-black bg-gray-50 px-2.5 py-2 text-xs font-bold text-text-main focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  />
+                </div>
+                {priceError && (
+                  <p role="alert" className="mt-1.5 text-xs font-bold text-red-600">
+                    {priceError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={applyPriceFilter}
+                  className="btn-primary mt-3 w-full py-2 text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
+                >
+                  Áp dụng giá
+                </button>
+
+                {/* Product types */}
+                <p className="mb-2.5 mt-5 text-xs font-bold uppercase text-text-main">
+                  Loại sản phẩm
+                </p>
+                <div className="flex flex-col gap-2">
+                  {[
+                    ["Thiết bị LED", "LED_MODEL"],
+                    ["Nhân vật", "CHARACTER"],
+                    ["Gói sản phẩm", "BUNDLE"],
+                    ["Gói thành viên", "SUBSCRIPTION"],
+                  ].map(([label, type]) => {
+                    const count = products.filter((p) => p.productType === type).length;
+                    return (
+                      <label
+                        key={label}
+                        className="flex cursor-pointer items-center justify-between text-xs font-bold text-text-main hover:text-black"
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedTypes.includes(type as ProductType)}
+                            onChange={() => {
+                              toggleType(type as ProductType);
+                              setActiveCategory("all");
+                            }}
+                            className="h-4 w-4 cursor-pointer border-2 border-black accent-primary-ink"
+                          />
+                          <span>{label}</span>
+                        </span>
+                        <span className="text-text-muted">({count})</span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* Product tags */}
+                {availableTags.length > 0 && (
+                  <>
+                    <div className="mb-2.5 mt-5 flex items-center justify-between">
+                      <p className="flex items-center gap-1.5 text-xs font-bold uppercase text-text-main">
+                        <Tag size={13} className="text-primary-ink" />
+                        <span>Thẻ sản phẩm</span>
+                      </p>
+                      {selectedTags.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTags([])}
+                          className="cursor-pointer text-[10px] font-black uppercase text-red-600 hover:underline"
+                        >
+                          Bỏ chọn
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableTags.map((tag) => {
+                        const isTagSelected = selectedTags.includes(tag.name);
+                        return (
+                          <button
+                            key={tag.name}
+                            type="button"
+                            onClick={() => toggleTag(tag.name)}
+                            aria-pressed={isTagSelected}
+                            className={`cursor-pointer border-2 border-black px-2 py-1 text-[11px] font-black uppercase transition-all ${
+                              isTagSelected
+                                ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
+                                : "bg-gray-50 text-text-main hover:bg-primary/20"
+                            }`}
+                          >
+                            #{tag.name}{" "}
+                            <span className={isTagSelected ? "text-black/75" : "text-text-muted"}>
+                              ({tag.count})
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* Status */}
+                <p className="mb-2.5 mt-5 text-xs font-bold uppercase text-text-main">
+                  Tình trạng kho
+                </p>
+                <div className="flex flex-col gap-2">
+                  {[
+                    ["Còn hàng", "IN_STOCK", products.length],
+                    ["Hết hàng", "OUT_OF_STOCK", 0] as const,
+                  ].map(([label, status, count]) => (
+                    <label
+                      key={label}
+                      className={`flex items-center justify-between text-xs font-bold ${
+                        count === 0
+                          ? "cursor-not-allowed text-gray-400"
+                          : "cursor-pointer text-text-main hover:text-black"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          disabled={count === 0}
+                          checked={selectedStatuses.includes(status as "IN_STOCK" | "OUT_OF_STOCK")}
+                          onChange={() => toggleStatus(status as "IN_STOCK" | "OUT_OF_STOCK")}
+                          className="h-4 w-4 cursor-pointer border-2 border-black accent-primary-ink disabled:cursor-not-allowed"
+                        />
+                        <span>{label}</span>
+                      </span>
+                      <span>({count})</span>
+                    </label>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="btn-secondary mt-5 w-full py-2 text-xs font-black uppercase shadow-[2px_2px_0_0_#000] hover:border-red-600 hover:bg-red-50 hover:text-red-600"
+                >
+                  Xóa tất cả bộ lọc
+                </button>
+              </div>
+            </aside>
+
+            {/* ── Main Catalog Column ── */}
+            <div>
+              {/* Catalog Top bar (Title & Sort) */}
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={20} className="text-primary-ink" />
+                  <div>
+                    <h2 className="text-lg font-black uppercase tracking-tight text-black sm:text-xl">
+                      Danh sách sản phẩm
+                    </h2>
+                    <p className="text-xs font-bold text-text-muted">
+                      {loadingProducts
+                        ? "Đang tải dữ liệu từ máy chủ..."
+                        : `${sortedProducts.length} sản phẩm phù hợp`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase text-text-muted">Sắp xếp:</span>
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value)}
+                    aria-label="Sắp xếp sản phẩm"
+                    className="cursor-pointer border-2 border-black bg-white px-3 py-1.5 text-xs font-black uppercase shadow-[2px_2px_0_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  >
+                    <option value="Phổ biến">Mặc định</option>
+                    <option value="Tên A → Z">Tên A → Z</option>
+                    <option value="Tên Z → A">Tên Z → A</option>
+                    <option value="Giá thấp">Giá thấp → cao</option>
+                    <option value="Giá cao">Giá cao → thấp</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Active tag filters */}
+              {selectedTags.length > 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black uppercase text-text-muted">
+                    Đang lọc theo thẻ:
+                  </span>
+                  {selectedTags.map((tagName) => (
+                    <button
+                      key={tagName}
+                      type="button"
+                      onClick={() => toggleTag(tagName)}
+                      className="flex cursor-pointer items-center gap-1 border-2 border-black bg-primary px-2.5 py-0.5 text-xs font-black uppercase text-black shadow-[2px_2px_0_0_#000] hover:bg-primary/80"
+                      aria-label={`Bỏ lọc thẻ ${tagName}`}
+                    >
+                      <span>#{tagName}</span>
+                      <X size={12} />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Products Grid or Empty / Loading State */}
+              {loadingProducts ? (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="neo-box-no-hover h-64 animate-pulse bg-gray-100 p-4"
+                      aria-label="Đang tải sản phẩm"
+                    />
+                  ))}
+                </div>
+              ) : sortedProducts.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                    {paginatedProducts.map((product) => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        onAdd={addProduct}
+                        canBuy={isAuthenticated}
+                        isOwned={isProductOwned(product, ownedCharacters, activeSubscription)}
+                        isAlreadyInCart={cartItems.some((item) => item.id === String(product.id))}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="neo-box-no-hover mt-6 flex flex-wrap items-center justify-between gap-3 bg-white p-4">
+                    <p className="text-xs font-bold uppercase text-text-muted">
+                      Hiển thị {(currentPage - 1) * PRODUCTS_PER_PAGE + 1} -{" "}
+                      {Math.min(currentPage * PRODUCTS_PER_PAGE, sortedProducts.length)} /{" "}
+                      {sortedProducts.length} sản phẩm
+                    </p>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="cursor-pointer border-2 border-black bg-white p-1.5 text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
+                        aria-label="Trang trước"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+
+                      {Array.from({ length: pageCount }, (_, i) => i + 1).map((pageNumber) => (
+                        <button
+                          key={pageNumber}
+                          type="button"
+                          onClick={() => handlePageChange(pageNumber)}
+                          className={`min-w-8 cursor-pointer border-2 border-black px-2.5 py-1 text-xs font-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 ${
+                            currentPage === pageNumber
+                              ? "bg-primary text-black"
+                              : "bg-white text-black hover:bg-gray-50"
+                          }`}
+                          aria-label={`Trang ${pageNumber}`}
+                        >
+                          {pageNumber}
+                        </button>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === pageCount}
+                        className="cursor-pointer border-2 border-black bg-white p-1.5 text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
+                        aria-label="Trang sau"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="neo-box-no-hover bg-white p-12 text-center">
+                  <Search size={40} className="mx-auto mb-3 text-primary-ink" />
+                  <p className="text-base font-black uppercase text-black">
+                    Không tìm thấy sản phẩm phù hợp
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-text-muted">
+                    Hãy thử thay đổi từ khóa hoặc điều chỉnh khoảng giá trong bộ lọc.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="btn-primary mt-4 inline-block text-xs font-black uppercase"
+                  >
+                    Xóa tất cả bộ lọc
+                  </button>
+                </div>
+              )}
+
+              {/* Quality Commitment Footer Banner */}
+              <div className="neo-box-no-hover mt-6 flex items-center justify-center gap-2 bg-white p-3 text-xs font-bold uppercase tracking-wide text-black">
+                <Check size={16} className="text-primary-ink" />
+                <span>Sản phẩm chính hãng và tương thích 100% hệ sinh thái Lumintra</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <StoreCartToast notice={toastNotice} />
       </main>
       <Footer />
     </>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <p className="text-xs font-black uppercase tracking-wider text-text-muted">
+            Đang tải cửa hàng Lumintra...
+          </p>
+        </div>
+      }
+    >
+      <StorefrontContent />
+    </Suspense>
   );
 }

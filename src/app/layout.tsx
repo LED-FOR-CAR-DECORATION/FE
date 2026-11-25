@@ -8,7 +8,7 @@ import { GalleryProvider } from "@/features/character/context/GalleryContext";
 
 const inter = Inter({
   variable: "--font-inter",
-  subsets: ["latin"],
+  subsets: ["latin", "vietnamese"],
   display: "swap",
 });
 

@@ -89,7 +89,7 @@ export default function CartPage() {
             <div className="neo-box-no-hover bg-white p-14 text-center">
               <ShoppingBag className="mx-auto mb-4 text-primary-dark" size={42} />
               <h2 className="mb-2 text-xl font-black">Giỏ hàng đang trống</h2>
-              <Link href="/" className="btn-primary inline-block mt-4">Tiếp tục mua sắm</Link>
+              <Link href="/products" className="btn-primary inline-block mt-4">Tiếp tục mua sắm</Link>
             </div>
           ) : (
             <div className="grid gap-6 lg:grid-cols-3">

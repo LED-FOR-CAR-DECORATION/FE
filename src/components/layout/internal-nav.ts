@@ -36,6 +36,13 @@ export const menuItems: MenuItem[] = [
     roles: ["DESIGNER"],
   },
   {
+    label: "Đăng bán",
+    description: "Chỉnh sửa thông tin và gửi phiên bản nhân vật lên Store",
+    href: "/designer/publish",
+    icon: Store,
+    roles: ["DESIGNER"],
+  },
+  {
     label: "Đăng tải yêu cầu thiết kế",
     description: "Tải bản thiết kế cho yêu cầu được giao",
     href: "/designer/commissions",

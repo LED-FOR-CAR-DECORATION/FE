@@ -62,6 +62,7 @@ export default function CustomerCommissionPayment({ commissionId }: { commission
 
 function PaymentDetails({ commissionId }: { commissionId: number }) {
   const [detail, setDetail] = useState<CustomerCommissionDetailResponse>();
+  const [liveDueAmount, setLiveDueAmount] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [redirecting, setRedirecting] = useState(false);
@@ -167,6 +168,12 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
   const statusMeta = getStatusMeta(detail.status);
   const paymentPending = isPaymentPendingStatus(detail.status);
   const isTerminated = detail.status === "CANCELLED" || detail.status === "EXPIRED";
+  const hasActiveQr = Boolean(detail.activePaymentCode);
+  const fallbackDueAmount =
+    detail.status === "AWAITING_EXTRA_PAYMENT"
+      ? detail.extraRevisionFee
+      : detail.totalPrice;
+  const amountDueNow = liveDueAmount ?? fallbackDueAmount;
 
   const heading =
     detail.status === "PENDING_REVIEW"
@@ -187,16 +194,28 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
           : CheckCircle2;
 
   return (
-    <div className="space-y-6">
-      <section className="neo-box-no-hover space-y-4 bg-white p-5 sm:p-6">
+    <div
+      className={
+        hasActiveQr
+          ? "grid grid-cols-1 items-start gap-6 lg:grid-cols-12"
+          : "mx-auto max-w-2xl space-y-6"
+      }
+    >
+      <section
+        className={`neo-box-no-hover space-y-4 bg-white p-5 sm:p-6 ${
+          hasActiveQr ? "lg:col-span-5" : ""
+        }`}
+      >
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-3">
-          <div className="flex items-center gap-2.5">
-            <HeaderIcon size={24} className="shrink-0 text-primary-ink" />
-            <h1 className="text-2xl font-black uppercase tracking-tight sm:text-3xl">{heading}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b-2 border-black pb-3">
+          <div className="flex items-center gap-2">
+            <HeaderIcon size={20} className="shrink-0 text-primary-ink" />
+            <h1 className="text-lg font-black uppercase tracking-tight sm:text-xl">
+              {heading}
+            </h1>
           </div>
           <span
-            className={`inline-flex items-center border-2 px-2.5 py-1 text-xs font-black uppercase ${
+            className={`inline-flex items-center border-2 px-2.5 py-0.5 text-[11px] font-black uppercase ${
               STATUS_TONE_CLASS[statusMeta.tone]
             }`}
           >
@@ -205,36 +224,73 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
         </div>
 
         {/* Summary Metadata */}
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="border border-black bg-gray-100 px-2 py-0.5 font-black tabular-nums">
-                #{detail.commissionId}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="border-2 border-black bg-gray-100 px-2 py-0.5 font-black tabular-nums">
+              #{detail.commissionId}
+            </span>
+            <span className="border-2 border-black bg-white px-2 py-0.5 text-[11px] font-black uppercase">
+              {getTierLabel(detail.tierCode)}
+            </span>
+            {detail.targetMatrixDimensions && (
+              <span className="inline-flex items-center gap-1 font-bold text-text-muted">
+                <Grid size={13} className="text-primary-ink" />
+                LED {detail.targetMatrixDimensions}
               </span>
-              <span className="border border-black bg-white px-2 py-0.5 text-[11px] font-black uppercase">
-                {getTierLabel(detail.tierCode)}
-              </span>
-              {detail.targetMatrixDimensions && (
-                <span className="inline-flex items-center gap-1 font-semibold text-text-muted">
-                  <Grid size={13} className="text-primary-ink" />
-                  LED {detail.targetMatrixDimensions}
-                </span>
-              )}
-            </div>
-            <p className="break-words text-lg font-black uppercase text-black">{detail.title}</p>
+            )}
+          </div>
+          <p className="break-words text-lg font-black uppercase text-black">
+            {detail.title}
+          </p>
+        </div>
+
+        {/* Price Breakdown Box */}
+        <dl className="space-y-2 border-2 border-black bg-background p-3.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <dt className="font-semibold text-text-muted">Giá gốc ban đầu</dt>
+            <dd className="font-black tabular-nums text-black">
+              {formatPrice(detail.initialPrice)}
+            </dd>
           </div>
 
-          <div className="shrink-0 sm:text-right">
-            <p className="text-xs font-bold uppercase text-text-muted">Tổng giá trị</p>
-            <p className="whitespace-nowrap text-2xl font-black tabular-nums text-primary-ink">
-              {formatPrice(detail.totalPrice)}
-            </p>
+          {(detail.extraRevisionFee > 0 || detail.status === "AWAITING_EXTRA_PAYMENT") && (
+            <div className="flex items-center justify-between gap-2">
+              <dt className="font-semibold text-text-muted">
+                Phí chỉnh sửa phát sinh
+              </dt>
+              <dd className="font-black tabular-nums text-black">
+                + {formatPrice(detail.extraRevisionFee)}
+              </dd>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-2">
+            <dt className="font-semibold text-text-muted">Lượt chỉnh sửa</dt>
+            <dd className="font-black tabular-nums text-black">
+              {detail.revisionsUsed}/{detail.maxRevisions} lượt miễn phí
+            </dd>
           </div>
-        </div>
+
+          <div className="flex items-center justify-between gap-2 border-t-2 border-dashed border-black pt-2">
+            <dt className="font-bold uppercase text-text-muted">Tổng giá trị đơn</dt>
+            <dd className="font-black tabular-nums text-black">
+              {formatPrice(detail.totalPrice)}
+            </dd>
+          </div>
+
+          {paymentPending && hasActiveQr && (
+            <div className="flex items-center justify-between gap-2 border-t-2 border-black pt-2">
+              <dt className="font-black uppercase text-black">Cần thanh toán kỳ này</dt>
+              <dd className="text-lg font-black tabular-nums text-primary-ink">
+                {formatPrice(amountDueNow)}
+              </dd>
+            </div>
+          )}
+        </dl>
 
         {/* Contextual Status Notice */}
         {detail.status === "PENDING_REVIEW" && (
-          <div role="status" className="flex items-start gap-2.5 border-2 border-amber-600 bg-amber-50 p-3.5 text-xs font-semibold text-amber-900">
+          <div role="status" className="flex items-start gap-2.5 border-2 border-black bg-amber-100 p-3.5 text-xs font-semibold text-black">
             <Clock size={16} className="mt-0.5 shrink-0" />
             <span>
               Yêu cầu đã được gửi và đang chờ nhân viên kiểm duyệt. Sau khi duyệt, mã QR thanh toán sẽ tự động hiển thị tại đây.
@@ -259,7 +315,7 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
         )}
 
         {detail.status === "AWAITING_EXTRA_PAYMENT" && detail.activePaymentCode && (
-          <div role="status" className="flex items-start gap-2.5 border-2 border-amber-600 bg-amber-50 p-3.5 text-xs font-semibold text-amber-900">
+          <div role="status" className="flex items-start gap-2.5 border-2 border-black bg-amber-100 p-3.5 text-xs font-semibold text-black">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <span>
               Bạn đã dùng hết lượt chỉnh sửa miễn phí. Thanh toán phí chỉnh sửa để họa sĩ bắt đầu thực hiện bản sửa mới.
@@ -268,8 +324,8 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
         )}
 
         {detail.status === "PENDING_PAYMENT" && detail.quoteExpiresAt && (
-          <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
-            <Clock size={14} />
+          <div className="flex items-center gap-2 border-2 border-black bg-amber-100 px-3 py-2 text-xs font-bold text-black">
+            <Clock size={14} className="shrink-0" />
             <span>Hạn thanh toán báo giá: {formatCommissionDate(detail.quoteExpiresAt, true)}</span>
           </div>
         )}
@@ -296,7 +352,7 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
           <div className="pt-1">
             <Link
               href={chatHref}
-              className="btn-primary inline-flex min-h-11 items-center gap-2 text-xs font-black uppercase"
+              className="btn-primary inline-flex min-h-11 w-full items-center justify-center gap-2 text-xs font-black uppercase"
             >
               <MessageSquare size={15} />
               {detail.status === "COMPLETED" ? "Xem lại trao đổi" : "Vào phòng trao đổi với họa sĩ"}
@@ -322,7 +378,7 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
                     type="button"
                     disabled={cancelling}
                     onClick={() => void cancelExtraPayment()}
-                    className="btn-danger min-h-11 text-xs font-black uppercase"
+                    className="btn-danger min-h-11 cursor-pointer text-xs font-black uppercase"
                   >
                     {cancelling ? "Đang hủy…" : "Xác nhận hủy thanh toán"}
                   </button>
@@ -330,7 +386,7 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
                     type="button"
                     disabled={cancelling}
                     onClick={() => setConfirmCancel(false)}
-                    className="btn-secondary min-h-11 text-xs font-black uppercase"
+                    className="btn-secondary min-h-11 cursor-pointer text-xs font-black uppercase"
                   >
                     Giữ lại
                   </button>
@@ -340,7 +396,7 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
               <button
                 type="button"
                 onClick={() => setConfirmCancel(true)}
-                className="min-h-11 cursor-pointer text-xs font-bold text-red-600 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                className="min-h-11 cursor-pointer text-xs font-bold text-red-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
                 Không muốn chỉnh sửa nữa? Hủy yêu cầu thanh toán phí sửa
               </button>
@@ -350,12 +406,15 @@ function PaymentDetails({ commissionId }: { commissionId: number }) {
       </section>
 
       {detail.activePaymentCode && (
-        <SePayOrderPaymentCard
-          key={detail.activePaymentCode}
-          commissionId={commissionId}
-          initialPaymentCode={detail.activePaymentCode}
-          onPaymentSuccess={goToChat}
-        />
+        <div className="lg:col-span-7">
+          <SePayOrderPaymentCard
+            key={detail.activePaymentCode}
+            commissionId={commissionId}
+            initialPaymentCode={detail.activePaymentCode}
+            onAmountLoaded={setLiveDueAmount}
+            onPaymentSuccess={goToChat}
+          />
+        </div>
       )}
     </div>
   );

@@ -57,12 +57,13 @@ export default function CommissionChatRoom({ commissionId, viewer, variant = "pa
 }) {
   const messenger = variant === "messenger";
   const room = useCommissionRoom(commissionId, viewer);
-  const { info, infoError, messages, addMessages, refreshInfo } = room;
+  const { info, infoError, messages, addMessages, refreshInfo, refreshHistory } = room;
   const cardIds = useMemo(() => latestCardIds(messages), [messages]);
   const onCardChanged = useCallback((incoming?: CommissionMessage[]) => {
     if (incoming?.length) addMessages(incoming);
     void refreshInfo();
-  }, [addMessages, refreshInfo]);
+    void refreshHistory();
+  }, [addMessages, refreshInfo, refreshHistory]);
   const backHref = viewer === "CUSTOMER" ? "/commission" : "/staff/commission";
 
   if (!info) {

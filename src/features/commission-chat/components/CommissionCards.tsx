@@ -77,10 +77,14 @@ export function DeliverableCard({ message, ctx }: { message: CommissionMessage; 
   const image = [message.mediaUrl, meta?.imageUrl].find(isHttpUrl);
   const version = asNumber(meta?.versionNumber);
   const autoComplete = formatDateTime(meta?.autoCompleteAt);
-  const maxRevisions = asNumber(meta?.maxRevisions);
-  const revisions = maxRevisions !== undefined ? `${asNumber(meta?.revisionsUsed) ?? 0}/${maxRevisions}` : null;
-
   const isLatest = message.messageId === latestDeliverableId;
+  const maxRevisions = asNumber(meta?.maxRevisions) ?? info.maxRevisions;
+  const metaRevisionsUsed = asNumber(meta?.revisionsUsed);
+  const deliverableRevisionsUsed =
+    isLatest && typeof info.revisionsUsed === "number"
+      ? Math.max(metaRevisionsUsed ?? 0, info.revisionsUsed)
+      : (metaRevisionsUsed ?? 0);
+  const revisions = maxRevisions !== undefined ? `${deliverableRevisionsUsed}/${maxRevisions}` : null;
   const awaitingCustomer = isLatest && info.status === "PREVIEW_DELIVERED";
   const accepted = isLatest && info.status === "COMPLETED";
 
@@ -152,20 +156,29 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
   const brief = typeof meta?.brief === "string" && meta.brief ? meta.brief : message.content;
   const usesFreeQuota = meta?.usesFreeQuota === true;
   const fee = asNumber(meta?.revisionFee) ?? 0;
-  const maxRevisions = asNumber(meta?.maxRevisions);
-  const revisionsUsed = asNumber(meta?.revisionsUsed) ?? 0;
+  const maxRevisions = asNumber(meta?.maxRevisions) ?? info.maxRevisions;
+  const metaRevisionsUsed = asNumber(meta?.revisionsUsed);
+  const isLatestRevision = message.messageId === latestRevisionId;
+  const revisionsUsed =
+    isLatestRevision && typeof info.revisionsUsed === "number"
+      ? Math.max(metaRevisionsUsed ?? 0, info.revisionsUsed)
+      : (metaRevisionsUsed ?? info.revisionsUsed ?? 0);
   const cardStatus = typeof meta?.status === "string" ? meta.status : "PENDING";
   const wasCancelled = typeof meta?.cancelledPaymentCode === "string";
 
   // Chỉ thẻ mới nhất, đăng sau bản xem trước mới nhất, mới còn xác nhận/hủy được (giống kiểm tra ở backend).
   const isCurrent = message.messageId === latestRevisionId && (latestDeliverableId ?? 0) < message.messageId;
+  const terminalCommission = info.status === "COMPLETED" || info.status === "CANCELLED" || info.status === "EXPIRED";
   const canConfirm = isCurrent && cardStatus === "PENDING" && info.status === "PREVIEW_DELIVERED";
+  const syncingCardStatus = isCurrent && cardStatus === "PENDING" && !terminalCommission && info.status !== "PREVIEW_DELIVERED";
   const awaitingPayment = isCurrent && cardStatus === "CONFIRMED" && !usesFreeQuota && info.status === "AWAITING_EXTRA_PAYMENT";
   const paymentHref = `/commission/${info.commissionId}/payment`;
 
   const badge = cardStatus === "PAID" ? "Đã thanh toán"
     : cardStatus === "CONFIRMED" ? (usesFreeQuota ? "Đã xác nhận" : awaitingPayment ? "Chờ thanh toán" : "Đã xác nhận")
-      : canConfirm ? "Chờ khách xác nhận" : "Hết hiệu lực";
+      : canConfirm ? "Chờ khách xác nhận"
+        : syncingCardStatus ? "Đang đồng bộ"
+          : "Hết hiệu lực";
 
   const feeText = usesFreeQuota
     ? `Miễn phí · dùng 1 lượt${maxRevisions !== undefined ? ` (đã dùng ${revisionsUsed}/${maxRevisions})` : ""}`

@@ -247,6 +247,38 @@ select,
   border-color: #48a56a;
   box-shadow: 0 0 0 3px rgba(72,165,106,.15);
 }
+/* Storefront Neo-Brutalist sync scoped to Manager Dashboard */
+.manager-main:has(.manager-neo-dashboard) {
+  background: var(--color-background);
+}
+.manager-main .manager-neo-dashboard h1 {
+  color: #000000;
+  letter-spacing: -0.02em;
+}
+.manager-main .manager-neo-dashboard .neo-box-no-hover {
+  border: 2px solid #000000;
+  border-radius: 0;
+  box-shadow: 4px 4px 0 0 #000000;
+  transition: none;
+}
+.manager-main .manager-neo-dashboard .neo-box-no-hover:hover {
+  border-color: #000000;
+  box-shadow: 4px 4px 0 0 #000000;
+}
+.manager-main .manager-neo-dashboard table thead {
+  background: #e9f5ed;
+}
+.manager-main .manager-neo-dashboard table tbody tr:hover {
+  background: #f3faf5;
+}
+.manager-main .manager-neo-dashboard input:focus,
+.manager-main .manager-neo-dashboard select:focus,
+.manager-main .manager-neo-dashboard textarea:focus {
+  border-color: #000000;
+  box-shadow: 2px 2px 0 0 #000000;
+  outline: 2px solid #000000;
+  outline-offset: 2px;
+}
 @keyframes manager-content-enter {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }

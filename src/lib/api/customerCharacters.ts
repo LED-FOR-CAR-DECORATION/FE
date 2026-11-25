@@ -29,6 +29,7 @@ export interface CustomerActiveSubscription {
   durationDays: number | null;
   allAccessCharacters: boolean;
   maxCommissionRevisions: number;
+  remainingCommissionRevisions: number;
   maxMobileProfiles: number;
   activatedAt: string;
   expiresAt: string | null;
@@ -145,6 +146,28 @@ export async function fetchCustomerGallery(): Promise<CustomerGalleryItem[]> {
   );
 }
 
+function normalizeActiveSubscription(
+  raw: CustomerActiveSubscription,
+): CustomerActiveSubscription {
+  return {
+    subscriptionId: Number(raw.subscriptionId),
+    productId: Number(raw.productId),
+    orderId: raw.orderId != null ? Number(raw.orderId) : null,
+    planCode: raw.planCode ?? null,
+    planName: raw.planName ?? null,
+    isLifetime: Boolean(raw.isLifetime),
+    durationDays: raw.durationDays ?? null,
+    allAccessCharacters: Boolean(raw.allAccessCharacters),
+    maxCommissionRevisions: Number(raw.maxCommissionRevisions ?? 0),
+    remainingCommissionRevisions: Number(
+      raw.remainingCommissionRevisions ?? raw.maxCommissionRevisions ?? 0,
+    ),
+    maxMobileProfiles: Number(raw.maxMobileProfiles ?? 3),
+    activatedAt: raw.activatedAt ?? "",
+    expiresAt: raw.expiresAt ?? null,
+  };
+}
+
 export async function fetchActiveCustomerSubscription(): Promise<CustomerActiveSubscription | null> {
   const res = await request<ApiEnvelope<CustomerActiveSubscription | null>>(OpenAPI, {
     method: "GET",
@@ -156,19 +179,23 @@ export async function fetchActiveCustomerSubscription(): Promise<CustomerActiveS
   });
 
   if (!res.data) return null;
-  return {
-    subscriptionId: Number(res.data.subscriptionId),
-    productId: Number(res.data.productId),
-    orderId: res.data.orderId != null ? Number(res.data.orderId) : null,
-    planCode: res.data.planCode ?? null,
-    planName: res.data.planName ?? null,
-    isLifetime: Boolean(res.data.isLifetime),
-    durationDays: res.data.durationDays ?? null,
-    allAccessCharacters: Boolean(res.data.allAccessCharacters),
-    maxCommissionRevisions: Number(res.data.maxCommissionRevisions ?? 0),
-    maxMobileProfiles: Number(res.data.maxMobileProfiles ?? 3),
-    activatedAt: res.data.activatedAt ?? "",
-    expiresAt: res.data.expiresAt ?? null,
-  };
+  return normalizeActiveSubscription(res.data);
+}
+
+export async function fetchActiveCustomerSubscriptions(): Promise<CustomerActiveSubscription[]> {
+  try {
+    const res = await request<ApiEnvelope<CustomerActiveSubscription[]>>(OpenAPI, {
+      method: "GET",
+      url: "/api/customer/subscriptions/active/all",
+      errors: {
+        401: "Authentication is required.",
+        403: "Access is denied.",
+      },
+    });
+    return Array.isArray(res.data) ? res.data.map(normalizeActiveSubscription) : [];
+  } catch {
+    const single = await fetchActiveCustomerSubscription().catch(() => null);
+    return single ? [single] : [];
+  }
 }
 

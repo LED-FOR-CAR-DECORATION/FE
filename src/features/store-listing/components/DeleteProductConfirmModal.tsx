@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import StoreModal from "./StoreModal";
 import { apiDeleteStoreProduct } from "@/lib/api/products";
 import { markProductAsDeleted } from "../services/store-listing.service";
 
@@ -54,9 +54,11 @@ export default function DeleteProductConfirmModal({
   };
 
   return (
-    <Modal
+    <StoreModal
       title="Xóa sản phẩm khỏi cửa hàng?"
       description={`Bạn đang thực hiện xóa mềm sản phẩm #${productId} - ${productName}.`}
+      icon={<Trash2 size={18} />}
+      iconBoxClassName="bg-[#fecaca]"
       onClose={onClose}
       busy={isSubmitting}
       footer={
@@ -65,7 +67,7 @@ export default function DeleteProductConfirmModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-[#cfe0d4] bg-white px-4 py-2 text-sm font-bold hover:bg-[#eef8f0] disabled:opacity-50"
+            className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             Hủy thao tác
           </button>
@@ -73,9 +75,9 @@ export default function DeleteProductConfirmModal({
             type="button"
             onClick={handleDelete}
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 rounded-lg border border-red-500 bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60"
+            className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
-            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+            {isSubmitting ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Trash2 size={15} aria-hidden="true" />}
             Xác nhận xóa
           </button>
         </>
@@ -83,20 +85,23 @@ export default function DeleteProductConfirmModal({
     >
       <div className="flex flex-col gap-3 text-sm">
         {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800">
-            {error}
+          <div
+            role="alert"
+            className="flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+          >
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
+            <span>{error}</span>
           </div>
         )}
 
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
-          <div className="flex items-center gap-2 font-bold text-amber-950 mb-1">
-            <AlertTriangle size={15} className="shrink-0 text-amber-700" />
+        <div className="border-2 border-black bg-[#fef08a]/70 p-3.5 text-xs font-medium leading-relaxed text-black shadow-[2px_2px_0_0_#000]">
+          <div className="mb-1.5 flex items-center gap-2 font-black uppercase tracking-wide text-black">
+            <AlertTriangle size={15} className="shrink-0 text-black" aria-hidden="true" />
             Lưu ý khi xóa mềm sản phẩm
           </div>
           Sản phẩm sẽ được chuyển sang trạng thái Đã xóa, ẩn hoàn toàn khỏi cửa hàng công khai và không thể đặt mua, nhưng toàn bộ lịch sử đơn hàng trước đây của khách hàng vẫn được bảo lưu nguyên vẹn.
         </div>
       </div>
-    </Modal>
+    </StoreModal>
   );
 }
-

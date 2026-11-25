@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { AlertCircle, Loader2, PackagePlus, Plus, Sparkles, Trash2 } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { AlertCircle, Loader2, PackagePlus, Plus, Sparkles, Trash2, X } from "lucide-react";
 import {
   apiStockInLedInstances,
   formatLedInventoryError,
@@ -74,12 +74,48 @@ export default function StockInLedInstancesModal({
   onClose,
   onSuccess,
 }: StockInLedInstancesModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [batchCount, setBatchCount] = useState("5");
   const [rows, setRows] = useState<StockInRow[]>(() =>
     buildGeneratedRows(model, 1),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const isSubmittingRef = useRef(isSubmitting);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    isSubmittingRef.current = isSubmitting;
+  });
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isSubmittingRef.current) {
+        onCloseRef.current();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
+    };
+  }, []);
 
   const updateRow = (
     key: string,
@@ -181,20 +217,190 @@ export default function StockInLedInstancesModal({
     }
   };
 
-  return (
-    <Modal
-      title={`Nhập kho thiết bị · ${model.modelName}`}
-      description={`Mỗi thiết bị nhập kho phải có Serial Number và địa chỉ MAC duy nhất. Tồn kho mẫu #${model.modelId} hiện tại: ${model.stockQuantity}.`}
-      onClose={onClose}
-      busy={isSubmitting}
-      size="lg"
-      footer={
-        <>
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 font-sans text-text-main"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden border-2 border-black bg-white shadow-[6px_6px_0_0_#000] outline-none"
+      >
+        <header className="flex items-start justify-between gap-4 border-b-2 border-black bg-primary/20 px-6 py-4">
+          <div className="min-w-0">
+            <span className="inline-flex items-center border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+              NHẬP KHO THIẾT BỊ · MẪU #{model.modelId}
+            </span>
+            <h2
+              id={titleId}
+              className="mt-1.5 text-base font-black uppercase tracking-tight text-black sm:text-lg"
+            >
+              Nhập kho thiết bị · {model.modelName}
+            </h2>
+            <p id={descriptionId} className="mt-0.5 text-xs font-medium text-text-muted">
+              Mỗi thiết bị nhập kho phải có Serial Number và địa chỉ MAC duy nhất. Tồn kho mẫu #{model.modelId} hiện tại:{" "}
+              <strong className="font-black text-black tabular-nums">{model.stockQuantity}</strong>.
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            aria-label="Đóng hộp thoại"
+            className="btn-secondary p-1.5! shadow-[2px_2px_0_0_#000]"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <form
+            id="stock-in-led-instances-form"
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-4 text-sm"
+          >
+            {error && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+              >
+                <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Quick batch generator */}
+            <div className="flex flex-wrap items-end gap-3 border-2 border-black bg-[#f3faf5] p-3.5 shadow-[2px_2px_0_0_#000]">
+              <div>
+                <label
+                  htmlFor="stock-in-batch-count"
+                  className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
+                >
+                  Số lượng tạo nhanh
+                </label>
+                <input
+                  id="stock-in-batch-count"
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={batchCount}
+                  onChange={(e) => setBatchCount(e.target.value)}
+                  className="w-28 border-2 border-black bg-white px-3 py-1.5 text-xs font-black text-black tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGenerateBatch}
+                className="btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+              >
+                <Sparkles size={14} aria-hidden="true" />
+                Tạo nhanh mã lô
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="btn-secondary ml-auto inline-flex items-center gap-1 px-3 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+              >
+                <Plus size={14} aria-hidden="true" />
+                Thêm 1 dòng
+              </button>
+            </div>
+
+            {/* Rows table */}
+            <div className="max-h-[45vh] overflow-y-auto border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="sticky top-0 z-10 border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
+                  <tr>
+                    <th className="w-10 px-3 py-2.5 text-center">#</th>
+                    <th className="px-3 py-2.5">Serial Number *</th>
+                    <th className="px-3 py-2.5">Địa chỉ MAC *</th>
+                    <th className="w-12 px-2 py-2.5 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y-2 divide-black/10 bg-white">
+                  {rows.map((row, index) => (
+                    <tr key={row.key} className="transition-colors hover:bg-[#f3faf5]">
+                      <td className="px-3 py-2 text-center font-mono font-black text-black tabular-nums">
+                        {index + 1}
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          required
+                          maxLength={100}
+                          value={row.serialNumber}
+                          onChange={(e) =>
+                            updateRow(row.key, "serialNumber", e.target.value)
+                          }
+                          placeholder="LMT-64X64-M1-0011"
+                          aria-label={`Serial Number dòng ${index + 1}`}
+                          className="w-full border-2 border-black bg-gray-50 px-2.5 py-1.5 font-mono text-xs font-bold text-black focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          required
+                          maxLength={17}
+                          value={row.macAddress}
+                          onChange={(e) =>
+                            updateRow(
+                              row.key,
+                              "macAddress",
+                              e.target.value.toUpperCase(),
+                            )
+                          }
+                          placeholder="AA:BB:CC:11:22:33"
+                          aria-label={`Địa chỉ MAC dòng ${index + 1}`}
+                          className="w-full border-2 border-black bg-gray-50 px-2.5 py-1.5 font-mono text-xs font-bold uppercase text-black focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRow(row.key)}
+                          disabled={rows.length <= 1}
+                          aria-label={`Xóa dòng ${index + 1}`}
+                          className="inline-flex h-8 w-8 cursor-pointer items-center justify-center border-2 border-black bg-white text-red-700 transition-colors hover:bg-[#fecaca] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          <Trash2 size={13} aria-hidden="true" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-2 border-black bg-primary/15 px-3.5 py-2.5 text-xs font-medium text-black">
+              Sau khi nhập kho, tất cả thiết bị sẽ ở trạng thái{" "}
+              <strong className="font-black">Trong kho (IN_STOCK)</strong>, tự động có mã QR nhà máy để in tem và cộng thẳng{" "}
+              <strong className="font-black tabular-nums">+{rows.length}</strong> vào tồn kho mẫu LED (mới:{" "}
+              <strong className="font-black text-primary-ink tabular-nums">
+                {(model.stockQuantity ?? 0) + rows.length}
+              </strong>
+              ).
+            </div>
+          </form>
+        </div>
+
+        <footer className="flex flex-wrap items-center justify-end gap-2.5 border-t-2 border-dashed border-gray-200 bg-white px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             Hủy
           </button>
@@ -202,143 +408,23 @@ export default function StockInLedInstancesModal({
             type="submit"
             form="stock-in-led-instances-form"
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 rounded-lg border-2 border-black bg-primary px-5 py-2 text-sm font-black text-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-primary/90 disabled:opacity-50"
+            className="btn-primary inline-flex items-center gap-2 px-5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             {isSubmitting ? (
               <>
-                <Loader2 size={15} className="animate-spin" />
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
                 Đang nhập kho...
               </>
             ) : (
               <>
-                <PackagePlus size={15} />
+                <PackagePlus size={14} aria-hidden="true" />
                 Nhập {rows.length} thiết bị vào kho
               </>
             )}
           </button>
-        </>
-      }
-    >
-      <form
-        id="stock-in-led-instances-form"
-        onSubmit={handleSubmit}
-        className="flex flex-col gap-4 text-sm"
-      >
-        {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800"
-          >
-            <AlertCircle size={16} className="mt-0.5 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Quick batch generator */}
-        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[#dbece0] bg-[#f9fdfa] p-3.5">
-          <div>
-            <label className="mb-1 block text-xs font-bold text-gray-700">
-              Số lượng tạo nhanh
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={batchCount}
-              onChange={(e) => setBatchCount(e.target.value)}
-              className="w-28 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-bold outline-none focus:border-[#439660]"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGenerateBatch}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#439660] bg-white px-3.5 py-2 text-xs font-bold text-[#1f432b] transition hover:bg-primary/20"
-          >
-            <Sparkles size={14} />
-            Tạo nhanh mã lô
-          </button>
-
-          <button
-            type="button"
-            onClick={handleAddRow}
-            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-800 hover:bg-gray-50"
-          >
-            <Plus size={14} />
-            Thêm 1 dòng
-          </button>
-        </div>
-
-        {/* Rows table */}
-        <div className="max-h-[45vh] overflow-y-auto rounded-xl border border-gray-200">
-          <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 border-b border-gray-200 bg-gray-50 text-[11px] font-black uppercase text-gray-600">
-              <tr>
-                <th className="w-10 px-3 py-2.5 text-center">#</th>
-                <th className="px-3 py-2.5">Serial Number *</th>
-                <th className="px-3 py-2.5">Địa chỉ MAC *</th>
-                <th className="w-12 px-2 py-2.5 text-center">Xóa</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
-              {rows.map((row, index) => (
-                <tr key={row.key}>
-                  <td className="px-3 py-2 text-center font-mono font-bold text-gray-500">
-                    {index + 1}
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="text"
-                      required
-                      maxLength={100}
-                      value={row.serialNumber}
-                      onChange={(e) =>
-                        updateRow(row.key, "serialNumber", e.target.value)
-                      }
-                      placeholder="LMT-64X64-M1-0011"
-                      className="w-full rounded border border-gray-300 px-2.5 py-1.5 font-mono text-xs outline-none focus:border-[#439660]"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="text"
-                      required
-                      maxLength={17}
-                      value={row.macAddress}
-                      onChange={(e) =>
-                        updateRow(
-                          row.key,
-                          "macAddress",
-                          e.target.value.toUpperCase(),
-                        )
-                      }
-                      placeholder="AA:BB:CC:11:22:33"
-                      className="w-full rounded border border-gray-300 px-2.5 py-1.5 font-mono text-xs uppercase outline-none focus:border-[#439660]"
-                    />
-                  </td>
-                  <td className="px-2 py-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveRow(row.key)}
-                      disabled={rows.length <= 1}
-                      aria-label={`Xóa dòng ${index + 1}`}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <p className="text-xs text-text-muted">
-          Sau khi nhập kho, tất cả thiết bị sẽ ở trạng thái <strong>Trong kho (IN_STOCK)</strong>,
-          tự động có mã QR nhà máy để in tem và cộng thẳng <strong>+{rows.length}</strong> vào tồn
-          kho mẫu LED (mới: <strong>{(model.stockQuantity ?? 0) + rows.length}</strong>).
-        </p>
-      </form>
-    </Modal>
+        </footer>
+      </div>
+    </div>,
+    document.body,
   );
 }

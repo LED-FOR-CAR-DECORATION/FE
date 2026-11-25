@@ -7,25 +7,23 @@ import { AlertTriangle, RotateCcw } from "lucide-react";
 export const STORE_FORBIDDEN_HINT =
   "Chỉ Quản lý mới có quyền thay đổi trạng thái hiển thị trên cửa hàng.";
 
-export const STORE_TABLE_CLASS = "w-full min-w-[960px] text-sm";
-export const STORE_THEAD_CLASS = "border-b border-[#e3efe6]";
+export const STORE_TABLE_CLASS = "w-full min-w-[960px] border-collapse text-left text-sm";
+export const STORE_THEAD_CLASS = "border-b-2 border-black bg-[#e9f5ed]";
 export const STORE_TH_CLASS =
-  "whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide";
+  "whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black";
 
 export function storeRowClass(isDeleted: boolean): string {
-  return `border-b border-[#eef5f0] last:border-0 transition-colors duration-150 ${
+  return `border-b-2 border-black/10 last:border-0 transition-colors duration-150 ${
     isDeleted
-      ? "bg-neutral-100/60 opacity-45 grayscale"
-      : "hover:bg-[#f9fdfa]"
+      ? "bg-gray-100/80 opacity-60 grayscale"
+      : "bg-white hover:bg-[#f3faf5]"
   }`;
 }
 
 const ACTION_VARIANT: Record<"primary" | "secondary" | "danger", string> = {
-  primary:
-    "border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] text-[#10351f] shadow-[2px_2px_0_#c6e8cd] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]",
-  secondary:
-    "border-[#cfe0d4] bg-white text-[#173b28] hover:border-[#a3d7b2] hover:bg-[#eef8f0]",
-  danger: "border-red-200 bg-white text-red-700 hover:bg-red-50",
+  primary: "btn-primary shadow-[2px_2px_0_0_#000]",
+  secondary: "btn-secondary shadow-[2px_2px_0_0_#000]",
+  danger: "btn-danger shadow-[2px_2px_0_0_#000]",
 };
 
 export function StoreActionButton({
@@ -42,7 +40,7 @@ export function StoreActionButton({
     <button
       type="button"
       {...props}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-bold transition-all duration-150 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none ${ACTION_VARIANT[variant]} ${className}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap px-2.5! py-1.5! text-[11px] font-black uppercase tracking-wide ${ACTION_VARIANT[variant]} ${className}`}
     >
       {icon}
       {children}
@@ -65,21 +63,23 @@ export function StoreThumbnail({
 
   if (src && !failed) {
     return (
-      <Image
-        src={src}
-        alt={alt}
-        width={44}
-        height={44}
-        onError={() => setFailed(true)}
-        className={`h-11 w-11 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] object-contain ${
-          pixelated ? "[image-rendering:pixelated]" : ""
-        }`}
-      />
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden border-2 border-black bg-gray-50">
+        <Image
+          src={src}
+          alt={alt}
+          width={44}
+          height={44}
+          onError={() => setFailed(true)}
+          className={`h-full w-full object-contain ${
+            pixelated ? "[image-rendering:pixelated]" : ""
+          }`}
+        />
+      </div>
     );
   }
 
   return (
-    <div className="grid h-11 w-11 place-items-center rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] text-[#3f9660]">
+    <div className="grid h-11 w-11 shrink-0 place-items-center border-2 border-black bg-gray-50 text-primary-ink">
       {fallback}
     </div>
   );
@@ -97,15 +97,15 @@ export function StoreSkeletonRows({
   return (
     <>
       {Array.from({ length: rows }, (_, rowIndex) => (
-        <tr key={rowIndex} className="border-b border-[#eef5f0]" aria-hidden="true">
+        <tr key={rowIndex} className="border-b-2 border-black/10" aria-hidden="true">
           {Array.from({ length: columns }, (_, colIndex) => (
             <td key={colIndex} className="px-4 py-3.5">
               <div
-                className={`animate-pulse rounded-lg bg-[#e7f3ea] ${
+                className={`animate-pulse border border-black/10 bg-gray-200 ${
                   colIndex === thumbnailColumnIndex
                     ? "h-11 w-11"
                     : colIndex === 0
-                      ? "h-4 w-10"
+                      ? "h-4 w-12"
                       : colIndex === 2
                         ? "h-4 w-44"
                         : "h-4 w-24"
@@ -130,17 +130,20 @@ export function StoreErrorRow({
 }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-14 text-center">
-        <div role="alert" className="mx-auto flex max-w-sm flex-col items-center gap-3">
-          <AlertTriangle size={24} className="text-red-600" />
-          <p className="text-sm font-semibold text-red-700">{message}</p>
+      <td colSpan={colSpan} className="px-4 py-12 text-center">
+        <div
+          role="alert"
+          className="mx-auto flex max-w-md flex-col items-center gap-3 border-2 border-black bg-[#fee2e2] p-5 shadow-[4px_4px_0_0_#000]"
+        >
+          <AlertTriangle size={22} className="text-red-700" aria-hidden="true" />
+          <p className="text-xs font-black text-black sm:text-sm">{message}</p>
           {onRetry && (
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-50"
+              className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
             >
-              <RotateCcw size={13} /> Thử lại
+              <RotateCcw size={13} aria-hidden="true" /> Thử lại
             </button>
           )}
         </div>
@@ -164,16 +167,18 @@ export function StoreEmptyRow({
 }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-14 text-center text-sm font-semibold text-text-muted">
-        <div className="flex flex-col items-center gap-2.5">
-          <p>{message}</p>
+      <td colSpan={colSpan} className="px-4 py-14 text-center">
+        <div className="mx-auto flex max-w-md flex-col items-center gap-3 border-2 border-dashed border-black/25 bg-gray-50 px-5 py-8">
+          <p className="text-xs font-black uppercase tracking-wide text-black sm:text-sm">
+            {message}
+          </p>
           {hasActiveFilters && onResetFilters && (
             <button
               type="button"
               onClick={onResetFilters}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#cfe0d4] bg-white px-3 py-1.5 text-xs font-bold text-[#173b28] transition-colors hover:border-[#a3d7b2] hover:bg-[#eef8f0]"
+              className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
             >
-              <RotateCcw size={13} /> Đặt lại bộ lọc
+              <RotateCcw size={13} aria-hidden="true" /> Đặt lại bộ lọc
             </button>
           )}
           {!hasActiveFilters && action}
@@ -194,10 +199,11 @@ export function StoreTableFooter({
 }) {
   return (
     <p
-      className="border-t border-[#e3efe6] px-4 py-3 text-xs font-medium text-text-muted"
+      className="border-t-2 border-dashed border-gray-200 bg-white px-4 py-3 text-xs font-medium text-text-muted tabular-nums"
       aria-live="polite"
     >
-      Hiển thị {filteredCount} / {totalCount} {unitLabel}
+      Hiển thị <strong className="font-black text-black">{filteredCount}</strong> /{" "}
+      <strong className="font-black text-black">{totalCount}</strong> {unitLabel}
     </p>
   );
 }

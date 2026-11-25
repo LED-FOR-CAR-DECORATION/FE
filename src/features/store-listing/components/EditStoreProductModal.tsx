@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Image as ImageIcon, Loader2, Upload, X } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import StoreModal from "./StoreModal";
 import CategoryTagSelector from "./CategoryTagSelector";
 import { apiUpdateStoreProduct, fetchStoreTags } from "@/lib/api/products";
 import { uploadMediaFile, type MediaPurposeType } from "@/lib/api/media";
@@ -209,8 +209,9 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
   };
 
   return (
-    <Modal
+    <StoreModal
       title={`Chỉnh sửa sản phẩm #${product.id}`}
+      badge="CHỈNH SỬA SẢN PHẨM"
       description="Chỉ dành cho Manager: Cập nhật thông tin chi tiết sản phẩm trên Store."
       onClose={onClose}
       busy={isSubmitting}
@@ -221,7 +222,7 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-[#cfe0d4] bg-white px-4 py-2 text-sm font-bold hover:bg-[#eef8f0] disabled:opacity-50"
+            className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             Hủy
           </button>
@@ -229,9 +230,9 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#3b8555] bg-[#439660] px-5 py-2 text-sm font-black text-white shadow-xs hover:bg-[#387e51] disabled:opacity-60"
+            className="btn-primary inline-flex items-center gap-2 px-5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
-            {isSubmitting && <Loader2 size={15} className="animate-spin" />}
+            {isSubmitting && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
             Lưu thay đổi
           </button>
         </>
@@ -239,33 +240,36 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm">
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800">
-            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <div
+            role="alert"
+            className="flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+          >
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
 
-        <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
-          <span className="font-bold">Lưu ý BR-FL5-03:</span> Việc thay đổi giá bán cơ bản chỉ áp dụng cho các đơn hàng tương lai, hoàn toàn không làm thay đổi giá trên các đơn hàng lịch sử của khách hàng.
+        <div className="border-2 border-black bg-[#fef08a]/60 p-3 text-xs font-medium text-black">
+          <span className="font-black uppercase">Lưu ý BR-FL5-03:</span> Việc thay đổi giá bán cơ bản chỉ áp dụng cho các đơn hàng tương lai, hoàn toàn không làm thay đổi giá trên các đơn hàng lịch sử của khách hàng.
         </div>
 
         {/* Tên & Giá */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">
-              Tên sản phẩm <span className="text-red-500">*</span>
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+              Tên sản phẩm <span className="text-red-600">*</span>
             </label>
             <input
               type="text"
               required
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
           </div>
           <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">
-              Giá bán cơ bản (VNĐ) <span className="text-red-500">*</span>
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+              Giá bán cơ bản (VNĐ) <span className="text-red-600">*</span>
             </label>
             <input
               type="number"
@@ -273,51 +277,55 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
               required
               value={basePrice}
               onChange={(e) => setBasePrice(e.target.value)}
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-black text-primary-ink tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
           </div>
         </div>
 
         {/* Mô tả */}
         <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">Mô tả sản phẩm</label>
+          <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+            Mô tả sản phẩm
+          </label>
           <textarea
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+            className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-medium text-black focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
           />
         </div>
 
         {/* Thumbnail & Gallery */}
-        <div className="space-y-4 rounded-xl border border-[#d8e6dc] bg-[#f9fdfa] p-4">
-          <div className="flex items-center justify-between border-b border-[#e5efe7] pb-2">
-            <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#1f432b]">
-              <ImageIcon size={15} /> Hình ảnh sản phẩm (Thumbnail & Thư viện ảnh)
+        <div className="space-y-4 border-2 border-black bg-white p-4 shadow-[2px_2px_0_0_#000]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2">
+            <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+              <ImageIcon size={15} className="text-primary-ink" aria-hidden="true" /> Hình ảnh sản phẩm (Thumbnail &amp; Thư viện ảnh)
             </h4>
-            <span className="text-[11px] text-[#558363]">Hỗ trợ PNG, JPG, WEBP, GIF</span>
+            <span className="border border-black bg-gray-100 px-2 py-0.5 text-[10px] font-black uppercase text-black">
+              PNG, JPG, WEBP, GIF
+            </span>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* THUMBNAIL */}
-            <div className="flex flex-col gap-2 rounded-lg border border-[#e0ede3] bg-white p-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#1f432b]">
+            <div className="flex flex-col gap-2.5 border-2 border-black bg-gray-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-black uppercase tracking-wide text-black">
                   Ảnh đại diện (Thumbnail)
                 </label>
                 <button
                   type="button"
                   disabled={isUploadingThumbnail}
                   onClick={() => thumbnailInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
+                  className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1! text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
                 >
                   {isUploadingThumbnail ? (
                     <>
-                      <Loader2 size={12} className="animate-spin" /> Đang tải...
+                      <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Đang tải...
                     </>
                   ) : (
                     <>
-                      <Upload size={12} /> Chọn ảnh từ máy
+                      <Upload size={12} aria-hidden="true" /> Chọn ảnh từ máy
                     </>
                   )}
                 </button>
@@ -332,22 +340,23 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
 
               {/* Preview Thumbnail */}
               {(thumbnailPreviewUrl || thumbnailUrl) && (
-                <div className="relative mt-1 flex items-center gap-3 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] p-2">
-                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-[#cbe4d2] bg-white">
+                <div className="relative mt-1 flex items-center gap-3 border-2 border-black bg-white p-2">
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden border-2 border-black bg-gray-50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={thumbnailPreviewUrl || thumbnailUrl}
                       alt="Thumbnail Preview"
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain [image-rendering:pixelated]"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = "none";
                       }}
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium text-[#1f432b]">
+                    <p className="truncate text-xs font-bold text-black">
                       {thumbnailUrl || "Ảnh đã tải lên"}
                     </p>
-                    <p className="text-[11px] text-text-muted">
+                    <p className="text-[11px] font-medium text-text-muted">
                       Đã gán làm ảnh đại diện sản phẩm
                     </p>
                   </div>
@@ -358,15 +367,16 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
                       setThumbnailPreviewUrl("");
                     }}
                     title="Xóa ảnh này"
-                    className="rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-500"
+                    aria-label="Xóa ảnh đại diện"
+                    className="btn-secondary p-1! shadow-[1px_1px_0_0_#000]"
                   >
-                    <X size={15} />
+                    <X size={14} aria-hidden="true" />
                   </button>
                 </div>
               )}
 
               <div>
-                <span className="text-[11px] text-text-muted">Hoặc nhập trực tiếp URL ảnh:</span>
+                <span className="text-[11px] font-bold text-text-muted">Hoặc nhập trực tiếp URL ảnh:</span>
                 <input
                   type="text"
                   value={thumbnailUrl}
@@ -375,30 +385,30 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
                     setThumbnailPreviewUrl(e.target.value);
                   }}
                   placeholder="https://cdn.lumintra.com/products/matrix.png"
-                  className="mt-1 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  className="mt-1 w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
                 />
               </div>
             </div>
 
             {/* GALLERY */}
-            <div className="flex flex-col gap-2 rounded-lg border border-[#e0ede3] bg-white p-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#1f432b]">
+            <div className="flex flex-col gap-2.5 border-2 border-black bg-gray-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-black uppercase tracking-wide text-black">
                   Thư viện ảnh (Gallery)
                 </label>
                 <button
                   type="button"
                   disabled={isUploadingGallery}
                   onClick={() => galleryInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
+                  className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1! text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
                 >
                   {isUploadingGallery ? (
                     <>
-                      <Loader2 size={12} className="animate-spin" /> Đang tải...
+                      <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Đang tải...
                     </>
                   ) : (
                     <>
-                      <Upload size={12} /> Tải nhiều ảnh từ máy
+                      <Upload size={12} aria-hidden="true" /> Tải nhiều ảnh từ máy
                     </>
                   )}
                 </button>
@@ -420,16 +430,17 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
                   .filter((u) => u.length > 0);
                 if (galleryList.length === 0) return null;
                 return (
-                  <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] p-2">
+                  <div className="mt-1 flex flex-wrap gap-2 border-2 border-black bg-white p-2">
                     {galleryList.map((url, idx) => (
                       <div
                         key={idx}
-                        className="group relative h-14 w-14 overflow-hidden rounded-md border border-[#cbe4d2] bg-white shadow-xs"
+                        className="group relative h-14 w-14 overflow-hidden border-2 border-black bg-gray-50"
                       >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={url}
                           alt={`Gallery ${idx + 1}`}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain [image-rendering:pixelated]"
                           onError={(e) => {
                             (e.target as HTMLElement).style.display = "none";
                           }}
@@ -437,10 +448,11 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
                         <button
                           type="button"
                           onClick={() => handleRemoveGalleryUrl(idx)}
-                          className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white transition hover:bg-red-600"
+                          className="absolute right-0.5 top-0.5 border border-black bg-black/80 p-0.5 text-white transition hover:bg-red-600"
                           title="Xóa ảnh"
+                          aria-label={`Xóa ảnh thư viện ${idx + 1}`}
                         >
-                          <X size={11} />
+                          <X size={11} aria-hidden="true" />
                         </button>
                       </div>
                     ))}
@@ -449,13 +461,13 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
               })()}
 
               <div>
-                <span className="text-[11px] text-text-muted">Hoặc dán danh sách URL (mỗi dòng 1 link):</span>
+                <span className="text-[11px] font-bold text-text-muted">Hoặc dán danh sách URL (mỗi dòng 1 link):</span>
                 <textarea
                   rows={2}
                   value={galleryUrlsText}
                   onChange={(e) => setGalleryUrlsText(e.target.value)}
                   placeholder="https://.../img1.png&#10;https://.../img2.png"
-                  className="mt-1 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+                  className="mt-1 w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
                 />
               </div>
             </div>
@@ -471,6 +483,6 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
           onTagCreated={handleTagCreated}
         />
       </form>
-    </Modal>
+    </StoreModal>
   );
 }

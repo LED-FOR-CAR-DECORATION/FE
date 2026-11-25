@@ -65,7 +65,7 @@ export const menuItems: MenuItem[] = [
     description: "Duyệt yêu cầu, báo giá và phân công nhà thiết kế",
     href: "/staff/commission",
     icon: ClipboardList,
-    roles: ["STAFF", "MANAGER", "ADMIN"],
+    roles: ["STAFF", "ADMIN"],
   },
   {
     label: "Tin nhắn khách hàng",
@@ -115,7 +115,7 @@ export const menuItems: MenuItem[] = [
     description: "Xem danh sách tài khoản nội bộ",
     href: "/admin/users",
     icon: Users,
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN"],
   },
   {
     label: "Quản lý firmware",

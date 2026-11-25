@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   Check,
+  Crown,
   Image as ImageIcon,
   Infinity as InfinityIcon,
   Loader2,
@@ -11,7 +12,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import StoreModal from "./StoreModal";
 import { fetchStoreProductDetail } from "@/lib/api/products";
 import { uploadMediaFile } from "@/lib/api/media";
 import {
@@ -43,6 +44,9 @@ export default function EditSubscriptionModal({
   const [allAccessCharacters, setAllAccessCharacters] = useState(
     Boolean(plan.allAccessCharacters),
   );
+  const [maxCommissionRevisions, setMaxCommissionRevisions] = useState(
+    String(plan.maxCommissionRevisions ?? 0),
+  );
 
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(true);
@@ -60,6 +64,9 @@ export default function EditSubscriptionModal({
         const thumb = detail.previewUrl ?? "";
         setThumbnailUrl(thumb);
         setThumbnailPreviewUrl(thumb);
+        if (detail.subscriptionDetails?.maxCommissionRevisions != null && plan.maxCommissionRevisions == null) {
+          setMaxCommissionRevisions(String(detail.subscriptionDetails.maxCommissionRevisions));
+        }
       })
       .catch(() => { })
       .finally(() => {
@@ -121,6 +128,17 @@ export default function EditSubscriptionModal({
       }
     }
 
+    const parsedBonusRevisions =
+      maxCommissionRevisions.trim() === "" ? 0 : Number(maxCommissionRevisions);
+    if (
+      !Number.isInteger(parsedBonusRevisions) ||
+      parsedBonusRevisions < 0 ||
+      parsedBonusRevisions > 100
+    ) {
+      setError("Số lượt chỉnh sửa Commission cộng thêm phải là số nguyên từ 0 đến 100.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const updated = await apiUpdateSubscription(plan.subscriptionDetailId, {
@@ -130,6 +148,7 @@ export default function EditSubscriptionModal({
         thumbnailUrl: trimmedThumb || undefined,
         durationDays: parsedDuration,
         allAccessCharacters,
+        maxCommissionRevisions: parsedBonusRevisions,
       });
       onSuccess(updated);
     } catch (err) {
@@ -140,9 +159,13 @@ export default function EditSubscriptionModal({
   };
 
   return (
-    <Modal
+    <StoreModal
       onClose={onClose}
       title={`Cập nhật gói hội viên: ${plan.planCode}`}
+      badge="GÓI HỘI VIÊN"
+      icon={<Crown size={18} />}
+      iconBoxClassName="bg-[#e9d5ff]"
+      busy={isSubmitting}
       size="lg"
       footer={
         <>
@@ -150,7 +173,7 @@ export default function EditSubscriptionModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             Hủy
           </button>
@@ -158,15 +181,15 @@ export default function EditSubscriptionModal({
             type="submit"
             form="edit-subscription-form"
             disabled={isSubmitting || isUploadingThumbnail}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#2d6a4f] px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-[#1f432b] disabled:opacity-50"
+            className="btn-primary inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             {isSubmitting ? (
               <>
-                <Loader2 size={15} className="animate-spin" /> Đang lưu...
+                <Loader2 size={15} className="animate-spin" aria-hidden="true" /> Đang lưu...
               </>
             ) : (
               <>
-                <Check size={15} /> Lưu thay đổi
+                <Check size={15} aria-hidden="true" /> Lưu thay đổi
               </>
             )}
           </button>
@@ -175,36 +198,39 @@ export default function EditSubscriptionModal({
     >
       <form id="edit-subscription-form" onSubmit={handleSubmit} className="space-y-4 text-sm">
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-            <AlertCircle size={15} className="mt-0.5 shrink-0" />
+          <div
+            role="alert"
+            className="flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+          >
+            <AlertCircle size={15} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Thông tin cố định */}
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#d8e6dc] bg-[#f6fbf7] p-3 text-xs">
-          <span className="font-semibold text-[#1f432b]">Mã gói:</span>
-          <span className="rounded bg-[#1f432b] px-2 py-0.5 font-mono font-bold text-white">
+        <div className="flex flex-wrap items-center gap-2 border-2 border-black bg-gray-50 p-3 text-xs">
+          <span className="font-black uppercase text-black">Mã gói:</span>
+          <span className="border border-black bg-black px-2 py-0.5 font-mono text-[11px] font-black text-white">
             {plan.planCode}
           </span>
-          <span className="ml-2 font-semibold text-[#1f432b]">Loại gói:</span>
+          <span className="ml-2 font-black uppercase text-black">Loại gói:</span>
           {plan.isLifetime ? (
-            <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 font-bold text-purple-800">
-              <InfinityIcon size={12} /> Vĩnh viễn (Lifetime)
+            <span className="inline-flex items-center gap-1 border border-black bg-[#e9d5ff] px-2 py-0.5 text-[10px] font-black uppercase text-black shadow-[1px_1px_0_0_#000]">
+              <InfinityIcon size={12} aria-hidden="true" /> Vĩnh viễn (Lifetime)
             </span>
           ) : (
-            <span className="rounded bg-sky-100 px-2 py-0.5 font-bold text-sky-800">
+            <span className="border border-black bg-[#bae6fd] px-2 py-0.5 text-[10px] font-black uppercase text-black shadow-[1px_1px_0_0_#000]">
               Có thời hạn (Theo ngày)
             </span>
           )}
-          <span className="text-[11px] text-text-muted">(Không thể thay đổi planCode / loại gói)</span>
+          <span className="text-[11px] font-medium text-text-muted">(Không thể thay đổi planCode / loại gói)</span>
         </div>
 
         {/* Tên gói & Giá bán */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">
-              Tên gói hội viên <span className="text-red-500">*</span>
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+              Tên gói hội viên <span className="text-red-600">*</span>
             </label>
             <input
               type="text"
@@ -212,12 +238,12 @@ export default function EditSubscriptionModal({
               maxLength={255}
               value={planName}
               onChange={(e) => setPlanName(e.target.value)}
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
           </div>
           <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">
-              Giá bán (VNĐ) <span className="text-red-500">*</span>
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+              Giá bán (VNĐ) <span className="text-red-600">*</span>
             </label>
             <input
               type="number"
@@ -225,7 +251,7 @@ export default function EditSubscriptionModal({
               required
               value={basePrice}
               onChange={(e) => setBasePrice(e.target.value)}
-              className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-black text-primary-ink tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
           </div>
         </div>
@@ -233,11 +259,11 @@ export default function EditSubscriptionModal({
         {/* Thời hạn & Quyền lợi */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block font-bold text-[#1f432b]">
-              Số ngày hiệu lực {!plan.isLifetime && <span className="text-red-500">*</span>}
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+              Số ngày hiệu lực {!plan.isLifetime && <span className="text-red-600">*</span>}
             </label>
             {plan.isLifetime ? (
-              <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-500">
+              <div className="border-2 border-black bg-gray-100 px-3 py-2 text-xs font-bold text-text-muted">
                 Gói vĩnh viễn
               </div>
             ) : (
@@ -247,61 +273,80 @@ export default function EditSubscriptionModal({
                 required
                 value={durationDays}
                 onChange={(e) => setDurationDays(e.target.value)}
-                className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
               />
             )}
           </div>
 
           <div className="flex flex-col justify-end">
-            <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[#d8e6dc] bg-[#f9fdfa] px-3 py-2">
+            <label className="flex cursor-pointer items-center gap-2.5 border-2 border-black bg-primary/15 px-3 py-2">
               <input
                 type="checkbox"
                 checked={allAccessCharacters}
                 onChange={(e) => setAllAccessCharacters(e.target.checked)}
-                className="h-4 w-4 accent-[#2d6a4f]"
+                className="h-4 w-4 accent-[#1f432b]"
               />
               <div>
-                <p className="flex items-center gap-1 text-xs font-bold text-[#1f432b]">
-                  <Sparkles size={13} className="text-[#2d6a4f]" /> Mở khóa toàn bộ Character
+                <p className="flex items-center gap-1 text-xs font-black uppercase text-black">
+                  <Sparkles size={13} className="text-primary-ink" aria-hidden="true" /> Mở khóa toàn bộ Character
                 </p>
-                <p className="text-[11px] text-text-muted">allAccessCharacters</p>
+                <p className="text-[11px] font-medium text-text-muted">allAccessCharacters</p>
               </div>
             </label>
           </div>
         </div>
 
+        {/* Lượt sửa Commission miễn phí cộng thêm */}
+        <div>
+          <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+            Lượt sửa Commission miễn phí cộng thêm (+N)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            value={maxCommissionRevisions}
+            onChange={(e) => setMaxCommissionRevisions(e.target.value)}
+            className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black sm:w-56"
+          />
+          <p className="mt-1 text-[11px] font-medium text-text-muted">
+            Tổng số lượt miễn phí cộng vào ví dùng chung cho mọi đơn Commission (nhập 0 nếu không áp dụng).
+          </p>
+        </div>
+
         {/* Mô tả */}
         <div>
-          <label className="mb-1 block font-bold text-[#1f432b]">
-            Mô tả gói {isLoadingDetail && <span className="text-xs font-normal text-text-muted">(Đang tải...)</span>}
+          <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+            Mô tả gói {isLoadingDetail && <span className="text-xs font-medium normal-case text-text-muted">(Đang tải...)</span>}
           </label>
           <textarea
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 outline-none focus:border-[#439660]"
+            className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-medium text-black focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
           />
         </div>
 
         {/* Thumbnail Upload */}
-        <div className="rounded-xl border border-[#d8e6dc] bg-[#f9fdfa] p-3">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-[#1f432b]">
-              <ImageIcon size={14} /> Ảnh đại diện gói (Thumbnail)
+        <div className="border-2 border-black bg-gray-50 p-3.5 shadow-[2px_2px_0_0_#000]">
+          <div className="flex items-center justify-between gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-black">
+              <ImageIcon size={14} className="text-primary-ink" aria-hidden="true" /> Ảnh đại diện gói (Thumbnail)
             </label>
             <button
               type="button"
               disabled={isUploadingThumbnail}
               onClick={() => thumbnailInputRef.current?.click()}
-              className="inline-flex items-center gap-1 rounded-md bg-[#2d6a4f] px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-[#1f432b] disabled:opacity-50"
+              className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1! text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
             >
               {isUploadingThumbnail ? (
                 <>
-                  <Loader2 size={12} className="animate-spin" /> Đang tải...
+                  <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Đang tải...
                 </>
               ) : (
                 <>
-                  <Upload size={12} /> Chọn ảnh từ máy
+                  <Upload size={12} aria-hidden="true" /> Chọn ảnh từ máy
                 </>
               )}
             </button>
@@ -315,22 +360,24 @@ export default function EditSubscriptionModal({
           </div>
 
           {(thumbnailPreviewUrl || thumbnailUrl) && (
-            <div className="mt-2 flex items-center gap-3 rounded-lg border border-[#d8e6dc] bg-white p-2">
+            <div className="mt-2.5 flex items-center gap-3 border-2 border-black bg-white p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={thumbnailPreviewUrl || thumbnailUrl}
                 alt="Thumbnail preview"
-                className="h-12 w-12 rounded-md border border-[#cbe4d2] object-cover"
+                className="h-12 w-12 shrink-0 border-2 border-black bg-gray-50 object-contain [image-rendering:pixelated]"
               />
-              <p className="min-w-0 flex-1 truncate text-xs text-[#1f432b]">{thumbnailUrl}</p>
+              <p className="min-w-0 flex-1 truncate text-xs font-bold text-black">{thumbnailUrl}</p>
               <button
                 type="button"
                 onClick={() => {
                   setThumbnailUrl("");
                   setThumbnailPreviewUrl("");
                 }}
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-red-500"
+                aria-label="Xóa ảnh đại diện"
+                className="btn-secondary p-1! shadow-[1px_1px_0_0_#000]"
               >
-                <X size={14} />
+                <X size={14} aria-hidden="true" />
               </button>
             </div>
           )}
@@ -343,10 +390,10 @@ export default function EditSubscriptionModal({
               setThumbnailPreviewUrl(e.target.value);
             }}
             placeholder="https://cdn.lumintra.shop/..."
-            className="mt-2 w-full rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660]"
+            className="mt-2.5 w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
           />
         </div>
       </form>
-    </Modal>
+    </StoreModal>
   );
 }

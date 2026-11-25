@@ -27,7 +27,7 @@ const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} VNĐ`;
 export default function SubscriptionsStorePage() {
   const router = useRouter();
   const { items: cartItems, addItem } = useCart();
-  const { activeSubscription } = useGallery();
+  const { activeSubscriptions, hasAllAccessCharacters, extraCommissionRevisions } = useGallery();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [plans, setPlans] = useState<CatalogProduct[]>([]);
@@ -108,30 +108,49 @@ export default function SubscriptionsStorePage() {
             </p>
           </div>
 
-          {activeSubscription && (
+          {activeSubscriptions.length > 0 && (
             <div className="mx-auto mb-6 flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-[#155e59] bg-[#e3f5e9] p-4 text-sm text-[#155e59]">
               <div className="flex items-start gap-2.5">
                 <Crown size={18} className="mt-0.5 shrink-0" />
                 <div>
                   <p className="font-black">
-                    Bạn đang kích hoạt gói:{" "}
-                    {activeSubscription.planName || activeSubscription.planCode || "Hội viên VIP"}
+                    Gói hội viên đang kích hoạt:{" "}
+                    {activeSubscriptions
+                      .map((sub) => sub.planName || sub.planCode || "Hội viên VIP")
+                      .join(" · ")}
                   </p>
                   <p className="text-xs font-medium text-[#2d6a4f]">
-                    {activeSubscription.allAccessCharacters
-                      ? "Toàn bộ nhân vật trên cửa hàng đã được mở khóa trong Thư viện nhân vật của bạn."
-                      : "Gói hội viên hiện tại đang có hiệu lực."}
+                    {[
+                      hasAllAccessCharacters
+                        ? "Mở khóa toàn bộ thư viện nhân vật"
+                        : null,
+                      extraCommissionRevisions > 0
+                        ? `Còn ${extraCommissionRevisions} lượt chỉnh sửa thiết kế miễn phí`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" • ") || "Gói hội viên hiện tại đang có hiệu lực."}
                   </p>
                 </div>
               </div>
-              {activeSubscription.allAccessCharacters && (
-                <Link
-                  href="/profile/gallery"
-                  className="btn-primary px-4 py-2 text-xs font-black uppercase"
-                >
-                  Mở thư viện nhân vật
-                </Link>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {hasAllAccessCharacters && (
+                  <Link
+                    href="/profile/gallery"
+                    className="btn-primary px-4 py-2 text-xs font-black uppercase"
+                  >
+                    Mở thư viện nhân vật
+                  </Link>
+                )}
+                {extraCommissionRevisions > 0 && (
+                  <Link
+                    href="/commission"
+                    className="rounded-lg border-2 border-[#155e59] bg-white px-4 py-2 text-xs font-black uppercase text-[#155e59] hover:bg-[#f4fbf6]"
+                  >
+                    Đặt Commission ngay
+                  </Link>
+                )}
+              </div>
             </div>
           )}
 
@@ -168,44 +187,52 @@ export default function SubscriptionsStorePage() {
                 const sub = plan.subscriptionDetails;
                 const isLifetime = Boolean(sub?.isLifetime);
                 const durationDays = sub?.durationDays;
-                const allAccess = Boolean(sub?.allAccessCharacters ?? true);
+                const allAccess = Boolean(sub?.allAccessCharacters);
+                const bonusRevisions = Number(sub?.maxCommissionRevisions ?? 0);
                 const isBusy = busyId === plan.id;
                 const isAdded = addedId === plan.id;
                 const inCart = cartItems.some(
                   (c) => c.productId === Number(plan.id) || String(c.id) === String(plan.id),
                 );
-                const isCurrentActivePlan =
-                  activeSubscription != null &&
-                  (activeSubscription.productId === Number(plan.id) ||
-                    (sub?.planCode != null && activeSubscription.planCode === sub.planCode));
-                const hasAnyActivePlan = activeSubscription != null;
+                const isCurrentActivePlan = activeSubscriptions.some(
+                  (active) =>
+                    active.productId === Number(plan.id) ||
+                    (sub?.planCode != null && active.planCode === sub.planCode),
+                );
+                const isCommissionRevisionPack = !allAccess && bonusRevisions > 0;
+                const disableBuy =
+                  isBusy || inCart || (isCurrentActivePlan && !isCommissionRevisionPack);
 
                 return (
                   <article
                     key={plan.id}
                     className={`neo-box flex flex-col justify-between bg-white p-6 transition-transform hover:-translate-y-1 ${
-                      isLifetime ? "ring-2 ring-[#155e59]" : ""
+                      allAccess ? "ring-2 ring-[#155e59]" : ""
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-black uppercase ${
-                            isLifetime
-                              ? "bg-[#155e59] text-white"
-                              : "bg-[#e3f5e9] text-[#155e59]"
-                          }`}
-                        >
-                          {isLifetime ? (
-                            <>
-                              <InfinityIcon size={13} /> Trọn đời
-                            </>
-                          ) : (
-                            <>
-                              <Clock size={13} /> {durationDays ?? 30} ngày
-                            </>
-                          )}
-                        </span>
+                      <div className="flex min-h-[26px] items-center justify-between gap-2">
+                        {!isCommissionRevisionPack ? (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-black uppercase ${
+                              isLifetime
+                                ? "bg-[#155e59] text-white"
+                                : "bg-[#e3f5e9] text-[#155e59]"
+                            }`}
+                          >
+                            {isLifetime ? (
+                              <>
+                                <InfinityIcon size={13} /> Trọn đời
+                              </>
+                            ) : (
+                              <>
+                                <Clock size={13} /> {durationDays ?? 30} ngày
+                              </>
+                            )}
+                          </span>
+                        ) : (
+                          <span />
+                        )}
                         {sub?.planCode && (
                           <span className="font-mono text-xs font-bold text-[#66736b]">
                             {sub.planCode}
@@ -231,70 +258,58 @@ export default function SubscriptionsStorePage() {
                         <strong className="text-3xl font-black text-[#1f432b]">
                           {formatPrice(plan.price)}
                         </strong>
-                        <span className="text-xs font-semibold text-text-muted">
-                          {isLifetime ? "/ vĩnh viễn" : `/ ${durationDays ?? 30} ngày`}
-                        </span>
+                        {!isCommissionRevisionPack && (
+                          <span className="text-xs font-semibold text-text-muted">
+                            {isLifetime ? "/ vĩnh viễn" : `/ ${durationDays ?? 30} ngày`}
+                          </span>
+                        )}
                       </div>
 
-                      <p className="mt-3 min-h-[40px] text-sm text-text-muted">
-                        {plan.description ||
-                          "Truy cập và tải xuống các nhân vật Pixel Art bản quyền cho thiết bị LED."}
-                      </p>
-
                       <ul className="mt-5 space-y-2.5 border-t border-[#e5efe7] pt-4 text-sm text-[#26352f]">
-                        {allAccess && (
+                        {allAccess ? (
                           <li className="flex items-start gap-2">
                             <Sparkles size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />
                             <span className="font-semibold">
-                              Mở khóa toàn bộ thư viện Character Pixel Art
+                              Mở khóa toàn bộ thư viện nhân vật
                             </span>
                           </li>
-                        )}
-                        <li className="flex items-start gap-2">
-                          <Check size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />
-                          <span>Đồng bộ không giới hạn lên thiết bị LED Lumintra</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <Check size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />
-                          <span>
-                            {isLifetime
-                              ? "Thanh toán 1 lần, sở hữu quyền lợi vĩnh viễn"
-                              : `Hiệu lực ngay sau khi thanh toán trong ${durationDays ?? 30} ngày`}
-                          </span>
-                        </li>
+                        ) : bonusRevisions > 0 ? (
+                          <li className="flex items-start gap-2">
+                            <Sparkles size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />
+                            <span className="font-semibold">
+                              +{bonusRevisions} lượt chỉnh sửa thiết kế miễn phí
+                            </span>
+                          </li>
+                        ) : null}
                       </ul>
                     </div>
 
                     <div className="mt-6 space-y-2.5 pt-2">
-                      {hasAnyActivePlan && (
+                      {isCurrentActivePlan && !isCommissionRevisionPack && (
                         <Link
-                          href={activeSubscription?.allAccessCharacters ? "/profile/gallery" : `/products/${plan.id}`}
-                          className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 border-black py-2.5 text-sm font-black ${
-                            isCurrentActivePlan
-                              ? "bg-[#e3f5e9] text-[#155e59]"
-                              : "bg-gray-100 text-gray-600"
-                          }`}
+                          href={allAccess ? "/profile/gallery" : "/commission"}
+                          className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-black bg-[#e3f5e9] py-2.5 text-sm font-black text-[#155e59]"
                         >
                           <Check size={16} />
-                          {isCurrentActivePlan ? "Đang sử dụng gói này" : "Tài khoản đã có gói hội viên"}
+                          Đang sử dụng gói này
                         </Link>
                       )}
 
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          disabled={isBusy || inCart || hasAnyActivePlan}
+                          disabled={disableBuy}
                           onClick={() => handleAddToCart(plan)}
                           className="btn-secondary flex items-center justify-center gap-1.5 py-2 text-xs font-bold disabled:opacity-60"
                         >
                           <ShoppingBag size={14} />
-                          {hasAnyActivePlan
-                            ? isCurrentActivePlan
-                              ? "Đã kích hoạt"
-                              : "Đã có gói"
+                          {isCurrentActivePlan && !isCommissionRevisionPack
+                            ? "Đã kích hoạt"
                             : inCart || isAdded
                               ? "Đã trong giỏ"
-                              : "Thêm vào giỏ"}
+                              : isCurrentActivePlan && isCommissionRevisionPack
+                                ? "Mua thêm lượt"
+                                : "Thêm vào giỏ"}
                         </button>
                         <Link
                           href={`/products/${plan.id}`}

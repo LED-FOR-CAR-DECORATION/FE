@@ -61,16 +61,6 @@ const mockAuthService = {
       throw new MockAuthError("Không tìm thấy tài khoản với email này.");
     }
   },
-  async verifyCurrentPassword(email: string, password: string): Promise<void> {
-    await wait(500);
-    const account = DEMO_ACCOUNTS.find(
-      (item) => item.email === email.trim().toLowerCase() && item.password === password,
-    );
-    if (!account) throw new MockAuthError("Mật khẩu hiện tại không đúng.");
-  },
-  async sendPasswordOtp(email: string): Promise<void> {
-    await this.requestPasswordReset(email);
-  },
   async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
     await wait(500);
     if (otp !== "123456") throw new MockAuthError("Mã OTP không đúng hoặc đã hết hạn.");
@@ -89,9 +79,6 @@ async function withFriendlyError<T>(call: () => Promise<T>, fallback?: string): 
     throw new Error(getApiErrorMessage(error, fallback));
   }
 }
-
-const notSupported = (feature: string) =>
-  Promise.reject(new Error(`Chức năng "${feature}" chưa có API ở backend.`));
 
 const VALID_ROLES: readonly UserRole[] = ["ADMIN", "MANAGER", "STAFF", "DESIGNER", "CUSTOMER"] as const;
 
@@ -175,20 +162,11 @@ const realAuthService = {
     );
   },
   async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
-    try {
-      await withFriendlyError(
-        () => apiResetPassword(email.trim().toLowerCase(), otp.trim(), newPassword),
-        "Không thể đổi mật khẩu."
-      );
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("404")) {
-        throw new Error("Backend hiện chưa hỗ trợ API đổi mật khẩu (Issue #8). Mã OTP đã được gửi về email của bạn!");
-      }
-      throw error;
-    }
+    await withFriendlyError(
+      () => apiResetPassword(email.trim().toLowerCase(), otp.trim(), newPassword),
+      "Không thể đổi mật khẩu.",
+    );
   },
-  verifyCurrentPassword: (_email: string, _password: string): Promise<void> => notSupported("Đổi mật khẩu"),
-  sendPasswordOtp: (_email: string): Promise<void> => notSupported("Đổi mật khẩu"),
 };
 
 export const authService = USE_MOCK_AUTH ? mockAuthService : realAuthService;

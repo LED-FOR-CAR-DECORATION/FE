@@ -629,10 +629,15 @@ export default function PixelArtStudio({
     [syncHistoryCounts, applyTimelineState],
   );
 
-  // Restore local draft if available; otherwise load committed version frames/GIF onto Canvas
+  // Restore local draft if available for this exact base version; otherwise fetch committed version from BE
   useEffect(() => {
     const draftKeyId = propCharacterId ?? null;
-    const savedDraft = skipDraftOnLoadRef.current ? null : loadStudioDraft(draftKeyId);
+    const rawDraft = skipDraftOnLoadRef.current ? null : loadStudioDraft(draftKeyId);
+    const savedDraft =
+      rawDraft &&
+      (rawDraft.baseVersionId ?? null) === (currentVersionId ?? null)
+        ? rawDraft
+        : null;
     skipDraftOnLoadRef.current = false;
 
     const draftFrames = savedDraft?.frames?.length

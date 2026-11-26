@@ -132,6 +132,30 @@ export function hasStudioDraft(characterId?: number | null): boolean {
   );
 }
 
+export function getStudioDraftMeta(characterId?: number | null): {
+  hasDraft: boolean;
+  updatedAt: string | null;
+} {
+  const draft = loadStudioDraft(characterId);
+  if (!draft) return { hasDraft: false, updatedAt: null };
+  const allFrames = draft.frames && draft.frames.length > 0 ? draft.frames : [draft.doc];
+  const hasDraft = allFrames.some(
+    (f) =>
+      f.pixels.some(Boolean) ||
+      f.texts.length > 0 ||
+      Boolean(
+        f.layerContents &&
+          Object.values(f.layerContents).some(
+            (cel) => cel.pixels.some(Boolean) || cel.texts.length > 0,
+          ),
+      ),
+  );
+  return {
+    hasDraft,
+    updatedAt: hasDraft && draft.updatedAt ? draft.updatedAt : null,
+  };
+}
+
 export function saveStudioDraft(
   characterId: number | null | undefined,
   payload: Omit<StudioDraftPayload, "previewDataUrl" | "updatedAt"> & {

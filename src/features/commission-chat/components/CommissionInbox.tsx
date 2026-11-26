@@ -35,14 +35,10 @@ export interface InboxFilter { key: string; label: string; statuses?: string[] }
 const PREVIEW_CONCURRENCY = 6;
 const PREVIEW_REFRESH_MS = 30_000;
 
-/** Bộ lọc mặc định của staff — theo giai đoạn của commission. */
+/** Bộ lọc mặc định của staff: giữ Tất cả và Chưa đọc (bỏ lọc theo status). */
 export const STAFF_FILTERS: InboxFilter[] = [
   { key: "all", label: "Tất cả" },
   { key: "unread", label: "Chưa đọc" },
-  { key: "review", label: "Chờ duyệt bản nháp", statuses: ["INTERNAL_REVIEW"] },
-  { key: "design", label: "Đang thiết kế", statuses: ["PAID", "IN_PROGRESS", "INTERNAL_REVISION_REQUIRED", "AWAITING_ESTIMATE"] },
-  { key: "customer", label: "Chờ khách", statuses: ["PREVIEW_DELIVERED", "AWAITING_EXTRA_PAYMENT"] },
-  { key: "done", label: "Hoàn thành", statuses: ["COMPLETED"] },
 ];
 
 function readSeen(prefix: string, commissionId: number) {

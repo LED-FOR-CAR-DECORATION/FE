@@ -58,6 +58,8 @@ export interface PendingMessage {
 const STATUS_POLL_MS = 4000;
 const FALLBACK_POLL_MS = 15000;
 const MAX_STOMP_ERRORS = 3;
+/** Lỗi quyền (SUBSCRIBE bị từ chối) — refresh token rồi thử lại cũng vô ích, dừng realtime và dùng poll dự phòng. */
+const STOMP_ACCESS_DENIED = /AccessDenied|not authorized|do not own|Unsupported subscription|chat room not found/i;
 
 async function fetchInfo(commissionId: number, viewer: ChatViewer): Promise<CommissionRoomInfo> {
   if (viewer === "CUSTOMER") {
@@ -170,7 +172,8 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
     try {
       const { data } = await listCommissionMessages(commissionId);
       const list = data ?? [];
-      const hasNewStateCard = list.some(
+      // Lần tải đầu (chưa biết tin nào) thì effect thông tin đã tải rồi, không coi mọi thẻ là "mới".
+      const hasNewStateCard = knownIds.current.size > 0 && list.some(
         (m) =>
           !knownIds.current.has(m.messageId) &&
           m.messageType !== "TEXT" &&
@@ -219,14 +222,18 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
       destination: `/topic/commissions/${commissionId}`,
       getToken: getSessionToken,
       onStatusChange: setRealtime,
-      onConnected: () => {
-        errors = 0;
+      onConnected: (isReconnect) => {
+        // Lần đầu: lịch sử & thông tin vừa được tải bằng REST ở các effect trên → không tải lại.
+        if (!isReconnect) return;
         void loadHistory(); // bù các tin bị lỡ trong lúc mất kết nối
         void loadInfo();
       },
-      onError: async () => {
+      onStable: () => {
+        errors = 0;
+      },
+      onError: async (message) => {
         errors += 1;
-        if (errors >= MAX_STOMP_ERRORS) return false;
+        if (errors >= MAX_STOMP_ERRORS || STOMP_ACCESS_DENIED.test(message)) return false;
         try {
           return Boolean(await refreshAccessToken());
         } catch {

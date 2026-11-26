@@ -33,7 +33,7 @@ interface Conversation {
 export interface InboxFilter { key: string; label: string; statuses?: string[] }
 
 const PREVIEW_CONCURRENCY = 6;
-const PREVIEW_REFRESH_MS = 30_000;
+const PREVIEW_REFRESH_MS = 60_000;
 
 /** Bộ lọc mặc định của staff: giữ Tất cả và Chưa đọc (bỏ lọc theo status). */
 export const STAFF_FILTERS: InboxFilter[] = [
@@ -118,6 +118,10 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
   const [revision, setRevision] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const itemsRef = useRef<InboxItem[]>([]);
+  const selectedIdRef = useRef(selectedId);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   const select = useCallback((commissionId?: number) => {
     router.replace(commissionId ? `${pathname}?commissionId=${commissionId}` : pathname, { scroll: false });
@@ -148,7 +152,9 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
   useEffect(() => {
     const timer = setInterval(async () => {
       if (document.visibilityState !== "visible" || itemsRef.current.length === 0) return;
-      const items = itemsRef.current;
+      // Hội thoại đang mở đã có tin realtime từ phòng chat (onLastMessage) → không tải lại toàn bộ lịch sử của nó.
+      const items = itemsRef.current.filter((item) => item.commissionId !== selectedIdRef.current);
+      if (items.length === 0) return;
       const lasts = await mapLimited(items, PREVIEW_CONCURRENCY, (item) => loadLastMessage(item.commissionId));
       setConversations((current) => current?.map((conversation) => {
         const index = items.findIndex((item) => item.commissionId === conversation.item.commissionId);
@@ -156,6 +162,14 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
       }));
     }, PREVIEW_REFRESH_MS);
     return () => clearInterval(timer);
+  }, []);
+
+  const updateLastMessage = useCallback((message: CommissionMessage) => {
+    setConversations((current) => current?.map((conversation) =>
+      conversation.item.commissionId === message.commissionId && conversation.last?.messageId !== message.messageId
+        ? { ...conversation, last: message }
+        : conversation,
+    ));
   }, []);
 
   // Hội thoại đang mở coi như đã đọc tới tin cuối.
@@ -285,7 +299,7 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
       {/* Phòng chat */}
       <section aria-label="Cuộc trò chuyện" className={`${selectedId ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col bg-white`}>
         {selectedId ? (
-          <CommissionChatRoom key={selectedId} commissionId={selectedId} viewer={viewer} variant="messenger" onBack={() => select(undefined)} />
+          <CommissionChatRoom key={selectedId} commissionId={selectedId} viewer={viewer} variant="messenger" onBack={() => select(undefined)} onLastMessage={updateLastMessage} />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-background p-8 text-center text-text-muted">
             {conversations ? <MessageCircle size={44} className="text-primary-ink" /> : <Loader2 size={28} className="animate-spin text-primary-ink" />}

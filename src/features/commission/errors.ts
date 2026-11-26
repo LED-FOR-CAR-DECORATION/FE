@@ -1,5 +1,13 @@
 import { ApiError } from "@/api_client/core/ApiError";
+import { CancelError } from "@/api_client/core/CancelablePromise";
 import { getApiErrorMessage } from "@/lib/api/auth";
+
+export function isRequestCancelled(failure: unknown): boolean {
+  return (
+    failure instanceof CancelError ||
+    Boolean((failure as { isCancelled?: boolean } | null)?.isCancelled)
+  );
+}
 
 /** Chuyển mã lỗi nghiệp vụ Commission của backend thành câu dễ hiểu; còn lại dùng message backend trả về. */
 export function commissionErrorMessage(failure: unknown, fallback: string) {

@@ -15,10 +15,8 @@ import {
   Edit3,
   ExternalLink,
   Eye,
-  List,
   Loader2,
   Lock,
-  PackageCheck,
   PackagePlus,
   Plus,
   Printer,
@@ -56,7 +54,6 @@ import {
 import LedModelFormModal from "@/features/product/components/LedModelFormModal";
 import DeprecateLedModelModal from "@/features/product/components/DeprecateLedModelModal";
 import StockInLedInstancesModal from "@/features/product/components/StockInLedInstancesModal";
-import { fetchAllPages } from "@/lib/api/paging";
 import { useAdaptiveListRows } from "@/hooks/useAdaptiveListRows";
 import CommissionPagination from "@/features/commission/components/CommissionPagination";
 
@@ -180,10 +177,10 @@ export default function InventoryPage() {
   const { rows: pageSize, ready } = useAdaptiveListRows({
     estimatedRowHeight: 56,
     rowGap: 0,
-    chromeHeight: 556,
+    chromeHeight: 438,
     minRows: 2,
     maxRows: 10,
-    defaultRows: 4,
+    defaultRows: 6,
   });
 
   // Unified Master -> Detail state: null = LED models list, non-null = instances of that LED model
@@ -194,7 +191,7 @@ export default function InventoryPage() {
   const [models, setModels] = useState<ManagedLedModelItem[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({
     page: 0,
-    size: 4,
+    size: 6,
     totalElements: 0,
     totalPages: 1,
     hasNext: false,
@@ -202,15 +199,6 @@ export default function InventoryPage() {
   });
   const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [modelsError, setModelsError] = useState<string | null>(null);
-
-  // Summary metrics across full catalog (up to 100 models)
-  const [summaryStats, setSummaryStats] = useState({
-    totalStock: 0,
-    totalModels: 0,
-    lowStockCount: 0,
-    activeCount: 0,
-    linkedProductCount: 0,
-  });
 
   // Filters
   const [searchInput, setSearchInput] = useState("");
@@ -240,36 +228,6 @@ export default function InventoryPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Load summary metrics
-  useEffect(() => {
-    let cancelled = false;
-    fetchAllPages(async (page) => {
-      const res = await fetchLedModelsPage({ page, size: 100 });
-      return { items: res.items, totalPages: res.meta.totalPages };
-    })
-      .then((list) => {
-        if (cancelled) return;
-        const nonDeprecated = list.filter((m) => m.status !== LedModelItem.status.DEPRECATED);
-        setSummaryStats({
-          totalStock: nonDeprecated.reduce((sum, m) => sum + (m.stockQuantity ?? 0), 0),
-          totalModels: list.length,
-          lowStockCount: nonDeprecated.filter((m) => m.isLowStock).length,
-          activeCount: list.filter((m) => m.status === LedModelItem.status.ACTIVE).length,
-          linkedProductCount: list.filter((m) => m.productId != null).length,
-        });
-        setSelectedModel((prev) => {
-          if (!prev) return null;
-          return list.find((m) => m.modelId === prev.modelId) ?? prev;
-        });
-      })
-      .catch(() => {
-        // Summary stays last known values
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
   // Load paginated models (DEV-01)
   useEffect(() => {
     if (!ready) return;
@@ -293,6 +251,10 @@ export default function InventoryPage() {
         }
         setModels(res.items);
         setMeta(res.meta);
+        setSelectedModel((prev) => {
+          if (!prev) return null;
+          return res.items.find((m) => m.modelId === prev.modelId) ?? prev;
+        });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -424,57 +386,6 @@ export default function InventoryPage() {
             </button>
           </div>
         )}
-
-        {/* KPI Stat Cards */}
-        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard
-            icon={<Boxes size={18} strokeWidth={2.25} aria-hidden="true" />}
-            label="Tổng tồn kho khả dụng"
-            subtitle="Thiết bị sẵn sàng trong kho"
-            value={summaryStats.totalStock}
-            badgeLabel="Khả dụng"
-            badgeClassName="bg-primary text-black"
-            iconBoxClassName="bg-primary"
-            helper="Không tính mẫu đã ngừng kinh doanh"
-          />
-          <SummaryCard
-            icon={<List size={18} strokeWidth={2.25} aria-hidden="true" />}
-            label="Tổng mẫu LED"
-            subtitle="Danh mục phần cứng"
-            value={summaryStats.totalModels}
-            badgeLabel={`${summaryStats.linkedProductCount} gắn Store`}
-            badgeClassName="bg-[#e0f2fe] text-black"
-            iconBoxClassName="bg-[#e0f2fe]"
-            helper={`${summaryStats.linkedProductCount} mẫu đã gắn sản phẩm Cửa hàng`}
-          />
-          <SummaryCard
-            icon={<AlertTriangle size={18} strokeWidth={2.25} aria-hidden="true" />}
-            label="Mẫu LED sắp hết hàng"
-            subtitle="Ngưỡng cảnh báo < 5 chiếc"
-            value={summaryStats.lowStockCount}
-            badgeLabel={summaryStats.lowStockCount > 0 ? "Cần nhập thêm" : "Ổn định"}
-            badgeClassName={
-              summaryStats.lowStockCount > 0
-                ? "bg-[#fef08a] text-black"
-                : "bg-primary text-black"
-            }
-            iconBoxClassName={
-              summaryStats.lowStockCount > 0 ? "bg-[#fef08a]" : "bg-primary/60"
-            }
-            helper="Tồn kho dưới 5 chiếc"
-            tone={summaryStats.lowStockCount > 0 ? "warning" : "default"}
-          />
-          <SummaryCard
-            icon={<PackageCheck size={18} strokeWidth={2.25} aria-hidden="true" />}
-            label="Đang kinh doanh"
-            subtitle="Trạng thái ACTIVE"
-            value={summaryStats.activeCount}
-            badgeLabel="Hoạt động"
-            badgeClassName="bg-primary text-black"
-            iconBoxClassName="bg-primary"
-            helper="Sẵn sàng cấp phát & bày bán"
-          />
-        </div>
 
         {/* Main Workspace Card */}
         <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -1942,74 +1853,6 @@ function InfoField({
       >
         {value}
       </p>
-    </div>
-  );
-}
-
-function SummaryCard({
-  icon,
-  label,
-  subtitle,
-  value,
-  badgeLabel,
-  badgeClassName,
-  iconBoxClassName,
-  helper,
-  tone = "default",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  subtitle: string;
-  value: number;
-  badgeLabel: string;
-  badgeClassName: string;
-  iconBoxClassName: string;
-  helper: string;
-  tone?: "default" | "warning";
-}) {
-  return (
-    <div className="flex h-full flex-col justify-between border-2 border-black bg-white p-3 shadow-[4px_4px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_#000] sm:p-3.5">
-      <div>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-start gap-2">
-            <div
-              className={`grid h-8 w-8 shrink-0 place-items-center border-2 border-black text-black shadow-[2px_2px_0_0_#000] ${iconBoxClassName}`}
-            >
-              {icon}
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-black uppercase leading-snug tracking-wider text-black">
-                {label}
-              </p>
-              <p className="mt-0.5 truncate text-[10px] font-medium leading-snug text-text-muted">
-                {subtitle}
-              </p>
-            </div>
-          </div>
-
-          <span className={`${BADGE_BASE_CLASS} shrink-0 ${badgeClassName}`}>
-            {badgeLabel}
-          </span>
-        </div>
-
-        <p
-          className={`mt-2 text-xl font-black tracking-tight tabular-nums sm:text-2xl ${
-            tone === "warning" ? "text-amber-800" : "text-black"
-          }`}
-        >
-          {value.toLocaleString("vi-VN")}
-        </p>
-      </div>
-
-      <div className="mt-2 border-t-2 border-dashed border-gray-200 pt-2">
-        <span
-          className={`text-[11px] font-medium ${
-            tone === "warning" ? "font-bold text-black" : "text-text-muted"
-          }`}
-        >
-          {helper}
-        </span>
-      </div>
     </div>
   );
 }

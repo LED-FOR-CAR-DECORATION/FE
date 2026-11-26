@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
-  AlertTriangle, ArrowLeft, CheckCircle2, ClipboardList, Grid, History, Layers, Loader2,
+  AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Grid, History, Layers, Loader2,
   Palette, RefreshCw, Send, Sparkles,
 } from "lucide-react";
 import "@/styles/transitions.css";
@@ -17,10 +17,11 @@ import {
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
 import { sortVersionsNewestFirst } from "@/features/designer/context/DesignerCharactersContext";
+import { useAdaptiveGridLayout } from "@/features/designer/hooks/useResponsiveGrid";
 import {
   createCommissionCharacter, findCommissionCharacter, linkedCommissionId, studioMatrixSize,
 } from "@/features/designer/commission-link";
-import { commissionErrorMessage } from "../errors";
+import { commissionErrorMessage, isRequestCancelled } from "../errors";
 import { resolveImageMimeAndExtension, uploadMediaFile } from "@/lib/api/media";
 import CommissionRevisionTimeline from "./CommissionRevisionTimeline";
 import {
@@ -79,15 +80,21 @@ function StatusChip({ status }: { status: string }) {
   return <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black uppercase ${TONE_CHIP[meta.tone]}`}>{meta.label}</span>;
 }
 
-function SkeletonGrid({ count = 4 }: { count?: number }) {
+function SkeletonGrid({ count = 8, rows = 2, columns = 4 }: { count?: number; rows?: number; columns?: number }) {
   return (
-    <div className="t-skel-skeleton is-pulsing grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-      style={{ "--pulse-count": "infinite" } as CSSProperties} aria-busy="true">
+    <div
+      className="t-skel-skeleton is-pulsing grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+      style={{
+        "--pulse-count": "infinite",
+        ...(columns >= 2 ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : {}),
+      } as CSSProperties}
+      aria-busy="true"
+    >
       <span className="sr-only" role="status">Đang tải…</span>
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className={`${shell} overflow-hidden`} aria-hidden="true">
-          <div className="aspect-[4/3] border-b-2 border-black bg-gray-200" />
-          <div className="space-y-2 p-4"><div className="h-4 w-3/4 bg-gray-200" /><div className="h-3 w-1/2 bg-gray-100" /></div>
+        <div key={index} className={`${shell} flex h-full flex-col overflow-hidden`} aria-hidden="true">
+          <div className="min-h-[112px] flex-1 border-b-2 border-black bg-gray-200" />
+          <div className="shrink-0 space-y-2 p-2.5"><div className="h-3.5 w-3/4 bg-gray-200" /><div className="h-3 w-1/2 bg-gray-100" /></div>
         </div>
       ))}
     </div>
@@ -116,57 +123,163 @@ const TABS: { key: string; label: string; statuses?: string[] }[] = [
 ];
 
 export function DesignerCommissionBoard() {
+  const { columns, rows, pageSize, ready } = useAdaptiveGridLayout({
+    estimatedRowHeight: 224,
+    chromeHeight: 268,
+    maxRows: 3,
+  });
   const [items, setItems] = useState<CommissionQueueItem[]>();
   const [characters, setCharacters] = useState<Map<number, DesignerCharacterItem>>(new Map());
-  const [hasNext, setHasNext] = useState(false);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [loadingMore, setLoadingMore] = useState(false);
   const [tab, setTab] = useState("todo");
   const [revision, setRevision] = useState(0);
 
-  useEffect(() => {
-    let active = true;
-    const query = getCommissionQueue(page, true);
-    query.then(({ data, meta }) => {
-      if (!active) return;
-      setItems((current) => (page === 0 ? data : [...(current ?? []), ...data]));
-      setHasNext(Boolean(meta?.hasNext));
-      setError("");
-    }).catch((failure) => {
-      if (active) setError(getApiErrorMessage(failure, "Không tải được commission được phân công."));
-    }).finally(() => { if (active) setLoadingMore(false); });
-    return () => { active = false; query.cancel(); };
-  }, [page, revision]);
+  const currentTab = TABS.find((entry) => entry.key === tab) ?? TABS[0];
 
-  // Ảnh version hiện hành của character đã liên kết, để thẻ commission có ảnh xem trước giống Dashboard.
   useEffect(() => {
+    if (!ready) return;
     let active = true;
-    fetchMyCharacters({ page: 0, size: 100, characterType: "COMMISSION" }).then(({ items: list }) => {
+    const cancelers: Array<() => void> = [];
+    setLoading(true);
+    setError("");
+
+    const statuses = currentTab.statuses;
+
+    if (!statuses || statuses.length === 1) {
+      const req = getCommissionQueue({
+        page,
+        size: pageSize,
+        assigned: true,
+        status: statuses?.[0],
+      });
+      cancelers.push(() => req.cancel());
+      req
+        .then(({ data, meta }) => {
+          if (!active) return;
+          const total = meta?.totalElements ?? data.length;
+          const pages = Math.max(1, meta?.totalPages ?? Math.ceil(total / pageSize));
+          if (page > 0 && page >= pages) {
+            setPage(Math.max(0, pages - 1));
+            return;
+          }
+          setItems(data);
+          setTotalElements(total);
+          setTotalPages(pages);
+        })
+        .catch((failure) => {
+          if (active && !isRequestCancelled(failure)) {
+            setError(getApiErrorMessage(failure, "Không tải được commission được phân công."));
+          }
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    } else {
+      // Multi-status tab: fetch only up to the needed slice for the current page per status
+      const neededWindow = Math.min(100, (page + 1) * pageSize);
+      const reqs = statuses.map((status) =>
+        getCommissionQueue({
+          page: 0,
+          size: neededWindow,
+          assigned: true,
+          status,
+        }),
+      );
+      for (const req of reqs) {
+        cancelers.push(() => req.cancel());
+      }
+      Promise.all(reqs)
+        .then((responses) => {
+          if (!active) return;
+          let sumElements = 0;
+          const merged: CommissionQueueItem[] = [];
+          for (const res of responses) {
+            sumElements += res.meta?.totalElements ?? res.data.length;
+            merged.push(...res.data);
+          }
+          merged.sort((a, b) => {
+            const ta = new Date(a.updatedAt ?? a.createdAt ?? 0).getTime();
+            const tb = new Date(b.updatedAt ?? b.createdAt ?? 0).getTime();
+            return tb - ta || b.commissionId - a.commissionId;
+          });
+          const pages = Math.max(1, Math.ceil(sumElements / pageSize));
+          if (page > 0 && page >= pages) {
+            setPage(Math.max(0, pages - 1));
+            return;
+          }
+          setItems(merged.slice(page * pageSize, (page + 1) * pageSize));
+          setTotalElements(sumElements);
+          setTotalPages(pages);
+        })
+        .catch((failure) => {
+          if (active && !isRequestCancelled(failure)) {
+            setError(getApiErrorMessage(failure, "Không tải được commission được phân công."));
+          }
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }
+
+    return () => {
+      active = false;
+      for (const cancel of cancelers) cancel();
+    };
+  }, [ready, page, pageSize, tab, currentTab.statuses, revision]);
+
+  // Ảnh version hiện hành chỉ cho các thẻ commission đang hiển thị trên trang hiện tại
+  useEffect(() => {
+    if (!items || items.length === 0) {
+      setCharacters(new Map());
+      return;
+    }
+    let active = true;
+    Promise.all(
+      items.map((entry) =>
+        fetchMyCharacters({ page: 0, size: 1, commissionId: entry.commissionId })
+          .then(({ items: list }) => [entry.commissionId, list[0]] as const)
+          .catch(() => [entry.commissionId, undefined] as const),
+      ),
+    ).then((pairs) => {
       if (!active) return;
       const map = new Map<number, DesignerCharacterItem>();
-      for (const item of list) {
-        const id = item.commissionId ?? linkedCommissionId(item.description);
-        if (id !== undefined && !map.has(id)) map.set(id, item);
+      for (const [id, char] of pairs) {
+        if (char) map.set(id, char);
       }
       setCharacters(map);
-    }).catch(() => { /* ảnh xem trước là phụ */ });
-    return () => { active = false; };
-  }, [revision]);
+    });
+    return () => {
+      active = false;
+    };
+  }, [items]);
 
-  const counts = useMemo(() => Object.fromEntries(TABS.map((entry) => [
-    entry.key, (items ?? []).filter((item) => !entry.statuses || entry.statuses.includes(item.status)).length,
-  ])), [items]);
-  const current = TABS.find((entry) => entry.key === tab) ?? TABS[0];
-  const visible = (items ?? []).filter((item) => !current.statuses || current.statuses.includes(item.status));
+  const visible = items ?? [];
+  const safePage = Math.min(page, totalPages - 1);
+  const rangeStart = totalElements === 0 ? 0 : safePage * pageSize + 1;
+  const rangeEnd =
+    totalElements === 0 ? 0 : Math.min(totalElements, rangeStart + Math.max(visible.length, 1) - 1);
 
-  const refresh = () => { setItems(undefined); setPage(0); setRevision((value) => value + 1); };
+  const handleTabChange = (nextTab: string) => {
+    setItems(undefined);
+    setTab(nextTab);
+    setPage(0);
+  };
+
+  const refresh = () => {
+    setItems(undefined);
+    setPage(0);
+    setRevision((value) => value + 1);
+  };
 
   return (
-    <div className="space-y-5">
+    <div className="flex min-h-[calc(100dvh-112px)] flex-col gap-3">
       {/* Slim Neo-Brutalist Header & Status Filter Bar */}
-      <div className="neo-box-no-hover flex flex-col gap-3 bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between">
-        <div role="tablist" aria-label="Lọc commission" className="flex flex-wrap gap-2">
+      <div className="neo-box-no-hover flex flex-col gap-2.5 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div role="tablist" aria-label="Lọc commission" className="flex flex-wrap gap-1.5">
           {TABS.map((entry) => {
             const active = tab === entry.key;
             return (
@@ -175,77 +288,82 @@ export function DesignerCommissionBoard() {
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => setTab(entry.key)}
-                className={`min-h-10 cursor-pointer border-2 border-black px-3.5 text-xs uppercase transition-transform hover:-translate-y-0.5 ${
+                onClick={() => handleTabChange(entry.key)}
+                className={`min-h-9 cursor-pointer border-2 border-black px-3 text-xs uppercase transition-transform hover:-translate-y-0.5 ${
                   active
                     ? "bg-primary font-black text-black shadow-[2px_2px_0_0_#000]"
                     : "bg-white font-bold text-black hover:bg-gray-50"
                 }`}
               >
-                {entry.label}{" "}
-                <span className={`ml-1 border border-black px-1.5 py-0.5 font-mono text-[10px] ${active ? "bg-white text-black" : "bg-gray-100 text-black"}`}>
-                  {counts[entry.key] ?? 0}
-                </span>
+                {entry.label}
+                {active && !loading && (
+                  <span className="ml-1.5 border border-black bg-white px-1.5 py-0.5 font-mono text-[10px] text-black">
+                    {totalElements}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
 
-        <button type="button" onClick={refresh} className={`${secondaryBtn} min-h-10! shrink-0 px-3! py-1.5!`}>
-          <RefreshCw size={14} /> Làm mới
+        <button type="button" onClick={refresh} className={`${secondaryBtn} min-h-9! shrink-0 px-3! py-1!`}>
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Làm mới
         </button>
       </div>
 
       {error && <ErrorBox message={error} onRetry={refresh} />}
 
-      {!items && !error ? <SkeletonGrid /> : visible.length === 0 ? (
-        <div className="neo-box-no-hover bg-white p-14 text-center">
-          <Sparkles size={36} className="mx-auto mb-3 text-black/40" />
-          <h2 className="text-lg font-black uppercase text-black">{tab === "todo" ? "Không có commission nào cần làm" : "Chưa có commission ở mục này"}</h2>
-          <p className="mx-auto mt-1 max-w-md text-sm font-medium text-text-muted">Commission mới được staff phân công sẽ xuất hiện ở mục “Cần làm”.</p>
-          {tab !== "all" && <button type="button" onClick={() => setTab("all")} className={`${secondaryBtn} mt-5`}>Xem tất cả</button>}
+      {loading ? <SkeletonGrid count={pageSize} rows={rows} columns={columns} /> : visible.length === 0 ? (
+        <div className="neo-box-no-hover flex flex-1 flex-col items-center justify-center bg-white p-10 text-center">
+          <Sparkles size={32} className="mx-auto mb-2.5 text-black/40" />
+          <h2 className="text-base font-black uppercase text-black">{tab === "todo" ? "Không có commission nào cần làm" : "Chưa có commission ở mục này"}</h2>
+          <p className="mx-auto mt-1 max-w-md text-xs font-medium text-text-muted">Commission mới được staff phân công sẽ xuất hiện ở mục “Cần làm”.</p>
+          {tab !== "all" && <button type="button" onClick={() => handleTabChange("all")} className={`${secondaryBtn} mt-4`}>Xem tất cả</button>}
         </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul
+          className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          style={columns >= 2 ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : undefined}
+        >
           {visible.map((item) => {
             const character = characters.get(item.commissionId);
             const preview = character?.currentVersion?.previewGifUrl;
             const todo = DESIGNER_DRAFTABLE.has(item.status);
             return (
-              <li key={item.commissionId}>
+              <li key={item.commissionId} className="h-full">
                 <Link href={`/designer/commissions/${item.commissionId}`}
                   className={`neo-box group flex h-full flex-col overflow-hidden bg-white transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${todo ? "border-l-8 border-l-amber-400" : ""}`}>
-                  <div className="relative aspect-[4/3] w-full overflow-hidden border-b-2 border-black bg-[#090d14]">
+                  <div className="relative min-h-[104px] w-full flex-1 overflow-hidden border-b-2 border-black bg-[#090d14]">
                     {isHttpUrl(preview) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={preview} alt={`Version hiện hành của ${item.title}`} loading="lazy"
-                        className="h-full w-full object-contain p-3 [image-rendering:pixelated] transition-transform group-hover:scale-105" />
+                        className="h-full w-full object-contain [image-rendering:pixelated] transition-transform group-hover:scale-105" />
                     ) : (
-                      <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
-                        <Palette size={28} className="opacity-60" />
-                        <span className="text-xs font-bold">{character ? "Character chưa có version" : "Chưa tạo character"}</span>
+                      <div className="flex h-full flex-col items-center justify-center gap-1 text-slate-400">
+                        <Palette size={22} className="opacity-60" />
+                        <span className="text-[11px] font-bold">{character ? "Character chưa có version" : "Chưa tạo character"}</span>
                       </div>
                     )}
                     {item.targetMatrixDimensions && (
-                      <span className="absolute left-3 top-3 inline-flex items-center gap-1 border border-black bg-white px-2 py-0.5 font-mono text-[11px] font-black text-black shadow-[2px_2px_0_0_#000]">
-                        <Grid size={11} /> {item.targetMatrixDimensions}
+                      <span className="absolute left-2 top-2 inline-flex items-center gap-1 border border-black bg-white px-1.5 py-0.5 font-mono text-[10px] font-black text-black shadow-[2px_2px_0_0_#000]">
+                        <Grid size={10} /> {item.targetMatrixDimensions}
                       </span>
                     )}
-                    <span className="absolute right-3 top-3 shadow-[2px_2px_0_0_#000]"><StatusChip status={item.status} /></span>
+                    <span className="absolute right-2 top-2 shadow-[2px_2px_0_0_#000]"><StatusChip status={item.status} /></span>
                   </div>
-                  <div className="flex flex-1 flex-col justify-between p-4">
+                  <div className="flex shrink-0 flex-col justify-between p-2.5">
                     <div>
                       <div className="flex items-start justify-between gap-2">
-                        <h2 className="line-clamp-2 text-base font-black text-black group-hover:underline">{item.title}</h2>
-                        <span className="shrink-0 font-mono text-[11px] font-bold text-text-muted">#{item.commissionId}</span>
+                        <h2 className="line-clamp-1 text-xs font-black text-black group-hover:underline">{item.title}</h2>
+                        <span className="shrink-0 font-mono text-[10px] font-bold text-text-muted">#{item.commissionId}</span>
                       </div>
-                      {item.customerName && <p className="mt-1 text-xs font-medium text-text-muted">Khách: {item.customerName}</p>}
+                      {item.customerName && <p className="mt-0.5 truncate text-[11px] font-medium text-text-muted">Khách: {item.customerName}</p>}
                     </div>
-                    <div className="mt-4 flex items-center justify-between border-t-2 border-dashed border-gray-200 pt-3 text-xs">
+                    <div className="mt-2 flex items-center justify-between border-t-2 border-dashed border-gray-200 pt-2 text-[11px]">
                       <span className="inline-flex items-center gap-1 font-black text-black">
-                        <Layers size={13} /> {character ? `${character.totalVersions} version` : "—"}
+                        <Layers size={12} /> {character ? `${character.totalVersions} version` : "—"}
                       </span>
-                      {todo && <span className="border border-black bg-amber-200 px-2 py-0.5 text-[10px] font-black uppercase text-black">Mở để làm →</span>}
+                      {todo && <span className="border border-black bg-amber-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-black">Mở để làm →</span>}
                     </div>
                   </div>
                 </Link>
@@ -255,13 +373,37 @@ export function DesignerCommissionBoard() {
         </ul>
       )}
 
-      {hasNext && items && (
-        <div className="text-center">
-          <button type="button" disabled={loadingMore} onClick={() => { setLoadingMore(true); setPage((value) => value + 1); }} className={secondaryBtn}>
-            {loadingMore ? <Loader2 size={15} className="animate-spin" /> : null} Tải thêm
+      <div className="neo-box-no-hover mt-auto flex flex-wrap items-center justify-between gap-2 bg-white px-4 py-2 text-xs">
+        <span className="font-bold text-black">
+          {totalElements > 0 && (
+            <>
+              <strong className="font-mono">
+                {rangeStart}–{rangeEnd}
+              </strong>{" "}
+              / {totalElements} ·{" "}
+            </>
+          )}
+          Trang <strong className="font-mono">{safePage + 1}</strong> / {totalPages}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={loading || safePage <= 0}
+            onClick={() => setPage(Math.max(0, safePage - 1))}
+            className="btn-secondary inline-flex items-center gap-1 px-3 py-1 text-xs font-black uppercase disabled:opacity-40"
+          >
+            <ChevronLeft size={14} /> Trước
+          </button>
+          <button
+            type="button"
+            disabled={loading || safePage >= totalPages - 1}
+            onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
+            className="btn-secondary inline-flex items-center gap-1 px-3 py-1 text-xs font-black uppercase disabled:opacity-40"
+          >
+            Sau <ChevronRight size={14} />
           </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

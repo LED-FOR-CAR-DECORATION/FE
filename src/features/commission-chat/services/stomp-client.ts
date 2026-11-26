@@ -16,12 +16,23 @@ export interface StompSubscriptionOptions {
   onStatusChange?: (status: StompStatus) => void;
   /** Gọi khi server trả ERROR (vd. token hết hạn / không có quyền). Trả về false để dừng kết nối lại. */
   onError?: (message: string) => Promise<boolean> | boolean;
-  /** Gọi mỗi lần CONNECTED thành công (kể cả lần kết nối lại) để FE tải lại lịch sử bù tin bị lỡ. */
-  onConnected?: () => void;
+  /**
+   * Gọi mỗi lần CONNECTED thành công. `isReconnect` = false ở lần đầu (FE vừa tải lịch sử bằng REST, không cần tải lại),
+   * true ở các lần kết nối lại (cần tải bù tin bị lỡ).
+   */
+  onConnected?: (isReconnect: boolean) => void;
+  /** Gọi khi kết nối đã giữ ổn định STABLE_MS mà không có ERROR — lúc này mới coi như kết nối thành công thật. */
+  onStable?: () => void;
 }
 
 const HEARTBEAT_MS = 20000;
 const MAX_BACKOFF_MS = 30000;
+/**
+ * BE xác thực token ở CONNECT nhưng kiểm tra quyền vào phòng ở SUBSCRIBE (sau CONNECTED).
+ * Nếu reset backoff ngay khi CONNECTED thì SUBSCRIBE bị từ chối sẽ tạo vòng lặp kết nối lại ~1s/lần,
+ * nên chỉ reset khi kết nối đã đứng vững một khoảng.
+ */
+const STABLE_MS = 10000;
 
 /** http(s)://host[:port] → ws(s)://host[:port]/ws */
 export function buildStompUrl(apiBaseUrl: string) {
@@ -67,6 +78,8 @@ export function subscribeStomp(options: StompSubscriptionOptions): () => void {
   let attempt = 0;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  let stableTimer: ReturnType<typeof setTimeout> | undefined;
+  let connectedOnce = false;
   let buffer = "";
 
   const setStatus = (status: StompStatus) => options.onStatusChange?.(status);
@@ -74,6 +87,8 @@ export function subscribeStomp(options: StompSubscriptionOptions): () => void {
   function cleanupSocket() {
     clearInterval(heartbeatTimer);
     heartbeatTimer = undefined;
+    clearTimeout(stableTimer);
+    stableTimer = undefined;
     buffer = "";
     if (socket) {
       socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
@@ -93,15 +108,21 @@ export function subscribeStomp(options: StompSubscriptionOptions): () => void {
 
   async function handleFrame(frame: StompFrame, ws: WebSocket) {
     switch (frame.command) {
-      case "CONNECTED":
-        attempt = 0;
+      case "CONNECTED": {
         ws.send(serialize("SUBSCRIBE", { id: "sub-0", destination: options.destination, ack: "auto" }));
         heartbeatTimer = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send("\n");
         }, HEARTBEAT_MS);
+        stableTimer = setTimeout(() => {
+          attempt = 0;
+          options.onStable?.();
+        }, STABLE_MS);
         setStatus("connected");
-        options.onConnected?.();
+        const isReconnect = connectedOnce;
+        connectedOnce = true;
+        options.onConnected?.(isReconnect);
         break;
+      }
       case "MESSAGE":
         options.onMessage(frame.body);
         break;

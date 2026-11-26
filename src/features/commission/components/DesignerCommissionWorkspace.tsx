@@ -21,7 +21,7 @@ import {
   createCommissionCharacter, findCommissionCharacter, linkedCommissionId, studioMatrixSize,
 } from "@/features/designer/commission-link";
 import { commissionErrorMessage } from "../errors";
-import { uploadMediaFile } from "@/lib/api/media";
+import { resolveImageMimeAndExtension, uploadMediaFile } from "@/lib/api/media";
 import CommissionRevisionTimeline from "./CommissionRevisionTimeline";
 import {
   getCommissionQueue, getManagementCommission, uploadCommissionDraft,
@@ -415,17 +415,41 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
     setSubmitting(true);
     setSubmitError("");
     try {
-      const response = await fetch(selected.previewGifUrl);
+      const response = await fetch(selected.previewGifUrl, { cache: "no-store" });
       if (!response.ok) throw new Error("Không tải được ảnh phiên bản. Hãy mở Studio và lưu lại.");
       const blob = await response.blob();
-      const file = new File([blob], `commission-${detail.commissionId}-v${selected.versionNumber}`, { type: blob.type });
+      const mimeInfo = resolveImageMimeAndExtension(blob.type, selected.previewGifUrl);
+      if (!mimeInfo) {
+        console.error("[commission.draft] Unsupported version blob MIME type", {
+          commissionId: detail.commissionId,
+          versionId: selected.versionId,
+          versionNumber: selected.versionNumber,
+          previewGifUrl: selected.previewGifUrl,
+          rawBlobType: blob.type,
+          byteSize: blob.size,
+        });
+        throw new Error(
+          `Định dạng ảnh phiên bản không hợp lệ (${blob.type || "không xác định"}). Chỉ hỗ trợ GIF, PNG, WEBP hoặc JPG.`,
+        );
+      }
+
+      const draftFileName = `commission-${detail.commissionId}-v${selected.versionNumber}.${mimeInfo.ext}`;
+      const file = new File([blob], draftFileName, { type: mimeInfo.mimeType });
       const uploaded = await uploadMediaFile(file, "COMMISSION_DRAFT", detail.commissionId);
       if (uploaded.localPreviewUrl) URL.revokeObjectURL(uploaded.localPreviewUrl);
       if (!uploaded.objectKey) throw new Error("Không nhận được mã bản nháp.");
+
       const { data } = await uploadCommissionDraft(detail.commissionId, {
         imageUrl: uploaded.objectKey,
         designerNote: designerNote || undefined,
         characterVersionId: selected.versionId,
+      });
+      console.info("[commission.draft] Submitted draft successfully", {
+        commissionId: detail.commissionId,
+        characterVersionId: selected.versionId,
+        draftVersion: data.versionNumber,
+        objectKey: uploaded.objectKey,
+        fileName: draftFileName,
       });
       setSubmitted({ versionNumber: selected.versionNumber, draftVersion: data.versionNumber });
       setSelectedId(undefined);

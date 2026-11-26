@@ -1096,7 +1096,7 @@ export default function ManagerDashboard() {
             }
             footerAction={
               <Link
-                href="/staff/inventory"
+                href="/manager/inventory"
                 className="inline-flex shrink-0 items-center border-2 border-black bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-[2px_2px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:bg-primary active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
                 Xem chi tiết

@@ -1,26 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import Image from "next/image";
 import {
   AlertCircle,
   Check,
   CheckCircle2,
   Clock,
   Edit,
-  ExternalLink,
   Eye,
   Loader2,
   RefreshCw,
   Search,
   ShieldCheck,
-  Sparkles,
   X,
 } from "lucide-react";
 import type { StoreCharacterRow } from "../types";
 import { formatVnd, formatDateTime } from "../format";
 import StatusBadge from "./StatusBadge";
+import StoreModal from "./StoreModal";
 
 interface ManagerProductListingTableProps {
   rows: StoreCharacterRow[];
@@ -99,40 +96,46 @@ export default function ManagerProductListingTable({
     <div className="flex flex-col">
       {/* Header bar */}
       {!hideHeader && (
-        <div className="flex flex-col gap-3 border-b border-[#e3efe6] bg-[#fbfdfb] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b-2 border-black bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
-              <Clock size={16} />
+            <span className="grid h-9 w-9 shrink-0 place-items-center border-2 border-black bg-[#fef08a] text-black shadow-[2px_2px_0_0_#000]">
+              <Clock size={16} aria-hidden="true" />
             </span>
             <div>
-              <h3 className="text-sm font-black text-[#173b28]">
+              <h3 className="text-sm font-black uppercase tracking-wider text-black">
                 Hàng đợi phê duyệt nhân vật (Chưa mở bán)
               </h3>
-              <p className="text-xs text-[#66736b]">
+              <p className="text-xs font-medium text-text-muted">
                 Các nhân vật do nhà thiết kế đăng tải đang chờ Quản lý thẩm định và duyệt mở bán.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 rounded-xl border border-[#d8e6dc] bg-white px-3 py-1.5 text-xs focus-within:border-[#48a56a]">
-              <Search size={14} className="text-[#66736b]" />
+            <div className="relative">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-black"
+                aria-hidden="true"
+              />
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Tìm theo tên hoặc nhà thiết kế..."
-                className="w-44 bg-transparent outline-none sm:w-56"
+                aria-label="Tìm theo tên hoặc nhà thiết kế"
+                className="w-48 border-2 border-black bg-gray-50 py-1.5 pl-8 pr-3 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white sm:w-60"
               />
-            </label>
+            </div>
             <button
               type="button"
               onClick={onRefresh}
               disabled={isLoading}
               title="Làm mới hàng đợi"
-              className="rounded-xl border border-[#d8e6dc] bg-white p-2 text-[#66736b] hover:bg-[#f6fbf7] hover:text-[#173b28]"
+              aria-label="Làm mới hàng đợi"
+              className="btn-secondary p-2! shadow-[2px_2px_0_0_#000]"
             >
-              <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+              <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -141,18 +144,19 @@ export default function ManagerProductListingTable({
       {actionNotice && (
         <div
           role="status"
-          className="m-4 flex items-center justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800"
+          className="m-4 flex items-center justify-between gap-2 border-2 border-black bg-primary/25 px-4 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
         >
           <span className="flex items-center gap-2">
-            <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+            <CheckCircle2 size={15} className="shrink-0 text-primary-ink" aria-hidden="true" />
             {actionNotice}
           </span>
           <button
             type="button"
             onClick={() => setActionNotice(null)}
-            className="rounded p-0.5 hover:bg-emerald-100"
+            aria-label="Đóng thông báo"
+            className="btn-secondary p-1! shadow-[1px_1px_0_0_#000]"
           >
-            <X size={13} />
+            <X size={13} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -160,61 +164,64 @@ export default function ManagerProductListingTable({
       {actionError && (
         <div
           role="alert"
-          className="m-4 flex items-center justify-between gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-xs font-semibold text-red-700"
+          className="m-4 flex items-center justify-between gap-2 border-2 border-black bg-[#fee2e2] px-4 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
         >
           <span className="flex items-center gap-2">
-            <AlertCircle size={15} className="shrink-0" />
+            <AlertCircle size={15} className="shrink-0 text-red-700" aria-hidden="true" />
             {actionError}
           </span>
           <button
             type="button"
             onClick={() => setActionError(null)}
-            className="rounded p-0.5 hover:bg-red-100"
+            aria-label="Đóng lỗi"
+            className="btn-secondary p-1! shadow-[1px_1px_0_0_#000]"
           >
-            <X size={13} />
+            <X size={13} aria-hidden="true" />
           </button>
         </div>
       )}
 
       {/* Data Table */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px] text-left text-sm">
-          <thead className="border-b border-[#e3efe6]">
+        <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+          <thead className="border-b-2 border-black bg-[#e9f5ed]">
             <tr>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Mã sản phẩm</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Ảnh đại diện</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Tên nhân vật</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Nhà thiết kế</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Phiên bản</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Giá đề xuất</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Trạng thái</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide">Thao tác</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Mã sản phẩm</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Ảnh đại diện</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Tên nhân vật</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Nhà thiết kế</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Phiên bản</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Giá đề xuất</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Trạng thái</th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Thao tác</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#eef5f0]">
+          <tbody className="divide-y-2 divide-black/10 bg-white">
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="py-14 text-center text-xs font-semibold text-[#66736b]">
-                  <Loader2 size={18} className="mx-auto mb-2 animate-spin text-[#198653]" />
+                <td colSpan={8} className="py-14 text-center text-xs font-bold text-text-muted">
+                  <Loader2 size={18} className="mx-auto mb-2 animate-spin text-primary-ink" aria-hidden="true" />
                   Đang tải danh sách chờ duyệt...
                 </td>
               </tr>
             ) : filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-16 text-center">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                    <ShieldCheck size={24} />
+                <td colSpan={8} className="px-4 py-14 text-center">
+                  <div className="mx-auto flex max-w-md flex-col items-center border-2 border-dashed border-black/25 bg-gray-50 px-5 py-8">
+                    <div className="grid h-11 w-11 place-items-center border-2 border-black bg-primary text-black shadow-[2px_2px_0_0_#000]">
+                      <ShieldCheck size={22} aria-hidden="true" />
+                    </div>
+                    <p className="mt-3 text-xs font-black uppercase tracking-wide text-black sm:text-sm">
+                      {activeQuery
+                        ? "Không có nhân vật nào khớp với từ khóa tìm kiếm."
+                        : "Không có nhân vật nào đang chờ duyệt!"}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-text-muted">
+                      {activeQuery
+                        ? "Hãy kiểm tra lại từ khóa hoặc xóa ô tìm kiếm."
+                        : "Tất cả nhân vật trên cửa hàng đều đã được duyệt hoặc đã ẩn."}
+                    </p>
                   </div>
-                  <p className="mt-3 text-sm font-bold text-[#173b28]">
-                    {activeQuery
-                      ? "Không có nhân vật nào khớp với từ khóa tìm kiếm."
-                      : "Không có nhân vật nào đang chờ duyệt!"}
-                  </p>
-                  <p className="mt-1 text-xs text-[#66736b]">
-                    {activeQuery
-                      ? "Hãy kiểm tra lại từ khóa hoặc xóa ô tìm kiếm."
-                      : "Tất cả nhân vật trên cửa hàng đều đã được duyệt hoặc đã ẩn."}
-                  </p>
                 </td>
               </tr>
             ) : (
@@ -223,74 +230,83 @@ export default function ManagerProductListingTable({
                 return (
                   <tr
                     key={row.characterId}
-                    className="transition-colors hover:bg-[#f8fcf9]"
+                    className="transition-colors duration-150 hover:bg-[#f3faf5]"
                   >
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
-                      #{row.characterId}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
+                        #{row.characterId}
+                      </span>
                     </td>
 
-                    <td className="px-4 py-3">
-                      <div className="group relative h-12 w-12 cursor-pointer overflow-hidden rounded-lg border border-[#d8e6dc] bg-[#0b0f19]">
+                    <td className="px-4 py-3.5">
+                      <div className="group relative h-12 w-12 cursor-pointer overflow-hidden border-2 border-black bg-gray-50">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={row.thumbnailUrl}
                           alt={row.name}
-                          className="h-full w-full object-contain"
-                          style={{ imageRendering: "pixelated" }}
+                          className="h-full w-full object-contain [image-rendering:pixelated]"
                           onClick={() => setZoomedRow(row)}
                         />
                         <button
                           type="button"
                           onClick={() => setZoomedRow(row)}
                           title="Xem phóng to bản vẽ"
-                          className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition group-hover:opacity-100 text-white"
+                          aria-label={`Xem phóng to ${row.name}`}
+                          className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/50 text-white opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
                         >
-                          <Eye size={14} />
+                          <Eye size={14} aria-hidden="true" />
                         </button>
                       </div>
                     </td>
 
-                    <td className="px-4 py-3">
-                      <p className="font-bold text-[#173b28]">{row.name}</p>
-                      <p className="line-clamp-1 max-w-xs text-[11px] text-[#66736b]">
+                    <td className="px-4 py-3.5">
+                      <p className="text-xs font-black uppercase text-black sm:text-sm">{row.name}</p>
+                      <p className="line-clamp-1 max-w-xs text-xs font-medium text-text-muted">
                         {row.description || "Chưa có mô tả chi tiết."}
                       </p>
-                      <p className="mt-0.5 text-[10px] text-[#8ea394]">
+                      <p className="mt-0.5 text-[11px] font-medium text-text-muted tabular-nums">
                         Cập nhật: {formatDateTime(row.updatedAt)}
                       </p>
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3 font-medium text-[#26352f]">
+                    <td className="whitespace-nowrap px-4 py-3.5 text-xs font-bold text-black">
                       {row.creatorName}
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3.5">
                       {row.activeVersion ? (
-                        <span className="rounded-md border border-[#cfe5d6] bg-[#f1faf4] px-2 py-0.5 font-mono text-xs font-black text-[#2c5a3f]">
+                        <span className="inline-flex items-center border border-black bg-primary/40 px-2 py-0.5 font-mono text-[11px] font-black text-black shadow-[1px_1px_0_0_#000]">
                           v{row.activeVersion.versionNumber}
                         </span>
                       ) : (
-                        <span className="font-mono text-xs text-slate-400">v1 (mặc định)</span>
+                        <span className="font-mono text-xs font-bold text-text-muted">v1 (mặc định)</span>
                       )}
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3 font-mono font-bold text-[#173b28]">
+                    <td className="whitespace-nowrap px-4 py-3.5 font-black text-primary-ink tabular-nums">
                       {row.draft ? (
-                        <input type="number" min={0} max={9999999999.99} step={0.01}
+                        <input
+                          type="number"
+                          min={0}
+                          max={9999999999.99}
+                          step={0.01}
                           aria-label={`Giá bán của ${row.name}`}
-                          className="w-32 rounded-lg border border-[#cfe5d6] bg-white px-2 py-2"
+                          className="w-36 border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-black text-primary-ink tabular-nums focus:bg-white disabled:opacity-50"
                           placeholder="Nhập giá (VNĐ)"
                           disabled={!canManage || isProcessing}
                           value={prices[row.characterId] ?? (row.draft.basePrice ? String(row.draft.basePrice) : "")}
-                          onChange={(event) => setPrices((current) => ({ ...current, [row.characterId]: event.target.value }))} />
-                      ) : formatVnd(199000)}
+                          onChange={(event) => setPrices((current) => ({ ...current, [row.characterId]: event.target.value }))}
+                        />
+                      ) : (
+                        formatVnd(199000)
+                      )}
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3.5">
                       <StatusBadge status={row.status} />
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3.5">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {onEdit && (
                           <button
@@ -298,9 +314,9 @@ export default function ManagerProductListingTable({
                             onClick={() => onEdit(row)}
                             disabled={!canManage || isProcessing}
                             title="Chỉnh sửa chi tiết, mô tả hoặc gắn thẻ"
-                            className="inline-flex items-center gap-1 rounded-xl border border-[#cfe0d4] bg-white px-2.5 py-1.5 text-xs font-bold text-[#173b28] shadow-sm transition hover:bg-[#eef8f0] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1.5! text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
                           >
-                            <Edit size={13} />
+                            <Edit size={13} aria-hidden="true" />
                             Sửa / Gắn thẻ
                           </button>
                         )}
@@ -311,12 +327,12 @@ export default function ManagerProductListingTable({
                           onClick={() => void handleApproveClick(row)}
                           disabled={!canManage || isProcessing}
                           title="Phê duyệt và chuyển sang trạng thái Đang mở bán"
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="btn-primary inline-flex items-center gap-1.5 px-3! py-1.5! text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
                         >
                           {isProcessing ? (
-                            <Loader2 size={13} className="animate-spin" />
+                            <Loader2 size={13} className="animate-spin" aria-hidden="true" />
                           ) : (
-                            <Check size={13} />
+                            <Check size={13} aria-hidden="true" />
                           )}
                           {isProcessing ? "Đang duyệt..." : "Duyệt mở bán"}
                         </button>
@@ -331,55 +347,50 @@ export default function ManagerProductListingTable({
       </div>
 
       {/* Zoom Artwork Modal */}
-      {zoomedRow &&
-        createPortal(
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
-            onClick={() => setZoomedRow(null)}
-          >
-            <div
-              className="relative flex max-w-md flex-col items-center rounded-2xl border border-slate-700 bg-[#090d14] p-5 text-white shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+      {zoomedRow && (
+        <StoreModal
+          title={zoomedRow.name}
+          description="Bản vẽ Pixel Art kiểm duyệt bởi Quản lý"
+          badge={`Nhân vật #${zoomedRow.characterId}`}
+          onClose={() => setZoomedRow(null)}
+          size="md"
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setZoomedRow(null)}
-                className="absolute right-3 top-3 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
               >
-                <X size={16} />
+                Đóng
               </button>
-              <h4 className="text-sm font-black text-white">{zoomedRow.name}</h4>
-              <p className="text-xs text-slate-400">Bản vẽ Pixel Art kiểm duyệt bởi Quản lý</p>
-              <div className="my-4 flex h-64 w-64 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-black">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={zoomedRow.thumbnailUrl}
-                  alt={zoomedRow.name}
-                  className="h-full w-full object-contain"
-                  style={{ imageRendering: "pixelated" }}
-                />
-              </div>
-              <div className="w-full text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = zoomedRow;
-                    setZoomedRow(null);
-                    void handleApproveClick(target);
-                  }}
-                  disabled={!canManage}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"
-                >
-                  <Check size={14} />
-                  Duyệt mở bán sản phẩm này
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = zoomedRow;
+                  setZoomedRow(null);
+                  void handleApproveClick(target);
+                }}
+                disabled={!canManage}
+                className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+              >
+                <Check size={14} aria-hidden="true" />
+                Duyệt mở bán sản phẩm này
+              </button>
+            </>
+          }
+        >
+          <div className="flex flex-col items-center justify-center border-2 border-black bg-gray-50 p-6">
+            <div className="flex h-64 w-64 items-center justify-center overflow-hidden border-2 border-black bg-[#111111] shadow-[4px_4px_0_0_#000]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={zoomedRow.thumbnailUrl}
+                alt={zoomedRow.name}
+                className="h-full w-full object-contain [image-rendering:pixelated]"
+              />
             </div>
-          </div>,
-          document.body,
-        )}
+          </div>
+        </StoreModal>
+      )}
     </div>
   );
 }

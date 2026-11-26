@@ -3,6 +3,12 @@ import { request } from "@/api_client/core/request";
 import { OpenAPI } from "./client";
 import { buildSignedPutHeaders } from "./media";
 
+export type CharacterType = "STORE" | "COMMISSION";
+
+export function isStoreCharacterType(characterType?: CharacterType | null): boolean {
+  return (characterType ?? "STORE") === "STORE";
+}
+
 export interface CurrentVersionSummary {
   versionId: number;
   versionNumber: number;
@@ -13,6 +19,8 @@ export interface DesignerCharacterItem {
   characterId: number;
   characterName: string;
   description: string | null;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   totalVersions: number;
   currentVersion: CurrentVersionSummary | null;
   createdAt: string;
@@ -21,6 +29,8 @@ export interface DesignerCharacterItem {
 export interface CreateCharacterRequest {
   characterName: string;
   description?: string;
+  characterType?: CharacterType;
+  commissionId?: number;
 }
 
 export interface UpdateCharacterRequest {
@@ -33,6 +43,8 @@ export interface CreateCharacterResponse {
   characterName: string;
   description: string | null;
   creatorEmployeeId: number;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   createdAt: string;
 }
 
@@ -40,6 +52,8 @@ export interface UpdateCharacterResponse {
   characterId: number;
   characterName: string;
   description: string | null;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   updatedAt: string;
 }
 
@@ -185,6 +199,12 @@ export function formatDesignerApiError(
       return serverMessage || "Dữ liệu đang được sử dụng trên cửa hàng, không thể thực hiện.";
     }
     if (error.status === 400) {
+      if (code === "CHARACTER_TYPE_NOT_ALLOWED_FOR_STORE") {
+        return "Nhân vật thuộc loại Commission không được phép đăng bán lên cửa hàng.";
+      }
+      if (code === "CHARACTER_TYPE_NOT_ALLOWED_FOR_COMMISSION") {
+        return "Nhân vật này không hợp lệ để nộp vào Commission.";
+      }
       return firstDetail || serverMessage || "Dữ liệu gửi lên không hợp lệ.";
     }
     if (serverMessage) return serverMessage;
@@ -198,6 +218,8 @@ export function formatDesignerApiError(
 
 export async function fetchMyCharacters(params: {
   query?: string;
+  characterType?: CharacterType;
+  commissionId?: number;
   page?: number;
   size?: number;
 } = {}): Promise<{ items: DesignerCharacterItem[]; meta: PaginationMeta }> {
@@ -210,11 +232,17 @@ export async function fetchMyCharacters(params: {
     url: "/api/management/designer/characters/my",
     query: {
       query: trimmedQuery ? trimmedQuery : undefined,
+      characterType: params.characterType,
+      commissionId: params.commissionId,
       page,
       size,
     },
   });
-  const items = res.data ?? [];
+  const items = (res.data ?? []).map((item) => ({
+    ...item,
+    characterType: item.characterType ?? "STORE",
+    commissionId: item.commissionId ?? null,
+  }));
   return {
     items,
     meta: normalizePaginationMeta(res.meta, page, size, items.length),
@@ -224,9 +252,15 @@ export async function fetchMyCharacters(params: {
 export async function createDesignerCharacter(
   payload: CreateCharacterRequest,
 ): Promise<CreateCharacterResponse> {
+  const characterType = payload.characterType ?? "STORE";
   const cleanPayload: CreateCharacterRequest = {
     characterName: payload.characterName.trim(),
     description: payload.description?.trim() || undefined,
+    characterType,
+    commissionId:
+      characterType === "COMMISSION" && payload.commissionId != null
+        ? payload.commissionId
+        : undefined,
   };
 
   const res = await request<ApiEnvelope<CreateCharacterResponse>>(OpenAPI, {

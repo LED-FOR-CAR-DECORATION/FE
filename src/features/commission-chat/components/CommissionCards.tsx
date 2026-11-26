@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { formatPrice } from "@/lib/currency";
+import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
 import { commissionErrorMessage } from "@/features/commission/errors";
 import {
   approveDeliverableCard,
@@ -77,10 +78,14 @@ export function DeliverableCard({ message, ctx }: { message: CommissionMessage; 
   const image = [message.mediaUrl, meta?.imageUrl].find(isHttpUrl);
   const version = asNumber(meta?.versionNumber);
   const autoComplete = formatDateTime(meta?.autoCompleteAt);
-  const maxRevisions = asNumber(meta?.maxRevisions);
-  const revisions = maxRevisions !== undefined ? `${asNumber(meta?.revisionsUsed) ?? 0}/${maxRevisions}` : null;
-
   const isLatest = message.messageId === latestDeliverableId;
+  const maxRevisions = asNumber(meta?.maxRevisions) ?? info.maxRevisions;
+  const metaRevisionsUsed = asNumber(meta?.revisionsUsed);
+  const deliverableRevisionsUsed =
+    isLatest && typeof info.revisionsUsed === "number"
+      ? Math.max(metaRevisionsUsed ?? 0, info.revisionsUsed)
+      : (metaRevisionsUsed ?? 0);
+  const revisions = maxRevisions !== undefined ? `${deliverableRevisionsUsed}/${maxRevisions}` : null;
   const awaitingCustomer = isLatest && info.status === "PREVIEW_DELIVERED";
   const accepted = isLatest && info.status === "COMPLETED";
 
@@ -151,24 +156,36 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
 
   const brief = typeof meta?.brief === "string" && meta.brief ? meta.brief : message.content;
   const usesFreeQuota = meta?.usesFreeQuota === true;
+  const usesSubscriptionCredit = meta?.usesSubscriptionCredit === true;
   const fee = asNumber(meta?.revisionFee) ?? 0;
-  const maxRevisions = asNumber(meta?.maxRevisions);
-  const revisionsUsed = asNumber(meta?.revisionsUsed) ?? 0;
+  const maxRevisions = asNumber(meta?.maxRevisions) ?? info.maxRevisions;
+  const metaRevisionsUsed = asNumber(meta?.revisionsUsed);
+  const isLatestRevision = message.messageId === latestRevisionId;
+  const revisionsUsed =
+    isLatestRevision && typeof info.revisionsUsed === "number"
+      ? Math.max(metaRevisionsUsed ?? 0, info.revisionsUsed)
+      : (metaRevisionsUsed ?? info.revisionsUsed ?? 0);
   const cardStatus = typeof meta?.status === "string" ? meta.status : "PENDING";
   const wasCancelled = typeof meta?.cancelledPaymentCode === "string";
 
   // Chỉ thẻ mới nhất, đăng sau bản xem trước mới nhất, mới còn xác nhận/hủy được (giống kiểm tra ở backend).
   const isCurrent = message.messageId === latestRevisionId && (latestDeliverableId ?? 0) < message.messageId;
+  const terminalCommission = info.status === "COMPLETED" || info.status === "CANCELLED" || info.status === "EXPIRED";
   const canConfirm = isCurrent && cardStatus === "PENDING" && info.status === "PREVIEW_DELIVERED";
+  const syncingCardStatus = isCurrent && cardStatus === "PENDING" && !terminalCommission && info.status !== "PREVIEW_DELIVERED";
   const awaitingPayment = isCurrent && cardStatus === "CONFIRMED" && !usesFreeQuota && info.status === "AWAITING_EXTRA_PAYMENT";
   const paymentHref = `/commission/${info.commissionId}/payment`;
 
   const badge = cardStatus === "PAID" ? "Đã thanh toán"
     : cardStatus === "CONFIRMED" ? (usesFreeQuota ? "Đã xác nhận" : awaitingPayment ? "Chờ thanh toán" : "Đã xác nhận")
-      : canConfirm ? "Chờ khách xác nhận" : "Hết hiệu lực";
+      : canConfirm ? "Chờ khách xác nhận"
+        : syncingCardStatus ? "Đang đồng bộ"
+          : "Hết hiệu lực";
 
   const feeText = usesFreeQuota
-    ? `Miễn phí · dùng 1 lượt${maxRevisions !== undefined ? ` (đã dùng ${revisionsUsed}/${maxRevisions})` : ""}`
+    ? usesSubscriptionCredit
+      ? "Miễn phí · trừ 1 lượt từ ví gói hội viên"
+      : `Miễn phí · dùng 1 lượt${maxRevisions !== undefined ? ` (đã dùng ${revisionsUsed}/${maxRevisions})` : ""}`
     : `${formatPrice(fee)}${typeof meta?.feePercentage === "number" ? ` · ${meta.feePercentage}% giá ban đầu` : ""}`;
 
   return (
@@ -191,13 +208,18 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
             <>
               <p className="text-xs font-medium text-text-main">
                 {usesFreeQuota
-                  ? "Yêu cầu dùng 1 lượt miễn phí. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
+                  ? usesSubscriptionCredit
+                    ? "Yêu cầu sẽ trừ 1 lượt miễn phí từ ví gói hội viên của bạn. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
+                    : "Yêu cầu dùng 1 lượt miễn phí. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
                   : `Bạn sẽ được chuyển tới trang thanh toán ${formatPrice(fee)}. Sau thanh toán, họa sĩ sẽ xác nhận thời gian thực hiện.`}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={action.busy} className={primaryButton}
                   onClick={() => void action.run(() => confirmRevisionCard(info.commissionId, message.messageId), "Không xác nhận được yêu cầu chỉnh sửa.",
                     ({ data }) => {
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(new Event(ENTITLEMENTS_CHANGED_EVENT));
+                      }
                       onChanged();
                       if (data?.paymentSession) router.push(paymentHref);
                     })}>

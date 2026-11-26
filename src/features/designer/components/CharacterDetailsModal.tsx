@@ -14,10 +14,11 @@ import {
   Store,
   Trash2,
 } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import StoreModal from "@/features/store-listing/components/StoreModal";
 import { ApiError } from "@/api_client/core/ApiError";
 import {
   formatDesignerApiError,
+  isStoreCharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
@@ -92,41 +93,39 @@ export default function CharacterDetailsModal({
   };
 
   return (
-    <Modal
+    <StoreModal
       onClose={onClose}
-      title={`Chi tiết nhân vật: ${character.characterName}`}
+      title={`Chi tiết: ${character.characterName}`}
+      badge="Character"
+      icon={<Palette className="h-5 w-5" aria-hidden="true" />}
       size="lg"
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
+          <button type="button" onClick={onClose} className="btn-secondary text-sm">
             Đóng
           </button>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Button B: Publish to Store */}
-            <button
-              type="button"
-              disabled={isLoading || Boolean(historyError) || !versions.some((version) => !version.isListedOnStore)}
-              onClick={() => onOpenPublish(character, versions)}
-              title={
-                versions.length === 0
-                  ? "Cần có ít nhất 1 phiên bản trước khi đăng bán lên Store"
-                  : "Chọn 1 phiên bản để gửi duyệt bán lên Store"
-              }
-              className="inline-flex items-center gap-2 rounded-lg border border-studio-accent bg-white px-4 py-2 text-sm font-bold text-studio-ink transition hover:bg-studio-wash disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Store size={15} /> Publish to Store
-            </button>
+            {isStoreCharacterType(character.characterType) && (
+              <button
+                type="button"
+                disabled={isLoading || Boolean(historyError) || !versions.some((version) => !version.isListedOnStore)}
+                onClick={() => onOpenPublish(character, versions)}
+                title={
+                  versions.length === 0
+                    ? "Cần có ít nhất 1 phiên bản trước khi đăng bán lên Store"
+                    : "Chọn 1 phiên bản để gửi duyệt bán lên Store"
+                }
+                className="btn-secondary inline-flex items-center gap-2 text-sm"
+              >
+                <Store size={15} /> Publish to Store
+              </button>
+            )}
 
-            {/* Button A: Draw New Version */}
             <button
               type="button"
               onClick={handleDrawNewVersion}
-              className="inline-flex items-center gap-2 rounded-lg bg-studio-accent px-4 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover"
+              className="btn-primary inline-flex items-center gap-2 text-sm"
             >
               <Palette size={15} /> Vẽ phiên bản mới
             </button>
@@ -134,85 +133,84 @@ export default function CharacterDetailsModal({
         </div>
       }
     >
-      <div className="space-y-4 text-sm">
-        {/* Character Header Summary */}
-        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-studio-line bg-studio-wash p-4">
+      <div className="space-y-4 text-sm text-black">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-2 border-black bg-[#f7fbf8] p-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-black text-studio-ink">{character.characterName}</h3>
-              <span className="inline-flex items-center gap-1 rounded-full bg-studio-accent-hover px-2.5 py-0.5 font-mono text-[11px] font-bold text-white">
+              <h3 className="text-base font-black text-black">{character.characterName}</h3>
+              <span className="inline-flex items-center gap-1 border border-black bg-primary px-2 py-0.5 font-mono text-[11px] font-black text-black">
                 <Grid size={11} /> {matrixSize} (Đã khóa)
               </span>
             </div>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs font-medium text-text-muted">
               {character.description || "Chưa có mô tả chi tiết cho nhân vật này."}
             </p>
           </div>
-          <div className="text-right text-xs text-slate-500">
-            <p className="font-bold text-studio-ink">
+          <div className="text-right text-xs text-text-muted">
+            <p className="font-black text-black">
               Tổng phiên bản: {loadedVersions?.length ?? character.totalVersions}
             </p>
-            <p>ID: #{character.characterId}</p>
+            <p className="font-mono">ID: #{character.characterId}</p>
           </div>
         </div>
 
         {actionError && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+          <div className="flex items-start gap-2 border-2 border-black bg-red-50 p-3 text-xs font-bold text-red-700">
             <AlertCircle size={15} className="mt-0.5 shrink-0" />
             <span>{actionError}</span>
           </div>
         )}
 
-        {/* Versions List (Chronologically Newest First) */}
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-studio-ink">
+            <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
               <History size={14} /> Danh sách phiên bản (Mới nhất trước)
             </h4>
-            <span className="text-[11px] text-slate-500">
+            <span className="text-[11px] font-medium text-text-muted">
               Phiên bản đã đăng Store sẽ bị khóa chỉnh sửa/xóa
             </span>
           </div>
 
           {historyError ? (
-            <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-4">
-              <p role="alert" className="text-red-700">{historyError}</p>
-              <button type="button" className="min-h-11 font-semibold text-studio-ink underline" onClick={() => {
+            <div className="space-y-2 border-2 border-black bg-red-50 p-4">
+              <p role="alert" className="font-bold text-red-700">{historyError}</p>
+              <button type="button" className="min-h-11 font-black text-black underline" onClick={() => {
                 setHistoryError("");
                 setHistoryAttempt((attempt) => attempt + 1);
               }}>Tải lại lịch sử phiên bản</button>
             </div>
           ) : isLoading || !loadedVersions ? (
-            <div role="status" className="flex items-center justify-center gap-2 rounded-xl border border-studio-line bg-white p-8 text-xs text-slate-500">
+            <div role="status" className="flex items-center justify-center gap-2 border-2 border-black bg-white p-8 text-xs font-bold text-text-muted">
               <Loader2 size={16} className="motion-safe:animate-spin" aria-hidden="true" /> Đang tải lịch sử phiên bản…
             </div>
           ) : versions.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-studio-line bg-white p-8 text-center">
-              <Palette size={28} className="mx-auto mb-2 text-studio-muted" />
-              <p className="font-bold text-studio-ink">Nhân vật này chưa có phiên bản nào</p>
-              <p className="mt-1 text-xs text-slate-500">
+            <div className="border-2 border-dashed border-black bg-white p-8 text-center">
+              <Palette size={28} className="mx-auto mb-2 text-black/40" />
+              <p className="font-black uppercase text-black">Nhân vật này chưa có phiên bản nào</p>
+              <p className="mt-1 text-xs font-medium text-text-muted">
                 Chọn <strong>Vẽ phiên bản mới</strong> để mở Pixel Art Studio với bảng vẽ{" "}
                 {matrixSize}.
               </p>
             </div>
           ) : (
             <div className="max-h-72 space-y-2.5 overflow-y-auto pr-1">
-              {versions.map((ver) => {
+              {versions.map((ver, idx) => {
                 const isLocked = Boolean(ver.isListedOnStore);
+                const isLatest = idx === 0;
                 const isDeleting = deletingVersionId === ver.versionId;
 
                 return (
                   <div
                     key={ver.versionId}
-                    className={`flex items-center gap-3 rounded-xl border p-3 transition ${
+                    className={`flex items-center gap-3 border-2 border-black p-3 transition ${
                       isLocked
-                        ? "border-amber-200 bg-amber-50/40"
-                        : "border-studio-line bg-white hover:bg-studio-wash"
+                        ? "bg-amber-50"
+                        : "bg-white hover:bg-[#eef8f0]"
                     }`}
                   >
-                    {/* Preview Artwork */}
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-900">
+                    <div className="h-14 w-14 shrink-0 overflow-hidden border-2 border-black bg-[#090d14]">
                       {ver.previewGifUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={ver.previewGifUrl}
                           alt={`v${ver.versionNumber}`}
@@ -226,29 +224,28 @@ export default function CharacterDetailsModal({
                       )}
                     </div>
 
-                    {/* Metadata */}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono text-sm font-black text-studio-ink">
+                        <span className="font-mono text-sm font-black text-black">
                           v{ver.versionNumber}
                         </span>
                         {ver.isCurrent && (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase text-black">
                             Mới nhất
                           </span>
                         )}
                         {isLocked ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                          <span className="inline-flex items-center gap-1 border border-black bg-amber-200 px-2 py-0.5 text-[10px] font-black uppercase text-black">
                             <Lock size={10} /> Đã đăng Store ({ver.productStatus ?? "LISTED"})
                           </span>
                         ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                          <span className="border border-black bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase text-black">
                             Nội bộ
                           </span>
                         )}
                       </div>
 
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] font-medium text-text-muted">
                         <span>{ver.frameCount ?? 1} frames</span>
                         <span>{ver.byteSize ? `${Math.round(ver.byteSize / 1024)} KB` : "—"}</span>
                         <span className="inline-flex items-center gap-1">
@@ -258,21 +255,22 @@ export default function CharacterDetailsModal({
                       </div>
                     </div>
 
-                    {/* Actions (Enforce Version Lock Logic when isListedOnStore === true) */}
                     <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        disabled={isLocked}
-                        onClick={handleDrawNewVersion}
-                        title={
-                          isLocked
-                            ? "Phiên bản đã đăng bán lên Store — không thể chỉnh sửa"
-                            : "Mở Studio vẽ kế thừa từ bản này"
-                        }
-                        className="inline-flex items-center gap-1 rounded-lg border border-studio-line bg-white px-2.5 py-1.5 text-xs font-bold text-studio-ink transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <Edit3 size={12} /> Sửa
-                      </button>
+                      {isLatest && (
+                        <button
+                          type="button"
+                          disabled={isLocked}
+                          onClick={handleDrawNewVersion}
+                          title={
+                            isLocked
+                              ? "Phiên bản đã đăng bán lên Store — không thể chỉnh sửa"
+                              : "Mở Studio chỉnh sửa bản mới nhất"
+                          }
+                          className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1.5! text-xs"
+                        >
+                          <Edit3 size={12} /> Sửa
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -283,7 +281,7 @@ export default function CharacterDetailsModal({
                             ? "Phiên bản đã đăng bán lên Store — không thể xóa"
                             : "Xóa phiên bản này"
                         }
-                        className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex cursor-pointer items-center gap-1 border-2 border-black bg-white px-2.5 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {isDeleting ? (
                           <Loader2 size={12} className="animate-spin" />
@@ -299,7 +297,7 @@ export default function CharacterDetailsModal({
           )}
         </div>
       </div>
-    </Modal>
+    </StoreModal>
   );
 }
 

@@ -49,3 +49,92 @@
   background-position: 0 0, 0 12px, 12px -12px, -12px 0;
 }
 .ps-doc-tab { background: var(--ps-panel); color: var(--ps-text); box-shadow: inset 0 2px 0 var(--ps-accent); border: 1px solid var(--ps-edge); border-bottom: 0; }
+
+/* ---------- Aseprite Light Pixel-Bevel Studio ---------- */
+.ase-bar {
+  background: #e9ecea;
+  border-bottom: 2px solid #9aa49e;
+  color: var(--ps-text);
+}
+.ase-dock {
+  background: #eef1ef;
+  border-color: #9aa49e;
+}
+.ase-panel {
+  background: #ffffff;
+  border: 2px solid #8a948e;
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #d5dbd7;
+}
+.ase-panel-head {
+  background: #e1e6e3;
+  border-bottom: 2px solid #8a948e;
+  color: #1f2a24;
+}
+.ase-btn {
+  background: #f8faf9;
+  color: #1f2a24;
+  border: 2px solid #7d8781;
+  border-radius: 2px;
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #cfd6d1;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.ase-btn:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: #2d6a4f;
+}
+.ase-btn:active:not(:disabled) {
+  box-shadow: inset 1px 1px 0 #c6ceca;
+  transform: translateY(1px);
+}
+.ase-btn:focus-visible,
+.ase-btn-primary:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 1px;
+}
+.ase-btn:disabled,
+.ase-btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.ase-btn[aria-pressed="true"],
+.ase-btn-active {
+  background: #dcebe2;
+  color: #163d2c;
+  border-color: #2d6a4f;
+  box-shadow: inset 1px 1px 0 #95bfa6;
+}
+.ase-btn-primary {
+  background: #2d6a4f;
+  color: #ffffff;
+  border: 2px solid #163d2c;
+  border-radius: 2px;
+  box-shadow: inset 1px 1px 0 #489572, inset -1px -1px 0 #163d2c;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.ase-btn-primary:hover:not(:disabled) {
+  background: #23533d;
+}
+.ase-input {
+  background: #ffffff;
+  color: #1f2a24;
+  border: 2px solid #8a948e;
+  border-radius: 2px;
+  box-shadow: inset 1px 1px 0 #e3e8e5;
+}
+.ase-input:focus {
+  border-color: #2d6a4f;
+  outline: 2px solid #2d6a4f;
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ase-btn,
+  .ase-btn-primary {
+    transition: none;
+  }
+  .ase-btn:active:not(:disabled) {
+    transform: none;
+  }
+}

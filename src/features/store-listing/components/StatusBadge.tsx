@@ -9,17 +9,19 @@ export const STATUS_LABEL: Record<StoreProductStatus, string> = {
 };
 
 const STATUS_STYLE: Record<StoreProductStatus, string> = {
-  UNPUBLISHED: "border-amber-300 bg-amber-50 text-amber-800",
-  PUBLISHED: "border-green-300 bg-green-50 text-green-800",
-  ARCHIVED: "border-blue-300 bg-blue-50 text-blue-800",
-  DELETED: "border-neutral-300 bg-neutral-200 text-neutral-700",
+  UNPUBLISHED: "bg-[#fef08a] text-black",
+  PUBLISHED: "bg-primary text-black",
+  ARCHIVED: "bg-gray-200 text-black",
+  DELETED: "bg-[#fecaca] text-black",
 };
 
 export default function StatusBadge({ status }: { status: StoreProductStatus | string }) {
   const normalized = (status in STATUS_STYLE ? status : "UNPUBLISHED") as StoreProductStatus;
   const className = STATUS_STYLE[normalized];
   return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${className}`}>
+    <span
+      className={`inline-flex items-center gap-1 whitespace-nowrap border border-black px-2 py-0.5 text-[10px] font-black uppercase tracking-wider shadow-[1px_1px_0_0_#000] ${className}`}
+    >
       {STATUS_LABEL[normalized]}
     </span>
   );

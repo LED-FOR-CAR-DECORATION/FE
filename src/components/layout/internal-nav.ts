@@ -36,6 +36,13 @@ export const menuItems: MenuItem[] = [
     roles: ["DESIGNER"],
   },
   {
+    label: "Đăng bán",
+    description: "Chỉnh sửa thông tin và gửi phiên bản nhân vật lên Store",
+    href: "/designer/publish",
+    icon: Store,
+    roles: ["DESIGNER"],
+  },
+  {
     label: "Đăng tải yêu cầu thiết kế",
     description: "Tải bản thiết kế cho yêu cầu được giao",
     href: "/designer/commissions",
@@ -61,7 +68,7 @@ export const menuItems: MenuItem[] = [
     description: "Duyệt yêu cầu, báo giá và phân công nhà thiết kế",
     href: "/staff/commission",
     icon: ClipboardList,
-    roles: ["STAFF", "MANAGER", "ADMIN"],
+    roles: ["STAFF", "ADMIN"],
   },
   {
     label: "Tin nhắn khách hàng",
@@ -111,7 +118,7 @@ export const menuItems: MenuItem[] = [
     description: "Xem danh sách tài khoản nội bộ",
     href: "/admin/users",
     icon: Users,
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN"],
   },
   {
     label: "Quản lý vai trò",

@@ -13,6 +13,7 @@ export type UpdatedSubscriptionResponse = {
     isLifetime?: boolean;
     durationDays?: number;
     allAccessCharacters?: boolean;
+    maxCommissionRevisions?: number;
     status?: UpdatedSubscriptionResponse.status;
     createdAt?: string;
     tagIds?: Array<number>;

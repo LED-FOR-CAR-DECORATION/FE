@@ -218,52 +218,63 @@ export default function SubscriptionListingTable({
                 const isDeleted = plan.status === "DELETED";
                 return (
                   <tr key={plan.subscriptionDetailId} className={storeRowClass(isDeleted)}>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
-                      #{plan.productId}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
+                        #{plan.productId}
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <StoreThumbnail
                         src={plan.thumbnailUrl}
                         alt={`Ảnh đại diện của ${plan.planName}`}
-                        fallback={<Crown size={18} />}
+                        fallback={<Crown size={18} aria-hidden="true" />}
+                        pixelated
                       />
                     </td>
-                    <td className="px-4 py-3">
-                      <p className={`font-bold ${isDeleted ? "line-through text-neutral-500" : ""}`}>
+                    <td className="px-4 py-3.5">
+                      <p className={`text-xs font-black uppercase sm:text-sm ${isDeleted ? "line-through text-text-muted" : "text-black"}`}>
                         {plan.planName}
                       </p>
-                      <p className="text-[11px] text-text-muted">
-                        Mã gói: <span className="font-mono font-semibold">{plan.planCode}</span>
+                      <p className="text-[11px] font-medium text-text-muted tabular-nums">
+                        Mã gói: <span className="font-mono font-black text-black">{plan.planCode}</span>
                         {plan.updatedAt ? ` · Cập nhật lúc ${formatDateTime(plan.updatedAt)}` : ""}
                       </p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {plan.isLifetime ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-800">
-                          <InfinityIcon size={13} /> Vĩnh viễn
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      {!plan.allAccessCharacters && (plan.maxCommissionRevisions ?? 0) > 0 ? (
+                        <span className="text-xs font-bold text-text-muted">—</span>
+                      ) : plan.isLifetime ? (
+                        <span className="inline-flex items-center gap-1 border border-black bg-[#e9d5ff] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                          <InfinityIcon size={12} aria-hidden="true" /> Vĩnh viễn
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-800">
-                          <Clock size={12} /> {plan.durationDays} ngày
+                        <span className="inline-flex items-center gap-1 border border-black bg-[#bae6fd] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000] tabular-nums">
+                          <Clock size={11} aria-hidden="true" /> {plan.durationDays} ngày
                         </span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {plan.allAccessCharacters ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#173b28]">
-                          <Sparkles size={13} className="text-[#3f9660]" /> Mở khóa toàn bộ nhân vật
-                        </span>
-                      ) : (
-                        <span className="text-xs font-medium text-text-muted">Theo cấu hình gói</span>
-                      )}
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-col gap-1">
+                        {plan.allAccessCharacters ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-black">
+                            <Sparkles size={13} className="shrink-0 text-primary-ink" aria-hidden="true" /> Mở khóa toàn bộ thư viện nhân vật
+                          </span>
+                        ) : (plan.maxCommissionRevisions ?? 0) > 0 ? (
+                          <span className="inline-flex w-fit items-center gap-1 border border-black bg-primary/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                            +{plan.maxCommissionRevisions} lượt chỉnh sửa thiết kế miễn phí
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium text-text-muted">Theo cấu hình gói</span>
+                        )}
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-bold tabular-nums text-[#173b28]">
+                    <td className="whitespace-nowrap px-4 py-3.5 text-sm font-black text-primary-ink tabular-nums">
                       {formatVnd(plan.basePrice)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <StatusBadge status={plan.status} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       {isDeleted ? null : (
                         <div className="flex flex-wrap items-center gap-1.5">
                           {onEdit && (

@@ -86,13 +86,13 @@ export default function CategoryTagSelector({
   };
 
   return (
-    <div className="rounded-lg border border-[#dbece0] bg-[#f9fdfa] p-3">
-      <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-[#1f432b]">
-        <Tag size={14} /> {label}
+    <div className="border-2 border-black bg-white p-4 shadow-[2px_2px_0_0_#000]">
+      <label className="mb-2.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+        <Tag size={14} className="text-primary-ink" aria-hidden="true" /> {label}
       </label>
 
       {isLoading ? (
-        <p className="text-xs text-text-muted">Đang tải danh sách thẻ...</p>
+        <p className="text-xs font-medium text-text-muted">Đang tải danh sách thẻ...</p>
       ) : availableTags.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {availableTags.map((tag) => {
@@ -103,27 +103,28 @@ export default function CategoryTagSelector({
               <button
                 key={tagId}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => onToggleTag(tagId)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
+                className={`inline-flex cursor-pointer items-center gap-1.5 border-2 border-black px-2.5 py-1 text-xs font-black uppercase tracking-wide transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                   isSelected
-                    ? "border-[#439660] bg-[#eaf7ee] text-[#1c4b2b]"
-                    : "border-[#d8e6dc] bg-white text-text-muted hover:bg-neutral-50"
+                    ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
+                    : "bg-gray-50 text-black hover:bg-primary/20"
                 }`}
               >
-                {isSelected && <Check size={12} />}
+                {isSelected && <Check size={12} strokeWidth={3} aria-hidden="true" />}
                 {tag.name}
               </button>
             );
           })}
         </div>
       ) : (
-        <p className="text-xs text-text-muted">
+        <p className="text-xs font-medium text-text-muted">
           Chưa có thẻ nào trên hệ thống. Bạn có thể tạo nhanh thẻ mới ở bên dưới.
         </p>
       )}
 
       {/* Quick inline tag creation */}
-      <div className="mt-3 space-y-2 border-t border-[#e5efe8] pt-2.5">
+      <div className="mt-3.5 space-y-2 border-t-2 border-dashed border-gray-200 pt-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             type="text"
@@ -137,7 +138,7 @@ export default function CategoryTagSelector({
             onKeyDown={handleKeyDown}
             placeholder="Nhập tên thẻ mới (ví dụ: hoạt hình, xe cộ)..."
             aria-label="Tên thẻ phân loại mới"
-            className="min-w-0 flex-1 rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660] disabled:bg-neutral-100"
+            className="min-w-0 flex-1 border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:outline-2 focus:outline-offset-2 focus:outline-black disabled:opacity-50"
           />
           <input
             type="text"
@@ -148,28 +149,32 @@ export default function CategoryTagSelector({
             onKeyDown={handleKeyDown}
             placeholder="Mô tả thẻ (tùy chọn)..."
             aria-label="Mô tả thẻ phân loại mới"
-            className="min-w-0 flex-1 rounded-md border border-[#d8e6dc] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#439660] disabled:bg-neutral-100"
+            className="min-w-0 flex-1 border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:outline-2 focus:outline-offset-2 focus:outline-black disabled:opacity-50"
           />
           <button
             type="button"
             disabled={isCreating || !newTagName.trim()}
             onClick={() => void handleCreateTag()}
-            className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md border border-[#439660] bg-[#eaf7ee] px-3 py-1.5 text-xs font-bold text-[#1c4b2b] transition hover:bg-[#d8efe0] disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-primary inline-flex shrink-0 items-center justify-center gap-1 px-3! py-1.5! text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
           >
             {isCreating ? (
-              <Loader2 size={13} className="animate-spin" />
+              <Loader2 size={13} className="animate-spin" aria-hidden="true" />
             ) : (
-              <Plus size={13} />
+              <Plus size={13} aria-hidden="true" />
             )}
             {isCreating ? "Đang tạo..." : "Tạo thẻ"}
           </button>
         </div>
 
         {tagError && (
-          <p className="mt-1.5 text-[11px] font-semibold text-red-600">{tagError}</p>
+          <p role="alert" className="mt-1.5 text-[11px] font-bold text-red-700">
+            {tagError}
+          </p>
         )}
         {tagNotice && !tagError && (
-          <p className="mt-1.5 text-[11px] font-semibold text-[#2b6f44]">{tagNotice}</p>
+          <p role="status" className="mt-1.5 text-[11px] font-bold text-primary-ink">
+            {tagNotice}
+          </p>
         )}
       </div>
     </div>

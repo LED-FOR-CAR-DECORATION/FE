@@ -22,6 +22,7 @@ import {
   fetchCharacterVersions,
   fetchMyCharacters,
   formatDesignerApiError,
+  isStoreCharacterType,
   uploadDesignerAssetFile,
   type CharacterVersionItem,
   type DesignerCharacterItem,
@@ -75,10 +76,11 @@ function StoreUploadsWorkspace() {
     async (preferCharacterId?: number | null) => {
       setLoadingCharacters(true);
       try {
-        const items = await fetchAllPages(async (page) => {
-          const res = await fetchMyCharacters({ page, size: 50 });
+        const rawItems = await fetchAllPages(async (page) => {
+          const res = await fetchMyCharacters({ page, size: 50, characterType: "STORE" });
           return { items: res.items, totalPages: res.meta.totalPages };
         });
+        const items = rawItems.filter((item) => isStoreCharacterType(item.characterType));
         setCharacters(items);
 
         setSelectedCharacterId((prev) => {
@@ -88,6 +90,11 @@ function StoreUploadsWorkspace() {
             items.some((item) => item.characterId === targetId)
           ) {
             return targetId;
+          }
+          if (preferCharacterId && !items.some((item) => item.characterId === preferCharacterId)) {
+            setListError(
+              "Nhân vật được chọn không thuộc loại Store (nhân vật Commission không thể đăng tải lên Store).",
+            );
           }
           return items[0]?.characterId ?? null;
         });

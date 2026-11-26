@@ -178,9 +178,11 @@ export default function Header() {
     e.preventDefault();
     const query = searchQuery.trim();
     if (query) {
-      router.push(`/?search=${encodeURIComponent(query)}`);
-    } else if (pathname === "/") {
-      router.push("/");
+      router.push(`/products?search=${encodeURIComponent(query)}`);
+    } else if (pathname.startsWith("/products")) {
+      router.push("/products");
+    } else {
+      router.push("/products");
     }
   };
 
@@ -199,9 +201,9 @@ export default function Header() {
 
           <nav className="hidden items-center gap-6 text-xs font-black uppercase tracking-wider text-black md:flex">
             <Link
-              href="/"
+              href="/products"
               className={`cursor-pointer transition-colors hover:text-primary-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
-                pathname === "/" ? "border-b-2 border-black pb-0.5" : ""
+                pathname.startsWith("/products") ? "border-b-2 border-black pb-0.5" : ""
               }`}
             >
               Cửa hàng
@@ -315,7 +317,7 @@ export default function Header() {
             </button>
           </form>
           <Link
-            href="/"
+            href="/products"
             onClick={() => setMobileOpen(false)}
             className="cursor-pointer border-b-2 border-black pb-2 text-black hover:text-primary-ink"
           >

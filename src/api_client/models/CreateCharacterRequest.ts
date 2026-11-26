@@ -14,5 +14,13 @@ export type CreateCharacterRequest = {
      * Optional detailed character description
      */
     description?: string;
+    /**
+     * Target usage type of character (STORE or COMMISSION)
+     */
+    characterType?: 'STORE' | 'COMMISSION';
+    /**
+     * Optional commission request ID when characterType is COMMISSION
+     */
+    commissionId?: number;
 };
 

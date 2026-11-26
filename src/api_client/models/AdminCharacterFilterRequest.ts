@@ -15,6 +15,14 @@ export type AdminCharacterFilterRequest = {
      */
     creatorEmployeeId?: number;
     /**
+     * Optional filter by character type (STORE or COMMISSION)
+     */
+    characterType?: 'STORE' | 'COMMISSION';
+    /**
+     * Optional filter by linked commission ID
+     */
+    commissionId?: number;
+    /**
      * 0-based page index
      */
     page?: number;

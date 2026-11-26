@@ -56,7 +56,7 @@ export async function fetchBundleSelectableItems(): Promise<{
   const [productsRes, ledModels, characters] = await Promise.all([
     managedProductsPromise,
     fetchManagedLedModels().catch(() => []),
-    fetchAdminCharacters({ size: 100 }).catch(() => []),
+    fetchAdminCharacters({ characterType: "STORE", size: 100 }).catch(() => []),
   ]);
 
   const ledModelByProductId = new Map<number, (typeof ledModels)[number]>();

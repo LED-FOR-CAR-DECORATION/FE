@@ -217,51 +217,54 @@ export default function BundleListingTable({
 
                 return (
                   <tr key={bundle.bundleId} className={storeRowClass(isDeleted)}>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-black text-primary-dark">
-                      #{bundle.productId}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
+                        #{bundle.productId}
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <StoreThumbnail
                         src={bundle.thumbnailUrl}
                         alt={`Ảnh đại diện của ${bundle.bundleName}`}
-                        fallback={<Boxes size={18} />}
+                        fallback={<Boxes size={18} aria-hidden="true" />}
+                        pixelated
                       />
                     </td>
-                    <td className="px-4 py-3">
-                      <p className={`font-bold ${isDeleted ? "line-through text-neutral-500" : ""}`}>
+                    <td className="px-4 py-3.5">
+                      <p className={`text-xs font-black uppercase sm:text-sm ${isDeleted ? "line-through text-text-muted" : "text-black"}`}>
                         {bundle.bundleName}
                       </p>
-                      <p className="max-w-xs truncate text-[11px] text-text-muted">
+                      <p className="max-w-xs truncate text-[11px] font-medium text-text-muted tabular-nums">
                         {bundle.updatedAt
                           ? `Cập nhật lúc ${formatDateTime(bundle.updatedAt)}`
                           : bundle.description || "Chưa có mô tả"}
                       </p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <span className="inline-flex items-center gap-1 rounded-full border border-[#cfe5d6] bg-[#f1faf4] px-2.5 py-0.5 text-xs font-bold text-[#173b28]">
-                        <Sparkles size={11} className="text-[#3f9660]" />
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span className="inline-flex items-center gap-1 border border-black bg-primary/35 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000] tabular-nums">
+                        <Sparkles size={11} className="text-black" aria-hidden="true" />
                         {bundle.itemCount} mục
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <p className="font-bold tabular-nums text-[#173b28]">
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <p className="text-sm font-black text-primary-ink tabular-nums">
                         {formatVnd(bundle.bundlePrice)}
                       </p>
                       {discount > 0 && (
                         <div className="mt-0.5 flex items-center gap-1.5">
-                          <span className="text-[11px] text-text-muted line-through tabular-nums">
+                          <span className="text-[11px] font-medium text-text-muted line-through tabular-nums">
                             {formatVnd(bundle.originalPrice)}
                           </span>
-                          <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
+                          <span className="border border-black bg-[#fecaca] px-1.5 py-0.2 text-[10px] font-black text-black tabular-nums">
                             -{discount}%
                           </span>
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <StatusBadge status={bundle.status} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       {isDeleted ? null : (
                         <div className="flex flex-wrap items-center gap-1.5">
                           {onEdit && (

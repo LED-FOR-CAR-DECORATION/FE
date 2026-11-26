@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import Image from "next/image";
 import { AlertTriangle, History, Loader2, RotateCcw, ShieldCheck } from "lucide-react";
-import Modal from "@/components/ui/Modal";
+import StoreModal from "./StoreModal";
 import { formatBytes, formatDate } from "../format";
 import { getCharacterVersions } from "../services/store-listing.service";
 import type { CharacterVersion, PublishMode, StoreCharacterRow } from "../types";
@@ -76,15 +76,16 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
   };
 
   return (
-    <Modal
+    <StoreModal
       title={copy.title}
+      badge="CHỌN PHIÊN BẢN"
       description="Chọn chính xác phiên bản sẽ được kích hoạt để hiển thị và bán cho khách hàng trên cửa hàng."
       onClose={onClose}
       busy={isSubmitting}
       size="lg"
       footer={
         <>
-          <p className="mr-auto text-xs font-medium text-text-muted" aria-live="polite">
+          <p className="mr-auto text-xs font-bold text-text-muted" aria-live="polite">
             {isSameAsLive
               ? "Phiên bản này hiện đang hoạt động trên cửa hàng — vui lòng chọn phiên bản khác."
               : selectedVersion
@@ -95,7 +96,7 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-[#cfe0d4] bg-white px-4 py-2 text-sm font-bold transition-colors hover:bg-[#eef8f0] disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-secondary px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
             Hủy
           </button>
@@ -103,35 +104,37 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
             type="button"
             onClick={submit}
             disabled={!canConfirm}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition-all hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd] disabled:translate-y-0 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-none disabled:bg-gray-100 disabled:text-gray-400 disabled:shadow-none"
+            className="btn-primary inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
-            {isSubmitting && <Loader2 size={15} className="animate-spin" />}
+            {isSubmitting && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
             {selectedVersion ? copy.confirm(selectedVersion.versionNumber) : "Vui lòng chọn version"}
           </button>
         </>
       }
     >
-      <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#e3efe6] bg-[#f6fbf7] p-3">
-        <Image
-          src={character.thumbnailUrl}
-          alt={`Thumbnail của ${character.name}`}
-          width={48}
-          height={48}
-          className="h-12 w-12 shrink-0 rounded-lg border border-[#d8e6dc] bg-white object-contain"
-        />
+      <div className="mb-4 flex items-center gap-3 border-2 border-black bg-gray-50 p-3 shadow-[2px_2px_0_0_#000]">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden border-2 border-black bg-white">
+          <Image
+            src={character.thumbnailUrl}
+            alt={`Thumbnail của ${character.name}`}
+            width={48}
+            height={48}
+            className="h-full w-full object-contain [image-rendering:pixelated]"
+          />
+        </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-black">{character.name}</p>
+          <p className="truncate text-sm font-black uppercase text-black">{character.name}</p>
           <p className="truncate text-xs font-medium text-text-muted">
-            {character.characterId} · Designer: {character.creatorName}
+            #{character.characterId} · Nhà thiết kế: {character.creatorName}
           </p>
         </div>
         <StatusBadge status={character.status} />
       </div>
 
-      <p className="mb-4 flex items-start gap-2 rounded-lg border border-[#cfe5d6] bg-[#f1faf4] px-3 py-2 text-xs font-medium text-[#2c5a3f]">
-        <ShieldCheck size={15} className="mt-0.5 shrink-0" />
+      <p className="mb-4 flex items-start gap-2.5 border-2 border-black bg-primary/15 px-3.5 py-2.5 text-xs font-medium text-black">
+        <ShieldCheck size={15} className="mt-0.5 shrink-0 text-primary-ink" aria-hidden="true" />
         <span>
-          <strong>Quy tắc BR-10 &amp; BR-14:</strong> Chỉ Manager mới có quyền publish. Hệ thống không tự động chọn
+          <strong className="font-black">Quy tắc BR-10 &amp; BR-14:</strong> Chỉ Manager mới có quyền publish. Hệ thống không tự động chọn
           version cho bạn — bản upload mới nhất chưa hẳn đã phù hợp. Vui lòng kiểm tra changelog và thông số kỹ thuật
           trước khi kích hoạt.
         </span>
@@ -140,24 +143,27 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
       {!versions && !loadError && <VersionListSkeleton />}
 
       {loadError && (
-        <div role="alert" className="flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-8 text-center">
-          <AlertTriangle size={22} className="text-red-600" />
-          <p className="text-sm font-semibold text-red-700">{loadError}</p>
+        <div
+          role="alert"
+          className="flex flex-col items-center gap-3 border-2 border-black bg-[#fee2e2] px-4 py-8 text-center shadow-[4px_4px_0_0_#000]"
+        >
+          <AlertTriangle size={22} className="text-red-700" aria-hidden="true" />
+          <p className="text-sm font-black text-black">{loadError}</p>
           <button
             type="button"
             onClick={() => setAttempt((value) => value + 1)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100"
+            className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
           >
-            <RotateCcw size={13} /> Thử lại
+            <RotateCcw size={13} aria-hidden="true" /> Thử lại
           </button>
         </div>
       )}
 
       {versions && versions.length === 0 && (
-        <div className="rounded-xl border border-dashed border-[#cfe0d4] px-4 py-10 text-center">
-          <History size={22} className="mx-auto mb-2 text-text-muted" />
-          <p className="text-sm font-bold">Chưa có version nào được tải lên</p>
-          <p className="mt-1 text-xs text-text-muted">
+        <div className="border-2 border-dashed border-black/30 bg-gray-50 px-4 py-10 text-center">
+          <History size={22} className="mx-auto mb-2 text-text-muted" aria-hidden="true" />
+          <p className="text-sm font-black uppercase text-black">Chưa có version nào được tải lên</p>
+          <p className="mt-1 text-xs font-medium text-text-muted">
             Designer cần upload ít nhất một version trước khi Character có thể publish lên Store.
           </p>
         </div>
@@ -165,7 +171,7 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
 
       {versions && versions.length > 0 && (
         <fieldset disabled={isSubmitting} className="min-w-0">
-          <legend className="mb-2 text-xs font-black uppercase tracking-wide text-text-muted">
+          <legend className="mb-2.5 text-xs font-black uppercase tracking-wider text-black">
             Danh sách version khả dụng ({versions.length})
           </legend>
           <div role="radiogroup" className="flex flex-col gap-2.5">
@@ -175,10 +181,10 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
               return (
                 <label
                   key={item.versionId}
-                  className={`relative flex cursor-pointer gap-3 rounded-xl border p-3.5 transition-all has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-[#48a56a]/25 ${
+                  className={`relative flex cursor-pointer gap-3 border-2 border-black p-3.5 transition-all duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-black ${
                     checked
-                      ? "border-[#3f9660] bg-[#effaf2] shadow-[3px_3px_0_#c6e8cd]"
-                      : "border-[#e0ebe3] bg-white hover:border-[#a3d7b2] hover:bg-[#f8fdf9]"
+                      ? "bg-primary/25 shadow-[3px_3px_0_0_#000]"
+                      : "bg-white hover:bg-primary/10"
                   }`}
                 >
                   <input
@@ -187,27 +193,31 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
                     value={item.versionId}
                     checked={checked}
                     onChange={() => setSelectedVersionId(item.versionId)}
-                    className="mt-1 h-4 w-4 shrink-0 accent-[#2f8a55]"
+                    className="mt-1 h-4 w-4 shrink-0 accent-[#1f432b]"
                   />
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-black">Version {item.versionNumber}</span>
+                      <span className="text-sm font-black uppercase text-black">
+                        Version {item.versionNumber}
+                      </span>
                       {isStoreVersion && (
-                        <span className="rounded-full border border-green-300 bg-green-100 px-2 py-0.5 text-[10px] font-black uppercase text-green-800">
+                        <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
                           {character.status === "PUBLISHED" ? "Đang bán trên Store" : "Bản publish trước đó"}
                         </span>
                       )}
                       {item.isCurrent && (
-                        <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-black uppercase text-sky-700">
+                        <span className="border border-black bg-[#bae6fd] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
                           Bản mới nhất của Designer
                         </span>
                       )}
-                      <span className="ml-auto text-[11px] font-medium text-text-muted">{formatDate(item.createdAt)}</span>
+                      <span className="ml-auto text-[11px] font-bold text-text-muted tabular-nums">
+                        {formatDate(item.createdAt)}
+                      </span>
                     </span>
-                    <span className="mt-1 block text-xs font-medium text-[#3d5a47]">
+                    <span className="mt-1 block text-xs font-medium text-text-muted">
                       {item.changelog || "Chưa có changelog."}
                     </span>
-                    <span className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-bold text-text-muted">
+                    <span className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black uppercase text-black tabular-nums">
                       <Spec>{item.format}</Spec>
                       <Spec>{item.width}×{item.height}px</Spec>
                       <Spec>{item.frameCount} khung hình</Spec>
@@ -223,24 +233,31 @@ export default function PublishVersionModal({ character, mode, onClose, onConfir
       )}
 
       {submitError && (
-        <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+        <p
+          role="alert"
+          className="mt-4 flex items-start gap-2 border-2 border-black bg-[#fee2e2] px-3.5 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+        >
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
           {submitError}
         </p>
       )}
-    </Modal>
+    </StoreModal>
   );
 }
 
 function Spec({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-md border border-[#e0ebe3] bg-[#f6fbf7] px-1.5 py-0.5">{children}</span>;
+  return (
+    <span className="border border-black bg-gray-100 px-1.5 py-0.5 text-black">
+      {children}
+    </span>
+  );
 }
 
 function VersionListSkeleton() {
   return (
     <div className="flex flex-col gap-2.5" role="status" aria-label="Đang tải danh sách version">
       {[0, 1, 2].map((item) => (
-        <div key={item} className="h-[88px] animate-pulse rounded-xl border border-[#e0ebe3] bg-[#f3f9f5]" />
+        <div key={item} className="h-[88px] animate-pulse border-2 border-black/15 bg-gray-100" />
       ))}
     </div>
   );

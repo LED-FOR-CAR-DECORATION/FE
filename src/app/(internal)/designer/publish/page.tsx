@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -21,11 +22,13 @@ import {
   ShieldCheck,
   Store,
   Tag,
+  X,
 } from "lucide-react";
 import {
   DesignerCharactersProvider,
   useDesignerCharacters,
 } from "@/features/designer/context/DesignerCharactersContext";
+import { useAdaptiveListRows } from "@/features/designer/hooks/useResponsiveGrid";
 import { getCharacterArtwork } from "@/features/designer/character-artwork";
 import { linkedCommissionId, stripCommissionMarker } from "@/features/designer/commission-link";
 import { fetchStoreTags } from "@/lib/api/products";
@@ -38,9 +41,6 @@ import {
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
 import type { TagItem } from "@/api_client";
-
-const CHARACTER_PAGE_SIZE = 5;
-const VERSION_PAGE_SIZE = 5;
 
 function getVersionArtwork(
   version: CharacterVersionItem | null,
@@ -79,6 +79,23 @@ function DesignerPublishWorkspace() {
     publishVersionToStore,
   } = useDesignerCharacters();
 
+  const { rows: charPageSize, ready: charLayoutReady } = useAdaptiveListRows({
+    estimatedRowHeight: 64,
+    rowGap: 6,
+    chromeHeight: 300,
+    minRows: 3,
+    maxRows: 8,
+    defaultRows: 4,
+  });
+  const { rows: versionPageSize } = useAdaptiveListRows({
+    estimatedRowHeight: 58,
+    rowGap: 6,
+    chromeHeight: 325,
+    minRows: 3,
+    maxRows: 8,
+    defaultRows: 5,
+  });
+
   const [ownCharacters, setOwnCharacters] = useState<DesignerCharacterItem[]>([]);
   const [loadingCharacters, setLoadingCharacters] = useState(true);
   const [charactersError, setCharactersError] = useState<string | null>(null);
@@ -93,6 +110,26 @@ function DesignerPublishWorkspace() {
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(true);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const tagsDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tagsOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      if (tagsDropdownRef.current && !tagsDropdownRef.current.contains(event.target as Node)) {
+        setTagsOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTagsOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [tagsOpen]);
 
   const [versionError, setVersionError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -140,22 +177,29 @@ function DesignerPublishWorkspace() {
     );
   }, [ownCharacters, appliedQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredCharacters.length / CHARACTER_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredCharacters.length / charPageSize));
   const safePage = Math.min(page, totalPages - 1);
   const pagedCharacters = useMemo(
     () =>
       filteredCharacters.slice(
-        safePage * CHARACTER_PAGE_SIZE,
-        (safePage + 1) * CHARACTER_PAGE_SIZE,
+        safePage * charPageSize,
+        (safePage + 1) * charPageSize,
       ),
-    [filteredCharacters, safePage],
+    [filteredCharacters, safePage, charPageSize],
   );
   const charRangeStart =
-    filteredCharacters.length === 0 ? 0 : safePage * CHARACTER_PAGE_SIZE + 1;
+    filteredCharacters.length === 0 ? 0 : safePage * charPageSize + 1;
   const charRangeEnd = Math.min(
     filteredCharacters.length,
-    (safePage + 1) * CHARACTER_PAGE_SIZE,
+    (safePage + 1) * charPageSize,
   );
+
+  // Clamp current page when adaptive pageSize grows on viewport resize
+  useEffect(() => {
+    if (page > 0 && page >= totalPages) {
+      setPage(Math.max(0, totalPages - 1));
+    }
+  }, [page, totalPages]);
 
   // Load Store tags once
   useEffect(() => {
@@ -178,13 +222,13 @@ function DesignerPublishWorkspace() {
 
   // Resolve initial selection from ?characterId (non-commission only) or first eligible character
   useEffect(() => {
-    if (requestedCharacterId) {
+    if (requestedCharacterId && charLayoutReady) {
       const requestedIndex = ownCharacters.findIndex(
         (c) => c.characterId === requestedCharacterId,
       );
       if (requestedIndex >= 0) {
         setSelectedCharacter(ownCharacters[requestedIndex]);
-        setPage(Math.floor(requestedIndex / CHARACTER_PAGE_SIZE));
+        setPage(Math.floor(requestedIndex / charPageSize));
         return;
       }
     }
@@ -198,7 +242,7 @@ function DesignerPublishWorkspace() {
     } else if (ownCharacters.length === 0) {
       setSelectedCharacter(null);
     }
-  }, [requestedCharacterId, ownCharacters, selectedCharacter]);
+  }, [requestedCharacterId, charLayoutReady, charPageSize, ownCharacters, selectedCharacter]);
 
   // Load versions whenever selected character changes
   useEffect(() => {
@@ -228,16 +272,22 @@ function DesignerPublishWorkspace() {
     () => (selectedCharacter ? versionsByCharacter[selectedCharacter.characterId] ?? [] : []),
     [selectedCharacter, versionsByCharacter],
   );
-  const versionTotalPages = Math.max(1, Math.ceil(versions.length / VERSION_PAGE_SIZE));
+  const versionTotalPages = Math.max(1, Math.ceil(versions.length / versionPageSize));
   const safeVersionPage = Math.min(versionPage, versionTotalPages - 1);
   const pagedVersions = useMemo(
     () =>
       versions.slice(
-        safeVersionPage * VERSION_PAGE_SIZE,
-        (safeVersionPage + 1) * VERSION_PAGE_SIZE,
+        safeVersionPage * versionPageSize,
+        (safeVersionPage + 1) * versionPageSize,
       ),
-    [versions, safeVersionPage],
+    [versions, safeVersionPage, versionPageSize],
   );
+
+  useEffect(() => {
+    if (versionPage > 0 && versionPage >= versionTotalPages) {
+      setVersionPage(Math.max(0, versionTotalPages - 1));
+    }
+  }, [versionPage, versionTotalPages]);
   const isVersionsLoading = Boolean(
     selectedCharacter &&
       (loadingVersions[selectedCharacter.characterId] ||
@@ -350,9 +400,9 @@ function DesignerPublishWorkspace() {
   };
 
   return (
-    <div className="space-y-3.5">
+    <div className="flex min-h-[calc(100dvh-112px)] flex-col gap-3">
       {/* Slim Neo-Brutalist Top Bar */}
-      <header className="neo-box-no-hover flex flex-wrap items-center justify-between gap-2.5 bg-white px-4 py-2.5">
+      <header className="neo-box-no-hover flex shrink-0 flex-wrap items-center justify-between gap-2.5 bg-white px-4 py-2.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center border-2 border-black bg-primary text-black shadow-[2px_2px_0_0_#000]">
             <Store size={16} />
@@ -398,10 +448,10 @@ function DesignerPublishWorkspace() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-        {/* LEFT COLUMN: Character Selector (5 per page) */}
+      <div className="grid flex-1 grid-cols-1 gap-3.5 lg:grid-cols-12">
+        {/* LEFT COLUMN: Adaptive-height Character Selector with bottom-pinned pagination */}
         <section className="neo-box-no-hover flex min-w-0 flex-col bg-white p-3.5 lg:col-span-4">
-          <form onSubmit={handleSearchSubmit} className="mb-2.5 flex items-center gap-2">
+          <form onSubmit={handleSearchSubmit} className="mb-2.5 flex shrink-0 items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <Search
                 size={14}
@@ -425,12 +475,12 @@ function DesignerPublishWorkspace() {
           </form>
 
           {loadingCharacters ? (
-            <div className="flex min-h-[240px] items-center justify-center gap-2 text-xs font-bold text-text-muted">
+            <div className="flex flex-1 items-center justify-center gap-2 text-xs font-bold text-text-muted">
               <Loader2 size={16} className="animate-spin" />
               <span>Đang tải danh sách nhân vật...</span>
             </div>
           ) : pagedCharacters.length === 0 ? (
-            <div className="flex min-h-[220px] flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-5 text-center text-xs text-text-muted">
+            <div className="flex flex-1 flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-5 text-center text-xs text-text-muted">
               <Layers size={26} className="mb-2 opacity-50" />
               <p className="font-black uppercase text-black">Không có nhân vật cá nhân nào phù hợp.</p>
               <Link
@@ -441,7 +491,7 @@ function DesignerPublishWorkspace() {
               </Link>
             </div>
           ) : (
-            <div className="space-y-1.5">
+            <div className="flex-1 space-y-1.5">
               {pagedCharacters.map((char) => {
                 const isActive = selectedCharacter?.characterId === char.characterId;
                 const thumb = getCharacterArtwork(char);
@@ -464,7 +514,7 @@ function DesignerPublishWorkspace() {
                         <img
                           src={thumb}
                           alt={char.characterName}
-                          className="h-full w-full object-contain p-0.5"
+                          className="h-full w-full object-contain"
                           style={{ imageRendering: "pixelated" }}
                         />
                       ) : (
@@ -504,15 +554,15 @@ function DesignerPublishWorkspace() {
           )}
 
           {filteredCharacters.length > 0 && (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t-2 border-black pt-2.5 text-xs">
-              <span className="font-semibold text-black/80">
-                <strong className="font-mono text-black">
-                  {charRangeStart}–{charRangeEnd}
-                </strong>{" "}
-                / {filteredCharacters.length} · Trang{" "}
-                <strong className="font-mono text-black">{safePage + 1}</strong>/{totalPages}
-              </span>
-              {totalPages > 1 && (
+            <div className="mt-auto shrink-0 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-black pt-2.5 text-xs">
+                <span className="font-semibold text-black/80">
+                  <strong className="font-mono text-black">
+                    {charRangeStart}–{charRangeEnd}
+                  </strong>{" "}
+                  / {filteredCharacters.length} · Trang{" "}
+                  <strong className="font-mono text-black">{safePage + 1}</strong>/{totalPages}
+                </span>
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
@@ -531,23 +581,23 @@ function DesignerPublishWorkspace() {
                     Sau <ChevronRight size={12} />
                   </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </section>
 
         {/* RIGHT COLUMN: Version Selector & Editable Publish Form */}
-        <section className="neo-box-no-hover min-w-0 bg-white p-4 lg:col-span-8">
+        <section className="neo-box-no-hover flex min-w-0 flex-col bg-white p-4 lg:col-span-8">
           {!selectedCharacter ? (
-            <div className="flex min-h-[280px] flex-col items-center justify-center text-center text-sm text-text-muted">
+            <div className="flex flex-1 flex-col items-center justify-center text-center text-sm text-text-muted">
               <Store size={32} className="mb-2 opacity-40" />
               <p className="font-black uppercase text-black">
                 Chọn một nhân vật ở cột bên trái để chỉnh sửa thông tin đăng bán.
               </p>
             </div>
           ) : (
-            <form onSubmit={handlePublish} className="space-y-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2.5">
+            <form onSubmit={handlePublish} className="flex flex-1 flex-col gap-3">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2.5">
                 <div className="min-w-0">
                   <h2 className="truncate text-base font-black uppercase tracking-tight text-black">
                     {selectedCharacter.characterName}
@@ -568,7 +618,7 @@ function DesignerPublishWorkspace() {
               {publishSuccess && (
                 <div
                   role="status"
-                  className="flex items-start gap-2 border-2 border-black bg-[#eef8f0] p-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+                  className="flex shrink-0 items-start gap-2 border-2 border-black bg-[#eef8f0] p-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
                 >
                   <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-primary-ink" />
                   <span>{publishSuccess}</span>
@@ -578,7 +628,7 @@ function DesignerPublishWorkspace() {
               {(submitError || versionError) && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 border-2 border-black bg-red-50 p-2.5 text-xs font-bold text-red-700 shadow-[2px_2px_0_0_#000]"
+                  className="flex shrink-0 items-start gap-2 border-2 border-black bg-red-50 p-2.5 text-xs font-bold text-red-700 shadow-[2px_2px_0_0_#000]"
                 >
                   <AlertCircle size={15} className="mt-0.5 shrink-0" />
                   <span>{submitError || versionError}</span>
@@ -586,12 +636,12 @@ function DesignerPublishWorkspace() {
               )}
 
               {isVersionsLoading ? (
-                <div className="flex min-h-[220px] items-center justify-center gap-2 border-2 border-black bg-[#f7fbf8] text-xs font-bold text-text-muted">
+                <div className="flex flex-1 items-center justify-center gap-2 border-2 border-black bg-[#f7fbf8] text-xs font-bold text-text-muted">
                   <Loader2 size={18} className="animate-spin" />
                   <span>Đang tải các phiên bản của nhân vật...</span>
                 </div>
               ) : versions.length === 0 ? (
-                <div className="flex min-h-[240px] flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-6 text-center">
+                <div className="flex flex-1 flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-6 text-center">
                   <Layers size={30} className="mb-2 text-black/40" />
                   <p className="text-sm font-black uppercase text-black">
                     Nhân vật này chưa có phiên bản hoàn thiện nào
@@ -607,11 +657,11 @@ function DesignerPublishWorkspace() {
                   </Link>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:items-start">
+                <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-12">
                   {/* Preview + Form */}
-                  <div className="min-w-0 space-y-3 md:col-span-7">
-                    <div className="relative flex min-h-[156px] flex-col items-center justify-center border-2 border-black bg-[#090d14] px-3 py-3.5 text-center shadow-[4px_4px_0_0_#000]">
-                      <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-1.5">
+                  <div className="flex min-w-0 flex-col gap-2.5 md:col-span-7">
+                    <div className="relative flex min-h-[140px] flex-1 flex-col items-center justify-center border-2 border-black bg-[#090d14] px-3 py-2.5 text-center shadow-[4px_4px_0_0_#000]">
+                      <div className="mb-1.5 flex w-full shrink-0 flex-wrap items-center justify-between gap-1.5">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="inline-flex items-center gap-1 border border-black bg-white px-2 py-0.5 font-mono text-[10px] font-black text-black">
                             <Grid size={10} /> {selectedMatrixSize}
@@ -636,18 +686,18 @@ function DesignerPublishWorkspace() {
                         <img
                           src={selectedArtwork}
                           alt={`${selectedCharacter.characterName} v${selectedVersion?.versionNumber}`}
-                          className="h-28 w-28 object-contain sm:h-32 sm:w-32"
+                          className="min-h-0 w-full max-w-[200px] flex-1 object-contain"
                           style={{ imageRendering: "pixelated" }}
                         />
                       ) : (
-                        <div className="flex flex-col items-center gap-1.5 py-5 text-slate-400">
-                          <Layers size={28} className="opacity-60" />
+                        <div className="flex flex-col items-center gap-1.5 py-4 text-slate-400">
+                          <Layers size={26} className="opacity-60" />
                           <span className="text-xs font-bold">Chưa có ảnh xem trước</span>
                         </div>
                       )}
 
                       {selectedVersion && (
-                        <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
+                        <div className="mt-1.5 flex shrink-0 flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
                           <span>{selectedVersion.frameCount ?? 1} frames</span>
                           <span>•</span>
                           <span>
@@ -664,7 +714,7 @@ function DesignerPublishWorkspace() {
                       )}
                     </div>
 
-                    <div className="flex items-start gap-2 border-2 border-black bg-sky-50 px-3 py-2 text-[11px] text-black">
+                    <div className="flex shrink-0 items-start gap-2 border-2 border-black bg-sky-50 px-3 py-2 text-[11px] text-black">
                       <ShieldCheck size={14} className="mt-0.5 shrink-0" />
                       <p className="font-medium text-text-muted">
                         <strong className="font-black uppercase text-black">
@@ -674,7 +724,7 @@ function DesignerPublishWorkspace() {
                       </p>
                     </div>
 
-                    <div className="space-y-2.5 border-2 border-black bg-[#f7fbf8] p-3">
+                    <div className="shrink-0 space-y-2.5 border-2 border-black bg-[#f7fbf8] p-3">
                       <div>
                         <label
                           htmlFor="publish-product-name"
@@ -713,32 +763,87 @@ function DesignerPublishWorkspace() {
                       </div>
 
                       {!isLoadingTags && availableTags.length > 0 && (
-                        <div>
+                        <div ref={tagsDropdownRef} className="relative">
                           <label className="mb-1 flex items-center gap-1 text-[11px] font-black uppercase tracking-wider text-black">
                             <Tag size={11} /> Thẻ phân loại (Tags)
                           </label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {availableTags.map((tag) => {
-                              const id = tag.tagId;
-                              const active = id != null && selectedTagIds.includes(id);
-                              return (
-                                <button
-                                  key={id ?? tag.name}
-                                  type="button"
-                                  disabled={isSelectedVersionListed || isSubmitting}
-                                  onClick={() => toggleTag(id)}
-                                  className={`inline-flex cursor-pointer items-center gap-1 border-2 border-black px-2 py-0.5 text-[11px] font-bold transition ${
-                                    active
-                                      ? "bg-primary font-black text-black shadow-[2px_2px_0_0_#000]"
-                                      : "bg-white text-black hover:bg-gray-50"
-                                  } disabled:cursor-not-allowed disabled:opacity-50`}
-                                >
-                                  {active && <Check size={10} />}
-                                  {tag.name}
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <button
+                            type="button"
+                            disabled={isSelectedVersionListed || isSubmitting}
+                            aria-expanded={tagsOpen}
+                            onClick={() => setTagsOpen((prev) => !prev)}
+                            className="flex w-full items-center justify-between gap-2 border-2 border-black bg-white px-2.5 py-1.5 text-left text-xs font-bold text-black hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
+                          >
+                            <span className="truncate">
+                              {selectedTagIds.length === 0
+                                ? "Chọn thẻ phân loại (tùy chọn)..."
+                                : availableTags
+                                    .filter((t) => t.tagId != null && selectedTagIds.includes(t.tagId))
+                                    .map((t) => t.name)
+                                    .join(", ")}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-1.5">
+                              {selectedTagIds.length > 0 && (
+                                <span className="border border-black bg-primary px-1.5 py-0.5 font-mono text-[10px] font-black text-black">
+                                  {selectedTagIds.length}
+                                </span>
+                              )}
+                              <ChevronDown
+                                size={14}
+                                className={`transition-transform ${tagsOpen ? "rotate-180" : ""}`}
+                              />
+                            </span>
+                          </button>
+
+                          {tagsOpen && (
+                            <div className="absolute bottom-full left-0 right-0 z-30 mb-1 border-2 border-black bg-white p-2.5 shadow-[4px_4px_0_0_#000]">
+                              <div className="mb-2 flex items-center justify-between border-b border-black/15 pb-1.5 text-[11px]">
+                                <span className="font-black uppercase text-black">
+                                  Chọn thẻ ({selectedTagIds.length}/{availableTags.length})
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  {selectedTagIds.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedTagIds([])}
+                                      className="inline-flex items-center gap-0.5 font-bold text-red-700 hover:underline"
+                                    >
+                                      <X size={11} /> Xóa hết
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setTagsOpen(false)}
+                                    className="border border-black bg-primary px-2 py-0.5 font-black text-black"
+                                  >
+                                    Xong
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+                                {availableTags.map((tag) => {
+                                  const id = tag.tagId;
+                                  const active = id != null && selectedTagIds.includes(id);
+                                  return (
+                                    <button
+                                      key={id ?? tag.name}
+                                      type="button"
+                                      disabled={isSelectedVersionListed || isSubmitting}
+                                      onClick={() => toggleTag(id)}
+                                      className={`inline-flex cursor-pointer items-center gap-1 border-2 border-black px-2 py-0.5 text-[11px] font-bold transition ${
+                                        active
+                                          ? "bg-primary font-black text-black shadow-[2px_2px_0_0_#000]"
+                                          : "bg-white text-black hover:bg-gray-50"
+                                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                                    >
+                                      {active && <Check size={10} />}
+                                      {tag.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -766,16 +871,16 @@ function DesignerPublishWorkspace() {
                     </div>
                   </div>
 
-                  {/* Version List Column (paged 5/page, no inner scrollbar) */}
+                  {/* Version List Column (adaptive paging, bottom-pinned pager, no inner scrollbar) */}
                   <div className="flex min-w-0 flex-col border-2 border-black bg-[#f7fbf8] p-3 md:col-span-5">
-                    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-1 border-b-2 border-black pb-2">
+                    <div className="mb-2.5 flex shrink-0 flex-wrap items-center justify-between gap-1 border-b-2 border-black pb-2">
                       <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
                         <History size={13} /> Chọn phiên bản ({versions.length})
                       </h3>
                       <span className="text-[10px] font-bold uppercase text-text-muted">Mới nhất trước</span>
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="flex-1 space-y-1.5">
                       {pagedVersions.map((ver) => {
                         const isSelected = ver.versionId === selectedVersion?.versionId;
                         const isLatest = versions[0]?.versionId === ver.versionId;
@@ -839,8 +944,8 @@ function DesignerPublishWorkspace() {
                       })}
                     </div>
 
-                    {versionTotalPages > 1 && (
-                      <div className="mt-3 flex items-center justify-between gap-2 border-t-2 border-black pt-2 text-[11px]">
+                    <div className="mt-auto shrink-0 pt-3">
+                      <div className="flex items-center justify-between gap-2 border-t-2 border-black pt-2 text-[11px]">
                         <span className="font-bold text-black">
                           Trang <strong className="font-mono">{safeVersionPage + 1}</strong>/
                           {versionTotalPages}
@@ -866,7 +971,7 @@ function DesignerPublishWorkspace() {
                           </button>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -880,7 +985,7 @@ function DesignerPublishWorkspace() {
 
 export default function DesignerPublishPage() {
   return (
-    <DesignerCharactersProvider>
+    <DesignerCharactersProvider autoLoadCharacters={false}>
       <Suspense
         fallback={
           <div className="flex min-h-[320px] items-center justify-center gap-2 text-sm text-slate-500">

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { use } from "react";
-import { ArrowLeft, CheckCircle, Image as ImageIcon, Package, WalletCards } from "lucide-react";
+import { ArrowLeft, CheckCircle, Image as ImageIcon, Loader2, Package, WalletCards } from "lucide-react";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useOrders } from "@/features/order/context/OrderContext";
 import { getCharacterOrderComposition, getCharacterRevenue, getCharacterSaleItems } from "@/features/order/character-orders";
 import { formatPrice } from "@/lib/currency";
@@ -32,8 +33,18 @@ function formatCompositionVi(comp: string) {
 
 export default function CharacterOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
-  const { orders } = useOrders();
-  const order = orders.find((entry) => entry.id === orderId);
+  const { isLoading: isAuthLoading } = useAuth();
+  const { orders, isLoading: isOrdersLoading } = useOrders();
+  const order = orders.find((entry) => String(entry.id) === String(orderId));
+
+  if (!order && (isAuthLoading || isOrdersLoading)) {
+    return (
+      <div role="status" aria-live="polite" className="mx-auto flex max-w-3xl flex-col items-center justify-center py-16 text-center">
+        <Loader2 size={28} className="animate-spin text-primary-ink" aria-hidden="true" />
+        <p className="mt-3 text-base font-black">Đang tải chi tiết đơn nhân vật #{orderId}...</p>
+      </div>
+    );
+  }
 
   if (!order) return <div className="mx-auto max-w-3xl py-12 text-center"><p className="mb-4 text-xl font-black">Không tìm thấy đơn nhân vật</p><Link href="/manager/character-orders" className="btn-primary">← Về quản lý đơn nhân vật</Link></div>;
 

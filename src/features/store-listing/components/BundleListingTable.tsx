@@ -36,10 +36,12 @@ import {
   StoreActionButton,
   StoreEmptyRow,
   StoreErrorRow,
+  StoreHoverActionButton,
   StoreSkeletonRows,
-  StoreTableFooter,
+  StoreTablePagination,
   StoreThumbnail,
   storeRowClass,
+  useStoreTablePagination,
 } from "./StoreTablePrimitives";
 
 interface EnrichedBundleItem extends ManagedBundleItem {
@@ -59,14 +61,14 @@ interface BundleListingTableProps {
   refreshTrigger?: number;
 }
 
-const HEADINGS = [
-  "Mã sản phẩm",
-  "Ảnh đại diện",
-  "Tên gói sản phẩm",
-  "Thành phần",
-  "Giá bán",
-  "Trạng thái",
-  "Thao tác",
+const HEADINGS: { label: string; className?: string }[] = [
+  { label: "Mã sản phẩm", className: "w-[108px]" },
+  { label: "Ảnh đại diện", className: "w-[88px]" },
+  { label: "Tên gói sản phẩm" },
+  { label: "Thành phần", className: "w-[132px]" },
+  { label: "Giá bán", className: "w-[160px]" },
+  { label: "Trạng thái", className: "w-[132px]" },
+  { label: "Thao tác", className: "w-[260px] text-right" },
 ];
 
 export default function BundleListingTable({
@@ -189,6 +191,16 @@ export default function BundleListingTable({
   }, [bundles, searchQuery, statusFilter]);
 
   const hasFilters = statusFilter !== "ALL" || searchQuery !== "";
+  const {
+    page,
+    setPage,
+    pageSize,
+    ready,
+    totalPages,
+    totalElements,
+    pagedItems,
+  } = useStoreTablePagination(filteredBundles, `${searchQuery}::${statusFilter}`);
+
   const resetFilters = () => {
     setStatusFilter("ALL");
     setSearchQuery("");
@@ -211,28 +223,34 @@ export default function BundleListingTable({
         canReset={hasFilters}
       />
 
-      <div className="overflow-x-auto">
-        <table className={STORE_TABLE_CLASS}>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className={`${STORE_TABLE_CLASS} min-w-[1060px]`}>
           <caption className="sr-only">
             Danh sách gói sản phẩm đang quản lý trên cửa hàng
           </caption>
           <thead className={STORE_THEAD_CLASS}>
             <tr>
               {HEADINGS.map((heading) => (
-                <th key={heading} scope="col" className={STORE_TH_CLASS}>
-                  {heading}
+                <th
+                  key={heading.label}
+                  scope="col"
+                  className={`${STORE_TH_CLASS} ${heading.className ?? ""}`}
+                >
+                  {heading.label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <StoreSkeletonRows columns={HEADINGS.length} />}
+            {(isLoading || !ready) && (
+              <StoreSkeletonRows columns={HEADINGS.length} rows={pageSize} />
+            )}
 
-            {!isLoading && error && (
+            {!isLoading && ready && error && (
               <StoreErrorRow colSpan={HEADINGS.length} message={error} onRetry={loadBundles} />
             )}
 
-            {!isLoading && !error && filteredBundles.length === 0 && (
+            {!isLoading && ready && !error && filteredBundles.length === 0 && (
               <StoreEmptyRow
                 colSpan={HEADINGS.length}
                 message={
@@ -257,8 +275,9 @@ export default function BundleListingTable({
             )}
 
             {!isLoading &&
+              ready &&
               !error &&
-              filteredBundles.map((bundle) => {
+              pagedItems.map((bundle) => {
                 const discount =
                   bundle.originalPrice && bundle.originalPrice > bundle.bundlePrice
                     ? Math.round((1 - bundle.bundlePrice / bundle.originalPrice) * 100)
@@ -267,12 +286,12 @@ export default function BundleListingTable({
 
                 return (
                   <tr key={bundle.bundleId} className={storeRowClass(isDeleted)}>
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
                         #{bundle.productId}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2.5">
                       <StoreThumbnail
                         src={bundle.thumbnailUrl}
                         alt={`Ảnh đại diện của ${bundle.bundleName}`}
@@ -280,17 +299,20 @@ export default function BundleListingTable({
                         pixelated
                       />
                     </td>
-                    <td className="px-4 py-3.5">
-                      <p className={`text-xs font-black uppercase sm:text-sm ${isDeleted ? "line-through text-text-muted" : "text-black"}`}>
+                    <td className="px-4 py-2.5">
+                      <p
+                        title={bundle.bundleName}
+                        className={`truncate text-xs font-black uppercase sm:text-sm ${isDeleted ? "line-through text-text-muted" : "text-black"}`}
+                      >
                         {bundle.bundleName}
                       </p>
-                      <p className="max-w-xs truncate text-[11px] font-medium text-text-muted tabular-nums">
+                      <p className="truncate text-[11px] font-medium text-text-muted tabular-nums">
                         {bundle.updatedAt
                           ? `Cập nhật lúc ${formatDateTime(bundle.updatedAt)}`
                           : bundle.description || "Chưa có mô tả"}
                       </p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       <button
                         type="button"
                         onClick={() => void openInspectModal(bundle)}
@@ -301,7 +323,7 @@ export default function BundleListingTable({
                         {bundle.itemCount} mục · Xem
                       </button>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       <p className="text-sm font-black text-primary-ink tabular-nums">
                         {formatVnd(bundle.bundlePrice)}
                       </p>
@@ -316,66 +338,68 @@ export default function BundleListingTable({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2.5">
                       <StatusBadge status={bundle.status} />
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
                       {isDeleted ? null : (
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
                           {onEdit && (
-                            <StoreActionButton
-                              variant="secondary"
+                            <StoreHoverActionButton
+                              tone="primary"
+                              label="Sửa"
+                              aria-label={`Sửa ${bundle.bundleName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Sửa"}
                               onClick={() => onEdit(bundle)}
-                              icon={<Edit size={13} />}
-                            >
-                              Sửa
-                            </StoreActionButton>
+                              icon={<Edit className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                           {bundle.status === "UNPUBLISHED" && onPublish && (
-                            <StoreActionButton
-                              variant="primary"
+                            <StoreHoverActionButton
+                              tone="approve"
+                              label="Mở bán"
+                              aria-label={`Mở bán ${bundle.bundleName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Mở bán"}
                               onClick={() => onPublish(bundle)}
-                              icon={<CheckCircle2 size={13} />}
-                            >
-                              Mở bán
-                            </StoreActionButton>
+                              icon={<CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                           {bundle.status === "ARCHIVED" && onPublish && (
-                            <StoreActionButton
-                              variant="primary"
+                            <StoreHoverActionButton
+                              tone="approve"
+                              labelSize="medium"
+                              label="Mở bán lại"
+                              aria-label={`Mở bán lại ${bundle.bundleName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Mở bán lại"}
                               onClick={() => onPublish(bundle)}
-                              icon={<Undo2 size={13} />}
-                            >
-                              Mở bán lại
-                            </StoreActionButton>
+                              icon={<Undo2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                           {bundle.status !== "ARCHIVED" && onArchive && (
-                            <StoreActionButton
-                              variant="secondary"
+                            <StoreHoverActionButton
+                              tone="neutral"
+                              labelSize="medium"
+                              label="Ngừng bán"
+                              aria-label={`Ngừng bán ${bundle.bundleName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Ngừng bán"}
                               onClick={() => onArchive(bundle)}
-                              icon={<Archive size={13} />}
-                            >
-                              Ngừng bán
-                            </StoreActionButton>
+                              icon={<Archive className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                           {onDelete && (
-                            <StoreActionButton
-                              variant="danger"
+                            <StoreHoverActionButton
+                              tone="danger"
+                              label="Xóa"
+                              aria-label={`Xóa ${bundle.bundleName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Xóa"}
                               onClick={() => onDelete(bundle)}
-                              icon={<Trash2 size={13} />}
-                            >
-                              Xóa
-                            </StoreActionButton>
+                              icon={<Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                         </div>
                       )}
@@ -387,11 +411,17 @@ export default function BundleListingTable({
         </table>
       </div>
 
-      {!isLoading && !error && (
-        <StoreTableFooter
-          filteredCount={filteredBundles.length}
-          totalCount={bundles.length}
+      {!error && (
+        <StoreTablePagination
+          page={page}
+          size={pageSize}
+          totalElements={totalElements}
+          totalPages={totalPages}
+          totalUnfilteredCount={bundles.length}
           unitLabel="gói sản phẩm"
+          onPageChange={setPage}
+          disabled={isLoading || !ready}
+          ariaLabel="Phân trang danh sách gói sản phẩm"
         />
       )}
 

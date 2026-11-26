@@ -26,6 +26,7 @@ import {
   XCircle,
 } from "lucide-react";
 import EditOrderDeliveryAddressModal from "@/components/ui/EditOrderDeliveryAddressModal";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useOrders } from "@/features/order/context/OrderContext";
 import { getOrderKind } from "@/features/order/fulfillment";
 import type { OrderKind } from "@/features/order/types";
@@ -213,7 +214,16 @@ export default function OrderDetailPage({
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = use(params);
-  const { orders, refreshOrders, updateOrderStatus, updateOrderDeliveryAddress, dispatchOrder } = useOrders();
+  const { isLoading: isAuthLoading } = useAuth();
+  const {
+    orders,
+    isLoading: isOrdersLoading,
+    error: ordersError,
+    refreshOrders,
+    updateOrderStatus,
+    updateOrderDeliveryAddress,
+    dispatchOrder,
+  } = useOrders();
 
   const [isPrepareModalOpen, setIsPrepareModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -363,6 +373,55 @@ export default function OrderDetailPage({
   }, [loadFulfillmentData]);
 
   const order = orders.find((entry) => String(entry.id) === String(orderId));
+
+  if (!order && (isAuthLoading || isOrdersLoading)) {
+    return (
+      <div className="manager-neo-dashboard mx-auto flex w-full max-w-4xl flex-col items-center justify-center py-20 text-center font-sans">
+        <div
+          role="status"
+          aria-live="polite"
+          className="neo-box-no-hover flex flex-col items-center bg-white p-10"
+        >
+          <Loader2 size={28} className="animate-spin text-primary-ink" aria-hidden="true" />
+          <h2 className="mt-4 text-xl font-black uppercase text-black">
+            Đang tải chi tiết đơn hàng #{orderId}...
+          </h2>
+          <p className="mt-1.5 text-sm font-medium text-text-muted">
+            Vui lòng chờ trong giây lát.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!order && ordersError) {
+    return (
+      <div className="manager-neo-dashboard mx-auto flex w-full max-w-4xl flex-col items-center justify-center py-20 text-center font-sans">
+        <div role="alert" className="neo-box-no-hover bg-white p-8">
+          <AlertTriangle size={28} className="mx-auto mb-3 text-red-700" aria-hidden="true" />
+          <h2 className="mb-2 text-2xl font-black uppercase text-black">
+            Không thể tải đơn hàng #{orderId}
+          </h2>
+          <p className="mb-6 text-sm font-medium text-text-muted">{ordersError}</p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => void refreshOrders()}
+              className="btn-primary inline-flex items-center gap-2 px-5! py-2.5! text-xs font-black uppercase"
+            >
+              <RefreshCw size={15} /> Thử lại
+            </button>
+            <Link
+              href="/staff/orders"
+              className="btn-secondary inline-flex items-center gap-2 px-5! py-2.5! text-xs font-black uppercase"
+            >
+              <ArrowLeft size={15} /> Quay lại danh sách đơn hàng
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!order) {
     return (

@@ -2,21 +2,22 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Grid2X2,
+  RefreshCw,
   Search,
   SlidersHorizontal,
   Sparkles,
-  Store,
   Tag,
   X,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import Pagination from "@/components/ui/Pagination";
+import { scrollToTop, usePageParam } from "@/hooks/usePageParam";
 import type { TagItem } from "@/api_client";
 import type { CatalogProduct } from "@/features/cart/catalog";
 import type { ProductType } from "@/features/cart/types";
@@ -25,6 +26,7 @@ import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getRoleHomePath } from "@/features/auth/services/auth.service";
 import { getApiErrorMessage } from "@/lib/api/auth";
+import { isRequestCancelled } from "@/features/commission/errors";
 import { fetchAllPages } from "@/lib/api/paging";
 import { fetchStoreProducts, fetchStoreTags } from "@/lib/api/products";
 import {
@@ -33,19 +35,50 @@ import {
   isProductOwned,
 } from "@/features/storefront/components/ProductCard";
 
-const PRODUCTS_PER_PAGE = 12;
 const ALL_PRODUCT_TYPES: ProductType[] = ["LED_MODEL", "CHARACTER", "BUNDLE", "SUBSCRIPTION"];
+
+function useStoreGridLayout(): { columns: 2 | 3 | 4; rows: number; pageSize: number; ready: boolean } {
+  const [layout, setLayout] = useState<{ columns: 2 | 3 | 4; rows: number; ready: boolean }>({
+    columns: 4,
+    rows: 3,
+    ready: false,
+  });
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const compute = () => {
+      const width = window.innerWidth;
+      const columns: 2 | 3 | 4 = width >= 1280 ? 4 : width >= 640 ? 3 : 2;
+      // On lg+ (>=1024px) the 250px filter sidebar sits beside the catalog, so 3 rows
+      // keeps catalog height balanced with the sidebar; below lg, 2 rows keeps stacked pages compact.
+      const rows = width >= 1024 ? 3 : 2;
+      setLayout({ columns, rows, ready: true });
+    };
+
+    compute();
+    const onResize = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(compute, 120);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  return {
+    columns: layout.columns,
+    rows: layout.rows,
+    pageSize: layout.columns * layout.rows,
+    ready: layout.ready,
+  };
+}
 
 function parseTypeParam(raw: string | null): ProductType | null {
   if (!raw) return null;
   const upper = raw.toUpperCase();
   return ALL_PRODUCT_TYPES.includes(upper as ProductType) ? (upper as ProductType) : null;
-}
-
-function scrollToCatalogTop() {
-  if (typeof window === "undefined") return;
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  window.scrollTo({ top: 0, behavior: reduced ? "instant" : "smooth" });
 }
 
 function StorefrontContent() {
@@ -59,9 +92,13 @@ function StorefrontContent() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const isInternalUser = isAuthenticated && Boolean(user?.role) && user?.role !== "CUSTOMER";
 
+  const { pageSize, ready: gridReady } = useStoreGridLayout();
+
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [storeTags, setStoreTags] = useState<TagItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
   const [activeCategory, setActiveCategory] = useState<"all" | ProductType>(urlType ?? "all");
   const [sort, setSort] = useState("Phổ biến");
   const [toastNotice, setToastNotice] = useState<{ title: string; desc: string } | null>(null);
@@ -78,7 +115,8 @@ function StorefrontContent() {
   const [minPrice, setMinPrice] = useState<number | null>(null);
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
   const [priceError, setPriceError] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = usePageParam();
+  const catalogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setActiveCategory(urlType ?? "all");
@@ -95,6 +133,7 @@ function StorefrontContent() {
     if (isLoading || isInternalUser) return;
     let cancelled = false;
     setLoadingProducts(true);
+    setLoadError(null);
     Promise.all([
       fetchAllPages((pageIdx) => fetchStoreProducts({ page: pageIdx, size: 100 })),
       fetchStoreTags(),
@@ -105,8 +144,11 @@ function StorefrontContent() {
           setStoreTags(tagsRes);
         }
       })
-      .catch(() => {
-        if (!cancelled) setProducts([]);
+      .catch((err: unknown) => {
+        if (!cancelled && !isRequestCancelled(err)) {
+          setProducts([]);
+          setLoadError(getApiErrorMessage(err, "Không thể tải danh sách sản phẩm. Vui lòng thử lại."));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingProducts(false);
@@ -114,7 +156,7 @@ function StorefrontContent() {
     return () => {
       cancelled = true;
     };
-  }, [isInternalUser, isLoading]);
+  }, [isInternalUser, isLoading, reloadTick]);
 
   const toggleType = (type: ProductType) => {
     setSelectedTypes((current) =>
@@ -203,62 +245,115 @@ function StorefrontContent() {
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "vi"));
   }, [products, storeTags]);
 
-  const filteredProducts = products.filter((product) => {
+  const filteredProducts = useMemo(() => {
     const query = activeSearchQuery.toLowerCase();
-    const matchesSearch =
-      !query ||
-      product.name.toLowerCase().includes(query) ||
-      product.description?.toLowerCase().includes(query) ||
-      product.tags?.some((t) => t.name?.toLowerCase().includes(query));
-    const matchesCategory = activeCategory === "all" || product.productType === activeCategory;
-    const matchesType = selectedTypes.includes(product.productType);
-    const matchesTags =
-      selectedTags.length === 0 ||
-      selectedTags.some((selected) =>
-        product.tags?.some((t) => t.name?.trim().toLowerCase() === selected.toLowerCase()),
+    return products.filter((product) => {
+      const matchesSearch =
+        !query ||
+        product.name.toLowerCase().includes(query) ||
+        product.description?.toLowerCase().includes(query) ||
+        product.tags?.some((t) => t.name?.toLowerCase().includes(query));
+      const matchesCategory = activeCategory === "all" || product.productType === activeCategory;
+      const matchesType = selectedTypes.includes(product.productType);
+      const matchesTags =
+        selectedTags.length === 0 ||
+        selectedTags.some((selected) =>
+          product.tags?.some((t) => t.name?.trim().toLowerCase() === selected.toLowerCase()),
+        );
+      const isInStock = true;
+      const matchesStatus =
+        (isInStock && selectedStatuses.includes("IN_STOCK")) ||
+        (!isInStock && selectedStatuses.includes("OUT_OF_STOCK"));
+      const matchesMinPrice = minPrice === null || product.price >= minPrice;
+      const matchesMaxPrice = maxPrice === null || product.price <= maxPrice;
+
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesType &&
+        matchesTags &&
+        matchesStatus &&
+        matchesMinPrice &&
+        matchesMaxPrice
       );
-    const isInStock = true;
-    const matchesStatus =
-      (isInStock && selectedStatuses.includes("IN_STOCK")) ||
-      (!isInStock && selectedStatuses.includes("OUT_OF_STOCK"));
-    const matchesMinPrice = minPrice === null || product.price >= minPrice;
-    const matchesMaxPrice = maxPrice === null || product.price <= maxPrice;
+    });
+  }, [
+    products,
+    activeSearchQuery,
+    activeCategory,
+    selectedTypes,
+    selectedTags,
+    selectedStatuses,
+    minPrice,
+    maxPrice,
+  ]);
 
-    return (
-      matchesSearch &&
-      matchesCategory &&
-      matchesType &&
-      matchesTags &&
-      matchesStatus &&
-      matchesMinPrice &&
-      matchesMaxPrice
-    );
-  });
+  const sortedProducts = useMemo(() => {
+    return [...filteredProducts].sort((a, b) => {
+      if (sort === "Tên A → Z") return a.name.localeCompare(b.name, "vi");
+      if (sort === "Tên Z → A") return b.name.localeCompare(a.name, "vi");
+      if (sort === "Giá thấp") return a.price - b.price;
+      if (sort === "Giá cao") return b.price - a.price;
+      return 0;
+    });
+  }, [filteredProducts, sort]);
 
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    if (sort === "Tên A → Z") return a.name.localeCompare(b.name, "vi");
-    if (sort === "Tên Z → A") return b.name.localeCompare(a.name, "vi");
-    if (sort === "Giá thấp") return a.price - b.price;
-    if (sort === "Giá cao") return b.price - a.price;
-    return 0;
-  });
-
-  const pageCount = Math.max(1, Math.ceil(sortedProducts.length / PRODUCTS_PER_PAGE));
+  const pageCount = Math.max(1, Math.ceil(sortedProducts.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const paginatedProducts = sortedProducts.slice(
-    (currentPage - 1) * PRODUCTS_PER_PAGE,
-    currentPage * PRODUCTS_PER_PAGE,
+  const paginatedProducts = useMemo(
+    () =>
+      sortedProducts.slice(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize,
+      ),
+    [sortedProducts, currentPage, pageSize],
   );
 
+  const filterKey = useMemo(
+    () =>
+      JSON.stringify({
+        activeCategory,
+        maxPrice,
+        minPrice,
+        selectedStatuses,
+        selectedTags,
+        selectedTypes,
+        sort,
+        activeSearchQuery,
+      }),
+    [
+      activeCategory,
+      maxPrice,
+      minPrice,
+      selectedStatuses,
+      selectedTags,
+      selectedTypes,
+      sort,
+      activeSearchQuery,
+    ],
+  );
+  const prevFilterKeyRef = useRef(filterKey);
+
+  // Reset to page 1 only when filter/sort/search changes after mount so initial ?page= persists
   useEffect(() => {
-    setPage(1);
-  }, [activeCategory, maxPrice, minPrice, selectedStatuses, selectedTags, selectedTypes, sort, activeSearchQuery]);
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      setPage(1);
+    }
+  }, [filterKey, setPage]);
+
+  // Clamp out-of-range URL page when resize increases pageSize or results shrink
+  useEffect(() => {
+    if (!loadingProducts && gridReady && page > pageCount) {
+      setPage(pageCount);
+    }
+  }, [loadingProducts, gridReady, page, pageCount, setPage]);
 
   const handlePageChange = (nextPage: number) => {
     const clampedPage = Math.min(pageCount, Math.max(1, nextPage));
     setPage(clampedPage);
     if (typeof window !== "undefined") {
-      window.requestAnimationFrame(() => scrollToCatalogTop());
+      window.requestAnimationFrame(() => scrollToTop(catalogRef.current));
     }
   };
 
@@ -316,37 +411,6 @@ function StorefrontContent() {
                 </span>
               </>
             )}
-          </div>
-
-          {/* Compact Store Header Banner (MOKB In-stock inspired) */}
-          <div className="neo-box-no-hover mb-6 flex flex-wrap items-center justify-between gap-4 border-l-8 border-l-primary bg-white p-5">
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
-                  HÀNG CÓ SẴN
-                </span>
-                <span className="text-xs font-bold uppercase text-text-muted">
-                  Giao nhanh toàn quốc · Kích hoạt nhân vật tức thì
-                </span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <Store size={26} className="shrink-0 text-primary-ink" />
-                <h1 className="text-2xl font-black uppercase tracking-tight text-black sm:text-3xl">
-                  Cửa hàng Lumintra
-                </h1>
-              </div>
-              <p className="text-xs font-medium text-text-muted sm:text-sm">
-                Chọn thiết bị LED ma trận, bộ sưu tập nhân vật Pixel Art, gói combo và thẻ hội viên chính hãng.
-              </p>
-            </div>
-
-            <Link
-              href="/commission/new"
-              className="btn-secondary inline-flex min-h-11 shrink-0 items-center gap-2 text-xs font-black uppercase"
-            >
-              <Sparkles size={15} className="text-primary-ink" />
-              Đặt thiết kế riêng
-            </Link>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
@@ -573,15 +637,15 @@ function StorefrontContent() {
             </aside>
 
             {/* ── Main Catalog Column ── */}
-            <div>
+            <div ref={catalogRef} className="flex min-w-0 flex-col">
               {/* Catalog Top bar (Title & Sort) */}
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-3">
                 <div className="flex items-center gap-2">
                   <Sparkles size={20} className="text-primary-ink" />
                   <div>
-                    <h2 className="text-lg font-black uppercase tracking-tight text-black sm:text-xl">
+                    <h1 className="text-lg font-black uppercase tracking-tight text-black sm:text-xl">
                       Danh sách sản phẩm
-                    </h2>
+                    </h1>
                     <p className="text-xs font-bold text-text-muted">
                       {loadingProducts
                         ? "Đang tải dữ liệu từ máy chủ..."
@@ -628,79 +692,56 @@ function StorefrontContent() {
                 </div>
               )}
 
-              {/* Products Grid or Empty / Loading State */}
-              {loadingProducts ? (
+              {/* Products Grid or Error / Empty / Loading State */}
+              {loadingProducts || !gridReady ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                  {Array.from({ length: 8 }).map((_, i) => (
+                  {Array.from({ length: gridReady ? pageSize : 4 }).map((_, i) => (
                     <div
                       key={i}
-                      className="neo-box-no-hover h-64 animate-pulse bg-gray-100 p-4"
+                      className="neo-box-no-hover flex animate-pulse flex-col overflow-hidden bg-white"
                       aria-label="Đang tải sản phẩm"
+                    >
+                      <div className="aspect-square border-b-2 border-black bg-gray-100" />
+                      <div className="space-y-2.5 p-3.5">
+                        <div className="h-3 w-16 bg-gray-200" />
+                        <div className="h-4 w-full bg-gray-200" />
+                        <div className="h-4 w-2/3 bg-gray-100" />
+                        <div className="mt-2 border-t-2 border-dashed border-gray-200 pt-3">
+                          <div className="h-4 w-24 bg-gray-200" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : loadError ? (
+                <div role="alert" className="neo-box-no-hover bg-red-50 p-10 text-center">
+                  <AlertTriangle size={38} className="mx-auto mb-3 text-red-700" aria-hidden="true" />
+                  <p className="text-base font-black uppercase text-black">
+                    Không thể tải sản phẩm
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-text-muted">{loadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setReloadTick((tick) => tick + 1)}
+                    className="btn-primary mt-4 inline-flex items-center gap-1.5 text-xs font-black uppercase"
+                  >
+                    <RefreshCw size={14} aria-hidden="true" />
+                    Thử lại
+                  </button>
+                </div>
+              ) : sortedProducts.length > 0 ? (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                  {paginatedProducts.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      onAdd={addProduct}
+                      canBuy={isAuthenticated}
+                      isOwned={isProductOwned(product, ownedCharacters, activeSubscription)}
+                      isAlreadyInCart={cartItems.some((item) => item.id === String(product.id))}
                     />
                   ))}
                 </div>
-              ) : sortedProducts.length > 0 ? (
-                <>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                    {paginatedProducts.map((product) => (
-                      <ProductCard
-                        key={product.id}
-                        product={product}
-                        onAdd={addProduct}
-                        canBuy={isAuthenticated}
-                        isOwned={isProductOwned(product, ownedCharacters, activeSubscription)}
-                        isAlreadyInCart={cartItems.some((item) => item.id === String(product.id))}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Pagination */}
-                  <div className="neo-box-no-hover mt-6 flex flex-wrap items-center justify-between gap-3 bg-white p-4">
-                    <p className="text-xs font-bold uppercase text-text-muted">
-                      Hiển thị {(currentPage - 1) * PRODUCTS_PER_PAGE + 1} -{" "}
-                      {Math.min(currentPage * PRODUCTS_PER_PAGE, sortedProducts.length)} /{" "}
-                      {sortedProducts.length} sản phẩm
-                    </p>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="cursor-pointer border-2 border-black bg-white p-1.5 text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
-                        aria-label="Trang trước"
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-
-                      {Array.from({ length: pageCount }, (_, i) => i + 1).map((pageNumber) => (
-                        <button
-                          key={pageNumber}
-                          type="button"
-                          onClick={() => handlePageChange(pageNumber)}
-                          className={`min-w-8 cursor-pointer border-2 border-black px-2.5 py-1 text-xs font-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 ${
-                            currentPage === pageNumber
-                              ? "bg-primary text-black"
-                              : "bg-white text-black hover:bg-gray-50"
-                          }`}
-                          aria-label={`Trang ${pageNumber}`}
-                        >
-                          {pageNumber}
-                        </button>
-                      ))}
-
-                      <button
-                        type="button"
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === pageCount}
-                        className="cursor-pointer border-2 border-black bg-white p-1.5 text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
-                        aria-label="Trang sau"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                </>
               ) : (
                 <div className="neo-box-no-hover bg-white p-12 text-center">
                   <Search size={40} className="mx-auto mb-3 text-primary-ink" />
@@ -720,10 +761,26 @@ function StorefrontContent() {
                 </div>
               )}
 
-              {/* Quality Commitment Footer Banner */}
-              <div className="neo-box-no-hover mt-6 flex items-center justify-center gap-2 bg-white p-3 text-xs font-bold uppercase tracking-wide text-black">
-                <Check size={16} className="text-primary-ink" />
-                <span>Sản phẩm chính hãng và tương thích 100% hệ sinh thái Lumintra</span>
+              {/* Bottom-Pinned Pagination & Quality Commitment Footer Banner */}
+              <div className="mt-auto space-y-6 pt-6">
+                {!loadingProducts && gridReady && !loadError && sortedProducts.length > 0 && (
+                  <Pagination
+                    page={currentPage}
+                    totalPages={pageCount}
+                    onPageChange={handlePageChange}
+                    totalItems={sortedProducts.length}
+                    pageSize={pageSize}
+                    itemLabel="sản phẩm"
+                    ariaLabel="Phân trang danh sách sản phẩm"
+                    variant="neo"
+                    alwaysShow
+                  />
+                )}
+
+                <div className="neo-box-no-hover flex items-center justify-center gap-2 bg-white p-3 text-xs font-bold uppercase tracking-wide text-black">
+                  <Check size={16} className="text-primary-ink" />
+                  <span>Sản phẩm chính hãng và tương thích 100% hệ sinh thái Lumintra</span>
+                </div>
               </div>
             </div>
           </div>

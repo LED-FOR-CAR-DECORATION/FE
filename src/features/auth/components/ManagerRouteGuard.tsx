@@ -15,8 +15,8 @@ export default function ManagerRouteGuard({ children }: { children: ReactNode })
     (user?.role === "STAFF" && pathname.startsWith("/staff/profile")) ||
     (user?.role === "MANAGER" && pathname.startsWith("/manager/profile")) ||
     (user?.role === "STAFF" && ["/staff/orders", "/staff/deliveries", "/staff/commission", "/staff/chat", "/staff/warranty"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
-    (user?.role === "MANAGER" && ["/staff/pricing", "/staff/tags", "/staff/warranty", "/staff/commission", "/staff/chat"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
-    (user?.role === "MANAGER" && ["/manager/inventory", "/manager/character-orders"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
+    (user?.role === "MANAGER" && ["/staff/pricing", "/staff/commission", "/staff/chat"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
+    (user?.role === "MANAGER" && ["/manager/inventory", "/manager/character-orders", "/manager/warranty", "/manager/tags"].some((path) => pathname === path || pathname.startsWith(`${path}/`))) ||
     (user?.role === "DESIGNER" && (pathname === "/designer" || pathname.startsWith("/designer/")));
 
   const isInternalRole =

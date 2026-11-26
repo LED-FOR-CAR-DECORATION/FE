@@ -37,6 +37,10 @@ export function usePageParam(param = "page") {
 /** Cuộn mượt tới phần tử (thường là đầu danh sách) sau khi đổi trang. */
 export function scrollToTop(element: HTMLElement | null) {
   if (!element) return;
-  const top = element.getBoundingClientRect().top + window.scrollY - 96;
-  if (top < window.scrollY) window.scrollTo({ top, behavior: "smooth" });
+  // Sticky Header (72px) + marquee banner (32px) + borders ≈ 106px
+  const top = Math.max(0, element.getBoundingClientRect().top + window.scrollY - 120);
+  if (top < window.scrollY) {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top, behavior: reducedMotion ? "auto" : "smooth" });
+  }
 }

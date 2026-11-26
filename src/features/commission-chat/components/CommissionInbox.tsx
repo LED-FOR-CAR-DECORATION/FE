@@ -9,6 +9,7 @@ import { commissionStatusLabel } from "../commission-status";
 import { canReadHistory, listCommissionMessages, type CommissionMessage } from "../services/commission-messages.api";
 import CommissionAvatar from "./CommissionAvatar";
 import CommissionChatRoom from "./CommissionChatRoom";
+import { subscribeHubStatus, subscribeTopic, type StompStatus } from "../services/stomp-hub";
 import type { ChatViewer } from "../hooks/useCommissionRoom";
 
 /**
@@ -34,6 +35,10 @@ export interface InboxFilter { key: string; label: string; statuses?: string[] }
 
 const PREVIEW_CONCURRENCY = 6;
 const PREVIEW_REFRESH_MS = 60_000;
+/** Số hội thoại (mới nhất) nhận tin realtime qua kết nối dùng chung; phần còn lại vẫn làm mới định kỳ. */
+const MAX_LIVE_CONVERSATIONS = 50;
+/** Sau khi kết nối lại, gộp nhiều topic cùng kích hoạt lại thành một lần tải bù tin cuối. */
+const CATCH_UP_DELAY_MS = 500;
 
 /** Bộ lọc mặc định của staff: giữ Tất cả và Chưa đọc (bỏ lọc theo status). */
 export const STAFF_FILTERS: InboxFilter[] = [
@@ -122,6 +127,16 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+  /** Hội thoại nhận tin realtime (chốt lúc tải danh sách để không đăng ký lại mỗi khi có tin mới). */
+  const [liveIds, setLiveIds] = useState<number[]>([]);
+  const [deniedIds, setDeniedIds] = useState<ReadonlySet<number>>(() => new Set());
+  const [hubStatus, setHubStatus] = useState<StompStatus>("disconnected");
+  useEffect(() => subscribeHubStatus(setHubStatus), []);
+  /** Giá trị mới nhất cho vòng làm mới định kỳ (đọc qua ref để interval không phải tạo lại). */
+  const pollStateRef = useRef({ liveIds, deniedIds, hubStatus });
+  useEffect(() => {
+    pollStateRef.current = { liveIds, deniedIds, hubStatus };
+  }, [liveIds, deniedIds, hubStatus]);
 
   const select = useCallback((commissionId?: number) => {
     router.replace(commissionId ? `${pathname}?commissionId=${commissionId}` : pathname, { scroll: false });
@@ -136,7 +151,15 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
         itemsRef.current = chatItems;
         const lasts = await mapLimited(chatItems, PREVIEW_CONCURRENCY, (item) => loadLastMessage(item.commissionId));
         if (!active) return;
-        setConversations(chatItems.map((item, index) => ({ item, last: lasts[index] })));
+        const loaded = chatItems.map((item, index) => ({ item, last: lasts[index] }));
+        setConversations(loaded);
+        setLiveIds(
+          [...loaded]
+            .sort((a, b) => new Date(b.last?.createdAt ?? 0).getTime() - new Date(a.last?.createdAt ?? 0).getTime())
+            .slice(0, MAX_LIVE_CONVERSATIONS)
+            .map((entry) => entry.item.commissionId),
+        );
+        setDeniedIds(new Set());
         setSeen(Object.fromEntries(chatItems.map((item) => [item.commissionId, readSeen(seenPrefix, item.commissionId)])));
         setError("");
       } catch (failure) {
@@ -148,21 +171,36 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
     return () => { active = false; };
   }, [loadItems, revision, seenPrefix]);
 
-  // Làm mới đoạn tin cuối định kỳ khi tab đang hiển thị.
+  /** Tải lại tin cuối cho các hội thoại chỉ định (bỏ qua hội thoại đang mở — phòng chat đã báo qua onLastMessage). */
+  const refreshPreviews = useCallback(async (ids: ReadonlySet<number> | "all") => {
+    const items = itemsRef.current.filter((item) =>
+      item.commissionId !== selectedIdRef.current && (ids === "all" || ids.has(item.commissionId)));
+    if (items.length === 0) return;
+    const lasts = await mapLimited(items, PREVIEW_CONCURRENCY, (item) => loadLastMessage(item.commissionId));
+    setConversations((current) => current?.map((conversation) => {
+      const index = items.findIndex((item) => item.commissionId === conversation.item.commissionId);
+      return index >= 0 && lasts[index] ? { ...conversation, last: lasts[index] } : conversation;
+    }));
+  }, []);
+
+  // Làm mới định kỳ CHỈ cho hội thoại không có realtime: ngoài MAX_LIVE_CONVERSATIONS, bị từ chối quyền,
+  // hoặc tất cả khi kết nối chung đang mất.
   useEffect(() => {
-    const timer = setInterval(async () => {
+    const timer = setInterval(() => {
       if (document.visibilityState !== "visible" || itemsRef.current.length === 0) return;
-      // Hội thoại đang mở đã có tin realtime từ phòng chat (onLastMessage) → không tải lại toàn bộ lịch sử của nó.
-      const items = itemsRef.current.filter((item) => item.commissionId !== selectedIdRef.current);
-      if (items.length === 0) return;
-      const lasts = await mapLimited(items, PREVIEW_CONCURRENCY, (item) => loadLastMessage(item.commissionId));
-      setConversations((current) => current?.map((conversation) => {
-        const index = items.findIndex((item) => item.commissionId === conversation.item.commissionId);
-        return index >= 0 && lasts[index] ? { ...conversation, last: lasts[index] } : conversation;
-      }));
+      const { liveIds: live, deniedIds: denied, hubStatus: hub } = pollStateRef.current;
+      if (hub !== "connected") {
+        void refreshPreviews("all");
+        return;
+      }
+      const liveSet = new Set(live);
+      const targets = new Set(itemsRef.current
+        .map((item) => item.commissionId)
+        .filter((id) => !liveSet.has(id) || denied.has(id)));
+      if (targets.size > 0) void refreshPreviews(targets);
     }, PREVIEW_REFRESH_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [refreshPreviews]);
 
   const updateLastMessage = useCallback((message: CommissionMessage) => {
     setConversations((current) => current?.map((conversation) =>
@@ -171,6 +209,33 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
         : conversation,
     ));
   }, []);
+
+  // Tin realtime của các hội thoại trong hộp thư, dùng chung socket với phòng chat đang mở.
+  const catchUpTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(catchUpTimer.current), []);
+  useEffect(() => {
+    if (liveIds.length === 0) return;
+    const scheduleCatchUp = () => {
+      clearTimeout(catchUpTimer.current);
+      catchUpTimer.current = setTimeout(() => void refreshPreviews(new Set(liveIds)), CATCH_UP_DELAY_MS);
+    };
+    const unsubscribes = liveIds.map((commissionId) => subscribeTopic(`/topic/commissions/${commissionId}`, {
+      onMessage: (body) => {
+        try {
+          const message = JSON.parse(body) as CommissionMessage;
+          if (typeof message?.messageId === "number") updateLastMessage(message);
+        } catch {
+          // bỏ qua frame không hợp lệ
+        }
+      },
+      // Lần đầu: tin cuối vừa tải bằng REST. Kết nối lại: tải bù một lần cho cả hộp thư.
+      onActive: (isReconnect) => {
+        if (isReconnect) scheduleCatchUp();
+      },
+      onDenied: () => setDeniedIds((current) => (current.has(commissionId) ? current : new Set(current).add(commissionId))),
+    }));
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }, [liveIds, refreshPreviews, updateLastMessage]);
 
   // Hội thoại đang mở coi như đã đọc tới tin cuối.
   const selectedLastId = conversations?.find((entry) => entry.item.commissionId === selectedId)?.last?.messageId;

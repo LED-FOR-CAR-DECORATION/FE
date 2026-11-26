@@ -1,9 +1,8 @@
 /** Menu entries and role helpers for the internal (back-office) shell. */
 import {
   Boxes,
-  ChartNoAxesCombined,
   ClipboardList,
-  Image,
+  Cpu,
   LayoutDashboard,
   MessageCircle,
   Settings2,
@@ -12,9 +11,7 @@ import {
   Sparkles,
   Store,
   Tag,
-  Truck,
   Users,
-  UserCog,
   type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/features/auth/types";
@@ -121,31 +118,10 @@ export const menuItems: MenuItem[] = [
     roles: ["ADMIN"],
   },
   {
-    label: "Quản lý vai trò",
-    description: "Quản lý khách hàng, nhân viên, quản lý và nhà thiết kế",
-    href: "/admin/roles",
-    icon: UserCog,
-    roles: ["ADMIN"],
-  },
-  {
-    label: "Quản lý quyền hạn",
-    description: "Thiết lập quyền truy cập chức năng",
-    href: "/admin/permissions",
-    icon: ShieldCheck,
-    roles: ["ADMIN"],
-  },
-  {
-    label: "Gán vai trò và quyền",
-    description: "Gán role và cấu hình quyền cho role",
-    href: "/admin/assignments",
-    icon: Settings2,
-    roles: ["ADMIN"],
-  },
-  {
-    label: "Báo cáo và thống kê",
-    description: "Số liệu đơn hàng, doanh thu và Commission",
-    href: "/admin/reports",
-    icon: ChartNoAxesCombined,
+    label: "Quản lý firmware",
+    description: "Phát hành, theo dõi và thu hồi firmware OTA cho mẫu LED",
+    href: "/admin/firmware",
+    icon: Cpu,
     roles: ["ADMIN"],
   },
 ];

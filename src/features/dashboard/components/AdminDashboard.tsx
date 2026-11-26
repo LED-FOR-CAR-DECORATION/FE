@@ -514,13 +514,6 @@ export default function AdminDashboard() {
                 </p>
               </div>
             </div>
-
-            <Link
-              href="/admin/assignments"
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:text-slate-900"
-            >
-              Cấu hình vai trò
-            </Link>
           </div>
 
           <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">

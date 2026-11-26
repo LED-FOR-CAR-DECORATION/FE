@@ -8,13 +8,10 @@ import CommissionInbox, { type InboxFilter, type InboxItem } from "./CommissionI
 const MAX_PAGES = 5;
 const PAGE_SIZE = 50;
 
-/** Bộ lọc của khách — theo việc khách cần làm. */
+/** Bộ lọc mặc định của khách: đồng bộ với staff, giữ Tất cả và Chưa đọc (bỏ lọc theo status). */
 const CUSTOMER_FILTERS: InboxFilter[] = [
   { key: "all", label: "Tất cả" },
   { key: "unread", label: "Chưa đọc" },
-  { key: "action", label: "Cần bạn phản hồi", statuses: ["PREVIEW_DELIVERED", "AWAITING_EXTRA_PAYMENT"] },
-  { key: "design", label: "Đang thiết kế", statuses: ["PAID", "IN_PROGRESS", "INTERNAL_REVIEW", "INTERNAL_REVISION_REQUIRED", "AWAITING_ESTIMATE"] },
-  { key: "done", label: "Hoàn thành", statuses: ["COMPLETED"] },
 ];
 
 async function loadCustomerItems(): Promise<InboxItem[]> {

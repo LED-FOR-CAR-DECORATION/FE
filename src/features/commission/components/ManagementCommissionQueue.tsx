@@ -238,15 +238,15 @@ export default function ManagementCommissionQueue() {
       {/* Commission Queue Table */}
       <section className="neo-box-no-hover flex min-h-0 flex-1 flex-col overflow-hidden bg-white" aria-label="Danh sách yêu cầu commission">
         <div className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1080px] table-fixed border-collapse text-left text-sm">
             <thead>
               <tr className="border-b-2 border-black bg-[#f7fbf8] text-xs font-black uppercase tracking-wider text-black">
-                <th className="px-3.5 py-2.5">Mã / Khách hàng</th>
+                <th className="w-[180px] px-3.5 py-2.5">Mã / Khách hàng</th>
                 <th className="px-3.5 py-2.5">Yêu cầu</th>
-                <th className="px-3.5 py-2.5">Trạng thái</th>
-                <th className="px-3.5 py-2.5">Phụ trách</th>
-                <th className="px-3.5 py-2.5">Giá trị / Ngày tạo</th>
-                <th className="px-3.5 py-2.5 text-right">Thao tác</th>
+                <th className="w-[205px] px-3.5 py-2.5">Trạng thái</th>
+                <th className="w-[190px] px-3.5 py-2.5">Phụ trách</th>
+                <th className="w-[140px] px-3.5 py-2.5">Giá trị / Ngày tạo</th>
+                <th className="w-[276px] px-3 py-2.5 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y-2 divide-black/15">
@@ -293,10 +293,7 @@ export default function ManagementCommissionQueue() {
                   return (
                     <tr
                       key={row.commissionId}
-                      onClick={() =>
-                        setDetailModal({ commissionId: row.commissionId, initialTab: "OVERVIEW" })
-                      }
-                      className="cursor-pointer transition-colors hover:bg-primary/10"
+                      className="transition-colors hover:bg-[#f3faf5]"
                     >
                       <td className="px-3.5 py-2 align-top">
                         <div className="font-mono text-xs font-black text-black">
@@ -363,9 +360,6 @@ export default function ManagementCommissionQueue() {
                             {row.assignedDesignerName || "Chưa phân công"}
                           </span>
                         </p>
-                        <p className="mt-0.5 font-semibold text-black/70">
-                          Staff: {row.assignedStaffName || "Chưa gán"}
-                        </p>
                       </td>
 
                       <td className="px-3.5 py-2 align-top text-xs">
@@ -377,16 +371,13 @@ export default function ManagementCommissionQueue() {
                         </p>
                       </td>
 
-                      <td
-                        className="px-3.5 py-2 align-top text-right"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <div className="inline-flex flex-wrap justify-end gap-1.5">
+                      <td className="px-3 py-2 align-top text-right">
+                        <div className="inline-flex flex-nowrap items-center justify-end gap-1">
                           {needsAssign && (
                             <button
                               type="button"
                               onClick={() => setAssignTarget(row)}
-                              className="btn-primary inline-flex items-center gap-1 px-2.5! py-1! text-xs font-black"
+                              className="btn-primary inline-flex shrink-0 items-center gap-1 whitespace-nowrap px-2! py-1! text-xs font-black"
                             >
                               <UserCheck className="h-3.5 w-3.5" />
                               Phân công

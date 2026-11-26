@@ -506,9 +506,7 @@ function DesignerDashboardContent({
           onClose={() => setShowCreateModal(false)}
           onCreated={(created) => {
             setShowCreateModal(false);
-            setNotice(
-              `Đã khởi tạo nhân vật "${created.characterName}" (0 phiên bản). Bấm vào thẻ nhân vật để mở Pixel Art Studio vẽ bản đầu tiên!`,
-            );
+            router.push(`/designer/studio/${created.characterId}`);
           }}
         />
       )}

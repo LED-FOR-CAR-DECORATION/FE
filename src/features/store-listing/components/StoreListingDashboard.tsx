@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { CheckCircle2, ChevronRight, Lock, Plus, Store, X } from "lucide-react";
 import {
   apiUpdateProductStatus,
-  apiUpdateStoreProduct,
   fetchManagedStoreProducts,
 } from "@/lib/api/products";
+import { formatVnd } from "../format";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
 import type { PublishMode, StoreCharacterRow } from "../types";
 import CatalogListingTable, { type StoreCatalogItem } from "./CatalogListingTable";
@@ -39,7 +39,8 @@ type TabId = "characters" | "led-models" | "bundles" | "subscriptions";
 
 type ModalState =
   | { kind: "select-product-type" }
-  | { kind: "edit"; product: EditableProductData }
+  | { kind: "edit"; product: EditableProductData; previewFallbackUrl?: string }
+  | { kind: "approve-character"; product: EditableProductData; creatorName?: string; previewFallbackUrl?: string }
   | { kind: "publish"; character: StoreCharacterRow; mode: PublishMode }
   | { kind: "unlist"; character: StoreCharacterRow }
   | { kind: "archive"; productId: string | number; productName: string }
@@ -345,40 +346,36 @@ export default function StoreListingDashboard() {
                   onEdit={(character) =>
                     setModal({
                       kind: "edit",
+                      previewFallbackUrl: character.thumbnailUrl,
                       product: {
                         id: character.characterId,
                         productType: "CHARACTER",
                         productName: character.name,
                         basePrice: character.draft?.basePrice ?? character.basePrice ?? 0,
                         description: character.description,
-                        thumbnailUrl: character.draft?.thumbnailUrl ?? character.thumbnailUrl,
+                        thumbnailUrl: character.draft?.thumbnailUrl ?? undefined,
                         galleryUrls: character.draft?.galleryUrls ?? character.galleryUrls ?? [],
                         tags: character.tags ?? [],
                       },
                     })
                   }
-                  onApprove={async (character, price) => {
-                    const numericId = Number(character.characterId);
-                    if (Number.isSafeInteger(numericId) && numericId > 0) {
-                      if (character.draft && price !== undefined) {
-                        const safeThumb =
-                          character.draft.thumbnailUrl && /^https?:\/\//i.test(character.draft.thumbnailUrl)
-                            ? character.draft.thumbnailUrl
-                            : undefined;
-                        const safeGallery = (character.draft.galleryUrls || []).filter((u) => /^https?:\/\//i.test(u));
-                        await apiUpdateStoreProduct(numericId, {
-                          productName: character.name,
-                          basePrice: price,
-                          description: character.description || undefined,
-                          thumbnailUrl: safeThumb,
-                          galleryUrls: safeGallery,
-                        });
-                      }
-                      await apiUpdateProductStatus(numericId, "PUBLISHED");
-                    }
-                    setNotice(`Đã duyệt nhân vật "${character.name}" sang trạng thái Đang bán!`);
-                    refreshCatalog();
-                  }}
+                  onOpenApprove={(character) =>
+                    setModal({
+                      kind: "approve-character",
+                      creatorName: character.creatorName,
+                      previewFallbackUrl: character.thumbnailUrl,
+                      product: {
+                        id: character.characterId,
+                        productType: "CHARACTER",
+                        productName: character.name,
+                        basePrice: character.draft?.basePrice ?? character.basePrice ?? 0,
+                        description: character.description,
+                        thumbnailUrl: character.draft?.thumbnailUrl ?? undefined,
+                        galleryUrls: character.draft?.galleryUrls ?? character.galleryUrls ?? [],
+                        tags: character.tags ?? [],
+                      },
+                    })
+                  }
                   onRefresh={refreshCatalog}
                 />
               ) : (
@@ -583,9 +580,25 @@ export default function StoreListingDashboard() {
       {modal?.kind === "edit" && (
         <EditStoreProductModal
           product={modal.product}
+          previewFallbackUrl={modal.previewFallbackUrl}
           onClose={() => setModal(null)}
           onSuccess={(productName) => {
             setNotice(`Cập nhật thông tin sản phẩm "${productName}" thành công.`);
+            refreshCatalog();
+          }}
+        />
+      )}
+
+      {modal?.kind === "approve-character" && (
+        <EditStoreProductModal
+          mode="approve"
+          product={modal.product}
+          creatorName={modal.creatorName}
+          previewFallbackUrl={modal.previewFallbackUrl}
+          onClose={() => setModal(null)}
+          onSuccess={(productName, savedPrice) => {
+            const priceLabel = savedPrice !== undefined ? ` với giá ${formatVnd(savedPrice)}` : "";
+            setNotice(`Đã xét duyệt nhân vật "${productName}"${priceLabel} sang trạng thái Đang bán!`);
             refreshCatalog();
           }}
         />

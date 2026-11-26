@@ -47,6 +47,9 @@ export default function EditSubscriptionModal({
   const [maxCommissionRevisions, setMaxCommissionRevisions] = useState(
     String(plan.maxCommissionRevisions ?? 0),
   );
+  const [maxMobileProfiles, setMaxMobileProfiles] = useState(
+    String(plan.maxMobileProfiles ?? 3),
+  );
 
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(true);
@@ -66,6 +69,9 @@ export default function EditSubscriptionModal({
         setThumbnailPreviewUrl(thumb);
         if (detail.subscriptionDetails?.maxCommissionRevisions != null && plan.maxCommissionRevisions == null) {
           setMaxCommissionRevisions(String(detail.subscriptionDetails.maxCommissionRevisions));
+        }
+        if (detail.subscriptionDetails?.maxMobileProfiles != null && plan.maxMobileProfiles == null) {
+          setMaxMobileProfiles(String(detail.subscriptionDetails.maxMobileProfiles));
         }
       })
       .catch(() => { })
@@ -135,7 +141,18 @@ export default function EditSubscriptionModal({
       parsedBonusRevisions < 0 ||
       parsedBonusRevisions > 100
     ) {
-      setError("Số lượt chỉnh sửa Commission cộng thêm phải là số nguyên từ 0 đến 100.");
+      setError("Số lượt chỉnh sửa Commission miễn phí mỗi đơn phải là số nguyên từ 0 đến 100.");
+      return;
+    }
+
+    const parsedMobileProfiles =
+      maxMobileProfiles.trim() === "" ? 3 : Number(maxMobileProfiles);
+    if (
+      !Number.isInteger(parsedMobileProfiles) ||
+      parsedMobileProfiles < 3 ||
+      parsedMobileProfiles > 100
+    ) {
+      setError("Số lượng profile Mobile tối đa phải là số nguyên từ 3 đến 100.");
       return;
     }
 
@@ -149,6 +166,7 @@ export default function EditSubscriptionModal({
         durationDays: parsedDuration,
         allAccessCharacters,
         maxCommissionRevisions: parsedBonusRevisions,
+        maxMobileProfiles: parsedMobileProfiles,
       });
       onSuccess(updated);
     } catch (err) {
@@ -296,23 +314,42 @@ export default function EditSubscriptionModal({
           </div>
         </div>
 
-        {/* Lượt sửa Commission miễn phí cộng thêm */}
-        <div>
-          <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
-            Lượt sửa Commission miễn phí cộng thêm (+N)
-          </label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={1}
-            value={maxCommissionRevisions}
-            onChange={(e) => setMaxCommissionRevisions(e.target.value)}
-            className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black sm:w-56"
-          />
-          <p className="mt-1 text-[11px] font-medium text-text-muted">
-            Tổng số lượt miễn phí cộng vào ví dùng chung cho mọi đơn Commission (nhập 0 nếu không áp dụng).
-          </p>
+        {/* Profile Mobile & Lượt sửa Commission miễn phí mỗi đơn */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+              Profile chữ trên App Mobile (tối đa)
+            </label>
+            <input
+              type="number"
+              min={3}
+              max={100}
+              step={1}
+              value={maxMobileProfiles}
+              onChange={(e) => setMaxMobileProfiles(e.target.value)}
+              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
+            />
+            <p className="mt-1 text-[11px] font-medium text-text-muted">
+              Mặc định tài khoản thường là 3 profile (nhập 5, 10, 20 để mở rộng).
+            </p>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+              Lượt sửa miễn phí / mỗi đơn Commission
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={maxCommissionRevisions}
+              onChange={(e) => setMaxCommissionRevisions(e.target.value)}
+              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
+            />
+            <p className="mt-1 text-[11px] font-medium text-text-muted">
+              Số lượt chỉnh sửa miễn phí áp dụng cho từng đơn Commission khi gói còn hiệu lực (nhập 0 nếu không áp dụng).
+            </p>
+          </div>
         </div>
 
         {/* Mô tả */}

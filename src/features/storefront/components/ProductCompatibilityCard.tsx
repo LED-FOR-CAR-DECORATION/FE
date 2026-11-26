@@ -41,9 +41,9 @@ function buildCompatibilityViewModel(item: CatalogProduct): CompatibilityViewMod
 
     const checklist: string[] = [
       `Phần cứng chính hãng: ${modelLabel}`,
-      ...(resolution ? [`Độ phân giải ma trận: ${String(resolution)}`] : []),
+      ...(resolution ? [`Độ phân giải tấm LED: ${String(resolution)}`] : []),
       `Kết nối điều khiển: ${Array.isArray(connectivity) ? connectivity.join(", ") : String(connectivity)}`,
-      "Hiển thị ảnh động GIF & Pixel Art từ App Lumintra Mobile",
+      "Hiển thị ảnh động GIF & tranh Pixel từ ứng dụng Lumintra Mobile",
       ...(typeof stock === "number"
         ? [stock > 0 ? `Tồn kho sẵn sàng giao: ${stock} thiết bị` : "Tạm hết hàng trong kho"]
         : []),
@@ -53,13 +53,13 @@ function buildCompatibilityViewModel(item: CatalogProduct): CompatibilityViewMod
       headingIcon: Cpu,
       heading: "Tương thích & Kết nối",
       summary:
-        "Thiết bị bảng LED ma trận Lumintra, ghép nối trực tiếp với điện thoại qua App Lumintra Mobile.",
+        "Thiết bị tấm LED Lumintra, ghép nối trực tiếp với điện thoại qua ứng dụng Lumintra Mobile.",
       checklist,
       highlights: [
         {
           icon: Smartphone,
           title: "Truyền ảnh qua BLE",
-          desc: "Chiếu ảnh động GIF từ App Lumintra Mobile lên bảng LED tức thì.",
+          desc: "Chiếu ảnh động GIF từ ứng dụng Lumintra Mobile lên tấm LED tức thì.",
         },
         {
           icon: ShieldCheck,
@@ -81,21 +81,21 @@ function buildCompatibilityViewModel(item: CatalogProduct): CompatibilityViewMod
       bundleItems.length > 0
         ? bundleItems.map((bi) => {
             const name = bi.modelName ?? bi.characterName ?? "Sản phẩm trong gói";
-            const kind = bi.itemType === "LED" ? "Thiết bị LED" : "Nhân vật GIF";
+            const kind = bi.itemType === "LED" ? "Tấm LED" : "Nhân vật GIF";
             return `${name} (${kind} ×${bi.quantity})`;
           })
         : [
             "Bao gồm trọn bộ sản phẩm đồng bộ trong gói Combo",
-            "Tương thích đầy đủ trên hệ sinh thái bảng LED Lumintra",
-            "Điều khiển đồng bộ qua App Lumintra Mobile",
+            "Tương thích đầy đủ trên hệ sinh thái tấm LED Lumintra",
+            "Điều khiển đồng bộ qua ứng dụng Lumintra Mobile",
           ];
 
     const summary =
       hasLed && hasCharacter
-        ? "Gói kết hợp thiết bị bảng LED và nhân vật Pixel Art đồng bộ sẵn sàng trình chiếu."
+        ? "Gói kết hợp tấm LED và nhân vật Pixel đồng bộ sẵn sàng trình chiếu."
         : hasLed
-          ? "Gói thiết bị LED Lumintra chính hãng kèm đầy đủ kết nối qua App Lumintra Mobile."
-          : "Bộ sưu tập nhân vật Pixel Art tương thích mọi dòng bảng LED ma trận Lumintra.";
+          ? "Gói tấm LED Lumintra chính hãng kèm đầy đủ kết nối qua ứng dụng Lumintra Mobile."
+          : "Bộ sưu tập nhân vật Pixel tương thích mọi dòng tấm LED Lumintra.";
 
     return {
       headingIcon: Package,
@@ -129,13 +129,13 @@ function buildCompatibilityViewModel(item: CatalogProduct): CompatibilityViewMod
     const checklist: string[] = [
       durationText,
       ...(sub?.allAccessCharacters
-        ? ["Mở khóa toàn bộ thư viện nhân vật Pixel Art trên cửa hàng"]
+        ? ["Mở khóa toàn bộ thư viện nhân vật"]
+        : []),
+      ...((sub?.maxMobileProfiles ?? 3) > 3
+        ? [`Tối đa ${sub?.maxMobileProfiles} profile chữ trên ứng dụng Mobile`]
         : []),
       ...((sub?.maxCommissionRevisions ?? 0) > 0
-        ? [`Tặng +${sub?.maxCommissionRevisions} lượt chỉnh sửa thiết kế riêng`]
-        : []),
-      ...((sub?.maxMobileProfiles ?? 0) > 0
-        ? [`Lưu tối đa ${sub?.maxMobileProfiles} cấu hình hiển thị trên App Mobile`]
+        ? [`${sub?.maxCommissionRevisions} lượt chỉnh sửa miễn phí cho mỗi đơn thiết kế`]
         : []),
       "Tương thích toàn bộ dòng bảng LED Lumintra (32×32, 64×32, 64×64...)",
     ];

@@ -21,6 +21,7 @@ export interface ManagedSubscriptionPlan {
   durationDays: number | null;
   allAccessCharacters: boolean;
   maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
   status: SubscriptionPlanStatus;
   createdAt: string;
 }
@@ -42,6 +43,7 @@ export interface CreateSubscriptionPayload {
   durationDays?: number | null;
   allAccessCharacters: boolean;
   maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
   tagIds?: number[];
 }
 
@@ -53,6 +55,7 @@ export interface UpdateSubscriptionPayload {
   durationDays?: number | null;
   allAccessCharacters: boolean;
   maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
 }
 
 interface ApiEnvelope<T> {

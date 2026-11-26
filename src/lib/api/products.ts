@@ -55,12 +55,13 @@ export function mapProductItemToCatalog(item: ProductItem): CatalogProduct {
 
 export function mapProductDetailToCatalog(detail: ProductDetailResponse): CatalogProduct {
   const components: CatalogProduct[] | undefined = detail.bundleDetails?.items?.map((bItem, idx) => ({
-    id: String(bItem.modelId ?? bItem.versionId ?? idx),
+    id: String(bItem.productId ?? bItem.modelId ?? bItem.versionId ?? idx),
+    productId: bItem.productId ?? undefined,
     productType: bItem.itemType === "LED" ? "LED_MODEL" : "CHARACTER",
     name: bItem.modelName ?? bItem.characterName ?? "Thành phần gói",
-    price: 0,
+    price: Number(bItem.unitPrice ?? 0),
     quantity: bItem.quantity,
-    previewUrl: bItem.previewGifUrl ?? undefined,
+    previewUrl: bItem.previewGifUrl || bItem.thumbnailUrl || undefined,
   }));
 
   return {

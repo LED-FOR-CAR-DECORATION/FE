@@ -3,6 +3,7 @@
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
   ClipboardList,
+  Crown,
   Edit2,
   Image as ImageIcon,
   ShieldCheck,
@@ -25,6 +26,7 @@ export default function CustomerSidebar() {
     pathname.startsWith("/profile/account") ||
     pathname.startsWith("/profile/addresses");
   const isOrdersActive = pathname.startsWith("/profile/orders");
+  const isSubscriptionActive = pathname.startsWith("/profile/subscription");
   const isGalleryActive = pathname.startsWith("/profile/gallery");
   const isWarrantyActive = pathname.startsWith("/profile/warranty");
   const isCommissionActive =
@@ -43,6 +45,12 @@ export default function CustomerSidebar() {
       label: "Lịch sử đơn mua",
       active: isOrdersActive,
       icon: <ClipboardList size={16} className={isOrdersActive ? "text-black" : "text-primary-ink"} />,
+    },
+    {
+      href: "/profile/subscription",
+      label: "Gói hội viên",
+      active: isSubscriptionActive,
+      icon: <Crown size={16} className={isSubscriptionActive ? "text-black" : "text-primary-ink"} />,
     },
     {
       href: "/profile/gallery",

@@ -604,11 +604,11 @@ export default function ApiCommissionForm() {
               <div>
                 <p className="font-black uppercase text-black">{tier?.tierName}</p>
                 <p className="font-semibold text-primary-ink">
-                  {tier?.maxRevisions ?? 0} lượt chỉnh sửa miễn phí mặc định cho đơn này
+                  {Math.max(tier?.maxRevisions ?? 1, extraCommissionRevisions)} lượt chỉnh sửa miễn phí cho đơn này
                 </p>
-                {extraCommissionRevisions > 0 && (
+                {extraCommissionRevisions > (tier?.maxRevisions ?? 1) && (
                   <p className="mt-0.5 text-[11px] font-bold text-[#2d6a4f]">
-                    Ví hội viên còn +{extraCommissionRevisions} lượt miễn phí (dùng chung cho mọi đơn Commission)
+                    Đã nâng từ mặc định {tier?.maxRevisions ?? 1} lượt nhờ gói hội viên của bạn
                   </p>
                 )}
               </div>

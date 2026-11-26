@@ -7,7 +7,7 @@ import { formatPrice } from "@/lib/currency";
 
 const statuses: Record<string, string> = {
   PENDING: "Chờ khách xác nhận", AWAITING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Chờ dự kiến thời gian",
-  IN_PROGRESS: "Đang sửa", COMPLETED: "Đã giao bản sửa", CANCELLED: "Đã hủy", SUPERSEDED: "Đã thay thế",
+  IN_PROGRESS: "Đang sửa", COMPLETED: "Đã giao bản sửa", CANCELLED: "Đã hủy", REJECTED: "Khách đã từ chối", SUPERSEDED: "Đã thay thế",
 };
 
 function date(value?: string | null) {

@@ -72,3 +72,16 @@ export function confirmRevisionCard(id: number, messageId: number) {
 export function cancelRevisionCheckout(id: number) {
   return request<void>(OpenAPI, { method: "POST", url: "/api/commissions/{id}/revision-card/cancel", path: { id } });
 }
+
+/** Khách từ chối thẻ yêu cầu chỉnh sửa khi nội dung chưa đúng ý → giữ nguyên PREVIEW_DELIVERED, không trừ lượt/phí. */
+export function rejectRevisionCard(id: number, messageId: number, reason?: string) {
+  return request<{ data: {
+    commissionId: number; messageId: number; status: string;
+  } }>(OpenAPI, {
+    method: "POST",
+    url: "/api/commissions/{id}/revision-card/reject",
+    path: { id },
+    mediaType: "application/json",
+    body: reason?.trim() ? { messageId, reason: reason.trim() } : { messageId },
+  });
+}

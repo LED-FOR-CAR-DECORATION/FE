@@ -183,9 +183,7 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
           : "Hết hiệu lực";
 
   const feeText = usesFreeQuota
-    ? usesSubscriptionCredit
-      ? "Miễn phí · trừ 1 lượt từ ví gói hội viên"
-      : `Miễn phí · dùng 1 lượt${maxRevisions !== undefined ? ` (đã dùng ${revisionsUsed}/${maxRevisions})` : ""}`
+    ? `Miễn phí · dùng 1 lượt${maxRevisions !== undefined ? ` (đã dùng ${revisionsUsed}/${maxRevisions})` : ""}`
     : `${formatPrice(fee)}${typeof meta?.feePercentage === "number" ? ` · ${meta.feePercentage}% giá ban đầu` : ""}`;
 
   return (
@@ -208,9 +206,7 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
             <>
               <p className="text-xs font-medium text-text-main">
                 {usesFreeQuota
-                  ? usesSubscriptionCredit
-                    ? "Yêu cầu sẽ trừ 1 lượt miễn phí từ ví gói hội viên của bạn. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
-                    : "Yêu cầu dùng 1 lượt miễn phí. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
+                  ? "Yêu cầu dùng 1 lượt chỉnh sửa miễn phí trong hạn mức của đơn. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
                   : `Bạn sẽ được chuyển tới trang thanh toán ${formatPrice(fee)}. Sau thanh toán, họa sĩ sẽ xác nhận thời gian thực hiện.`}
               </p>
               <div className="flex flex-wrap gap-2">

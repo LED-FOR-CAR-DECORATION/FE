@@ -268,7 +268,7 @@ export default function PublishToStoreModal({
           <Store className="h-5 w-5" aria-hidden="true" />
         )
       }
-      description={`Kích thước ma trận: ${matrixSize} · ID: #${character.characterId}`}
+      description={`Kích thước bản vẽ: ${matrixSize} · ID: #${character.characterId}`}
       size="xl"
       busy={isSubmitting}
       footer={

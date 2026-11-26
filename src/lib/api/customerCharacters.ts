@@ -33,6 +33,36 @@ export interface CustomerActiveSubscription {
   maxMobileProfiles: number;
   activatedAt: string;
   expiresAt: string | null;
+  paidPrice: number | null;
+}
+
+export interface CustomerSubscriptionHistoryItem {
+  subscriptionId: number;
+  productId: number;
+  orderId: number | null;
+  planCode: string | null;
+  planName: string | null;
+  isLifetime: boolean;
+  durationDays: number | null;
+  allAccessCharacters: boolean;
+  maxCommissionRevisions: number;
+  maxMobileProfiles: number;
+  status: string;
+  activatedAt: string;
+  expiresAt: string | null;
+  paidPrice: number | null;
+}
+
+export interface CustomerSubscriptionBenefits {
+  hasActiveSubscription: boolean;
+  allAccessCharacters: boolean;
+  defaultMobileProfiles: number;
+  maxMobileProfiles: number;
+  defaultCommissionRevisions: number;
+  maxCommissionRevisions: number;
+  upgradeCreditAvailable: number;
+  activeSubscriptions: CustomerActiveSubscription[];
+  subscriptionHistory: CustomerSubscriptionHistoryItem[];
 }
 
 export interface CustomerAcceptedCommissionItem extends Omit<CustomerOwnedCharacterItem, "sourceType" | "characterId"> {
@@ -165,6 +195,7 @@ function normalizeActiveSubscription(
     maxMobileProfiles: Number(raw.maxMobileProfiles ?? 3),
     activatedAt: raw.activatedAt ?? "",
     expiresAt: raw.expiresAt ?? null,
+    paidPrice: raw.paidPrice != null ? Number(raw.paidPrice) : null,
   };
 }
 
@@ -197,5 +228,51 @@ export async function fetchActiveCustomerSubscriptions(): Promise<CustomerActive
     const single = await fetchActiveCustomerSubscription().catch(() => null);
     return single ? [single] : [];
   }
+}
+
+export async function fetchCustomerSubscriptionBenefits(): Promise<CustomerSubscriptionBenefits> {
+  const res = await request<ApiEnvelope<CustomerSubscriptionBenefits>>(OpenAPI, {
+    method: "GET",
+    url: "/api/customer/subscriptions/benefits",
+    errors: {
+      401: "Authentication is required.",
+      403: "Access is denied.",
+    },
+  });
+
+  const raw = res.data;
+  const activeSubscriptions = Array.isArray(raw?.activeSubscriptions)
+    ? raw.activeSubscriptions.map(normalizeActiveSubscription)
+    : [];
+  const subscriptionHistory = Array.isArray(raw?.subscriptionHistory)
+    ? raw.subscriptionHistory.map((item) => ({
+        subscriptionId: Number(item.subscriptionId),
+        productId: Number(item.productId),
+        orderId: item.orderId != null ? Number(item.orderId) : null,
+        planCode: item.planCode ?? null,
+        planName: item.planName ?? null,
+        isLifetime: Boolean(item.isLifetime),
+        durationDays: item.durationDays ?? null,
+        allAccessCharacters: Boolean(item.allAccessCharacters),
+        maxCommissionRevisions: Number(item.maxCommissionRevisions ?? 0),
+        maxMobileProfiles: Number(item.maxMobileProfiles ?? 3),
+        status: item.status ?? "EXPIRED",
+        activatedAt: item.activatedAt ?? "",
+        expiresAt: item.expiresAt ?? null,
+        paidPrice: item.paidPrice != null ? Number(item.paidPrice) : null,
+      }))
+    : [];
+
+  return {
+    hasActiveSubscription: Boolean(raw?.hasActiveSubscription),
+    allAccessCharacters: Boolean(raw?.allAccessCharacters),
+    defaultMobileProfiles: Number(raw?.defaultMobileProfiles ?? 3),
+    maxMobileProfiles: Number(raw?.maxMobileProfiles ?? 3),
+    defaultCommissionRevisions: Number(raw?.defaultCommissionRevisions ?? 1),
+    maxCommissionRevisions: Number(raw?.maxCommissionRevisions ?? 1),
+    upgradeCreditAvailable: Number(raw?.upgradeCreditAvailable ?? 0),
+    activeSubscriptions,
+    subscriptionHistory,
+  };
 }
 

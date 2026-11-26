@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Image as ImageIcon, Loader2, Upload, X } from "lucide-react";
+import { AlertCircle, Check, Image as ImageIcon, Loader2, Upload, X } from "lucide-react";
 import StoreModal from "./StoreModal";
 import CategoryTagSelector from "./CategoryTagSelector";
-import { apiUpdateStoreProduct, fetchStoreTags } from "@/lib/api/products";
+import { apiUpdateProductStatus, apiUpdateStoreProduct, fetchStoreTags } from "@/lib/api/products";
 import { uploadMediaFile, type MediaPurposeType } from "@/lib/api/media";
+import { formatVnd } from "../format";
 import type { TagItem, UpdateStoreProductRequest } from "@/api_client";
 
 export interface EditableProductData {
@@ -38,22 +39,47 @@ function resolveProductMediaPurpose(
 
 interface EditStoreProductModalProps {
   product: EditableProductData;
+  mode?: "edit" | "approve";
+  creatorName?: string;
+  previewFallbackUrl?: string;
   onClose: () => void;
-  onSuccess: (productName: string) => void;
+  onSuccess: (productName: string, savedPrice?: number) => void;
 }
 
-export default function EditStoreProductModal({ product, onClose, onSuccess }: EditStoreProductModalProps) {
+export default function EditStoreProductModal({
+  product,
+  mode = "edit",
+  creatorName,
+  previewFallbackUrl,
+  onClose,
+  onSuccess,
+}: EditStoreProductModalProps) {
+  const isApproveMode = mode === "approve";
+  const initialHttpThumb =
+    product.thumbnailUrl && /^https?:\/\/\S+$/i.test(product.thumbnailUrl.trim())
+      ? product.thumbnailUrl.trim()
+      : "";
   const [productName, setProductName] = useState(product.productName);
-  const [basePrice, setBasePrice] = useState<string>(String(product.basePrice ?? 0));
+  const [basePrice, setBasePrice] = useState<string>(
+    isApproveMode
+      ? product.basePrice > 0
+        ? String(product.basePrice)
+        : ""
+      : String(product.basePrice ?? 0),
+  );
   const [description, setDescription] = useState(product.description ?? "");
-  const [thumbnailUrl, setThumbnailUrl] = useState(product.thumbnailUrl ?? "");
-  const [galleryUrlsText, setGalleryUrlsText] = useState((product.galleryUrls ?? []).join("\n"));
+  const [thumbnailUrl, setThumbnailUrl] = useState(initialHttpThumb);
+  const [galleryUrlsText, setGalleryUrlsText] = useState(
+    (product.galleryUrls ?? []).filter((u) => /^https?:\/\/\S+$/i.test(u.trim())).join("\n"),
+  );
 
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
   const [isUploadingGallery, setIsUploadingGallery] = useState(false);
-  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string>(product.thumbnailUrl ?? "");
+  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string>(
+    initialHttpThumb || previewFallbackUrl || product.thumbnailUrl || "",
+  );
 
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
@@ -166,9 +192,21 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
       return;
     }
 
-    const priceNum = Number(basePrice);
-    if (!Number.isFinite(priceNum) || priceNum < 0) {
-      setError("Giá bán cơ bản phải lớn hơn hoặc bằng 0 VNĐ.");
+    const trimmedPrice = basePrice.trim();
+    const priceNum = Number(trimmedPrice);
+    if (
+      trimmedPrice === "" ||
+      !/^\d{1,10}(?:\.\d{1,2})?$/.test(trimmedPrice) ||
+      !Number.isFinite(priceNum) ||
+      priceNum < 0
+    ) {
+      setError("Vui lòng nhập giá bán cơ bản hợp lệ (lớn hơn hoặc bằng 0 VNĐ).");
+      return;
+    }
+
+    const trimmedThumb = thumbnailUrl.trim();
+    if (trimmedThumb && !/^https?:\/\/\S+$/i.test(trimmedThumb)) {
+      setError("Đường dẫn ảnh đại diện phải là URL HTTP/HTTPS hợp lệ.");
       return;
     }
 
@@ -176,12 +214,16 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
       .split(/[\n,]/)
       .map((url) => url.trim())
       .filter((url) => url.length > 0);
+    if (galleryUrls.some((url) => !/^https?:\/\/\S+$/i.test(url))) {
+      setError("Mỗi đường dẫn trong thư viện ảnh phải là URL HTTP/HTTPS hợp lệ.");
+      return;
+    }
 
     const payload: UpdateStoreProductRequest = {
       productName: trimmedName,
       basePrice: priceNum,
       description: description.trim() || undefined,
-      thumbnailUrl: thumbnailUrl.trim() || undefined,
+      thumbnailUrl: trimmedThumb || undefined,
       galleryUrls: galleryUrls.length > 0 ? galleryUrls : undefined,
       tagIds: selectedTagIds,
     };
@@ -195,13 +237,18 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
     setIsSubmitting(true);
     try {
       await apiUpdateStoreProduct(numericId, payload);
-      onSuccess(trimmedName);
+      if (isApproveMode) {
+        await apiUpdateProductStatus(numericId, "PUBLISHED");
+      }
+      onSuccess(trimmedName, priceNum);
       onClose();
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
         err?.message ||
-        "Cập nhật sản phẩm thất bại. Vui lòng thử lại.";
+        (isApproveMode
+          ? "Xét duyệt mở bán sản phẩm thất bại. Vui lòng thử lại."
+          : "Cập nhật sản phẩm thất bại. Vui lòng thử lại.");
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -210,9 +257,19 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
 
   return (
     <StoreModal
-      title={`Chỉnh sửa sản phẩm #${product.id}`}
-      badge="CHỈNH SỬA SẢN PHẨM"
-      description="Chỉ dành cho Manager: Cập nhật thông tin chi tiết sản phẩm trên Store."
+      title={
+        isApproveMode
+          ? `Xét duyệt mở bán sản phẩm #${product.id}`
+          : `Chỉnh sửa sản phẩm #${product.id}`
+      }
+      badge={isApproveMode ? "XÉT DUYỆT MỞ BÁN" : "CHỈNH SỬA SẢN PHẨM"}
+      description={
+        isApproveMode
+          ? creatorName
+            ? `Nhà thiết kế: ${creatorName} · Kiểm tra thông tin, gắn thẻ và đặt giá bán trước khi mở bán.`
+            : "Chỉ dành cho Manager: Kiểm tra thông tin, gắn thẻ và đặt giá bán trước khi mở bán."
+          : "Chỉ dành cho Manager: Cập nhật thông tin chi tiết sản phẩm trên Store."
+      }
       onClose={onClose}
       busy={isSubmitting}
       size="lg"
@@ -232,8 +289,12 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
             disabled={isSubmitting}
             className="btn-primary inline-flex items-center gap-2 px-5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
-            {isSubmitting && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
-            Lưu thay đổi
+            {isSubmitting ? (
+              <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+            ) : isApproveMode ? (
+              <Check size={15} aria-hidden="true" />
+            ) : null}
+            {isApproveMode ? "Xác nhận duyệt mở bán" : "Lưu thay đổi"}
           </button>
         </>
       }
@@ -249,9 +310,15 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
           </div>
         )}
 
-        <div className="border-2 border-black bg-[#fef08a]/60 p-3 text-xs font-medium text-black">
-          <span className="font-black uppercase">Lưu ý BR-FL5-03:</span> Việc thay đổi giá bán cơ bản chỉ áp dụng cho các đơn hàng tương lai, hoàn toàn không làm thay đổi giá trên các đơn hàng lịch sử của khách hàng.
-        </div>
+        {isApproveMode ? (
+          <div className="border-2 border-black bg-[#eef8f0] p-3 text-xs font-medium text-black">
+            <span className="font-black uppercase">Xét duyệt mở bán:</span> Kiểm tra lại tên, mô tả, hình ảnh, thẻ phân loại và nhập giá niêm yết. Khi xác nhận, hệ thống sẽ lưu thông tin mới nhất và chuyển sản phẩm sang trạng thái <strong className="font-black">Đang bán</strong>.
+          </div>
+        ) : (
+          <div className="border-2 border-black bg-[#fef08a]/60 p-3 text-xs font-medium text-black">
+            <span className="font-black uppercase">Lưu ý BR-FL5-03:</span> Việc thay đổi giá bán cơ bản chỉ áp dụng cho các đơn hàng tương lai, hoàn toàn không làm thay đổi giá trên các đơn hàng lịch sử của khách hàng.
+          </div>
+        )}
 
         {/* Tên & Giá */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -269,16 +336,32 @@ export default function EditStoreProductModal({ product, onClose, onSuccess }: E
           </div>
           <div>
             <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
-              Giá bán cơ bản (VNĐ) <span className="text-red-600">*</span>
+              {isApproveMode ? "Giá bán đề xuất / niêm yết (VNĐ)" : "Giá bán cơ bản (VNĐ)"}{" "}
+              <span className="text-red-600">*</span>
             </label>
             <input
               type="number"
               min={0}
+              max={9999999999.99}
+              step={0.01}
               required
+              autoFocus={isApproveMode}
+              placeholder={isApproveMode ? "Nhập giá bán (VD: 49000)" : undefined}
               value={basePrice}
               onChange={(e) => setBasePrice(e.target.value)}
               className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-black text-primary-ink tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
+            {isApproveMode && (
+              <div className="mt-1 flex items-center justify-between text-[11px] font-medium text-text-muted">
+                <span>Nhập 0 nếu muốn phát hành miễn phí.</span>
+                {basePrice.trim() !== "" &&
+                  /^\d{1,10}(?:\.\d{1,2})?$/.test(basePrice.trim()) && (
+                    <span className="font-black text-primary-ink tabular-nums">
+                      {formatVnd(Number(basePrice.trim()))}
+                    </span>
+                  )}
+              </div>
+            )}
           </div>
         </div>
 

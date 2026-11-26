@@ -2960,8 +2960,8 @@ export default function PixelArtStudio({
             disabled={Boolean(lockedMatrixSize)}
             title={
               lockedMatrixSize
-                ? `Kích thước ma trận đã khóa cố định ở mức ${lockedMatrixSize}`
-                : "Chọn kích thước ma trận"
+                ? `Kích thước bản vẽ đã khóa cố định ở mức ${lockedMatrixSize}`
+                : "Chọn kích thước bản vẽ"
             }
             onChange={(e) =>
               handleSizePresetChange(e.target.value as "32x32" | "64x32" | "64x64")

@@ -29,7 +29,10 @@ interface GalleryContextValue {
   activeSubscription: CustomerActiveSubscription | null;
   activeSubscriptions: CustomerActiveSubscription[];
   hasAllAccessCharacters: boolean;
+  maxCommissionRevisions: number;
   extraCommissionRevisions: number;
+  maxMobileProfiles: number;
+  ownedAllAccessOnlyPrice: number | null;
   entitlements: UserEntitlement[];
   isLoading: boolean;
   error: string | null;
@@ -47,10 +50,33 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
     useState<CustomerActiveSubscription[]>([]);
   const activeSubscription = activeSubscriptions[0] ?? null;
   const hasAllAccessCharacters = activeSubscriptions.some((sub) => sub.allAccessCharacters);
-  const extraCommissionRevisions = activeSubscriptions.reduce(
-    (sum, sub) => sum + Math.max(0, sub.remainingCommissionRevisions ?? 0),
+  const maxCommissionRevisions = activeSubscriptions.reduce(
+    (max, sub) => Math.max(max, sub.maxCommissionRevisions ?? 0),
     0,
   );
+  const extraCommissionRevisions = maxCommissionRevisions;
+  const maxMobileProfiles = activeSubscriptions.reduce(
+    (max, sub) => Math.max(max, sub.maxMobileProfiles ?? 3),
+    3,
+  );
+  const alreadyOwnsAllAccessUpgrade = activeSubscriptions.some(
+    (sub) =>
+      sub.allAccessCharacters &&
+      ((sub.maxMobileProfiles ?? 3) > 3 || (sub.maxCommissionRevisions ?? 0) > 0),
+  );
+  const ownedAllAccessOnlyPrices = alreadyOwnsAllAccessUpgrade
+    ? []
+    : activeSubscriptions
+        .filter(
+          (sub) =>
+            sub.allAccessCharacters &&
+            (sub.maxMobileProfiles ?? 3) <= 3 &&
+            (sub.maxCommissionRevisions ?? 0) <= 0 &&
+            (sub.paidPrice ?? 0) > 0,
+        )
+        .map((sub) => sub.paidPrice as number);
+  const ownedAllAccessOnlyPrice =
+    ownedAllAccessOnlyPrices.length > 0 ? Math.max(...ownedAllAccessOnlyPrices) : null;
   const [entitlements, setEntitlements] = useState<UserEntitlement[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +175,10 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
         activeSubscription,
         activeSubscriptions,
         hasAllAccessCharacters,
+        maxCommissionRevisions,
         extraCommissionRevisions,
+        maxMobileProfiles,
+        ownedAllAccessOnlyPrice,
         entitlements,
         isLoading,
         error,

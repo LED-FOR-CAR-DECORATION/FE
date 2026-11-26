@@ -18,12 +18,14 @@ import type { StoreCharacterRow } from "../types";
 import { formatVnd, formatDateTime } from "../format";
 import StatusBadge from "./StatusBadge";
 import StoreModal from "./StoreModal";
+import EditStoreProductModal from "./EditStoreProductModal";
 
 interface ManagerProductListingTableProps {
   rows: StoreCharacterRow[];
   isLoading: boolean;
   canManage: boolean;
-  onApprove: (character: StoreCharacterRow, price?: number) => Promise<void>;
+  onApprove?: (character: StoreCharacterRow, price?: number) => Promise<void>;
+  onOpenApprove?: (character: StoreCharacterRow) => void;
   onRefresh: () => void;
   onEdit?: (character: StoreCharacterRow) => void;
   externalQuery?: string;
@@ -34,18 +36,17 @@ export default function ManagerProductListingTable({
   rows,
   isLoading,
   canManage,
-  onApprove,
+  onOpenApprove,
   onRefresh,
   onEdit,
   externalQuery,
   hideHeader = false,
 }: ManagerProductListingTableProps) {
   const [query, setQuery] = useState("");
-  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [zoomedRow, setZoomedRow] = useState<StoreCharacterRow | null>(null);
+  const [approveTarget, setApproveTarget] = useState<StoreCharacterRow | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [prices, setPrices] = useState<Record<string, string>>({});
 
   // Filter ONLY UNPUBLISHED ("Chờ duyệt") character products
   const unpublishedRows = useMemo(() => {
@@ -65,31 +66,14 @@ export default function ManagerProductListingTable({
     );
   }, [activeQuery, unpublishedRows]);
 
-  const handleApproveClick = async (row: StoreCharacterRow) => {
-    if (approvingId !== null || !canManage) return;
-    const priceInput = prices[row.characterId] ?? (row.draft?.basePrice ? String(row.draft.basePrice) : "");
-    const price = Number(priceInput);
-    if (row.draft && (!/^\d{1,10}(?:\.\d{1,2})?$/.test(priceInput) || !Number.isFinite(price))) {
-      setActionError("Nhập giá bán hợp lệ cho sản phẩm trước khi duyệt. Nhập 0 nếu muốn phát hành miễn phí.");
+  const handleOpenApprove = (row: StoreCharacterRow) => {
+    if (!canManage) return;
+    setActionError(null);
+    if (onOpenApprove) {
+      onOpenApprove(row);
       return;
     }
-    setApprovingId(row.characterId);
-    setActionNotice(null);
-    setActionError(null);
-    try {
-      await onApprove(row, row.draft ? price : undefined);
-      setActionNotice(
-        `Đã phê duyệt nhân vật "${row.name}" (#${row.characterId}) và mở bán PUBLISHED trên Store!`,
-      );
-    } catch (err) {
-      setActionError(
-        err instanceof Error
-          ? err.message
-          : "Phê duyệt nhân vật thất bại. Vui lòng thử lại.",
-      );
-    } finally {
-      setApprovingId(null);
-    }
+    setApproveTarget(row);
   };
 
   return (
@@ -183,15 +167,13 @@ export default function ManagerProductListingTable({
 
       {/* Data Table */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[820px] border-collapse text-left text-sm">
           <thead className="border-b-2 border-black bg-[#e9f5ed]">
             <tr>
               <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Mã sản phẩm</th>
               <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Ảnh đại diện</th>
               <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Tên nhân vật</th>
               <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Nhà thiết kế</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Phiên bản</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Giá đề xuất</th>
               <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Trạng thái</th>
               <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Thao tác</th>
             </tr>
@@ -199,14 +181,14 @@ export default function ManagerProductListingTable({
           <tbody className="divide-y-2 divide-black/10 bg-white">
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="py-14 text-center text-xs font-bold text-text-muted">
+                <td colSpan={6} className="py-14 text-center text-xs font-bold text-text-muted">
                   <Loader2 size={18} className="mx-auto mb-2 animate-spin text-primary-ink" aria-hidden="true" />
                   Đang tải danh sách chờ duyệt...
                 </td>
               </tr>
             ) : filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-14 text-center">
+                <td colSpan={6} className="px-4 py-14 text-center">
                   <div className="mx-auto flex max-w-md flex-col items-center border-2 border-dashed border-black/25 bg-gray-50 px-5 py-8">
                     <div className="grid h-11 w-11 place-items-center border-2 border-black bg-primary text-black shadow-[2px_2px_0_0_#000]">
                       <ShieldCheck size={22} aria-hidden="true" />
@@ -226,7 +208,6 @@ export default function ManagerProductListingTable({
               </tr>
             ) : (
               filteredRows.map((row) => {
-                const isProcessing = approvingId === row.characterId;
                 return (
                   <tr
                     key={row.characterId}
@@ -274,35 +255,6 @@ export default function ManagerProductListingTable({
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      {row.activeVersion ? (
-                        <span className="inline-flex items-center border border-black bg-primary/40 px-2 py-0.5 font-mono text-[11px] font-black text-black shadow-[1px_1px_0_0_#000]">
-                          v{row.activeVersion.versionNumber}
-                        </span>
-                      ) : (
-                        <span className="font-mono text-xs font-bold text-text-muted">v1 (mặc định)</span>
-                      )}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3.5 font-black text-primary-ink tabular-nums">
-                      {row.draft ? (
-                        <input
-                          type="number"
-                          min={0}
-                          max={9999999999.99}
-                          step={0.01}
-                          aria-label={`Giá bán của ${row.name}`}
-                          className="w-36 border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-black text-primary-ink tabular-nums focus:bg-white disabled:opacity-50"
-                          placeholder="Nhập giá (VNĐ)"
-                          disabled={!canManage || isProcessing}
-                          value={prices[row.characterId] ?? (row.draft.basePrice ? String(row.draft.basePrice) : "")}
-                          onChange={(event) => setPrices((current) => ({ ...current, [row.characterId]: event.target.value }))}
-                        />
-                      ) : (
-                        formatVnd(199000)
-                      )}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3.5">
                       <StatusBadge status={row.status} />
                     </td>
 
@@ -312,7 +264,7 @@ export default function ManagerProductListingTable({
                           <button
                             type="button"
                             onClick={() => onEdit(row)}
-                            disabled={!canManage || isProcessing}
+                            disabled={!canManage}
                             title="Chỉnh sửa chi tiết, mô tả hoặc gắn thẻ"
                             className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1.5! text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
                           >
@@ -321,20 +273,16 @@ export default function ManagerProductListingTable({
                           </button>
                         )}
 
-                        {/* Dedicated "Approve" (Duyệt mở bán) button */}
+                        {/* Dedicated "Approve" (Xét duyệt) button */}
                         <button
                           type="button"
-                          onClick={() => void handleApproveClick(row)}
-                          disabled={!canManage || isProcessing}
-                          title="Phê duyệt và chuyển sang trạng thái Đang mở bán"
+                          onClick={() => handleOpenApprove(row)}
+                          disabled={!canManage}
+                          title="Mở hộp thoại xét duyệt thông tin, đặt giá bán và mở bán lên cửa hàng"
                           className="btn-primary inline-flex items-center gap-1.5 px-3! py-1.5! text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
                         >
-                          {isProcessing ? (
-                            <Loader2 size={13} className="animate-spin" aria-hidden="true" />
-                          ) : (
-                            <Check size={13} aria-hidden="true" />
-                          )}
-                          {isProcessing ? "Đang duyệt..." : "Duyệt mở bán"}
+                          <Check size={13} aria-hidden="true" />
+                          Xét duyệt
                         </button>
                       </div>
                     </td>
@@ -368,13 +316,13 @@ export default function ManagerProductListingTable({
                 onClick={() => {
                   const target = zoomedRow;
                   setZoomedRow(null);
-                  void handleApproveClick(target);
+                  handleOpenApprove(target);
                 }}
                 disabled={!canManage}
                 className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
               >
                 <Check size={14} aria-hidden="true" />
-                Duyệt mở bán sản phẩm này
+                Xét duyệt sản phẩm này
               </button>
             </>
           }
@@ -390,6 +338,33 @@ export default function ManagerProductListingTable({
             </div>
           </div>
         </StoreModal>
+      )}
+
+      {/* Fallback Approve Modal based on EditStoreProductModal */}
+      {approveTarget && (
+        <EditStoreProductModal
+          mode="approve"
+          creatorName={approveTarget.creatorName}
+          previewFallbackUrl={approveTarget.thumbnailUrl}
+          product={{
+            id: approveTarget.characterId,
+            productType: "CHARACTER",
+            productName: approveTarget.name,
+            basePrice: approveTarget.draft?.basePrice ?? approveTarget.basePrice ?? 0,
+            description: approveTarget.description,
+            thumbnailUrl: approveTarget.draft?.thumbnailUrl ?? undefined,
+            galleryUrls: approveTarget.draft?.galleryUrls ?? approveTarget.galleryUrls ?? [],
+            tags: approveTarget.tags ?? [],
+          }}
+          onClose={() => setApproveTarget(null)}
+          onSuccess={(productName, savedPrice) => {
+            const priceLabel = savedPrice !== undefined ? ` (${formatVnd(savedPrice)})` : "";
+            setActionNotice(
+              `Đã xét duyệt nhân vật "${productName}"${priceLabel} sang trạng thái Đang bán!`,
+            );
+            onRefresh();
+          }}
+        />
       )}
     </div>
   );

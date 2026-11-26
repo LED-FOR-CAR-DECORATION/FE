@@ -45,8 +45,8 @@ export default function CreateSubscriptionModal({
   const [galleryUrlsText, setGalleryUrlsText] = useState("");
   const [isLifetime, setIsLifetime] = useState(true);
   const [durationDays, setDurationDays] = useState<string>("30");
-  const [planBenefitMode, setPlanBenefitMode] = useState<"ALL_CHARACTERS" | "COMMISSION_REVISIONS">("ALL_CHARACTERS");
   const [allAccessCharacters, setAllAccessCharacters] = useState(true);
+  const [maxMobileProfiles, setMaxMobileProfiles] = useState<string>("3");
   const [maxCommissionRevisions, setMaxCommissionRevisions] = useState<string>("0");
   const [publishImmediately, setPublishImmediately] = useState(false);
 
@@ -170,20 +170,30 @@ export default function CreateSubscriptionModal({
       parsedBonusRevisions < 0 ||
       parsedBonusRevisions > 100
     ) {
-      setError("Số lượt chỉnh sửa Commission cộng thêm phải là số nguyên từ 0 đến 100.");
+      setError("Số lượt chỉnh sửa Commission miễn phí mỗi đơn phải là số nguyên từ 0 đến 100.");
       return;
     }
 
-    if (!allAccessCharacters && parsedBonusRevisions <= 0) {
-      setError("Gói hội viên cần bật Mở khóa toàn bộ Character hoặc cộng ít nhất +1 lượt chỉnh sửa Commission miễn phí.");
+    const parsedMobileProfiles =
+      maxMobileProfiles.trim() === "" ? 3 : Number(maxMobileProfiles);
+    if (
+      !Number.isInteger(parsedMobileProfiles) ||
+      parsedMobileProfiles < 3 ||
+      parsedMobileProfiles > 100
+    ) {
+      setError("Số lượng profile Mobile tối đa phải là số nguyên từ 3 đến 100.");
       return;
     }
 
-    const effectiveIsLifetime =
-      planBenefitMode === "COMMISSION_REVISIONS" && !allAccessCharacters ? true : isLifetime;
+    if (!allAccessCharacters && parsedBonusRevisions <= 0 && parsedMobileProfiles <= 3) {
+      setError(
+        "Gói hội viên cần bật Mở khóa toàn bộ nhân vật, mở rộng trên 3 profile Mobile, hoặc đặt lượt sửa Commission miễn phí > 0.",
+      );
+      return;
+    }
 
     let parsedDuration: number | null = null;
-    if (!effectiveIsLifetime) {
+    if (!isLifetime) {
       const d = Number(durationDays);
       if (!Number.isInteger(d) || d <= 0) {
         setError("Số ngày hiệu lực (durationDays) phải là số nguyên dương > 0 đối với gói có thời hạn.");
@@ -230,10 +240,11 @@ export default function CreateSubscriptionModal({
         description: description.trim() || undefined,
         thumbnailUrl: resolvedThumb || undefined,
         galleryUrls: resolvedGallery.length > 0 ? resolvedGallery : undefined,
-        isLifetime: effectiveIsLifetime,
+        isLifetime,
         durationDays: parsedDuration,
         allAccessCharacters,
         maxCommissionRevisions: parsedBonusRevisions,
+        maxMobileProfiles: parsedMobileProfiles,
         tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
       });
       if (publishImmediately && created.productId) {
@@ -325,111 +336,142 @@ export default function CreateSubscriptionModal({
           . Sau khi kiểm tra thông tin, bạn có thể bấm <strong className="font-black">Mở bán</strong> trong danh sách.
         </div>
 
-        {/* Chọn loại gói hội viên */}
+        {/* Cấu hình quyền lợi gói hội viên */}
         <div className="border-2 border-black bg-white p-4 shadow-[2px_2px_0_0_#000]">
-          <label className="mb-2.5 block text-xs font-black uppercase tracking-wider text-black">
-            Loại quyền lợi gói hội viên
-          </label>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              aria-pressed={planBenefitMode === "ALL_CHARACTERS"}
-              onClick={() => {
-                setPlanBenefitMode("ALL_CHARACTERS");
-                setAllAccessCharacters(true);
-                setMaxCommissionRevisions("0");
-              }}
-              className={`flex cursor-pointer items-start justify-between border-2 border-black p-3 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
-                planBenefitMode === "ALL_CHARACTERS"
-                  ? "bg-primary/30 text-black shadow-[2px_2px_0_0_#000]"
-                  : "bg-gray-50 text-black hover:bg-primary/15"
-              }`}
-            >
-              <div>
-                <p className="flex items-center gap-1.5 text-xs font-black uppercase">
-                  <Sparkles size={13} className="text-primary-ink" aria-hidden="true" /> Mở khóa toàn bộ Character
-                </p>
-                <p className="mt-1 text-[11px] font-medium text-text-muted">
-                  Cho phép khách sử dụng mọi nhân vật trên cửa hàng (Vĩnh viễn hoặc theo ngày)
-                </p>
-              </div>
-              {planBenefitMode === "ALL_CHARACTERS" && (
-                <Check size={16} strokeWidth={3} className="mt-0.5 shrink-0 text-black" aria-hidden="true" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              aria-pressed={planBenefitMode === "COMMISSION_REVISIONS"}
-              onClick={() => {
-                setPlanBenefitMode("COMMISSION_REVISIONS");
-                setAllAccessCharacters(false);
-                setIsLifetime(true);
-                if (!Number(maxCommissionRevisions) || Number(maxCommissionRevisions) <= 0) {
-                  setMaxCommissionRevisions("5");
-                }
-                if (basePrice === "199000" || !basePrice) {
-                  setBasePrice("99000");
-                }
-              }}
-              className={`flex cursor-pointer items-start justify-between border-2 border-black p-3 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
-                planBenefitMode === "COMMISSION_REVISIONS"
-                  ? "bg-primary/30 text-black shadow-[2px_2px_0_0_#000]"
-                  : "bg-gray-50 text-black hover:bg-primary/15"
-              }`}
-            >
-              <div>
-                <p className="flex items-center gap-1.5 text-xs font-black uppercase">
-                  <InfinityIcon size={14} className="text-primary-ink" aria-hidden="true" /> Cộng lượt sửa Commission miễn phí
-                </p>
-                <p className="mt-1 text-[11px] font-medium text-text-muted">
-                  Cộng tổng +N lượt sửa miễn phí vào ví, dùng tùy chọn cho mọi đơn Commission · Vĩnh viễn
-                </p>
-              </div>
-              {planBenefitMode === "COMMISSION_REVISIONS" && (
-                <Check size={16} strokeWidth={3} className="mt-0.5 shrink-0 text-black" aria-hidden="true" />
-              )}
-            </button>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <label className="block text-xs font-black uppercase tracking-wider text-black">
+              Quyền lợi gói hội viên
+            </label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-black uppercase text-text-muted">Mẫu nhanh:</span>
+              {[
+                {
+                  label: "Full Char · 999.999đ",
+                  name: "Gói VIP Mở Khóa Toàn Bộ Lumintra",
+                  code: "VIP_LIFETIME",
+                  price: 999999,
+                  lifetime: true,
+                  days: 30,
+                  allChar: true,
+                  profiles: 3,
+                  revisions: 0,
+                  desc: "Mở khóa toàn bộ thư viện nhân vật",
+                },
+                {
+                  label: "5 Profile · 3 Sửa (30 ngày)",
+                  name: "Gói Hội Viên Standard 30 Ngày",
+                  code: "VIP_STANDARD_30D",
+                  price: 399999,
+                  lifetime: false,
+                  days: 30,
+                  allChar: false,
+                  profiles: 5,
+                  revisions: 3,
+                  desc: "Tối đa 5 profile chữ trên ứng dụng Mobile · 3 lượt chỉnh sửa miễn phí cho mỗi đơn thiết kế",
+                },
+                {
+                  label: "10 Profile · 5 Sửa (30 ngày)",
+                  name: "Gói Hội Viên Pro 30 Ngày",
+                  code: "VIP_PRO_30D",
+                  price: 599999,
+                  lifetime: false,
+                  days: 30,
+                  allChar: false,
+                  profiles: 10,
+                  revisions: 5,
+                  desc: "Tối đa 10 profile chữ trên ứng dụng Mobile · 5 lượt chỉnh sửa miễn phí cho mỗi đơn thiết kế",
+                },
+                {
+                  label: "Ultimate · 4.999.999đ",
+                  name: "Gói VIP Ultimate Trọn Đời Lumintra",
+                  code: "VIP_ULTIMATE_LIFETIME",
+                  price: 4999999,
+                  lifetime: true,
+                  days: 30,
+                  allChar: true,
+                  profiles: 20,
+                  revisions: 10,
+                  desc: "Mở khóa toàn bộ thư viện nhân vật · Tối đa 20 profile chữ trên ứng dụng Mobile · 10 lượt chỉnh sửa miễn phí cho mỗi đơn thiết kế",
+                },
+              ].map((preset) => (
+                <button
+                  key={preset.code}
+                  type="button"
+                  onClick={() => {
+                    setPlanName(preset.name);
+                    setPlanCode(preset.code);
+                    setBasePrice(String(preset.price));
+                    setIsLifetime(preset.lifetime);
+                    setDurationDays(String(preset.days));
+                    setAllAccessCharacters(preset.allChar);
+                    setMaxMobileProfiles(String(preset.profiles));
+                    setMaxCommissionRevisions(String(preset.revisions));
+                    setDescription(preset.desc);
+                  }}
+                  className="btn-secondary px-2! py-1! text-[10px] font-black shadow-[1px_1px_0_0_#000]"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {planBenefitMode === "COMMISSION_REVISIONS" && (
-            <div className="mt-3 space-y-2.5 border-t-2 border-dashed border-gray-200 pt-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-black uppercase text-black">Cấu hình nhanh:</span>
-                {[
-                  {
-                    revisions: 5,
-                    price: 99000,
-                    code: "COMMISSION_REV_5",
-                    name: "Gói +5 Lượt Sửa Commission (Vĩnh viễn)",
-                    desc: "Cộng tổng +5 lượt chỉnh sửa Commission miễn phí dùng chung cho mọi đơn thiết kế, không giới hạn thời gian.",
-                  },
-                  {
-                    revisions: 10,
-                    price: 169000,
-                    code: "COMMISSION_REV_10",
-                    name: "Gói +10 Lượt Sửa Commission (Vĩnh viễn)",
-                    desc: "Cộng tổng +10 lượt chỉnh sửa Commission miễn phí dùng chung cho mọi đơn thiết kế, không giới hạn thời gian.",
-                  },
-                ].map((preset) => (
-                  <button
-                    key={preset.revisions}
-                    type="button"
-                    onClick={() => {
-                      setMaxCommissionRevisions(String(preset.revisions));
-                      setBasePrice(String(preset.price));
-                      if (!planName.trim()) setPlanName(preset.name);
-                      if (!planCode.trim()) setPlanCode(preset.code);
-                      if (!description.trim()) setDescription(preset.desc);
-                    }}
-                    className="btn-secondary px-2.5! py-1! text-[11px] font-black tabular-nums shadow-[2px_2px_0_0_#000]"
-                  >
-                    +{preset.revisions} lượt · {preset.price.toLocaleString("vi-VN")}đ
-                  </button>
-                ))}
-              </div>
+          <label className="flex cursor-pointer items-center gap-2.5 border-2 border-black bg-gray-50 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={allAccessCharacters}
+              onChange={(e) => setAllAccessCharacters(e.target.checked)}
+              className="h-4 w-4 accent-[#2d6a4f]"
+            />
+            <div>
+              <p className="flex items-center gap-1.5 text-xs font-black uppercase text-black">
+                <Sparkles size={13} className="text-primary-ink" aria-hidden="true" /> Mở khóa toàn bộ thư viện nhân vật
+              </p>
+              <p className="text-[11px] font-medium text-text-muted">
+                Cho phép khách sử dụng toàn bộ nhân vật Pixel Art đang mở bán trên cửa hàng.
+              </p>
             </div>
-          )}
+          </label>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+                Số lượng Profile chữ trên App Mobile (tối đa)
+              </label>
+              <input
+                type="number"
+                min={3}
+                max={100}
+                step={1}
+                value={maxMobileProfiles}
+                onChange={(e) => setMaxMobileProfiles(e.target.value)}
+                placeholder="Mặc định: 3 (VD: 5, 10, 20)"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
+              />
+              <p className="mt-1 text-[11px] font-medium text-text-muted">
+                Tài khoản thường có 3 profile. Nhập 5, 10, 20... để mở rộng giới hạn trên App Mobile.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+                Lượt chỉnh sửa miễn phí / mỗi đơn Commission
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={maxCommissionRevisions}
+                onChange={(e) => setMaxCommissionRevisions(e.target.value)}
+                placeholder="Mặc định: 0 (VD: 3, 5, 10)"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
+              />
+              <p className="mt-1 text-[11px] font-medium text-text-muted">
+                Mỗi đơn thiết kế mặc định 1 lượt miễn phí. Nhập 3, 5, 10... để nâng hạn mức cho từng đơn khi gói đang hiệu lực.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Tên gói & Mã gói */}
@@ -444,11 +486,7 @@ export default function CreateSubscriptionModal({
               maxLength={255}
               value={planName}
               onChange={(e) => setPlanName(e.target.value)}
-              placeholder={
-                planBenefitMode === "COMMISSION_REVISIONS"
-                  ? "Ví dụ: Gói +5 Lượt Sửa Commission (Vĩnh viễn)"
-                  : "Ví dụ: Lumintra All-Access VIP Pass"
-              }
+              placeholder="Ví dụ: Gói Hội Viên Pro 30 Ngày"
               className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
           </div>
@@ -462,123 +500,87 @@ export default function CreateSubscriptionModal({
               maxLength={100}
               value={planCode}
               onChange={(e) => setPlanCode(e.target.value.toUpperCase())}
-              placeholder={
-                planBenefitMode === "COMMISSION_REVISIONS"
-                  ? "Ví dụ: COMMISSION_REV_5"
-                  : "Ví dụ: PRO_30_DAYS"
-              }
+              placeholder="Ví dụ: VIP_PRO_30D"
               className="w-full border-2 border-black bg-gray-50 px-3 py-2 font-mono text-xs font-black uppercase text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
             />
           </div>
         </div>
 
-        {/* Giá bán & Số lượt sửa Commission cộng thêm */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
-              Giá bán (VNĐ) <span className="text-red-600">*</span>
-            </label>
-            <input
-              type="number"
-              min={0}
-              required
-              value={basePrice}
-              onChange={(e) => setBasePrice(e.target.value)}
-              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-black text-primary-ink tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
-              Lượt sửa Commission miễn phí cộng thêm (+N){" "}
-              {planBenefitMode === "COMMISSION_REVISIONS" && <span className="text-red-600">*</span>}
-            </label>
-            <input
-              type="number"
-              min={planBenefitMode === "COMMISSION_REVISIONS" ? 1 : 0}
-              max={100}
-              step={1}
-              required={planBenefitMode === "COMMISSION_REVISIONS"}
-              value={maxCommissionRevisions}
-              onChange={(e) => setMaxCommissionRevisions(e.target.value)}
-              placeholder="Ví dụ: 5 hoặc 10"
-              className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black"
-            />
-            <p className="mt-1 text-[11px] font-medium text-text-muted">
-              Tổng số lượt miễn phí cộng vào ví khách hàng (dùng tùy ý cho bất kỳ đơn Commission nào, hết lượt mới tính phí).
-            </p>
-          </div>
+        {/* Giá bán */}
+        <div>
+          <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+            Giá bán (VNĐ) <span className="text-red-600">*</span>
+          </label>
+          <input
+            type="number"
+            min={0}
+            required
+            value={basePrice}
+            onChange={(e) => setBasePrice(e.target.value)}
+            className="w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-black text-primary-ink tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black sm:w-64"
+          />
         </div>
 
         {/* Thời hạn gói */}
-        {planBenefitMode === "COMMISSION_REVISIONS" && !allAccessCharacters ? (
-          <div className="flex items-center gap-2 border-2 border-black bg-[#e9d5ff] px-3.5 py-2.5 text-xs font-medium text-black shadow-[2px_2px_0_0_#000]">
-            <InfinityIcon size={15} className="shrink-0 text-black" aria-hidden="true" />
-            <span>
-              <strong className="font-black">Thời hạn: Vĩnh viễn (Không giới hạn ngày).</strong> Gói cộng lượt sửa Commission miễn phí mặc định có hiệu lực vĩnh viễn.
-            </span>
-          </div>
-        ) : (
-          <div className="border-2 border-black bg-white p-4 shadow-[2px_2px_0_0_#000]">
-            <label className="mb-2.5 block text-xs font-black uppercase tracking-wider text-black">
-              Thời hạn sử dụng (isLifetime &amp; durationDays)
-            </label>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                aria-pressed={!isLifetime}
-                onClick={() => setIsLifetime(false)}
-                className={`flex cursor-pointer items-center justify-between border-2 border-black p-2.5 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
-                  !isLifetime
-                    ? "bg-primary/30 text-black shadow-[2px_2px_0_0_#000]"
-                    : "bg-gray-50 text-black hover:bg-primary/15"
-                }`}
-              >
-                <div>
-                  <p className="text-xs font-black uppercase">Gói có thời hạn (Theo ngày)</p>
-                  <p className="text-[11px] font-medium text-text-muted">Bắt buộc nhập số ngày hiệu lực</p>
-                </div>
-                {!isLifetime && <Check size={16} strokeWidth={3} className="text-black" aria-hidden="true" />}
-              </button>
-
-              <button
-                type="button"
-                aria-pressed={isLifetime}
-                onClick={() => setIsLifetime(true)}
-                className={`flex cursor-pointer items-center justify-between border-2 border-black p-2.5 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
-                  isLifetime
-                    ? "bg-primary/30 text-black shadow-[2px_2px_0_0_#000]"
-                    : "bg-gray-50 text-black hover:bg-primary/15"
-                }`}
-              >
-                <div>
-                  <p className="flex items-center gap-1 text-xs font-black uppercase">
-                    <InfinityIcon size={14} aria-hidden="true" /> Gói Vĩnh viễn (Lifetime)
-                  </p>
-                  <p className="text-[11px] font-medium text-text-muted">Không giới hạn ngày</p>
-                </div>
-                {isLifetime && <Check size={16} strokeWidth={3} className="text-black" aria-hidden="true" />}
-              </button>
-            </div>
-
-            {!isLifetime && (
-              <div className="mt-3">
-                <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
-                  Số ngày hiệu lực <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  required
-                  value={durationDays}
-                  onChange={(e) => setDurationDays(e.target.value)}
-                  placeholder="Ví dụ: 30, 90, 365"
-                  className="w-full border-2 border-black bg-gray-50 px-3 py-1.5 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black sm:w-48"
-                />
+        <div className="border-2 border-black bg-white p-4 shadow-[2px_2px_0_0_#000]">
+          <label className="mb-2.5 block text-xs font-black uppercase tracking-wider text-black">
+            Thời hạn sử dụng (isLifetime &amp; durationDays)
+          </label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              aria-pressed={!isLifetime}
+              onClick={() => setIsLifetime(false)}
+              className={`flex cursor-pointer items-center justify-between border-2 border-black p-2.5 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                !isLifetime
+                  ? "bg-primary/30 text-black shadow-[2px_2px_0_0_#000]"
+                  : "bg-gray-50 text-black hover:bg-primary/15"
+              }`}
+            >
+              <div>
+                <p className="text-xs font-black uppercase">Gói có thời hạn (Theo ngày)</p>
+                <p className="text-[11px] font-medium text-text-muted">Bắt buộc nhập số ngày hiệu lực</p>
               </div>
-            )}
+              {!isLifetime && <Check size={16} strokeWidth={3} className="text-black" aria-hidden="true" />}
+            </button>
+
+            <button
+              type="button"
+              aria-pressed={isLifetime}
+              onClick={() => setIsLifetime(true)}
+              className={`flex cursor-pointer items-center justify-between border-2 border-black p-2.5 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                isLifetime
+                  ? "bg-primary/30 text-black shadow-[2px_2px_0_0_#000]"
+                  : "bg-gray-50 text-black hover:bg-primary/15"
+              }`}
+            >
+              <div>
+                <p className="flex items-center gap-1 text-xs font-black uppercase">
+                  <InfinityIcon size={14} aria-hidden="true" /> Gói Vĩnh viễn (Lifetime)
+                </p>
+                <p className="text-[11px] font-medium text-text-muted">Không giới hạn ngày</p>
+              </div>
+              {isLifetime && <Check size={16} strokeWidth={3} className="text-black" aria-hidden="true" />}
+            </button>
           </div>
-        )}
+
+          {!isLifetime && (
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-black uppercase tracking-wide text-black">
+                Số ngày hiệu lực <span className="text-red-600">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                required
+                value={durationDays}
+                onChange={(e) => setDurationDays(e.target.value)}
+                placeholder="Ví dụ: 30, 90, 365"
+                className="w-full border-2 border-black bg-gray-50 px-3 py-1.5 text-sm font-bold text-black tabular-nums focus:bg-white focus:shadow-[2px_2px_0_0_#000] focus:outline-2 focus:outline-offset-2 focus:outline-black sm:w-48"
+              />
+            </div>
+          )}
+        </div>
 
         {/* Mô tả */}
         <div>

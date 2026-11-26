@@ -27,7 +27,13 @@ const formatPrice = (price: number) => `${price.toLocaleString("vi-VN")} VNĐ`;
 export default function SubscriptionsStorePage() {
   const router = useRouter();
   const { items: cartItems, addItem } = useCart();
-  const { activeSubscriptions, hasAllAccessCharacters, extraCommissionRevisions } = useGallery();
+  const {
+    activeSubscriptions,
+    hasAllAccessCharacters,
+    maxCommissionRevisions,
+    maxMobileProfiles,
+    ownedAllAccessOnlyPrice,
+  } = useGallery();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [plans, setPlans] = useState<CatalogProduct[]>([]);
@@ -124,8 +130,11 @@ export default function SubscriptionsStorePage() {
                       hasAllAccessCharacters
                         ? "Mở khóa toàn bộ thư viện nhân vật"
                         : null,
-                      extraCommissionRevisions > 0
-                        ? `Còn ${extraCommissionRevisions} lượt chỉnh sửa thiết kế miễn phí`
+                      maxMobileProfiles > 3
+                        ? `Tối đa ${maxMobileProfiles} profile chữ trên ứng dụng Mobile`
+                        : null,
+                      maxCommissionRevisions > 0
+                        ? `${maxCommissionRevisions} lượt chỉnh sửa miễn phí cho mỗi đơn thiết kế`
                         : null,
                     ]
                       .filter(Boolean)
@@ -134,6 +143,12 @@ export default function SubscriptionsStorePage() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href="/profile/subscription"
+                  className="rounded-lg border-2 border-[#155e59] bg-white px-4 py-2 text-xs font-black uppercase text-[#155e59] hover:bg-[#f4fbf6]"
+                >
+                  Xem quyền lợi của tôi
+                </Link>
                 {hasAllAccessCharacters && (
                   <Link
                     href="/profile/gallery"
@@ -142,7 +157,7 @@ export default function SubscriptionsStorePage() {
                     Mở thư viện nhân vật
                   </Link>
                 )}
-                {extraCommissionRevisions > 0 && (
+                {maxCommissionRevisions > 0 && (
                   <Link
                     href="/commission"
                     className="rounded-lg border-2 border-[#155e59] bg-white px-4 py-2 text-xs font-black uppercase text-[#155e59] hover:bg-[#f4fbf6]"
@@ -188,51 +203,61 @@ export default function SubscriptionsStorePage() {
                 const isLifetime = Boolean(sub?.isLifetime);
                 const durationDays = sub?.durationDays;
                 const allAccess = Boolean(sub?.allAccessCharacters);
-                const bonusRevisions = Number(sub?.maxCommissionRevisions ?? 0);
+                const planCommissionRevisions = Number(sub?.maxCommissionRevisions ?? 0);
+                const planMobileProfiles = Number(sub?.maxMobileProfiles ?? 3);
                 const isBusy = busyId === plan.id;
                 const isAdded = addedId === plan.id;
                 const inCart = cartItems.some(
                   (c) => c.productId === Number(plan.id) || String(c.id) === String(plan.id),
                 );
-                const isCurrentActivePlan = activeSubscriptions.some(
+                const isDirectActivePlan = activeSubscriptions.some(
                   (active) =>
                     active.productId === Number(plan.id) ||
                     (sub?.planCode != null && active.planCode === sub.planCode),
                 );
-                const isCommissionRevisionPack = !allAccess && bonusRevisions > 0;
-                const disableBuy =
-                  isBusy || inCart || (isCurrentActivePlan && !isCommissionRevisionPack);
+                const isAllAccessOnlyPlan =
+                  allAccess && planMobileProfiles <= 3 && planCommissionRevisions <= 0;
+                const isAllAccessUpgradePlan =
+                  allAccess && (planMobileProfiles > 3 || planCommissionRevisions > 0);
+                const isCoveredByHigherAllAccess = isAllAccessOnlyPlan && hasAllAccessCharacters;
+                const isCurrentActivePlan = isDirectActivePlan || isCoveredByHigherAllAccess;
+
+                const upgradeDeduction =
+                  !isCurrentActivePlan &&
+                  isAllAccessUpgradePlan &&
+                  ownedAllAccessOnlyPrice != null &&
+                  ownedAllAccessOnlyPrice > 0
+                    ? ownedAllAccessOnlyPrice
+                    : 0;
+                const effectivePrice = Math.max(0, plan.price - upgradeDeduction);
+                const disableBuy = isBusy || inCart || isCurrentActivePlan;
 
                 return (
                   <article
                     key={plan.id}
                     className={`neo-box flex flex-col justify-between bg-white p-6 transition-transform hover:-translate-y-1 ${
-                      allAccess ? "ring-2 ring-[#155e59]" : ""
+                      isAllAccessUpgradePlan ? "ring-2 ring-[#155e59]" : ""
                     }`}
                   >
                     <div>
                       <div className="flex min-h-[26px] items-center justify-between gap-2">
-                        {!isCommissionRevisionPack ? (
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-black uppercase ${
-                              isLifetime
-                                ? "bg-[#155e59] text-white"
-                                : "bg-[#e3f5e9] text-[#155e59]"
-                            }`}
-                          >
-                            {isLifetime ? (
-                              <>
-                                <InfinityIcon size={13} /> Trọn đời
-                              </>
-                            ) : (
-                              <>
-                                <Clock size={13} /> {durationDays ?? 30} ngày
-                              </>
-                            )}
-                          </span>
-                        ) : (
-                          <span />
-                        )}
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-black uppercase ${
+                            isLifetime
+                              ? "bg-[#155e59] text-white"
+                              : "bg-[#e3f5e9] text-[#155e59]"
+                          }`}
+                        >
+                          {isLifetime ? (
+                            <>
+                              <InfinityIcon size={13} /> Trọn đời
+                            </>
+                          ) : (
+                            <>
+                              <Clock size={13} /> {durationDays ?? 30} ngày
+                            </>
+                          )}
+                        </span>
                         {sub?.planCode && (
                           <span className="font-mono text-xs font-bold text-[#66736b]">
                             {sub.planCode}
@@ -254,44 +279,63 @@ export default function SubscriptionsStorePage() {
                         {sub?.planName || plan.name}
                       </h2>
 
-                      <div className="mt-3 flex items-baseline gap-1.5">
-                        <strong className="text-3xl font-black text-[#1f432b]">
-                          {formatPrice(plan.price)}
-                        </strong>
-                        {!isCommissionRevisionPack && (
+                      <div className="mt-3">
+                        {upgradeDeduction > 0 && (
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-bold text-text-muted line-through">
+                              {formatPrice(plan.price)}
+                            </span>
+                            <span className="rounded bg-[#e3f5e9] px-2 py-0.5 text-[11px] font-black text-[#155e59]">
+                              Đã trừ {formatPrice(upgradeDeduction)} gói Full nhân vật
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-baseline gap-1.5">
+                          <strong className="text-3xl font-black text-[#1f432b]">
+                            {formatPrice(effectivePrice)}
+                          </strong>
                           <span className="text-xs font-semibold text-text-muted">
                             {isLifetime ? "/ vĩnh viễn" : `/ ${durationDays ?? 30} ngày`}
                           </span>
-                        )}
+                        </div>
                       </div>
 
                       <ul className="mt-5 space-y-2.5 border-t border-[#e5efe7] pt-4 text-sm text-[#26352f]">
-                        {allAccess ? (
+                        {allAccess && (
                           <li className="flex items-start gap-2">
                             <Sparkles size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />
                             <span className="font-semibold">
                               Mở khóa toàn bộ thư viện nhân vật
                             </span>
                           </li>
-                        ) : bonusRevisions > 0 ? (
+                        )}
+                        {planMobileProfiles > 3 && (
                           <li className="flex items-start gap-2">
                             <Sparkles size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />
                             <span className="font-semibold">
-                              +{bonusRevisions} lượt chỉnh sửa thiết kế miễn phí
+                              Tối đa {planMobileProfiles} profile chữ trên ứng dụng Mobile
                             </span>
                           </li>
-                        ) : null}
+                        )}
+                        {planCommissionRevisions > 0 && (
+                          <li className="flex items-start gap-2">
+                            <Sparkles size={16} className="mt-0.5 shrink-0 text-[#2d6a4f]" />
+                            <span className="font-semibold">
+                              {planCommissionRevisions} lượt chỉnh sửa miễn phí cho mỗi đơn thiết kế
+                            </span>
+                          </li>
+                        )}
                       </ul>
                     </div>
 
                     <div className="mt-6 space-y-2.5 pt-2">
-                      {isCurrentActivePlan && !isCommissionRevisionPack && (
+                      {isCurrentActivePlan && (
                         <Link
                           href={allAccess ? "/profile/gallery" : "/commission"}
                           className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-black bg-[#e3f5e9] py-2.5 text-sm font-black text-[#155e59]"
                         >
                           <Check size={16} />
-                          Đang sử dụng gói này
+                          {isDirectActivePlan ? "Đang sử dụng gói này" : "Đã bao gồm trong gói hiện tại"}
                         </Link>
                       )}
 
@@ -299,16 +343,16 @@ export default function SubscriptionsStorePage() {
                         <button
                           type="button"
                           disabled={disableBuy}
-                          onClick={() => handleAddToCart(plan)}
+                          onClick={() => handleAddToCart({ ...plan, price: effectivePrice })}
                           className="btn-secondary flex items-center justify-center gap-1.5 py-2 text-xs font-bold disabled:opacity-60"
                         >
                           <ShoppingBag size={14} />
-                          {isCurrentActivePlan && !isCommissionRevisionPack
+                          {isCurrentActivePlan
                             ? "Đã kích hoạt"
                             : inCart || isAdded
                               ? "Đã trong giỏ"
-                              : isCurrentActivePlan && isCommissionRevisionPack
-                                ? "Mua thêm lượt"
+                              : upgradeDeduction > 0
+                                ? "Nâng cấp ngay"
                                 : "Thêm vào giỏ"}
                         </button>
                         <Link

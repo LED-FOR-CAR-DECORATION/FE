@@ -198,7 +198,7 @@ function DesignerDashboardContent() {
                       Tạo nhân vật mới
                     </h3>
                     <p className="mt-1.5 min-h-[32px] text-xs font-medium text-text-muted">
-                      Khởi tạo bản vẽ nhân vật LED mới và chọn kích thước ma trận.
+                      Khởi tạo bản vẽ nhân vật mới và chọn kích thước bản vẽ.
                     </p>
                   </div>
 
@@ -396,9 +396,7 @@ function DesignerDashboardContent() {
           onClose={() => setShowCreateModal(false)}
           onCreated={(created) => {
             setShowCreateModal(false);
-            setNotice(
-              `Đã khởi tạo nhân vật "${created.characterName}" (0 phiên bản). Bấm vào thẻ nhân vật để mở Pixel Art Studio vẽ bản đầu tiên!`,
-            );
+            router.push(`/designer/studio/${created.characterId}`);
           }}
         />
       )}

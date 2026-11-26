@@ -241,9 +241,7 @@ export default function SubscriptionListingTable({
                       </p>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      {!plan.allAccessCharacters && (plan.maxCommissionRevisions ?? 0) > 0 ? (
-                        <span className="text-xs font-bold text-text-muted">—</span>
-                      ) : plan.isLifetime ? (
+                      {plan.isLifetime ? (
                         <span className="inline-flex items-center gap-1 border border-black bg-[#e9d5ff] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
                           <InfinityIcon size={12} aria-hidden="true" /> Vĩnh viễn
                         </span>
@@ -255,17 +253,26 @@ export default function SubscriptionListingTable({
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex flex-col gap-1">
-                        {plan.allAccessCharacters ? (
+                        {plan.allAccessCharacters && (
                           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-black">
                             <Sparkles size={13} className="shrink-0 text-primary-ink" aria-hidden="true" /> Mở khóa toàn bộ thư viện nhân vật
                           </span>
-                        ) : (plan.maxCommissionRevisions ?? 0) > 0 ? (
-                          <span className="inline-flex w-fit items-center gap-1 border border-black bg-primary/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
-                            +{plan.maxCommissionRevisions} lượt chỉnh sửa thiết kế miễn phí
-                          </span>
-                        ) : (
-                          <span className="text-xs font-medium text-text-muted">Theo cấu hình gói</span>
                         )}
+                        {(plan.maxMobileProfiles ?? 3) > 3 && (
+                          <span className="inline-flex w-fit items-center gap-1 border border-black bg-[#e0e7ff] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                            Tối đa {plan.maxMobileProfiles} profile Mobile
+                          </span>
+                        )}
+                        {(plan.maxCommissionRevisions ?? 0) > 0 && (
+                          <span className="inline-flex w-fit items-center gap-1 border border-black bg-primary/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                            {plan.maxCommissionRevisions} lượt sửa miễn phí / đơn thiết kế
+                          </span>
+                        )}
+                        {!plan.allAccessCharacters &&
+                          (plan.maxMobileProfiles ?? 3) <= 3 &&
+                          (plan.maxCommissionRevisions ?? 0) <= 0 && (
+                            <span className="text-xs font-medium text-text-muted">Theo cấu hình gói</span>
+                          )}
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3.5 text-sm font-black text-primary-ink tabular-nums">

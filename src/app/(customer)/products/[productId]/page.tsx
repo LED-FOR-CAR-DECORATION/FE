@@ -17,6 +17,7 @@ import { useCart } from "@/features/cart/context/CartContext";
 import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CatalogProduct } from "@/features/cart/catalog";
+import { BundleContentsSection } from "@/features/storefront/components/BundleContentsSection";
 import { ProductCompatibilityCard } from "@/features/storefront/components/ProductCompatibilityCard";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchStoreProductDetail, fetchStoreProducts } from "@/lib/api/products";
@@ -26,7 +27,12 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const params = useParams<{ productId: string }>();
   const { items: cartItems, addItem } = useCart();
-  const { ownedCharacters, activeSubscriptions, hasAllAccessCharacters } = useGallery();
+  const {
+    ownedCharacters,
+    activeSubscriptions,
+    hasAllAccessCharacters,
+    ownedAllAccessOnlyPrice,
+  } = useGallery();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const canBuy = isAuthenticated && !authLoading;
 
@@ -104,7 +110,11 @@ export default function ProductDetailPage() {
   const isBundle = item.productType === "BUNDLE";
   const isDigital = isCharacter || isSubscription;
   const hasAllAccess = hasAllAccessCharacters;
-  const ownedCharIdSet = new Set(ownedCharacters.map((o) => o.characterId));
+  const ownedCharIdSet = new Set(
+    ownedCharacters
+      .map((o) => o.characterId)
+      .filter((id): id is number => id != null),
+  );
   const isOwnedCharacter =
     isCharacter &&
     (hasAllAccess ||
@@ -123,10 +133,13 @@ export default function ProductDetailPage() {
     ) ??
       false);
   const subDetail = item.subscriptionDetails;
-  const isCommissionRevisionPack =
-    isSubscription &&
-    !subDetail?.allAccessCharacters &&
-    (subDetail?.maxCommissionRevisions ?? 0) > 0;
+  const subAllAccess = Boolean(subDetail?.allAccessCharacters);
+  const subMobileProfiles = Number(subDetail?.maxMobileProfiles ?? 3);
+  const subCommissionRevisions = Number(subDetail?.maxCommissionRevisions ?? 0);
+  const isAllAccessOnlyPlan =
+    isSubscription && subAllAccess && subMobileProfiles <= 3 && subCommissionRevisions <= 0;
+  const isAllAccessUpgradePlan =
+    isSubscription && subAllAccess && (subMobileProfiles > 3 || subCommissionRevisions > 0);
   const isCurrentActiveSubscription =
     isSubscription &&
     activeSubscriptions.some(
@@ -137,7 +150,16 @@ export default function ProductDetailPage() {
   const isOwned =
     isOwnedCharacter ||
     isOwnedBundle ||
-    (isCurrentActiveSubscription && !isCommissionRevisionPack);
+    isCurrentActiveSubscription ||
+    (isAllAccessOnlyPlan && hasAllAccess);
+  const upgradeDeduction =
+    !isOwned &&
+    isAllAccessUpgradePlan &&
+    ownedAllAccessOnlyPrice != null &&
+    ownedAllAccessOnlyPrice > 0
+      ? ownedAllAccessOnlyPrice
+      : 0;
+  const effectiveItemPrice = Math.max(0, item.price - upgradeDeduction);
   const isAlreadyInCart = cartItems.some((i) => i.id === String(item.id));
 
   const productTypeLabel = isSubscription
@@ -177,21 +199,19 @@ export default function ProductDetailPage() {
     ]);
   } else if (item.subscriptionDetails) {
     specifications.push(["Mã gói", item.subscriptionDetails.planCode]);
-    if (!isCommissionRevisionPack) {
-      specifications.push([
-        "Thời hạn",
-        item.subscriptionDetails.isLifetime
-          ? "Trọn đời (Lifetime)"
-          : `${item.subscriptionDetails.durationDays ?? 30} ngày`,
-      ]);
-    }
-    if (item.subscriptionDetails.allAccessCharacters) {
-      specifications.push(["Quyền lợi", "Mở khóa toàn bộ thư viện nhân vật"]);
-    } else if ((item.subscriptionDetails.maxCommissionRevisions ?? 0) > 0) {
-      specifications.push([
-        "Quyền lợi",
-        `+${item.subscriptionDetails.maxCommissionRevisions} lượt chỉnh sửa thiết kế miễn phí`,
-      ]);
+    specifications.push([
+      "Thời hạn",
+      item.subscriptionDetails.isLifetime
+        ? "Trọn đời (Lifetime)"
+        : `${item.subscriptionDetails.durationDays ?? 30} ngày`,
+    ]);
+    const perks: string[] = [];
+    if (subAllAccess) perks.push("Mở khóa toàn bộ thư viện nhân vật");
+    if (subMobileProfiles > 3) perks.push(`Tối đa ${subMobileProfiles} profile chữ trên Mobile`);
+    if (subCommissionRevisions > 0)
+      perks.push(`${subCommissionRevisions} lượt chỉnh sửa miễn phí / mỗi đơn thiết kế`);
+    if (perks.length > 0) {
+      specifications.push(["Quyền lợi", perks.join(" · ")]);
     }
   }
 
@@ -204,7 +224,7 @@ export default function ProductDetailPage() {
     setActionError("");
     setIsSubmitting(true);
     try {
-      await addItem(item, isDigital ? 1 : quantity);
+      await addItem({ ...item, price: effectiveItemPrice }, isDigital ? 1 : quantity);
       setAdded(true);
       return true;
     } catch (err) {
@@ -315,18 +335,57 @@ export default function ProductDetailPage() {
                 </p>
 
                 <div className="mt-4 border-b-2 border-dashed border-gray-300 pb-4">
-                  <span className="block text-xs font-bold uppercase text-text-muted">Giá niêm yết</span>
+                  <span className="block text-xs font-bold uppercase text-text-muted">
+                    {upgradeDeduction > 0
+                      ? "Giá nâng cấp dành riêng cho bạn"
+                      : isBundle && Number(item.bundleDetails?.originalPrice ?? 0) > effectiveItemPrice
+                        ? "Giá ưu đãi gói Combo"
+                        : "Giá niêm yết"}
+                  </span>
+                  {upgradeDeduction > 0 && (
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-text-muted line-through">
+                        {formatPrice(item.price)}
+                      </span>
+                      <span className="border border-black bg-primary/20 px-2 py-0.5 text-[11px] font-black text-black">
+                        Đã trừ {formatPrice(upgradeDeduction)} gói Mở khóa toàn bộ nhân vật
+                      </span>
+                    </div>
+                  )}
+                  {isBundle &&
+                    upgradeDeduction === 0 &&
+                    Number(item.bundleDetails?.originalPrice ?? 0) > effectiveItemPrice && (
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-text-muted line-through">
+                          {formatPrice(Number(item.bundleDetails?.originalPrice ?? 0))}
+                        </span>
+                        <span className="border border-black bg-[#fef08a] px-2 py-0.5 text-[11px] font-black text-black">
+                          Tiết kiệm{" "}
+                          {formatPrice(
+                            Number(item.bundleDetails?.originalPrice ?? 0) - effectiveItemPrice,
+                          )}
+                        </span>
+                      </div>
+                    )}
                   <strong className="text-3xl font-black text-primary-ink">
-                    {formatPrice(item.price)}
+                    {formatPrice(effectiveItemPrice)}
                   </strong>
                 </div>
 
                 <p className="mt-4 text-sm font-medium leading-relaxed text-text-muted">
-                  {isSubscription && subDetail?.allAccessCharacters
-                    ? "Mở khóa toàn bộ thư viện nhân vật"
-                    : isCommissionRevisionPack
-                      ? `+${subDetail?.maxCommissionRevisions} lượt chỉnh sửa thiết kế miễn phí`
-                      : item.description || "Chưa có mô tả chi tiết cho sản phẩm này."}
+                  {isSubscription
+                    ? [
+                        subAllAccess ? "Mở khóa toàn bộ thư viện nhân vật" : null,
+                        subMobileProfiles > 3
+                          ? `Tối đa ${subMobileProfiles} profile chữ trên ứng dụng Mobile`
+                          : null,
+                        subCommissionRevisions > 0
+                          ? `${subCommissionRevisions} lượt chỉnh sửa miễn phí cho mỗi đơn thiết kế`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || item.description || "Chưa có mô tả chi tiết cho sản phẩm này."
+                    : item.description || "Chưa có mô tả chi tiết cho sản phẩm này."}
                 </p>
 
                 {/* Quantity selector (physical products only) */}
@@ -418,6 +477,16 @@ export default function ProductDetailPage() {
             <ProductCompatibilityCard item={item} />
           </div>
 
+          {/* ── Bundle Contents Showcase (for BUNDLE products) ── */}
+          {isBundle && item.bundleDetails && item.bundleDetails.items.length > 0 && (
+            <BundleContentsSection
+              bundleDetails={item.bundleDetails}
+              sellingPrice={effectiveItemPrice}
+              hasAllAccess={hasAllAccess}
+              ownedCharacterIds={ownedCharIdSet}
+            />
+          )}
+
           {/* ── Specifications Section ── */}
           <section className="neo-box-no-hover mt-8 bg-white p-6">
             <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 text-sm font-black uppercase tracking-wider text-black">
@@ -427,7 +496,7 @@ export default function ProductDetailPage() {
               <div>
                 <p className="text-xs font-black uppercase text-black mb-2">Giới thiệu sản phẩm</p>
                 <p className="text-xs font-medium leading-relaxed text-text-muted">
-                  {item.description || "Sản phẩm được tối ưu cho hệ thống LED ma trận gắn kính xe hoặc trang trí bàn làm việc."}
+                  {item.description || "Sản phẩm được tối ưu cho hệ thống tấm LED gắn kính xe hoặc trang trí bàn làm việc."}
                 </p>
               </div>
               <div>

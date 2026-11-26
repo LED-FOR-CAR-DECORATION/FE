@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useMemo, useRef, useEffect, useState } from "react";
+import Pagination from "@/components/ui/Pagination";
+import { scrollToTop, usePageParam } from "@/hooks/usePageParam";
 import {
   AlertCircle,
   Crown,
@@ -35,6 +37,8 @@ function formatPurchasedDate(value: string): string {
   });
 }
 
+const GALLERY_PAGE_SIZE = 12;
+
 export default function GalleryPage() {
   const { ownedCharacters, activeSubscription, isLoading, error, refresh } = useGallery();
   const [previewItem, setPreviewItem] =
@@ -44,9 +48,18 @@ export default function GalleryPage() {
     refresh();
   }, [refresh]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const [page, setPage] = usePageParam();
+  const gridRef = useRef<HTMLDivElement>(null);
+  const totalPages = Math.max(1, Math.ceil(ownedCharacters.length / GALLERY_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCharacters = useMemo(
+    () => ownedCharacters.slice((currentPage - 1) * GALLERY_PAGE_SIZE, currentPage * GALLERY_PAGE_SIZE),
+    [ownedCharacters, currentPage],
+  );
+  const changePage = (next: number) => {
+    setPage(next);
+    scrollToTop(gridRef.current);
+  };
 
   return (
     <>
@@ -147,8 +160,9 @@ export default function GalleryPage() {
                 </Link>
               </section>
             ) : (
-              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {ownedCharacters.map((item, idx) => (
+              <>
+              <div ref={gridRef} className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                {pagedCharacters.map((item, idx) => (
                   <article
                     key={item.sourceType === "COMMISSION" ? `commission-${item.commissionId}-${item.submissionId}` : `${item.orderId}-${item.storeProductId}-${item.characterId}-${idx}`}
                     className="profile-card flex flex-col overflow-hidden p-0"
@@ -247,6 +261,16 @@ export default function GalleryPage() {
                   </article>
                 ))}
               </div>
+              <Pagination
+                page={currentPage}
+                totalPages={totalPages}
+                onPageChange={changePage}
+                totalItems={ownedCharacters.length}
+                pageSize={GALLERY_PAGE_SIZE}
+                itemLabel="nhân vật"
+                ariaLabel="Phân trang thư viện nhân vật"
+              />
+              </>
             )}
           </div>
         </div>

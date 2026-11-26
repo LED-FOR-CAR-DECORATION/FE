@@ -39,6 +39,9 @@ import {
 } from "@/lib/api/designerCharacters";
 import type { TagItem } from "@/api_client";
 
+const CHARACTER_PAGE_SIZE = 5;
+const VERSION_PAGE_SIZE = 5;
+
 function getVersionArtwork(
   version: CharacterVersionItem | null,
   characterId: number,
@@ -82,6 +85,7 @@ function DesignerPublishWorkspace() {
   const [searchInput, setSearchInput] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [page, setPage] = useState(0);
+  const [versionPage, setVersionPage] = useState(0);
   const [selectedCharacter, setSelectedCharacter] = useState<DesignerCharacterItem | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [productName, setProductName] = useState("");
@@ -101,12 +105,15 @@ function DesignerPublishWorkspace() {
     setCharactersError(null);
     try {
       const all = await fetchAllPages(async (p) => {
-        const res = await fetchMyCharacters({ page: p, size: 100, characterType: "STORE" });
+        const res = await fetchMyCharacters({ page: p, size: 100 });
         return { items: res.items, totalPages: res.meta.totalPages };
       });
-      // Exclude commission characters — only STORE characters can be listed on Store
+      // Exclude commission characters (both characterType === COMMISSION, commissionId, and legacy [COMMISSION #id] marker)
       const personalOnly = all.filter(
-        (char) => isStoreCharacterType(char.characterType) && linkedCommissionId(char.description) === undefined,
+        (char) =>
+          isStoreCharacterType(char.characterType) &&
+          char.commissionId == null &&
+          linkedCommissionId(char.description) === undefined,
       );
       setOwnCharacters(personalOnly);
     } catch (err) {
@@ -133,12 +140,21 @@ function DesignerPublishWorkspace() {
     );
   }, [ownCharacters, appliedQuery]);
 
-  const pageSize = 12;
-  const totalPages = Math.max(1, Math.ceil(filteredCharacters.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredCharacters.length / CHARACTER_PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
   const pagedCharacters = useMemo(
-    () => filteredCharacters.slice(safePage * pageSize, (safePage + 1) * pageSize),
+    () =>
+      filteredCharacters.slice(
+        safePage * CHARACTER_PAGE_SIZE,
+        (safePage + 1) * CHARACTER_PAGE_SIZE,
+      ),
     [filteredCharacters, safePage],
+  );
+  const charRangeStart =
+    filteredCharacters.length === 0 ? 0 : safePage * CHARACTER_PAGE_SIZE + 1;
+  const charRangeEnd = Math.min(
+    filteredCharacters.length,
+    (safePage + 1) * CHARACTER_PAGE_SIZE,
   );
 
   // Load Store tags once
@@ -163,9 +179,12 @@ function DesignerPublishWorkspace() {
   // Resolve initial selection from ?characterId (non-commission only) or first eligible character
   useEffect(() => {
     if (requestedCharacterId) {
-      const requested = ownCharacters.find((c) => c.characterId === requestedCharacterId);
-      if (requested) {
-        setSelectedCharacter(requested);
+      const requestedIndex = ownCharacters.findIndex(
+        (c) => c.characterId === requestedCharacterId,
+      );
+      if (requestedIndex >= 0) {
+        setSelectedCharacter(ownCharacters[requestedIndex]);
+        setPage(Math.floor(requestedIndex / CHARACTER_PAGE_SIZE));
         return;
       }
     }
@@ -189,6 +208,7 @@ function DesignerPublishWorkspace() {
     setSubmitError(null);
     setPublishSuccess(null);
     setSelectedVersionId(null);
+    setVersionPage(0);
     setProductName(selectedCharacter.characterName);
     setDescription(stripCommissionMarker(selectedCharacter.description) ?? "");
     setSelectedTagIds([]);
@@ -207,6 +227,16 @@ function DesignerPublishWorkspace() {
   const versions = useMemo(
     () => (selectedCharacter ? versionsByCharacter[selectedCharacter.characterId] ?? [] : []),
     [selectedCharacter, versionsByCharacter],
+  );
+  const versionTotalPages = Math.max(1, Math.ceil(versions.length / VERSION_PAGE_SIZE));
+  const safeVersionPage = Math.min(versionPage, versionTotalPages - 1);
+  const pagedVersions = useMemo(
+    () =>
+      versions.slice(
+        safeVersionPage * VERSION_PAGE_SIZE,
+        (safeVersionPage + 1) * VERSION_PAGE_SIZE,
+      ),
+    [versions, safeVersionPage],
   );
   const isVersionsLoading = Boolean(
     selectedCharacter &&
@@ -320,15 +350,15 @@ function DesignerPublishWorkspace() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3.5">
       {/* Slim Neo-Brutalist Top Bar */}
-      <header className="neo-box-no-hover flex flex-wrap items-center justify-between gap-3 bg-white px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2.5">
+      <header className="neo-box-no-hover flex flex-wrap items-center justify-between gap-2.5 bg-white px-4 py-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center border-2 border-black bg-primary text-black shadow-[2px_2px_0_0_#000]">
             <Store size={16} />
           </span>
-          <div>
-            <h1 className="text-base font-black uppercase tracking-tight text-black">
+          <div className="min-w-0">
+            <h1 className="text-sm font-black uppercase tracking-tight text-black sm:text-base">
               Đăng bán lên Store
             </h1>
             <p className="text-[11px] font-medium text-text-muted">
@@ -361,18 +391,18 @@ function DesignerPublishWorkspace() {
       {charactersError && (
         <div
           role="alert"
-          className="neo-box-no-hover flex items-center gap-2 border-l-8 border-l-red-600 bg-red-50 px-4 py-3 text-sm font-bold text-red-700"
+          className="neo-box-no-hover flex items-center gap-2 border-l-8 border-l-red-600 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700"
         >
           <AlertCircle size={16} />
           <span>{charactersError}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* LEFT COLUMN: Character Selector */}
-        <section className="neo-box-no-hover flex flex-col bg-white p-4 lg:col-span-4">
-          <form onSubmit={handleSearchSubmit} className="mb-3 flex items-center gap-2">
-            <div className="relative flex-1">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
+        {/* LEFT COLUMN: Character Selector (5 per page) */}
+        <section className="neo-box-no-hover flex min-w-0 flex-col bg-white p-3.5 lg:col-span-4">
+          <form onSubmit={handleSearchSubmit} className="mb-2.5 flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
               <Search
                 size={14}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black"
@@ -383,35 +413,35 @@ function DesignerPublishWorkspace() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Tìm nhân vật..."
                 aria-label="Tìm nhân vật để đăng bán"
-                className="w-full border-2 border-black bg-white py-2 pl-8 pr-3 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none"
+                className="w-full min-w-0 border-2 border-black bg-white py-1.5 pl-8 pr-3 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none"
               />
             </div>
             <button
               type="submit"
-              className="btn-primary px-3 py-2 text-xs font-black uppercase"
+              className="btn-primary shrink-0 px-3 py-1.5 text-xs font-black uppercase"
             >
               Tìm
             </button>
           </form>
 
           {loadingCharacters ? (
-            <div className="flex min-h-[280px] items-center justify-center gap-2 text-xs font-bold text-text-muted">
+            <div className="flex min-h-[240px] items-center justify-center gap-2 text-xs font-bold text-text-muted">
               <Loader2 size={16} className="animate-spin" />
               <span>Đang tải danh sách nhân vật...</span>
             </div>
           ) : pagedCharacters.length === 0 ? (
-            <div className="flex min-h-[260px] flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-6 text-center text-xs text-text-muted">
-              <Layers size={28} className="mb-2 opacity-50" />
+            <div className="flex min-h-[220px] flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-5 text-center text-xs text-text-muted">
+              <Layers size={26} className="mb-2 opacity-50" />
               <p className="font-black uppercase text-black">Không có nhân vật cá nhân nào phù hợp.</p>
               <Link
                 href="/designer/characters"
-                className="mt-3 font-black text-primary-ink underline"
+                className="mt-2.5 font-black text-primary-ink underline"
               >
                 Về Danh sách nhân vật
               </Link>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {pagedCharacters.map((char) => {
                 const isActive = selectedCharacter?.characterId === char.characterId;
                 const thumb = getCharacterArtwork(char);
@@ -422,19 +452,19 @@ function DesignerPublishWorkspace() {
                     key={char.characterId}
                     type="button"
                     onClick={() => handleSelectCharacter(char)}
-                    className={`flex w-full cursor-pointer items-center gap-3 border-2 p-2.5 text-left transition ${
+                    className={`flex w-full cursor-pointer items-center gap-2.5 border-2 p-2 text-left transition ${
                       isActive
                         ? "border-black bg-[#eef8f0] shadow-[3px_3px_0_0_#000]"
                         : "border-black/25 bg-white hover:border-black"
                     }`}
                   >
-                    <div className="h-12 w-12 shrink-0 overflow-hidden border-2 border-black bg-[#090d14]">
+                    <div className="h-11 w-11 shrink-0 overflow-hidden border-2 border-black bg-[#090d14]">
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={thumb}
                           alt={char.characterName}
-                          className="h-full w-full object-contain p-1"
+                          className="h-full w-full object-contain p-0.5"
                           style={{ imageRendering: "pixelated" }}
                         />
                       ) : (
@@ -473,57 +503,63 @@ function DesignerPublishWorkspace() {
             </div>
           )}
 
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between border-t-2 border-black pt-3 text-xs">
-              <span className="font-bold text-black">
-                Trang <strong className="font-mono">{safePage + 1}</strong> / {totalPages}
+          {filteredCharacters.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t-2 border-black pt-2.5 text-xs">
+              <span className="font-semibold text-black/80">
+                <strong className="font-mono text-black">
+                  {charRangeStart}–{charRangeEnd}
+                </strong>{" "}
+                / {filteredCharacters.length} · Trang{" "}
+                <strong className="font-mono text-black">{safePage + 1}</strong>/{totalPages}
               </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={safePage <= 0}
-                  onClick={() => setPage(Math.max(0, safePage - 1))}
-                  className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1 text-xs font-black uppercase"
-                >
-                  <ChevronLeft size={13} /> Trước
-                </button>
-                <button
-                  type="button"
-                  disabled={safePage >= totalPages - 1}
-                  onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
-                  className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1 text-xs font-black uppercase"
-                >
-                  Sau <ChevronRight size={13} />
-                </button>
-              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={safePage <= 0}
+                    onClick={() => setPage(Math.max(0, safePage - 1))}
+                    className="btn-secondary inline-flex items-center gap-1 px-2 py-1 text-[11px] font-black uppercase disabled:opacity-40"
+                  >
+                    <ChevronLeft size={12} /> Trước
+                  </button>
+                  <button
+                    type="button"
+                    disabled={safePage >= totalPages - 1}
+                    onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
+                    className="btn-secondary inline-flex items-center gap-1 px-2 py-1 text-[11px] font-black uppercase disabled:opacity-40"
+                  >
+                    Sau <ChevronRight size={12} />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </section>
 
         {/* RIGHT COLUMN: Version Selector & Editable Publish Form */}
-        <section className="neo-box-no-hover bg-white p-6 lg:col-span-8">
+        <section className="neo-box-no-hover min-w-0 bg-white p-4 lg:col-span-8">
           {!selectedCharacter ? (
-            <div className="flex min-h-[360px] flex-col items-center justify-center text-center text-sm text-text-muted">
+            <div className="flex min-h-[280px] flex-col items-center justify-center text-center text-sm text-text-muted">
               <Store size={32} className="mb-2 opacity-40" />
               <p className="font-black uppercase text-black">
                 Chọn một nhân vật ở cột bên trái để chỉnh sửa thông tin đăng bán.
               </p>
             </div>
           ) : (
-            <form onSubmit={handlePublish} className="space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-4">
-                <div>
-                  <h2 className="text-lg font-black uppercase tracking-tight text-black">
+            <form onSubmit={handlePublish} className="space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2.5">
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-black uppercase tracking-tight text-black">
                     {selectedCharacter.characterName}
                   </h2>
-                  <p className="font-mono text-xs font-bold text-text-muted">
+                  <p className="font-mono text-[11px] font-bold text-text-muted">
                     Mã #{selectedCharacter.characterId} · Ma trận {selectedMatrixSize}
                   </p>
                 </div>
 
                 <Link
                   href={`/designer/studio/${selectedCharacter.characterId}`}
-                  className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase"
+                  className="btn-secondary inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase"
                 >
                   <Palette size={14} /> Chỉnh sửa trên Studio
                 </Link>
@@ -532,9 +568,9 @@ function DesignerPublishWorkspace() {
               {publishSuccess && (
                 <div
                   role="status"
-                  className="flex items-start gap-2.5 border-2 border-black bg-[#eef8f0] p-3.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000] sm:text-sm"
+                  className="flex items-start gap-2 border-2 border-black bg-[#eef8f0] p-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
                 >
-                  <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-primary-ink" />
+                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-primary-ink" />
                   <span>{publishSuccess}</span>
                 </div>
               )}
@@ -542,7 +578,7 @@ function DesignerPublishWorkspace() {
               {(submitError || versionError) && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 border-2 border-black bg-red-50 p-3 text-xs font-bold text-red-700 shadow-[2px_2px_0_0_#000]"
+                  className="flex items-start gap-2 border-2 border-black bg-red-50 p-2.5 text-xs font-bold text-red-700 shadow-[2px_2px_0_0_#000]"
                 >
                   <AlertCircle size={15} className="mt-0.5 shrink-0" />
                   <span>{submitError || versionError}</span>
@@ -550,13 +586,13 @@ function DesignerPublishWorkspace() {
               )}
 
               {isVersionsLoading ? (
-                <div className="flex min-h-[260px] items-center justify-center gap-2 border-2 border-black bg-[#f7fbf8] text-xs font-bold text-text-muted">
+                <div className="flex min-h-[220px] items-center justify-center gap-2 border-2 border-black bg-[#f7fbf8] text-xs font-bold text-text-muted">
                   <Loader2 size={18} className="animate-spin" />
                   <span>Đang tải các phiên bản của nhân vật...</span>
                 </div>
               ) : versions.length === 0 ? (
-                <div className="flex min-h-[280px] flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-8 text-center">
-                  <Layers size={34} className="mb-2 text-black/40" />
+                <div className="flex min-h-[240px] flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-6 text-center">
+                  <Layers size={30} className="mb-2 text-black/40" />
                   <p className="text-sm font-black uppercase text-black">
                     Nhân vật này chưa có phiên bản hoàn thiện nào
                   </p>
@@ -565,51 +601,53 @@ function DesignerPublishWorkspace() {
                   </p>
                   <Link
                     href={`/designer/studio/${selectedCharacter.characterId}`}
-                    className="btn-primary mt-4 inline-flex items-center gap-2 text-xs font-black uppercase"
+                    className="btn-primary mt-3 inline-flex items-center gap-2 text-xs font-black uppercase"
                   >
                     <Palette size={14} /> Mở Studio để vẽ v1
                   </Link>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:items-start">
                   {/* Preview + Form */}
-                  <div className="space-y-4 md:col-span-7">
-                    <div className="relative flex min-h-[240px] flex-col items-center justify-center border-2 border-black bg-[#090d14] p-5 text-center shadow-[4px_4px_0_0_#000]">
-                      <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 border border-black bg-white px-2 py-0.5 font-mono text-[11px] font-black text-black">
-                          <Grid size={11} /> {selectedMatrixSize}
-                        </span>
-                        {selectedVersion && (
-                          <span className="border border-black bg-primary px-2 py-0.5 font-mono text-[11px] font-black text-black">
-                            v{selectedVersion.versionNumber}
-                            {isSelectedVersionLatest ? " · Mới nhất" : ""}
+                  <div className="min-w-0 space-y-3 md:col-span-7">
+                    <div className="relative flex min-h-[156px] flex-col items-center justify-center border-2 border-black bg-[#090d14] px-3 py-3.5 text-center shadow-[4px_4px_0_0_#000]">
+                      <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 border border-black bg-white px-2 py-0.5 font-mono text-[10px] font-black text-black">
+                            <Grid size={10} /> {selectedMatrixSize}
+                          </span>
+                          {selectedVersion && (
+                            <span className="border border-black bg-primary px-2 py-0.5 font-mono text-[10px] font-black text-black">
+                              v{selectedVersion.versionNumber}
+                              {isSelectedVersionLatest ? " · Mới nhất" : ""}
+                            </span>
+                          )}
+                        </div>
+
+                        {isSelectedVersionListed && (
+                          <span className="inline-flex items-center gap-1 border border-black bg-amber-300 px-2 py-0.5 text-[10px] font-black uppercase text-black">
+                            <Lock size={10} /> Đã đăng Store
                           </span>
                         )}
                       </div>
-
-                      {isSelectedVersionListed && (
-                        <span className="absolute right-3 top-3 inline-flex items-center gap-1 border border-black bg-amber-300 px-2 py-0.5 text-[11px] font-black uppercase text-black">
-                          <Lock size={11} /> Đã đăng Store
-                        </span>
-                      )}
 
                       {selectedArtwork ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={selectedArtwork}
                           alt={`${selectedCharacter.characterName} v${selectedVersion?.versionNumber}`}
-                          className="h-44 w-44 object-contain sm:h-52 sm:w-52"
+                          className="h-28 w-28 object-contain sm:h-32 sm:w-32"
                           style={{ imageRendering: "pixelated" }}
                         />
                       ) : (
-                        <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
-                          <Layers size={32} className="opacity-60" />
+                        <div className="flex flex-col items-center gap-1.5 py-5 text-slate-400">
+                          <Layers size={28} className="opacity-60" />
                           <span className="text-xs font-bold">Chưa có ảnh xem trước</span>
                         </div>
                       )}
 
                       {selectedVersion && (
-                        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
+                        <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
                           <span>{selectedVersion.frameCount ?? 1} frames</span>
                           <span>•</span>
                           <span>
@@ -626,21 +664,21 @@ function DesignerPublishWorkspace() {
                       )}
                     </div>
 
-                    <div className="flex items-start gap-2.5 border-2 border-black bg-sky-50 p-3 text-xs text-black">
-                      <ShieldCheck size={16} className="mt-0.5 shrink-0" />
-                      <div>
-                        <p className="font-black uppercase">Chờ manager duyệt &amp; định giá</p>
-                        <p className="mt-0.5 font-medium text-text-muted">
-                          Yêu cầu được tạo ở trạng thái chưa công khai với giá tạm 0 VNĐ để Manager định giá trước khi mở bán.
-                        </p>
-                      </div>
+                    <div className="flex items-start gap-2 border-2 border-black bg-sky-50 px-3 py-2 text-[11px] text-black">
+                      <ShieldCheck size={14} className="mt-0.5 shrink-0" />
+                      <p className="font-medium text-text-muted">
+                        <strong className="font-black uppercase text-black">
+                          Chờ Manager duyệt &amp; định giá:
+                        </strong>{" "}
+                        Yêu cầu tạo với giá tạm 0 VNĐ để Manager định giá trước khi mở bán.
+                      </p>
                     </div>
 
-                    <div className="space-y-3 border-2 border-black bg-[#f7fbf8] p-4">
+                    <div className="space-y-2.5 border-2 border-black bg-[#f7fbf8] p-3">
                       <div>
                         <label
                           htmlFor="publish-product-name"
-                          className="mb-1 block text-xs font-black uppercase tracking-wider text-black"
+                          className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
                         >
                           Tên sản phẩm trên Store <span className="text-red-600">*</span>
                         </label>
@@ -652,32 +690,32 @@ function DesignerPublishWorkspace() {
                           disabled={isSelectedVersionListed || isSubmitting}
                           value={productName}
                           onChange={(e) => setProductName(e.target.value)}
-                          className="w-full border-2 border-black bg-white px-3 py-2 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none disabled:bg-gray-100"
+                          className="w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none disabled:bg-gray-100"
                         />
                       </div>
 
                       <div>
                         <label
                           htmlFor="publish-product-desc"
-                          className="mb-1 block text-xs font-black uppercase tracking-wider text-black"
+                          className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
                         >
                           Mô tả sản phẩm
                         </label>
                         <textarea
                           id="publish-product-desc"
-                          rows={3}
+                          rows={2}
                           disabled={isSelectedVersionListed || isSubmitting}
                           value={description}
                           onChange={(e) => setDescription(e.target.value)}
                           placeholder="Mô tả phong cách, hiệu ứng, điểm nổi bật của nhân vật..."
-                          className="w-full border-2 border-black bg-white px-3 py-2 text-xs font-medium text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none disabled:bg-gray-100"
+                          className="w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-medium text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none disabled:bg-gray-100"
                         />
                       </div>
 
                       {!isLoadingTags && availableTags.length > 0 && (
                         <div>
-                          <label className="mb-1.5 flex items-center gap-1 text-xs font-black uppercase tracking-wider text-black">
-                            <Tag size={12} /> Thẻ phân loại (Tags)
+                          <label className="mb-1 flex items-center gap-1 text-[11px] font-black uppercase tracking-wider text-black">
+                            <Tag size={11} /> Thẻ phân loại (Tags)
                           </label>
                           <div className="flex flex-wrap gap-1.5">
                             {availableTags.map((tag) => {
@@ -689,7 +727,7 @@ function DesignerPublishWorkspace() {
                                   type="button"
                                   disabled={isSelectedVersionListed || isSubmitting}
                                   onClick={() => toggleTag(id)}
-                                  className={`inline-flex cursor-pointer items-center gap-1 border-2 border-black px-2.5 py-0.5 text-[11px] font-bold transition ${
+                                  className={`inline-flex cursor-pointer items-center gap-1 border-2 border-black px-2 py-0.5 text-[11px] font-bold transition ${
                                     active
                                       ? "bg-primary font-black text-black shadow-[2px_2px_0_0_#000]"
                                       : "bg-white text-black hover:bg-gray-50"
@@ -704,11 +742,11 @@ function DesignerPublishWorkspace() {
                         </div>
                       )}
 
-                      <div className="pt-2">
+                      <div className="pt-1">
                         <button
                           type="submit"
                           disabled={isSubmitting || !selectedVersion || isSelectedVersionListed}
-                          className="btn-primary inline-flex w-full items-center justify-center gap-2 py-2.5 text-sm font-black uppercase"
+                          className="btn-primary inline-flex w-full items-center justify-center gap-2 py-2 text-xs font-black uppercase sm:text-sm"
                         >
                           {isSubmitting ? (
                             <>
@@ -728,19 +766,19 @@ function DesignerPublishWorkspace() {
                     </div>
                   </div>
 
-                  {/* Version List Column */}
-                  <div className="flex flex-col border-2 border-black bg-[#f7fbf8] p-4 md:col-span-5">
-                    <div className="mb-3 flex items-center justify-between border-b-2 border-black pb-2.5">
+                  {/* Version List Column (paged 5/page, no inner scrollbar) */}
+                  <div className="flex min-w-0 flex-col border-2 border-black bg-[#f7fbf8] p-3 md:col-span-5">
+                    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-1 border-b-2 border-black pb-2">
                       <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
-                        <History size={14} /> Chọn phiên bản ({versions.length})
+                        <History size={13} /> Chọn phiên bản ({versions.length})
                       </h3>
                       <span className="text-[10px] font-bold uppercase text-text-muted">Mới nhất trước</span>
                     </div>
 
-                    <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
-                      {versions.map((ver, idx) => {
+                    <div className="space-y-1.5">
+                      {pagedVersions.map((ver) => {
                         const isSelected = ver.versionId === selectedVersion?.versionId;
-                        const isLatest = idx === 0;
+                        const isLatest = versions[0]?.versionId === ver.versionId;
                         const locked = Boolean(
                           ver.isListedOnStore || locallyPublishedIds.has(ver.versionId),
                         );
@@ -751,7 +789,7 @@ function DesignerPublishWorkspace() {
                             key={ver.versionId}
                             type="button"
                             onClick={() => handleSelectVersion(ver)}
-                            className={`flex w-full cursor-pointer items-center gap-2.5 border-2 p-2.5 text-left transition ${
+                            className={`flex w-full cursor-pointer items-center gap-2.5 border-2 p-2 text-left transition ${
                               isSelected
                                 ? "border-black bg-[#eef8f0] shadow-[3px_3px_0_0_#000]"
                                 : locked
@@ -759,7 +797,7 @@ function DesignerPublishWorkspace() {
                                   : "border-black/25 bg-white hover:border-black"
                             }`}
                           >
-                            <div className="h-12 w-12 shrink-0 overflow-hidden border-2 border-black bg-[#090d14]">
+                            <div className="h-10 w-10 shrink-0 overflow-hidden border-2 border-black bg-[#090d14]">
                               {thumb ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
@@ -800,6 +838,35 @@ function DesignerPublishWorkspace() {
                         );
                       })}
                     </div>
+
+                    {versionTotalPages > 1 && (
+                      <div className="mt-3 flex items-center justify-between gap-2 border-t-2 border-black pt-2 text-[11px]">
+                        <span className="font-bold text-black">
+                          Trang <strong className="font-mono">{safeVersionPage + 1}</strong>/
+                          {versionTotalPages}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={safeVersionPage <= 0}
+                            onClick={() => setVersionPage(Math.max(0, safeVersionPage - 1))}
+                            className="btn-secondary inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-black uppercase disabled:opacity-40"
+                          >
+                            <ChevronLeft size={11} /> Trước
+                          </button>
+                          <button
+                            type="button"
+                            disabled={safeVersionPage >= versionTotalPages - 1}
+                            onClick={() =>
+                              setVersionPage(Math.min(versionTotalPages - 1, safeVersionPage + 1))
+                            }
+                            className="btn-secondary inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-black uppercase disabled:opacity-40"
+                          >
+                            Sau <ChevronRight size={11} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

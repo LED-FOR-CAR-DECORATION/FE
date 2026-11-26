@@ -19,7 +19,6 @@ import {
   Palette,
   RefreshCw,
   Search,
-  ShieldCheck,
   Store,
   Tag,
   X,
@@ -712,16 +711,6 @@ function DesignerPublishWorkspace() {
                           </span>
                         </div>
                       )}
-                    </div>
-
-                    <div className="flex shrink-0 items-start gap-2 border-2 border-black bg-sky-50 px-3 py-2 text-[11px] text-black">
-                      <ShieldCheck size={14} className="mt-0.5 shrink-0" />
-                      <p className="font-medium text-text-muted">
-                        <strong className="font-black uppercase text-black">
-                          Chờ Manager duyệt &amp; định giá:
-                        </strong>{" "}
-                        Yêu cầu tạo với giá tạm 0 VNĐ để Manager định giá trước khi mở bán.
-                      </p>
                     </div>
 
                     <div className="shrink-0 space-y-2.5 border-2 border-black bg-[#f7fbf8] p-3">

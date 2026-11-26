@@ -1,7 +1,7 @@
 import { ApiError } from "@/api_client";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "./client";
-import { buildSignedPutHeaders } from "./media";
+import { buildSignedPutHeaders, resolveImageMimeAndExtension } from "./media";
 
 export type CharacterType = "STORE" | "COMMISSION";
 
@@ -359,10 +359,11 @@ export async function uploadDesignerAssetFile(
   purpose: "CHARACTER_ASSET",
   targetId?: number,
 ): Promise<UploadedDesignerAsset> {
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-  if (!allowedTypes.includes(file.type)) {
+  const resolved = resolveImageMimeAndExtension(file.type, file.name);
+  if (!resolved) {
     throw new Error("Chỉ hỗ trợ file ảnh định dạng GIF, PNG, JPG hoặc WEBP.");
   }
+  const contentType = resolved.mimeType;
   if (file.size <= 0 || file.size > 10 * 1024 * 1024) {
     throw new Error("Kích thước file phải từ 1 byte đến tối đa 10MB.");
   }
@@ -374,7 +375,7 @@ export async function uploadDesignerAssetFile(
     url: "/api/media/upload-url",
     body: {
       fileName: file.name.slice(0, 255),
-      contentType: file.type,
+      contentType,
       fileSize: file.size,
       purpose,
       targetId,
@@ -388,16 +389,27 @@ export async function uploadDesignerAssetFile(
   }
 
   // BE trả uploadHeaders (nằm trong chữ ký) → phải gửi nguyên văn khi PUT
-  const putHeaders =
-    signedData.uploadHeaders ?? buildSignedPutHeaders(signedData.signedUploadUrl, file.type);
+  const putHeaders: Record<string, string> = signedData.uploadHeaders
+    ? { ...signedData.uploadHeaders }
+    : buildSignedPutHeaders(signedData.signedUploadUrl, contentType);
+  if (!putHeaders["Content-Type"]) {
+    putHeaders["Content-Type"] = contentType;
+  }
 
   const putResponse = await fetch(signedData.signedUploadUrl, {
     method: "PUT",
     headers: putHeaders,
-    body: file,
+    body: file.slice(0, file.size, putHeaders["Content-Type"]),
   });
 
   if (!putResponse.ok) {
+    console.error("[designerCharacters.uploadDesignerAssetFile] PUT failed", {
+      purpose,
+      targetId,
+      objectKey: signedData.objectKey,
+      status: putResponse.status,
+      contentType: putHeaders["Content-Type"],
+    });
     throw new Error(`Tải tệp lên kho lưu trữ thất bại (HTTP ${putResponse.status}).`);
   }
 

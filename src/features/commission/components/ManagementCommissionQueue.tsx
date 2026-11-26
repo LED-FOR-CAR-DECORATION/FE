@@ -11,6 +11,7 @@ import {
   RefreshCw,
   UserCheck,
 } from "lucide-react";
+import { useAdaptiveListRows } from "@/hooks/useAdaptiveListRows";
 import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
 import { formatPrice } from "@/lib/currency";
 import {
@@ -51,10 +52,19 @@ const SECONDARY_STATUS_FILTERS: Array<{ value: string; label: string }> = [
 ];
 
 export default function ManagementCommissionQueue() {
+  const { rows: autoSize, ready } = useAdaptiveListRows({
+    estimatedRowHeight: 74,
+    rowGap: 0,
+    chromeHeight: 306,
+    minRows: 2,
+    maxRows: 12,
+    defaultRows: 6,
+  });
+
   const [rows, setRows] = useState<CommissionQueueItem[]>([]);
   const [meta, setMeta] = useState<CommissionQueueMeta>({
     page: 0,
-    size: 10,
+    size: 5,
     totalElements: 0,
     totalPages: 1,
     hasNext: false,
@@ -62,7 +72,6 @@ export default function ManagementCommissionQueue() {
   });
 
   const [page, setPage] = useState(0);
-  const [size, setSize] = useState(10);
   const [statusFilter, setStatusFilter] = useState("");
   const [sortDirection, setSortDirection] = useState<"DESC" | "ASC">("DESC");
   const [reloadTick, setReloadTick] = useState(0);
@@ -87,12 +96,13 @@ export default function ManagementCommissionQueue() {
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     let active = true;
     setLoading(true);
     setError("");
     const req = getCommissionQueue({
       page,
-      size,
+      size: autoSize,
       status: statusFilter || undefined,
       sortDirection,
     });
@@ -100,17 +110,20 @@ export default function ManagementCommissionQueue() {
       .then((res) => {
         if (!active) return;
         const list = res.data ?? [];
+        const resolvedMeta = res.meta ?? {
+          page,
+          size: autoSize,
+          totalElements: list.length,
+          totalPages: Math.max(1, Math.ceil(list.length / autoSize)),
+          hasNext: false,
+          hasPrevious: page > 0,
+        };
+        if (page > 0 && page >= resolvedMeta.totalPages) {
+          setPage(Math.max(0, resolvedMeta.totalPages - 1));
+          return;
+        }
         setRows(list);
-        setMeta(
-          res.meta ?? {
-            page,
-            size,
-            totalElements: list.length,
-            totalPages: Math.max(1, Math.ceil(list.length / size)),
-            hasNext: false,
-            hasPrevious: page > 0,
-          },
-        );
+        setMeta(resolvedMeta);
       })
       .catch((failure) => {
         if (!active || isRequestCancelled(failure)) return;
@@ -123,7 +136,7 @@ export default function ManagementCommissionQueue() {
       active = false;
       req.cancel();
     };
-  }, [page, size, statusFilter, sortDirection, reloadTick]);
+  }, [ready, page, autoSize, statusFilter, sortDirection, reloadTick]);
 
   function handleStatusChange(nextStatus: string) {
     setStatusFilter(nextStatus);
@@ -135,28 +148,23 @@ export default function ManagementCommissionQueue() {
     setPage(0);
   }
 
-  function handleSizeChange(nextSize: number) {
-    setSize(nextSize);
-    setPage(0);
-  }
-
   function handleAssignedSuccess() {
     refreshQueue();
     setDetailReloadSignal((value) => value + 1);
   }
 
   return (
-    <div className="space-y-5">
+    <div className="manager-neo-dashboard flex min-h-[calc(100dvh-114px)] flex-col gap-3 font-sans xl:h-[calc(100dvh-114px)]">
       {/* Header */}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex shrink-0 flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="font-mono text-xs font-black uppercase tracking-widest text-primary-ink">
             Staff & Manager Workspace
           </p>
-          <h1 className="mt-1 text-2xl font-black uppercase tracking-tight text-black sm:text-3xl">
+          <h1 className="mt-0.5 text-xl font-black uppercase tracking-tight text-black sm:text-2xl">
             Quản lý Commission
           </h1>
-          <p className="mt-1 text-sm text-black/75">
+          <p className="mt-0.5 text-xs text-black/75 sm:text-sm">
             Theo dõi yêu cầu, phân công họa sĩ, duyệt bản nháp và quản lý ảnh gửi khách hàng.
           </p>
         </div>
@@ -228,26 +236,47 @@ export default function ManagementCommissionQueue() {
       )}
 
       {/* Commission Queue Table */}
-      <section className="neo-box-no-hover overflow-hidden bg-white" aria-label="Danh sách yêu cầu commission">
-        <div className="overflow-x-auto">
+      <section className="neo-box-no-hover flex min-h-0 flex-1 flex-col overflow-hidden bg-white" aria-label="Danh sách yêu cầu commission">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[920px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b-2 border-black bg-[#f7fbf8] text-xs font-black uppercase tracking-wider text-black">
-                <th className="px-4 py-3">Mã / Khách hàng</th>
-                <th className="px-4 py-3">Yêu cầu</th>
-                <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-3">Phụ trách</th>
-                <th className="px-4 py-3">Giá trị / Ngày tạo</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
+                <th className="px-3.5 py-2.5">Mã / Khách hàng</th>
+                <th className="px-3.5 py-2.5">Yêu cầu</th>
+                <th className="px-3.5 py-2.5">Trạng thái</th>
+                <th className="px-3.5 py-2.5">Phụ trách</th>
+                <th className="px-3.5 py-2.5">Giá trị / Ngày tạo</th>
+                <th className="px-3.5 py-2.5 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y-2 divide-black/15">
-              {loading && rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-sm font-bold text-black/60">
-                    Đang tải danh sách commission…
-                  </td>
-                </tr>
+              {loading ? (
+                Array.from({ length: autoSize }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="px-4 py-3">
+                      <div className="h-3 w-12 bg-gray-200" />
+                      <div className="mt-1.5 h-3.5 w-28 bg-gray-200" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-3.5 w-44 bg-gray-200" />
+                      <div className="mt-1.5 h-3 w-24 bg-gray-100" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-5 w-24 bg-gray-200" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-3 w-28 bg-gray-200" />
+                      <div className="mt-1.5 h-3 w-24 bg-gray-100" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-3.5 w-20 bg-gray-200" />
+                      <div className="mt-1.5 h-3 w-24 bg-gray-100" />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="ml-auto h-7 w-20 bg-gray-200" />
+                    </td>
+                  </tr>
+                ))
               ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center text-sm font-bold text-black/60">
@@ -269,11 +298,11 @@ export default function ManagementCommissionQueue() {
                       }
                       className="cursor-pointer transition-colors hover:bg-primary/10"
                     >
-                      <td className="px-4 py-3 align-top">
+                      <td className="px-3.5 py-2 align-top">
                         <div className="font-mono text-xs font-black text-black">
                           #{row.commissionId}
                         </div>
-                        <div className="mt-1 font-bold text-black">
+                        <div className="mt-0.5 font-bold text-black">
                           {row.customerName || "Khách hàng"}
                         </div>
                         {row.customerEmail && (
@@ -283,11 +312,14 @@ export default function ManagementCommissionQueue() {
                         )}
                       </td>
 
-                      <td className="px-4 py-3 align-top">
-                        <p className="max-w-[260px] font-black text-black line-clamp-2">
+                      <td className="px-3.5 py-2 align-top">
+                        <p
+                          title={row.title}
+                          className="max-w-[260px] font-black text-black line-clamp-1"
+                        >
                           {row.title}
                         </p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
                           {row.tierCode && (
                             <span className="border border-black bg-neutral-100 px-1.5 py-0.5 text-black">
                               {getTierLabel(row.tierCode)}
@@ -307,7 +339,7 @@ export default function ManagementCommissionQueue() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 align-top">
+                      <td className="px-3.5 py-2 align-top">
                         <span
                           className={`inline-flex border-2 px-2 py-0.5 text-xs font-black ${toneClass}`}
                         >
@@ -320,7 +352,7 @@ export default function ManagementCommissionQueue() {
                         )}
                       </td>
 
-                      <td className="px-4 py-3 align-top text-xs">
+                      <td className="px-3.5 py-2 align-top text-xs">
                         <p className="font-bold text-black">
                           Họa sĩ:{" "}
                           <span
@@ -336,7 +368,7 @@ export default function ManagementCommissionQueue() {
                         </p>
                       </td>
 
-                      <td className="px-4 py-3 align-top text-xs">
+                      <td className="px-3.5 py-2 align-top text-xs">
                         <p className="font-mono text-sm font-black text-primary-ink">
                           {formatPrice(row.totalPrice ?? row.initialPrice ?? 0)}
                         </p>
@@ -346,7 +378,7 @@ export default function ManagementCommissionQueue() {
                       </td>
 
                       <td
-                        className="px-4 py-3 align-top text-right"
+                        className="px-3.5 py-2 align-top text-right"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <div className="inline-flex flex-wrap justify-end gap-1.5">
@@ -354,7 +386,7 @@ export default function ManagementCommissionQueue() {
                             <button
                               type="button"
                               onClick={() => setAssignTarget(row)}
-                              className="btn-primary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-black"
+                              className="btn-primary inline-flex items-center gap-1 px-2.5! py-1! text-xs font-black"
                             >
                               <UserCheck className="h-3.5 w-3.5" />
                               Phân công
@@ -421,12 +453,13 @@ export default function ManagementCommissionQueue() {
       {/* Server-side Pagination */}
       <CommissionPagination
         page={meta.page}
-        size={meta.size}
+        size={autoSize}
         totalElements={meta.totalElements}
         totalPages={meta.totalPages}
         onPageChange={(nextPage) => setPage(nextPage)}
-        onSizeChange={handleSizeChange}
+        ariaLabel="Phân trang danh sách commission"
         disabled={loading}
+        className="mt-auto shrink-0"
       />
 
       {/* Detail & Image Management Modal */}

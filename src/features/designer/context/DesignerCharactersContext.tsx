@@ -21,7 +21,7 @@ import type { CreatedStoreProductResponse } from "@/api_client";
 export type MatrixSize = "32x32" | "64x32" | "64x64";
 
 const MATRIX_STORAGE_PREFIX = "character_matrix_size_";
-const PAGE_SIZE = 12;
+const DEFAULT_PAGE_SIZE = 12;
 
 export function getStoredMatrixSize(characterId: number): MatrixSize {
   if (typeof window === "undefined") return "32x32";
@@ -49,6 +49,18 @@ export interface PublishToStoreInput {
   productName: string;
   description?: string;
   tagIds?: number[];
+}
+
+export interface DesignerCharactersProviderProps {
+  children: React.ReactNode;
+  /** Responsive page size (number of items per page). Defaults to 12. */
+  pageSize?: number;
+  /** When true and pageSize >= 2, page 0 reserves 1 slot for an inline Create card. */
+  reserveCreateSlotOnFirstPage?: boolean;
+  /** Delay initial fetch until client breakpoint detection completes. Defaults to true. */
+  ready?: boolean;
+  /** Set false on pages that manage their own character fetch (e.g. /designer/publish). */
+  autoLoadCharacters?: boolean;
 }
 
 interface DesignerCharactersContextValue {
@@ -81,11 +93,20 @@ interface DesignerCharactersContextValue {
 
 const DesignerCharactersContext = createContext<DesignerCharactersContextValue | null>(null);
 
-export function DesignerCharactersProvider({ children }: { children: React.ReactNode }) {
+export function DesignerCharactersProvider({
+  children,
+  pageSize = DEFAULT_PAGE_SIZE,
+  reserveCreateSlotOnFirstPage = false,
+  ready = true,
+  autoLoadCharacters = true,
+}: DesignerCharactersProviderProps) {
+  const safePageSize = Math.max(1, pageSize);
+  const hasCreateSlot = Boolean(reserveCreateSlotOnFirstPage && safePageSize >= 2);
+
   const [characters, setCharacters] = useState<DesignerCharacterItem[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({
     page: 0,
-    size: PAGE_SIZE,
+    size: safePageSize,
     totalElements: 0,
     totalPages: 1,
     hasNext: false,
@@ -94,39 +115,119 @@ export function DesignerCharactersProvider({ children }: { children: React.React
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState("");
   const [characterTypeFilter, setCharacterTypeFilter] = useState<CharacterType | "ALL">("ALL");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(autoLoadCharacters);
   const [error, setError] = useState("");
   const [versionsByCharacter, setVersionsByCharacter] = useState<
     Record<number, CharacterVersionItem[]>
   >({});
   const [loadingVersions, setLoadingVersions] = useState<Record<number, boolean>>({});
   const latestVersionRequests = useRef(new Map<number, symbol>());
+  const latestCharactersRequest = useRef<symbol | null>(null);
   const [matrixSizes, setMatrixSizes] = useState<Record<number, MatrixSize>>({});
 
   const refreshCharacters = useCallback(async () => {
+    if (!ready || !autoLoadCharacters) return;
+    const requestToken = Symbol();
+    latestCharactersRequest.current = requestToken;
     setLoading(true);
     setError("");
+
+    const trimmedQuery = query.trim() || undefined;
+    const resolvedType = characterTypeFilter === "ALL" ? undefined : characterTypeFilter;
+
+    let redirected = false;
     try {
-      const res = await fetchMyCharacters({
-        page,
-        size: PAGE_SIZE,
-        query: query.trim() || undefined,
-        characterType: characterTypeFilter === "ALL" ? undefined : characterTypeFilter,
-      });
-      setCharacters(res.items);
-      setMeta(res.meta);
+      let resolvedItems: DesignerCharacterItem[];
+      let resolvedMeta: PaginationMeta;
+
+      if (!hasCreateSlot) {
+        const res = await fetchMyCharacters({
+          page,
+          size: safePageSize,
+          query: trimmedQuery,
+          characterType: resolvedType,
+        });
+        resolvedItems = res.items;
+        resolvedMeta = res.meta;
+      } else {
+        // Reserve 1 slot on page 0 for the inline Create card without skipping items across pages
+        const firstPageCount = safePageSize - 1;
+        const offset = page === 0 ? 0 : firstPageCount + (page - 1) * safePageSize;
+        const count = page === 0 ? firstPageCount : safePageSize;
+
+        const firstBePage = Math.floor(offset / safePageSize);
+        const lastBePage = Math.floor((offset + count - 1) / safePageSize);
+
+        const firstRes = await fetchMyCharacters({
+          page: firstBePage,
+          size: safePageSize,
+          query: trimmedQuery,
+          characterType: resolvedType,
+        });
+
+        const totalElements = firstRes.meta.totalElements;
+        const totalPages =
+          totalElements <= firstPageCount
+            ? 1
+            : 1 + Math.ceil((totalElements - firstPageCount) / safePageSize);
+
+        if (page > 0 && page >= totalPages) {
+          if (latestCharactersRequest.current === requestToken) {
+            redirected = true;
+            setPage(Math.max(0, totalPages - 1));
+          }
+          return;
+        }
+
+        const combined: DesignerCharacterItem[] = [...firstRes.items];
+        if (lastBePage > firstBePage && firstRes.meta.hasNext) {
+          const secondRes = await fetchMyCharacters({
+            page: lastBePage,
+            size: safePageSize,
+            query: trimmedQuery,
+            characterType: resolvedType,
+          });
+          combined.push(...secondRes.items);
+        }
+
+        const sliceStart = offset - firstBePage * safePageSize;
+        resolvedItems = combined.slice(sliceStart, sliceStart + count);
+        resolvedMeta = {
+          page,
+          size: count,
+          totalElements,
+          totalPages,
+          hasPrevious: page > 0,
+          hasNext: page + 1 < totalPages,
+        };
+      }
+
+      if (latestCharactersRequest.current !== requestToken) return;
+
+      if (!hasCreateSlot && page > 0 && page >= resolvedMeta.totalPages) {
+        redirected = true;
+        setPage(Math.max(0, resolvedMeta.totalPages - 1));
+        return;
+      }
+
+      setCharacters(resolvedItems);
+      setMeta(resolvedMeta);
 
       const nextMatrixMap: Record<number, MatrixSize> = {};
-      for (const item of res.items) {
+      for (const item of resolvedItems) {
         nextMatrixMap[item.characterId] = getStoredMatrixSize(item.characterId);
       }
       setMatrixSizes((prev) => ({ ...prev, ...nextMatrixMap }));
     } catch (err) {
-      setError(formatDesignerApiError(err, "Không thể tải danh sách nhân vật của bạn."));
+      if (latestCharactersRequest.current === requestToken) {
+        setError(formatDesignerApiError(err, "Không thể tải danh sách nhân vật của bạn."));
+      }
     } finally {
-      setLoading(false);
+      if (latestCharactersRequest.current === requestToken && !redirected) {
+        setLoading(false);
+      }
     }
-  }, [page, query, characterTypeFilter]);
+  }, [ready, autoLoadCharacters, page, safePageSize, hasCreateSlot, query, characterTypeFilter]);
 
   useEffect(() => {
     void refreshCharacters();

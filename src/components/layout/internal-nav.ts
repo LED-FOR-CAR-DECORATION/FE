@@ -77,7 +77,7 @@ export const menuItems: MenuItem[] = [
   {
     label: "Quản lý kho LED",
     description: "Theo dõi mẫu thiết bị và số lượng tồn kho",
-    href: "/staff/inventory",
+    href: "/manager/inventory",
     icon: Boxes,
     roles: ["MANAGER"],
   },

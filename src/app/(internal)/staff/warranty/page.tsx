@@ -30,7 +30,8 @@ import {
   type ManagementWarrantyClaimItem,
   type WarrantyTicketStatus,
 } from "@/lib/api/warranty";
-import { fetchAllPages } from "@/lib/api/paging";
+import { useAdaptiveListRows } from "@/hooks/useAdaptiveListRows";
+import CommissionPagination from "@/features/commission/components/CommissionPagination";
 
 const STATUS_CONFIG: Record<
   WarrantyTicketStatus,
@@ -62,11 +63,33 @@ export default function StaffWarrantyManagementPage() {
   const { user } = useAuth();
   void user;
 
+  const { rows: pageSize, ready } = useAdaptiveListRows({
+    estimatedRowHeight: 62,
+    rowGap: 0,
+    chromeHeight: 530,
+    minRows: 2,
+    maxRows: 10,
+    defaultRows: 4,
+  });
+
   const [claims, setClaims] = useState<ManagementWarrantyClaimItem[]>([]);
-  const [statsData, setStatsData] = useState<ManagementWarrantyClaimItem[]>([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    approved: 0,
+    completed: 0,
+    rejected: 0,
+  });
+  const [page, setPage] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [reloadTick, setReloadTick] = useState(0);
+
   const [isLoading, setIsLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const lastSearchRef = useRef("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Separate states for Detail Modal vs Action Modal so they NEVER overlap
@@ -83,68 +106,118 @@ export default function StaffWarrantyManagementPage() {
     text: string;
   } | null>(null);
 
-  // Fetch claims from backend
-  const fetchClaims = useCallback(async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const claimItems = await fetchAllPages(async (page) => {
-        const res = await getManagementWarrantyClaims({
-          status: selectedStatus === "ALL" ? undefined : selectedStatus,
-          search: searchTerm.trim() || undefined,
-          page,
-          size: 50,
-        });
-        return { items: res.items || [], totalPages: res.totalPages };
-      });
-      setClaims(claimItems);
+  // Debounce search input without triggering extra initial fetch on mount
+  useEffect(() => {
+    const trimmed = searchTerm.trim();
+    if (trimmed === lastSearchRef.current) return;
+    const timer = window.setTimeout(() => {
+      lastSearchRef.current = trimmed;
+      setPage(0);
+      setDebouncedSearch(trimmed);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
 
-      // Keep stats counts accurate even when a specific status filter is active
-      if (selectedStatus !== "ALL" || searchTerm.trim()) {
-        fetchAllPages(async (page) => {
-          const res = await getManagementWarrantyClaims({ page, size: 100 });
-          return { items: res.items || [], totalPages: res.totalPages };
-        })
-          .then((unfiltered) => setStatsData(unfiltered))
-          .catch(() => {});
-      } else {
-        setStatsData(claimItems);
-      }
-    } catch (err: any) {
-      console.error("Failed to load warranty claims", err);
-      setErrorMessage(err.message || "Không thể tải danh sách phiếu bảo hành.");
-    } finally {
-      setIsLoading(false);
+  const loadStats = useCallback(async () => {
+    try {
+      const [allRes, pendingRes, approvedRes, completedRes, rejectedRes] = await Promise.all([
+        getManagementWarrantyClaims({ page: 0, size: 1 }),
+        getManagementWarrantyClaims({ status: "PENDING", page: 0, size: 1 }),
+        getManagementWarrantyClaims({ status: "APPROVED", page: 0, size: 1 }),
+        getManagementWarrantyClaims({ status: "COMPLETED", page: 0, size: 1 }),
+        getManagementWarrantyClaims({ status: "REJECTED", page: 0, size: 1 }),
+      ]);
+      setStats({
+        total: allRes.totalElements,
+        pending: pendingRes.totalElements,
+        approved: approvedRes.totalElements,
+        completed: completedRes.totalElements,
+        rejected: rejectedRes.totalElements,
+      });
+    } catch {
+      // Keep previous stats if lightweight count refresh fails
     }
-  }, [selectedStatus, searchTerm]);
+  }, []);
 
   useEffect(() => {
-    fetchClaims();
-  }, [fetchClaims]);
+    void loadStats();
+  }, [loadStats]);
+
+  // Fetch single backend page of claims
+  useEffect(() => {
+    if (!ready) return;
+    let active = true;
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    getManagementWarrantyClaims({
+      status: selectedStatus === "ALL" ? undefined : selectedStatus,
+      search: debouncedSearch || undefined,
+      page,
+      size: pageSize,
+    })
+      .then((res) => {
+        if (!active) return;
+        const nextTotalPages = Math.max(1, res.totalPages || 1);
+        if (page > 0 && page >= nextTotalPages) {
+          setPage(Math.max(0, nextTotalPages - 1));
+          return;
+        }
+        setClaims(res.items || []);
+        setTotalElements(res.totalElements);
+        setTotalPages(nextTotalPages);
+      })
+      .catch((err: any) => {
+        if (!active) return;
+        console.error("Failed to load warranty claims", err);
+        setErrorMessage(err.message || "Không thể tải danh sách phiếu bảo hành.");
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [ready, selectedStatus, debouncedSearch, page, pageSize, reloadTick]);
+
+  const refreshClaims = useCallback(() => {
+    void loadStats();
+    setReloadTick((tick) => tick + 1);
+  }, [loadStats]);
 
   const autoOpenedTicketRef = useRef<string | null>(null);
 
   // Auto-open ticket detail once if navigated from Manager Dashboard with ?ticketId=
   useEffect(() => {
     const ticketIdParam = new URLSearchParams(window.location.search).get("ticketId");
-    if (!ticketIdParam || autoOpenedTicketRef.current === ticketIdParam || claims.length === 0) return;
+    if (!ticketIdParam || autoOpenedTicketRef.current === ticketIdParam) return;
     const match = claims.find((c) => String(c.ticketId) === ticketIdParam);
     if (match) {
       autoOpenedTicketRef.current = ticketIdParam;
       setDetailClaim(match);
+      return;
     }
-  }, [claims]);
+    if (!ready || isLoading) return;
+    autoOpenedTicketRef.current = ticketIdParam;
+    getManagementWarrantyClaims({ search: ticketIdParam, page: 0, size: 10 })
+      .then((res) => {
+        const found = (res.items || []).find((c) => String(c.ticketId) === ticketIdParam);
+        if (found) setDetailClaim(found);
+      })
+      .catch(() => {});
+  }, [claims, ready, isLoading]);
 
   // Sync with global change events
   useEffect(() => {
     const handleWarrantyChange = () => {
-      fetchClaims();
+      refreshClaims();
     };
     window.addEventListener(WARRANTY_CHANGED_EVENT, handleWarrantyChange);
     return () => {
       window.removeEventListener(WARRANTY_CHANGED_EVENT, handleWarrantyChange);
     };
-  }, [fetchClaims]);
+  }, [refreshClaims]);
 
   const handleCloseAction = useCallback(() => {
     setActionClaim(null);
@@ -172,17 +245,11 @@ export default function StaffWarrantyManagementPage() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [previewImage, actionClaim, detailClaim, isProcessing, handleCloseAction]);
 
-  // Calculate metrics
-  const stats = useMemo(() => {
-    const list = statsData.length > 0 ? statsData : claims;
-    return {
-      total: list.length,
-      pending: list.filter((c) => c.status === "PENDING").length,
-      approved: list.filter((c) => c.status === "APPROVED").length,
-      completed: list.filter((c) => c.status === "COMPLETED").length,
-      rejected: list.filter((c) => c.status === "REJECTED").length,
-    };
-  }, [statsData, claims]);
+  // Close modal helper stays above; status filter handler resets to page 0
+  const handleStatusChange = (nextStatus: string) => {
+    setSelectedStatus(nextStatus);
+    setPage(0);
+  };
 
   // Open action confirmation modal ONLY (closes detail modal if open)
   const handleOpenAction = (
@@ -244,7 +311,7 @@ export default function StaffWarrantyManagementPage() {
       });
 
       handleCloseAction();
-      await fetchClaims();
+      refreshClaims();
     } catch (err: any) {
       setActionError(err.message || "Xử lý phiếu bảo hành thất bại. Vui lòng thử lại.");
     } finally {
@@ -309,11 +376,11 @@ export default function StaffWarrantyManagementPage() {
 
   return (
     <div className="manager-neo-dashboard mx-auto w-full max-w-[1440px] font-sans text-text-main">
-      <div className="flex flex-col gap-6">
+      <div className="flex min-h-[calc(100dvh-114px)] flex-col gap-3">
         {/* Top Header Banner */}
-        <header className="border-2 border-black border-l-8 border-l-primary bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 space-y-1.5">
+        <header className="shrink-0 border-2 border-black border-l-8 border-l-primary bg-white px-4 py-3 shadow-[4px_4px_0_0_#000] sm:px-5 sm:py-3.5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
                   BẢO HÀNH THIẾT BỊ
@@ -330,16 +397,16 @@ export default function StaffWarrantyManagementPage() {
 
               <div className="flex items-center gap-2.5">
                 <ShieldCheck
-                  size={24}
+                  size={22}
                   className="shrink-0 text-primary-ink"
                   aria-hidden="true"
                 />
-                <h1 className="text-xl font-black uppercase tracking-tight text-black sm:text-2xl">
+                <h1 className="text-lg font-black uppercase tracking-tight text-black sm:text-xl">
                   Quản lý bảo hành thiết bị LED
                 </h1>
               </div>
 
-              <p className="text-xs font-medium text-text-muted sm:text-sm">
+              <p className="text-xs font-medium text-text-muted">
                 Tiếp nhận xét duyệt, hướng dẫn khách hàng và xử lý sửa chữa/đổi mới phần cứng tại quầy.
               </p>
             </div>
@@ -347,7 +414,7 @@ export default function StaffWarrantyManagementPage() {
             <div className="flex items-center gap-2.5 self-start sm:self-auto">
               <button
                 type="button"
-                onClick={() => fetchClaims()}
+                onClick={refreshClaims}
                 disabled={isLoading}
                 className="btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
               >
@@ -411,7 +478,7 @@ export default function StaffWarrantyManagementPage() {
             </div>
             <button
               type="button"
-              onClick={() => fetchClaims()}
+              onClick={refreshClaims}
               className="btn-secondary px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
             >
               Thử lại
@@ -420,7 +487,7 @@ export default function StaffWarrantyManagementPage() {
         )}
 
         {/* KPI Stat Cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 sm:gap-5">
+        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {statCards.map((card) => {
             const CardIcon = card.icon;
             const isActive = selectedStatus === card.id;
@@ -429,52 +496,52 @@ export default function StaffWarrantyManagementPage() {
                 key={card.id}
                 type="button"
                 aria-pressed={isActive}
-                onClick={() => setSelectedStatus(card.id)}
-                className={`flex h-full cursor-pointer flex-col justify-between border-2 border-black p-4 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:p-5 ${
+                onClick={() => handleStatusChange(card.id)}
+                className={`flex h-full cursor-pointer flex-col justify-between border-2 border-black p-3 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:p-3.5 ${
                   isActive
                     ? "-translate-y-0.5 bg-primary/20 shadow-[6px_6px_0_0_#000]"
                     : "bg-white shadow-[4px_4px_0_0_#000] hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_#000]"
                 }`}
               >
                 <div className="w-full">
-                  <div className="flex items-start justify-between gap-2.5">
-                    <div className="flex min-w-0 items-start gap-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-2">
                       <div
-                        className={`grid h-9 w-9 shrink-0 place-items-center border-2 border-black shadow-[2px_2px_0_0_#000] ${card.iconBoxClass}`}
+                        className={`grid h-8 w-8 shrink-0 place-items-center border-2 border-black shadow-[2px_2px_0_0_#000] ${card.iconBoxClass}`}
                       >
                         <CardIcon className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-black uppercase leading-snug tracking-wider text-black">
+                        <p className="text-[11px] font-black uppercase leading-snug tracking-wider text-black">
                           {card.title}
                         </p>
-                        <p className="mt-0.5 text-[11px] font-medium leading-snug text-text-muted">
+                        <p className="mt-0.5 truncate text-[10px] font-medium leading-snug text-text-muted">
                           {card.subtitle}
                         </p>
                       </div>
                     </div>
 
                     <span
-                      className={`inline-flex shrink-0 items-center border border-black px-2 py-0.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap shadow-[1px_1px_0_0_#000] ${card.badgeClass}`}
+                      className={`inline-flex shrink-0 items-center border border-black px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider whitespace-nowrap shadow-[1px_1px_0_0_#000] ${card.badgeClass}`}
                     >
                       {card.badgeLabel}
                     </span>
                   </div>
 
-                  <div className="mt-4 flex items-baseline gap-2">
-                    <span className="text-2xl font-black tracking-tight text-black tabular-nums sm:text-3xl">
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="text-xl font-black tracking-tight text-black tabular-nums sm:text-2xl">
                       {card.value.toLocaleString("vi-VN")}
                     </span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
                       phiếu
                     </span>
                   </div>
                 </div>
 
-                <div className="mt-4 flex w-full items-center justify-between gap-2 border-t-2 border-dashed border-gray-200 pt-3">
-                  <span className="text-xs font-medium text-text-muted">{card.footerText}</span>
+                <div className="mt-2 flex w-full items-center justify-between gap-2 border-t-2 border-dashed border-gray-200 pt-2">
+                  <span className="truncate text-[11px] font-medium text-text-muted">{card.footerText}</span>
                   {isActive && (
-                    <span className="inline-flex shrink-0 items-center border border-black bg-primary px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+                    <span className="inline-flex shrink-0 items-center border border-black bg-primary px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
                       Đang lọc
                     </span>
                   )}
@@ -485,12 +552,12 @@ export default function StaffWarrantyManagementPage() {
         </div>
 
         {/* Filter / Status Tabs & Search Toolbar */}
-        <div className="flex flex-col gap-3 border-2 border-black bg-white p-4 shadow-[4px_4px_0_0_#000] lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex shrink-0 flex-col gap-2.5 border-2 border-black bg-white p-3 shadow-[4px_4px_0_0_#000] lg:flex-row lg:items-center lg:justify-between">
           {/* Search input */}
           <div className="relative flex-1">
             <Search
-              size={16}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-black"
+              size={15}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black"
               aria-hidden="true"
             />
             <input
@@ -499,12 +566,17 @@ export default function StaffWarrantyManagementPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               aria-label="Tìm kiếm phiếu bảo hành"
               placeholder="Tìm theo mã phiếu, Serial number, tên thiết bị, tên hoặc SĐT khách..."
-              className="w-full border-2 border-black bg-gray-50 py-2.5 pl-10 pr-9 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white"
+              className="w-full border-2 border-black bg-gray-50 py-2 pl-9 pr-9 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white"
             />
             {searchTerm && (
               <button
                 type="button"
-                onClick={() => setSearchTerm("")}
+                onClick={() => {
+                  setSearchTerm("");
+                  lastSearchRef.current = "";
+                  setDebouncedSearch("");
+                  setPage(0);
+                }}
                 aria-label="Xóa từ khóa tìm kiếm"
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer border border-black bg-white p-0.5 text-black transition-colors hover:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
@@ -517,7 +589,7 @@ export default function StaffWarrantyManagementPage() {
           <div
             role="group"
             aria-label="Lọc theo trạng thái bảo hành"
-            className="flex flex-wrap items-center gap-2"
+            className="flex flex-wrap items-center gap-1.5"
           >
             {statusTabs.map((tab) => {
               const isActive = selectedStatus === tab.id;
@@ -526,8 +598,8 @@ export default function StaffWarrantyManagementPage() {
                   key={tab.id}
                   type="button"
                   aria-pressed={isActive}
-                  onClick={() => setSelectedStatus(tab.id)}
-                  className={`shrink-0 cursor-pointer border-2 border-black px-3 py-1.5 text-xs font-black uppercase tracking-wide transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:py-2 ${
+                  onClick={() => handleStatusChange(tab.id)}
+                  className={`shrink-0 cursor-pointer border-2 border-black px-3 py-1.5 text-xs font-black uppercase tracking-wide transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                     isActive
                       ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
                       : "bg-white text-black hover:bg-primary/20"
@@ -543,42 +615,69 @@ export default function StaffWarrantyManagementPage() {
         {/* Warranty Claims Table */}
         <section
           aria-label="Danh sách phiếu bảo hành"
-          className="overflow-x-auto border-2 border-black bg-white shadow-[4px_4px_0_0_#000]"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden border-2 border-black bg-white shadow-[4px_4px_0_0_#000]"
         >
-          {isLoading ? (
-            <div className="flex h-64 items-center justify-center gap-2.5 p-6">
-              <Loader2 size={22} className="animate-spin text-primary-ink" aria-hidden="true" />
-              <span className="text-xs font-black uppercase tracking-wider text-black">
-                Đang tải danh sách bảo hành...
-              </span>
-            </div>
-          ) : claims.length === 0 ? (
-            <div className="p-10 text-center sm:p-12">
-              <div className="mx-auto grid h-12 w-12 place-items-center border-2 border-black bg-gray-50 shadow-[2px_2px_0_0_#000]">
-                <Inbox size={24} className="text-black" aria-hidden="true" />
+          <div className="min-h-0 flex-1 overflow-x-auto">
+            {isLoading ? (
+              <table className="w-full min-w-[760px] border-collapse text-left text-xs text-black">
+                <thead className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Mã phiếu</th>
+                    <th className="px-4 py-3 text-left">Khách hàng</th>
+                    <th className="px-4 py-3 text-left">Thiết bị</th>
+                    <th className="px-4 py-3 text-left">Mô tả sự cố</th>
+                    <th className="px-4 py-3 text-left">Trạng thái</th>
+                    <th className="px-4 py-3 text-left">Ngày tạo</th>
+                    <th className="px-4 py-3 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y-2 divide-black/10 bg-white">
+                  {Array.from({ length: pageSize }).map((_, idx) => (
+                    <tr key={`skeleton-${idx}`} className="animate-pulse">
+                      <td className="px-4 py-3"><div className="h-4 w-12 bg-gray-200" /></td>
+                      <td className="px-4 py-3">
+                        <div className="h-3.5 w-28 bg-gray-200" />
+                        <div className="mt-1 h-3 w-24 bg-gray-100" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-3.5 w-24 bg-gray-200" />
+                        <div className="mt-1 h-4 w-28 bg-gray-100" />
+                      </td>
+                      <td className="px-4 py-3"><div className="h-3.5 w-40 bg-gray-200" /></td>
+                      <td className="px-4 py-3"><div className="h-5 w-24 bg-gray-200" /></td>
+                      <td className="px-4 py-3"><div className="h-3.5 w-24 bg-gray-100" /></td>
+                      <td className="px-4 py-3 text-right"><div className="ml-auto h-7 w-24 bg-gray-200" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : claims.length === 0 ? (
+              <div className="flex h-full min-h-[180px] flex-col items-center justify-center p-8 text-center">
+                <div className="mx-auto grid h-12 w-12 place-items-center border-2 border-black bg-gray-50 shadow-[2px_2px_0_0_#000]">
+                  <Inbox size={24} className="text-black" aria-hidden="true" />
+                </div>
+                <p className="mt-4 text-sm font-black uppercase tracking-wide text-black">
+                  Không tìm thấy phiếu yêu cầu bảo hành nào
+                </p>
+                <p className="mt-1 text-xs font-medium text-text-muted">
+                  Thử thay đổi bộ lọc trạng thái hoặc từ khóa tìm kiếm.
+                </p>
               </div>
-              <p className="mt-4 text-sm font-black uppercase tracking-wide text-black">
-                Không tìm thấy phiếu yêu cầu bảo hành nào
-              </p>
-              <p className="mt-1 text-xs font-medium text-text-muted">
-                Thử thay đổi bộ lọc trạng thái hoặc từ khóa tìm kiếm.
-              </p>
-            </div>
-          ) : (
-            <table className="w-full min-w-[760px] border-collapse text-left text-xs text-black">
-              <thead className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
-                <tr>
-                  <th className="px-4 py-3.5 text-left">Mã phiếu</th>
-                  <th className="px-4 py-3.5 text-left">Khách hàng</th>
-                  <th className="px-4 py-3.5 text-left">Thiết bị</th>
-                  <th className="px-4 py-3.5 text-left">Mô tả sự cố</th>
-                  <th className="px-4 py-3.5 text-left">Trạng thái</th>
-                  <th className="px-4 py-3.5 text-left">Ngày tạo</th>
-                  <th className="px-4 py-3.5 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y-2 divide-black/10 bg-white font-medium">
-                {claims.map((claim) => {
+            ) : (
+              <table className="w-full min-w-[760px] border-collapse text-left text-xs text-black">
+                <thead className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Mã phiếu</th>
+                    <th className="px-4 py-3 text-left">Khách hàng</th>
+                    <th className="px-4 py-3 text-left">Thiết bị</th>
+                    <th className="px-4 py-3 text-left">Mô tả sự cố</th>
+                    <th className="px-4 py-3 text-left">Trạng thái</th>
+                    <th className="px-4 py-3 text-left">Ngày tạo</th>
+                    <th className="px-4 py-3 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y-2 divide-black/10 bg-white font-medium">
+                  {claims.map((claim) => {
                   const config = STATUS_CONFIG[claim.status] || STATUS_CONFIG.PENDING;
                   const StatusIcon = config.icon;
 
@@ -692,7 +791,19 @@ export default function StaffWarrantyManagementPage() {
               </tbody>
             </table>
           )}
+          </div>
         </section>
+
+        <CommissionPagination
+          page={page}
+          size={pageSize}
+          totalElements={totalElements}
+          totalPages={totalPages}
+          onPageChange={(nextPage) => setPage(nextPage)}
+          ariaLabel="Phân trang danh sách bảo hành"
+          disabled={isLoading}
+          className="mt-auto shrink-0"
+        />
       </div>
 
       {/* Detail Modal ONLY (Only when clicking 'Chi tiết') */}

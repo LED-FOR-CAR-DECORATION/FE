@@ -4,8 +4,8 @@ import CustomerSidebar from "@/components/layout/CustomerSidebar";
 import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import { useOrders } from "@/features/order/context/OrderContext";
-import { isCharacterOnlyOrder } from "@/features/order/fulfillment";
 import type { MockOrder, OrderStatus } from "@/features/order/types";
+import { getOrderFulfillment, isCharacterOnlyOrder } from "@/features/order/fulfillment";
 import { formatPrice } from "@/lib/currency";
 import {
   CheckCircle,
@@ -89,8 +89,15 @@ function getHeaderStatusInfo(order: MockOrder): {
   isSuccessDelivery: boolean;
 } {
   if (isCharacterOnlyOrder(order) && order.paymentStatus === "Paid") {
+    const fulfillment = getOrderFulfillment(order);
+    const deliveryText =
+      fulfillment.hasSubscription && fulfillment.hasCharacter
+        ? "Đã kích hoạt gói hội viên & cấp nhân vật"
+        : fulfillment.hasSubscription
+          ? "Đã kích hoạt gói hội viên"
+          : "Đã cấp nhân vật vào thư viện";
     return {
-      deliveryText: "Đã cấp nhân vật vào thư viện",
+      deliveryText,
       statusText: "HOÀN THÀNH",
       statusColor: "text-[#155e59]",
       isSuccessDelivery: true,
@@ -213,6 +220,13 @@ function getHeaderStatusInfo(order: MockOrder): {
 
 function getFooterHint(order: MockOrder): string {
   if (isCharacterOnlyOrder(order) && order.paymentStatus === "Paid") {
+    const fulfillment = getOrderFulfillment(order);
+    if (fulfillment.hasSubscription && fulfillment.hasCharacter) {
+      return "Gói hội viên và nhân vật kỹ thuật số đã được mở khóa trong tài khoản của bạn.";
+    }
+    if (fulfillment.hasSubscription) {
+      return "Gói hội viên đã được kích hoạt trong tài khoản của bạn.";
+    }
     return "Nhân vật kỹ thuật số đã được mở khóa trong Thư viện của bạn.";
   }
   switch (order.status) {
@@ -248,6 +262,8 @@ function getProductTypeLabel(productType: string): string {
   switch (productType) {
     case "CHARACTER":
       return "Nhân vật kỹ thuật số";
+    case "SUBSCRIPTION":
+      return "Gói hội viên";
     case "BUNDLE":
       return "Bộ sản phẩm (Bundle)";
     case "LED_MODEL":

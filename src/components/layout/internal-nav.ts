@@ -92,16 +92,23 @@ export const menuItems: MenuItem[] = [
   {
     label: "Quản lý thẻ sản phẩm",
     description: "Tạo, sửa và xóa thẻ danh mục phân loại",
-    href: "/staff/tags",
+    href: "/manager/tags",
     icon: Tag,
     roles: ["MANAGER", "ADMIN"],
   },
   {
     label: "Quản lý bảo hành",
-    description: "Tra cứu và cập nhật thông tin bảo hành",
+    description: "Thẩm định, duyệt và theo dõi phiếu bảo hành",
+    href: "/manager/warranty",
+    icon: ShieldCheck,
+    roles: ["MANAGER", "ADMIN"],
+  },
+  {
+    label: "Quản lý bảo hành",
+    description: "Tiếp nhận tại quầy, hoàn thành và từ chối bảo hành",
     href: "/staff/warranty",
     icon: ShieldCheck,
-    roles: ["MANAGER", "STAFF", "ADMIN"],
+    roles: ["STAFF"],
   },
   {
     label: "Cấu hình giá Yêu cầu thiết kế",

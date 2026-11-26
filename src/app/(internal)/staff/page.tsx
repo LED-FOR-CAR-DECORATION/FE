@@ -124,7 +124,7 @@ export default function StaffDashboard() {
     try {
       const [commResults, warrantyPending] = await Promise.all([
         Promise.all(reqs),
-        getManagementWarrantyClaims({ status: "PENDING", page: 0, size: 1 }),
+        getManagementWarrantyClaims({ status: "APPROVED", page: 0, size: 1 }),
       ]);
       if (latestCountsReqRef.current !== token) return;
       const totalComm =
@@ -282,10 +282,10 @@ export default function StaffDashboard() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-black uppercase text-black group-hover:underline">
-                Thẩm định phiếu bảo hành
+                Xử lý bảo hành tại quầy
               </span>
               <span className="mt-0.5 block truncate text-[11px] font-medium text-text-muted">
-                Phiếu đang chờ tiếp nhận
+                Phiếu đang chờ tại quầy
               </span>
             </span>
             <span className="shrink-0 border-2 border-black bg-[#fed7aa] px-2 py-0.5 font-mono text-xs font-black text-black">

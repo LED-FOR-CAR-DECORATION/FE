@@ -33,10 +33,12 @@ import {
   StoreActionButton,
   StoreEmptyRow,
   StoreErrorRow,
+  StoreHoverActionButton,
   StoreSkeletonRows,
-  StoreTableFooter,
+  StoreTablePagination,
   StoreThumbnail,
   storeRowClass,
+  useStoreTablePagination,
 } from "./StoreTablePrimitives";
 
 interface EnrichedSubscriptionPlan extends ManagedSubscriptionPlan {
@@ -56,15 +58,15 @@ interface SubscriptionListingTableProps {
   onCountChange?: (count: number) => void;
 }
 
-const HEADINGS = [
-  "Mã sản phẩm",
-  "Ảnh đại diện",
-  "Tên gói hội viên",
-  "Thời hạn",
-  "Quyền lợi",
-  "Giá bán",
-  "Trạng thái",
-  "Thao tác",
+const HEADINGS: { label: string; className?: string }[] = [
+  { label: "Mã sản phẩm", className: "w-[108px]" },
+  { label: "Ảnh đại diện", className: "w-[88px]" },
+  { label: "Tên gói hội viên", className: "w-[210px]" },
+  { label: "Thời hạn", className: "w-[120px]" },
+  { label: "Quyền lợi" },
+  { label: "Giá bán", className: "w-[128px]" },
+  { label: "Trạng thái", className: "w-[132px]" },
+  { label: "Thao tác", className: "w-[260px] text-right" },
 ];
 
 export default function SubscriptionListingTable({
@@ -145,6 +147,16 @@ export default function SubscriptionListingTable({
   }, [plans, searchTerm, statusFilter]);
 
   const hasFilters = statusFilter !== "ALL" || searchTerm !== "";
+  const {
+    page,
+    setPage,
+    pageSize,
+    ready,
+    totalPages,
+    totalElements,
+    pagedItems,
+  } = useStoreTablePagination(filteredPlans, `${searchTerm}::${statusFilter}`);
+
   const resetFilters = () => {
     setStatusFilter("ALL");
     setSearchTerm("");
@@ -167,28 +179,34 @@ export default function SubscriptionListingTable({
         canReset={hasFilters}
       />
 
-      <div className="overflow-x-auto">
-        <table className={STORE_TABLE_CLASS}>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className={`${STORE_TABLE_CLASS} min-w-[1180px]`}>
           <caption className="sr-only">
             Danh sách gói hội viên đang quản lý trên cửa hàng
           </caption>
           <thead className={STORE_THEAD_CLASS}>
             <tr>
               {HEADINGS.map((heading) => (
-                <th key={heading} scope="col" className={STORE_TH_CLASS}>
-                  {heading}
+                <th
+                  key={heading.label}
+                  scope="col"
+                  className={`${STORE_TH_CLASS} ${heading.className ?? ""}`}
+                >
+                  {heading.label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <StoreSkeletonRows columns={HEADINGS.length} />}
+            {(isLoading || !ready) && (
+              <StoreSkeletonRows columns={HEADINGS.length} rows={pageSize} />
+            )}
 
-            {!isLoading && error && (
+            {!isLoading && ready && error && (
               <StoreErrorRow colSpan={HEADINGS.length} message={error} onRetry={loadPlans} />
             )}
 
-            {!isLoading && !error && filteredPlans.length === 0 && (
+            {!isLoading && ready && !error && filteredPlans.length === 0 && (
               <StoreEmptyRow
                 colSpan={HEADINGS.length}
                 message={
@@ -213,17 +231,18 @@ export default function SubscriptionListingTable({
             )}
 
             {!isLoading &&
+              ready &&
               !error &&
-              filteredPlans.map((plan) => {
+              pagedItems.map((plan) => {
                 const isDeleted = plan.status === "DELETED";
                 return (
                   <tr key={plan.subscriptionDetailId} className={storeRowClass(isDeleted)}>
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
                         #{plan.productId}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2.5">
                       <StoreThumbnail
                         src={plan.thumbnailUrl}
                         alt={`Ảnh đại diện của ${plan.planName}`}
@@ -231,16 +250,19 @@ export default function SubscriptionListingTable({
                         pixelated
                       />
                     </td>
-                    <td className="px-4 py-3.5">
-                      <p className={`text-xs font-black uppercase sm:text-sm ${isDeleted ? "line-through text-text-muted" : "text-black"}`}>
+                    <td className="px-4 py-2.5">
+                      <p
+                        title={plan.planName}
+                        className={`truncate text-xs font-black uppercase sm:text-sm ${isDeleted ? "line-through text-text-muted" : "text-black"}`}
+                      >
                         {plan.planName}
                       </p>
-                      <p className="text-[11px] font-medium text-text-muted tabular-nums">
+                      <p className="truncate text-[11px] font-medium text-text-muted tabular-nums">
                         Mã gói: <span className="font-mono font-black text-black">{plan.planCode}</span>
                         {plan.updatedAt ? ` · Cập nhật lúc ${formatDateTime(plan.updatedAt)}` : ""}
                       </p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       {plan.isLifetime ? (
                         <span className="inline-flex items-center gap-1 border border-black bg-[#e9d5ff] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
                           <InfinityIcon size={12} aria-hidden="true" /> Vĩnh viễn
@@ -251,7 +273,7 @@ export default function SubscriptionListingTable({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2.5">
                       <div className="flex flex-col gap-1">
                         {plan.allAccessCharacters && (
                           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-black">
@@ -275,69 +297,71 @@ export default function SubscriptionListingTable({
                           )}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-sm font-black text-primary-ink tabular-nums">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-sm font-black text-primary-ink tabular-nums">
                       {formatVnd(plan.basePrice)}
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2.5">
                       <StatusBadge status={plan.status} />
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
                       {isDeleted ? null : (
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
                           {onEdit && (
-                            <StoreActionButton
-                              variant="secondary"
+                            <StoreHoverActionButton
+                              tone="primary"
+                              label="Sửa"
+                              aria-label={`Sửa ${plan.planName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Sửa"}
                               onClick={() => onEdit(plan)}
-                              icon={<Edit size={13} />}
-                            >
-                              Sửa
-                            </StoreActionButton>
+                              icon={<Edit className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                           {plan.status === "UNPUBLISHED" && onPublish && (
-                            <StoreActionButton
-                              variant="primary"
+                            <StoreHoverActionButton
+                              tone="approve"
+                              label="Mở bán"
+                              aria-label={`Mở bán ${plan.planName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Mở bán"}
                               onClick={() => onPublish(plan)}
-                              icon={<CheckCircle2 size={13} />}
-                            >
-                              Mở bán
-                            </StoreActionButton>
+                              icon={<CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                           {plan.status === "ARCHIVED" && onPublish && (
-                            <StoreActionButton
-                              variant="primary"
+                            <StoreHoverActionButton
+                              tone="approve"
+                              labelSize="medium"
+                              label="Mở bán lại"
+                              aria-label={`Mở bán lại ${plan.planName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Mở bán lại"}
                               onClick={() => onPublish(plan)}
-                              icon={<Undo2 size={13} />}
-                            >
-                              Mở bán lại
-                            </StoreActionButton>
+                              icon={<Undo2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                           {plan.status !== "ARCHIVED" && onArchive && (
-                            <StoreActionButton
-                              variant="secondary"
+                            <StoreHoverActionButton
+                              tone="neutral"
+                              labelSize="medium"
+                              label="Ngừng bán"
+                              aria-label={`Ngừng bán ${plan.planName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Ngừng bán"}
                               onClick={() => onArchive(plan)}
-                              icon={<Archive size={13} />}
-                            >
-                              Ngừng bán
-                            </StoreActionButton>
+                              icon={<Archive className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                           {onDelete && (
-                            <StoreActionButton
-                              variant="danger"
+                            <StoreHoverActionButton
+                              tone="danger"
+                              label="Xóa"
+                              aria-label={`Xóa ${plan.planName}`}
                               disabled={!canManage}
-                              title={actionTitle}
+                              title={actionTitle ?? "Xóa"}
                               onClick={() => onDelete(plan)}
-                              icon={<Trash2 size={13} />}
-                            >
-                              Xóa
-                            </StoreActionButton>
+                              icon={<Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                            />
                           )}
                         </div>
                       )}
@@ -349,11 +373,17 @@ export default function SubscriptionListingTable({
         </table>
       </div>
 
-      {!isLoading && !error && (
-        <StoreTableFooter
-          filteredCount={filteredPlans.length}
-          totalCount={plans.length}
+      {!error && (
+        <StoreTablePagination
+          page={page}
+          size={pageSize}
+          totalElements={totalElements}
+          totalPages={totalPages}
+          totalUnfilteredCount={plans.length}
           unitLabel="gói hội viên"
+          onPageChange={setPage}
+          disabled={isLoading || !ready}
+          ariaLabel="Phân trang danh sách gói hội viên"
         />
       )}
     </>

@@ -16,6 +16,8 @@ interface PaginationProps {
   itemLabel?: string;
   ariaLabel?: string;
   variant?: Variant;
+  /** Luôn hiển thị thanh phân trang kể cả khi chỉ có 1 trang để giữ cố định bố cục dưới đáy. */
+  alwaysShow?: boolean;
   className?: string;
 }
 
@@ -66,16 +68,17 @@ export default function Pagination({
   itemLabel = "mục",
   ariaLabel = "Phân trang",
   variant = "neo",
+  alwaysShow = false,
   className = "",
 }: PaginationProps) {
-  if (totalPages <= 1) return null;
+  if (!alwaysShow && totalPages <= 1) return null;
   const style = STYLES[variant];
   const go = (target: number) => {
     const next = Math.min(Math.max(target, 1), totalPages);
     if (next !== page) onPageChange(next);
   };
   const summary =
-    totalItems !== undefined && pageSize
+    totalItems !== undefined && totalItems > 0 && pageSize
       ? `Hiển thị ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, totalItems)} trong ${totalItems} ${itemLabel}`
       : null;
 

@@ -59,7 +59,7 @@ function ProductArtwork({ product }: { product: CatalogProduct }) {
         alt={product.name}
         fill
         sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-        className="object-contain p-3 [image-rendering:pixelated]"
+        className="object-contain [image-rendering:pixelated]"
         onError={() => setImgError(true)}
       />
     );
@@ -114,7 +114,7 @@ export function ProductCard({
         : "Thiết bị LED";
 
   return (
-    <article className="neo-box group relative flex flex-col justify-between overflow-hidden bg-white transition-all">
+    <article className="neo-box group relative flex h-full flex-col justify-between overflow-hidden bg-white transition-all">
       <Link href={`/products/${product.id}`} className="flex flex-1 cursor-pointer flex-col">
         {/* Image Area */}
         <div className="relative aspect-square overflow-hidden border-b-2 border-black bg-gray-50">

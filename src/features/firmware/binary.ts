@@ -6,7 +6,8 @@
 /** App slot size of the device's `min_spiffs.csv` partition table (0x1E0000). */
 export const MAX_FIRMWARE_BYTES = 0x1e0000;
 export const ESP_IMAGE_MAGIC = 0xe9;
-export const SEMVER_PATTERN = /^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})$/;
+/** Same rule as the backend's FirmwareVersionNumber.PATTERN. */
+export const SEMVER_PATTERN = /^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/;
 export const CHANGELOG_MAX = 5000;
 export const DEPRECATION_REASON_MAX = 1000;
 

@@ -65,28 +65,19 @@ export default function FirmwareReleasesPage() {
   const [models, setModels] = useState<FirmwareModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [modelsError, setModelsError] = useState("");
-  // null = unknown (the summary request failed), otherwise modelId -> active release.
-  const [activeByModel, setActiveByModel] = useState<Map<number, FirmwareRelease> | null>(new Map());
 
+  // One request: DEV-01 returns each model's ACTIVE firmware summary alongside it.
   const loadModels = useCallback(async () => {
     setModelsLoading(true);
     setModelsError("");
-    const [modelResult, activeResult] = await Promise.allSettled([
-      fetchFirmwareModels(),
-      fetchFirmwareReleases({ status: "ACTIVE", size: 100 }),
-    ]);
-    if (modelResult.status === "fulfilled") {
-      setModels(modelResult.value);
-    } else {
+    try {
+      setModels(await fetchFirmwareModels());
+    } catch (error) {
       setModels([]);
-      setModelsError(firmwareErrorMessage(modelResult.reason, "Không thể tải danh sách mẫu LED."));
+      setModelsError(firmwareErrorMessage(error, "Không thể tải danh sách mẫu LED."));
+    } finally {
+      setModelsLoading(false);
     }
-    setActiveByModel(
-      activeResult.status === "fulfilled"
-        ? new Map(activeResult.value.items.map((release) => [release.modelId, release]))
-        : null,
-    );
-    setModelsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -121,7 +112,6 @@ export default function FirmwareReleasesPage() {
             models={models}
             loading={modelsLoading}
             error={modelsError}
-            activeByModel={activeByModel}
             selectedId={selectedId}
             onSelect={selectModel}
             onRetry={() => void loadModels()}
@@ -152,7 +142,6 @@ function ModelList({
   models,
   loading,
   error,
-  activeByModel,
   selectedId,
   onSelect,
   onRetry,
@@ -160,7 +149,6 @@ function ModelList({
   models: FirmwareModel[];
   loading: boolean;
   error: string;
-  activeByModel: Map<number, FirmwareRelease> | null;
   selectedId: number | null;
   onSelect: (modelId: number) => void;
   onRetry: () => void;
@@ -239,7 +227,7 @@ function ModelList({
         ) : (
           <ul className="divide-y divide-gray-100">
             {visible.map((model) => {
-              const active = activeByModel?.get(model.modelId);
+              const active = model.activeFirmware;
               const selected = model.modelId === selectedId;
               return (
                 <li key={model.modelId}>
@@ -257,9 +245,7 @@ function ModelList({
                       <span className="text-[11px] text-gray-400">{MODEL_STATUS_LABELS[model.status]}</span>
                     </span>
                     <span className="shrink-0 text-right">
-                      {activeByModel === null ? (
-                        <span className="text-[11px] text-gray-400">—</span>
-                      ) : active ? (
+                      {active ? (
                         <span className="font-mono text-xs font-black text-[#0F5B38]">v{active.version}</span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600" title="Chưa có bản đang phát hành">
@@ -277,7 +263,6 @@ function ModelList({
       {!error && models.length > 0 && (
         <p className="border-t border-gray-100 px-3 py-2 text-[11px] text-gray-400">
           {visible.length}/{models.length} mẫu
-          {activeByModel === null && " · chưa tải được phiên bản đang phát hành"}
         </p>
       )}
     </section>
@@ -322,25 +307,27 @@ function ModelReleases({
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [deprecating, setDeprecating] = useState<FirmwareRelease | null>(null);
-  // Kept separately so the header is right even when the active release is on another page.
-  const [active, setActive] = useState<FirmwareRelease | null | undefined>(undefined);
+  // The header comes from the model's DEV-01 summary, refreshed by onReleasesChanged.
+  const active = model.activeFirmware;
+  // DEV-12 accepts only versions above every earlier one, deprecated included. Versions only
+  // go up and the list is newest-upload first, so the newest upload is the highest version.
+  const [highestVersion, setHighestVersion] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError("");
     try {
-      const [list, activeList] = await Promise.all([
+      const [list, newest] = await Promise.all([
         fetchFirmwareReleases({ modelId: model.modelId, page, size: RELEASES_PAGE_SIZE }),
-        fetchFirmwareReleases({ modelId: model.modelId, status: "ACTIVE", size: 1 }),
+        page === 0 ? null : fetchFirmwareReleases({ modelId: model.modelId, size: 1 }),
       ]);
       setReleases(list.items);
       setTotalPages(list.totalPages);
       setTotalElements(list.totalElements);
-      setActive(activeList.items[0] ?? null);
+      setHighestVersion((newest ?? list).items[0]?.version);
     } catch (error) {
       setLoadError(firmwareErrorMessage(error, "Không thể tải lịch sử firmware."));
       setReleases([]);
-      setActive(undefined);
     } finally {
       setLoading(false);
     }
@@ -399,9 +386,7 @@ function ModelReleases({
             <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs text-gray-600">
               <span>
                 Bản đang phát hành:{" "}
-                {active === undefined ? (
-                  <span className="text-gray-400">{loading ? "…" : "không rõ"}</span>
-                ) : active ? (
+                {active ? (
                   <strong className="font-mono text-sm text-[#0F5B38]">v{active.version}</strong>
                 ) : (
                   <strong className="text-amber-600">chưa có — ứng dụng sẽ báo không có cập nhật</strong>
@@ -414,7 +399,10 @@ function ModelReleases({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => {
+                void load();
+                onReleasesChanged();
+              }}
               disabled={loading}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
             >
@@ -613,6 +601,7 @@ function ModelReleases({
           <UploadFirmwareModal
             model={model}
             activeVersion={active?.version}
+            highestVersion={highestVersion}
             onClose={() => setUploadOpen(false)}
             onUploaded={handleUploaded}
           />

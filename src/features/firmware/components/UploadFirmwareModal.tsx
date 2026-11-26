@@ -16,13 +16,18 @@ import {
 type Props = {
   /** The release always goes to the model the admin opened; there is no model picker. */
   model: FirmwareModel;
-  /** The model's current ACTIVE version, used to hint the next version (undefined = none or unknown). */
+  /** The model's current ACTIVE version, shown for context (undefined = none). */
   activeVersion?: string;
+  /**
+   * Highest version ever uploaded for the model, deprecated ones included. The backend
+   * (DEV-12) rejects anything not above it with FIRMWARE_VERSION_CONFLICT.
+   */
+  highestVersion?: string;
   onClose: () => void;
   onUploaded: (result: UploadFirmwareResult) => void;
 };
 
-export default function UploadFirmwareModal({ model, activeVersion, onClose, onUploaded }: Props) {
+export default function UploadFirmwareModal({ model, activeVersion, highestVersion, onClose, onUploaded }: Props) {
   const [version, setVersion] = useState("");
   const [changelog, setChangelog] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -34,7 +39,7 @@ export default function UploadFirmwareModal({ model, activeVersion, onClose, onU
 
   const trimmedVersion = version.trim();
   const versionFormatOk = SEMVER_PATTERN.test(trimmedVersion);
-  const versionTooLow = versionFormatOk && activeVersion !== undefined && compareSemver(trimmedVersion, activeVersion) <= 0;
+  const versionTooLow = versionFormatOk && highestVersion !== undefined && compareSemver(trimmedVersion, highestVersion) <= 0;
 
   const handleFile = async (selected: File | null) => {
     setFile(selected);
@@ -52,7 +57,7 @@ export default function UploadFirmwareModal({ model, activeVersion, onClose, onU
     event.preventDefault();
     setFormError("");
     if (!versionFormatOk) return setFormError("Phiên bản phải theo dạng MAJOR.MINOR.PATCH, ví dụ 1.3.0.");
-    if (versionTooLow) return setFormError(`Phiên bản phải lớn hơn bản đang phát hành (${activeVersion}).`);
+    if (versionTooLow) return setFormError(`Phiên bản phải lớn hơn ${highestVersion}, phiên bản cao nhất từng tải lên cho mẫu này.`);
     if (!changelog.trim()) return setFormError("Nhập ghi chú thay đổi cho bản phát hành.");
     if (!file || !inspection) return setFormError("Chọn tệp firmware .bin.");
     if (!inspection.ok) return setFormError("Tệp firmware chưa hợp lệ, xem chi tiết bên dưới.");
@@ -126,8 +131,10 @@ export default function UploadFirmwareModal({ model, activeVersion, onClose, onU
                   {trimmedVersion && !versionFormatOk
                     ? "Dạng MAJOR.MINOR.PATCH, ví dụ 1.3.0."
                     : versionTooLow
-                      ? `Phải lớn hơn ${activeVersion}.`
-                      : "Phải lớn hơn mọi phiên bản trước, kể cả bản đã thu hồi."}
+                      ? `Phải lớn hơn ${highestVersion} (cao nhất từng tải lên, kể cả bản đã thu hồi).`
+                      : highestVersion
+                        ? `Phải lớn hơn ${highestVersion}, kể cả khi bản đó đã bị thu hồi.`
+                        : "Bản đầu tiên của mẫu này."}
                 </p>
               </div>
             </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
-import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import { useOrders } from "@/features/order/context/OrderContext";
 import type { MockOrder, OrderStatus } from "@/features/order/types";
@@ -679,7 +678,6 @@ export default function OrderHistoryPage() {
           onConfirm={() => void handleConfirmOrder(confirmTargetId)}
         />
       )}
-      <Footer />
     </>
   );
 }

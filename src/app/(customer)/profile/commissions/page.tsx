@@ -1,5 +1,4 @@
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
-import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import CommissionRequestList from "@/features/commission/components/CommissionRequestList";
 
@@ -15,7 +14,6 @@ export default function ProfileCommissionsPage() {
           </div>
         </div>
       </main>
-      <Footer />
     </>
   );
 }

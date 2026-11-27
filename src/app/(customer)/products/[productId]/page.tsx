@@ -12,7 +12,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import { useCart } from "@/features/cart/context/CartContext";
 import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -80,7 +79,6 @@ export default function ProductDetailPage() {
             Đang tải chi tiết sản phẩm...
           </p>
         </main>
-        <Footer />
       </>
     );
   }
@@ -100,7 +98,6 @@ export default function ProductDetailPage() {
             </Link>
           </div>
         </main>
-        <Footer />
       </>
     );
   }
@@ -560,7 +557,6 @@ export default function ProductDetailPage() {
 
         </div>
       </main>
-      <Footer />
     </>
   );
 }

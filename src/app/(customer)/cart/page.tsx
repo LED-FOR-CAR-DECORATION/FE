@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { useCart } from "@/features/cart/context/CartContext";
 import NeoDialog from "@/components/ui/NeoDialog";
@@ -77,7 +76,7 @@ export default function CartPage() {
   };
 
 
-  if (isLoading) return <><Header /><main className="flex-1 grid place-items-center p-20">Đang tải giỏ hàng...</main><Footer /></>;
+  if (isLoading) return <><Header /><main className="flex-1 grid place-items-center p-20">Đang tải giỏ hàng...</main></>;
 
   return (
     <>
@@ -193,7 +192,6 @@ export default function CartPage() {
           }
         />
       )}
-      <Footer />
     </>
   );
 }

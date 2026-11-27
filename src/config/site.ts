@@ -33,6 +33,7 @@ export const SITE = {
 /** Google Maps nhúng không cần API key (dạng ?q=…&output=embed). */
 export const MAP_EMBED_URL = `https://www.google.com/maps?q=${encodeURIComponent(SITE.contact.address)}&output=embed`;
 export const MAP_LINK_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(SITE.contact.address)}`;
+export const GMAIL_COMPOSE_URL = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(SITE.contact.email)}`;
 
 /** Các trang thông tin công khai (Footer + điều hướng giữa các trang chính sách). */
 export const INFO_LINKS = [

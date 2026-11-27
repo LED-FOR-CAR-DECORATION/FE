@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import CustomerCommissionPayment from "@/features/commission/components/CustomerCommissionPayment";
 
 export default async function CommissionPaymentPage({ params }: {
@@ -27,7 +26,6 @@ export default async function CommissionPaymentPage({ params }: {
           <CustomerCommissionPayment commissionId={id} />
         </div>
       </main>
-      <Footer />
     </>
   );
 }

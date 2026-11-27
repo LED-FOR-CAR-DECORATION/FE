@@ -14,7 +14,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import { useCart } from "@/features/cart/context/CartContext";
 import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -370,7 +369,6 @@ export default function SubscriptionsStorePage() {
           )}
         </div>
       </main>
-      <Footer />
     </>
   );
 }

@@ -1,5 +1,4 @@
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import ApiCommissionForm from "@/features/commission/components/ApiCommissionForm";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
@@ -20,7 +19,6 @@ export default function NewCommissionPage() {
           <ApiCommissionForm />
         </div>
       </main>
-      <Footer />
     </>
   );
 }

@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Clock, Mail, MapPin, Phone } from "lucide-react";
-import { SiGooglemaps } from "react-icons/si";
-import { INFO_LINKS, MAP_EMBED_URL, MAP_LINK_URL, SHOP_LINKS, SITE } from "@/config/site";
+import { INFO_LINKS, SHOP_LINKS, SITE } from "@/config/site";
 import SocialLinks from "./SocialLinks";
 import CopyrightYear from "./CopyrightYear";
+import FooterContactList from "./FooterContactList";
 
 const linkClass = "inline-flex min-h-8 items-center hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black";
 
@@ -42,24 +41,7 @@ export default function Footer() {
         <div className="lg:col-span-4">
           <h2 className="mb-3 text-base font-black uppercase">Kết nối</h2>
           <SocialLinks />
-          <address className="mt-5 space-y-2 text-sm font-medium not-italic">
-            <p className="flex gap-2"><MapPin size={16} className="mt-0.5 shrink-0" aria-hidden="true" /> {SITE.contact.address}</p>
-            <p className="flex gap-2"><Phone size={16} className="mt-0.5 shrink-0" aria-hidden="true" /> <a href={SITE.contact.phoneHref} className={linkClass}>{SITE.contact.phone}</a></p>
-            <p className="flex gap-2"><Mail size={16} className="mt-0.5 shrink-0" aria-hidden="true" /> <a href={`mailto:${SITE.contact.email}`} className={linkClass}>{SITE.contact.email}</a></p>
-            <p className="flex gap-2"><Clock size={16} className="mt-0.5 shrink-0" aria-hidden="true" /> {SITE.contact.hours}</p>
-          </address>
-        </div>
-      </div>
-
-      {/* Bản đồ */}
-      <div className="container mx-auto mt-10 px-4">
-        <div className="overflow-hidden border-2 border-black bg-white shadow-[4px_4px_0_#000]">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black px-4 py-2">
-            <p className="flex items-center gap-2 text-sm font-black"><SiGooglemaps aria-hidden="true" /> Tìm đường tới {SITE.name}</p>
-            <a href={MAP_LINK_URL} target="_blank" rel="noopener noreferrer" className={`${linkClass} text-sm font-bold`}>Mở Google Maps ↗</a>
-          </div>
-          <iframe title={`Bản đồ vị trí ${SITE.name}`} src={MAP_EMBED_URL} loading="lazy" referrerPolicy="no-referrer-when-downgrade"
-            className="block h-56 w-full border-0 md:h-64" />
+          <FooterContactList />
         </div>
       </div>
 

@@ -1,7 +1,6 @@
 "use client";
 
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
-import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useGallery } from "@/features/character/context/GalleryContext";
@@ -354,7 +353,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
         </main>
-        <Footer />
       </>
     );
   }
@@ -380,7 +378,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
         </main>
-        <Footer />
       </>
     );
   }
@@ -830,8 +827,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
           onConfirm={() => void handleCancelOrder()}
         />
       )}
-
-      <Footer />
     </>
   );
 }

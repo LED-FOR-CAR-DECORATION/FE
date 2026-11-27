@@ -78,6 +78,8 @@ export interface ProductCardProps {
   canBuy: boolean;
   isOwned?: boolean;
   isAlreadyInCart?: boolean;
+  /** Compact viewport-fitted mode for 1-screen storefront grid (no fixed aspect-square). */
+  compact?: boolean;
 }
 
 /**
@@ -90,6 +92,7 @@ export function ProductCard({
   canBuy,
   isOwned = false,
   isAlreadyInCart = false,
+  compact = false,
 }: ProductCardProps) {
   const isCharacter = product.productType === "CHARACTER";
   const isBundle = product.productType === "BUNDLE";
@@ -114,36 +117,58 @@ export function ProductCard({
         : "Thiết bị LED";
 
   return (
-    <article className="neo-box group relative flex h-full flex-col justify-between overflow-hidden bg-white transition-all">
-      <Link href={`/products/${product.id}`} className="flex flex-1 cursor-pointer flex-col">
+    <article className="neo-box group relative flex h-full min-h-0 flex-col justify-between overflow-hidden bg-white transition-all">
+      <Link href={`/products/${product.id}`} className="flex min-h-0 flex-1 cursor-pointer flex-col">
         {/* Image Area */}
-        <div className="relative aspect-square overflow-hidden border-b-2 border-black bg-gray-50">
+        <div
+          className={`relative overflow-hidden border-b-2 border-black bg-gray-50 ${
+            compact ? "min-h-[112px] flex-1" : "aspect-square"
+          }`}
+        >
           <ProductArtwork product={product} />
-          <span className="absolute left-2.5 top-2.5 border border-black bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+          <span className="absolute left-2 top-2 border border-black bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
             {typeLabel}
           </span>
           {isOwned && (
-            <span className="absolute right-2.5 top-2.5 border border-black bg-emerald-300 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
+            <span className="absolute right-2 top-2 border border-black bg-emerald-300 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
               Đã sở hữu
             </span>
           )}
         </div>
 
         {/* Details */}
-        <div className="flex flex-1 flex-col justify-between p-3.5">
+        <div
+          className={
+            compact
+              ? "flex shrink-0 flex-col justify-between p-2.5"
+              : "flex flex-1 flex-col justify-between p-3.5"
+          }
+        >
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
               {typeLabel}
             </p>
-            <h3 className="mt-1 line-clamp-2 min-h-10 text-sm font-black uppercase leading-snug text-black transition-colors group-hover:text-primary-ink">
+            <h3
+              className={`font-black uppercase leading-snug text-black transition-colors group-hover:text-primary-ink ${
+                compact
+                  ? "mt-0.5 line-clamp-1 text-xs sm:text-sm"
+                  : "mt-1 line-clamp-2 min-h-10 text-sm"
+              }`}
+            >
               {product.name}
             </h3>
             {product.tags && product.tags.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {product.tags.slice(0, 3).map((tag, idx) => (
+              <div
+                className={
+                  compact
+                    ? "mt-1.5 flex flex-nowrap gap-1 overflow-hidden"
+                    : "mt-2 flex flex-wrap gap-1"
+                }
+              >
+                {product.tags.slice(0, compact ? 2 : 3).map((tag, idx) => (
                   <span
                     key={tag.tagId ?? tag.name ?? idx}
-                    className="border border-black bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black"
+                    className="shrink-0 border border-black bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black"
                   >
                     #{tag.name}
                   </span>
@@ -152,7 +177,11 @@ export function ProductCard({
             )}
           </div>
 
-          <div className="mt-3 flex items-center justify-between gap-2 border-t-2 border-dashed border-gray-200 pr-12 pt-3">
+          <div
+            className={`flex items-center justify-between gap-2 border-t-2 border-dashed border-gray-200 ${
+              compact ? "mt-2 pr-10 pt-2" : "mt-3 pr-12 pt-3"
+            }`}
+          >
             <div>
               <span className="block text-[10px] font-bold uppercase text-text-muted">Giá bán</span>
               <strong className="text-sm font-black text-primary-ink sm:text-base">
@@ -168,7 +197,9 @@ export function ProductCard({
         disabled={isBlockedFromAdd}
         title={buttonTitle}
         onClick={() => onAdd(product)}
-        className={`absolute bottom-3.5 right-3.5 grid size-9 place-items-center p-0! shadow-[2px_2px_0_0_#000] ${
+        className={`absolute grid place-items-center p-0! shadow-[2px_2px_0_0_#000] ${
+          compact ? "bottom-2.5 right-2.5 size-8" : "bottom-3.5 right-3.5 size-9"
+        } ${
           isOwned || isDigitalSingle
             ? "cursor-not-allowed border-2 border-black bg-emerald-200 text-black"
             : "btn-primary"
@@ -182,9 +213,9 @@ export function ProductCard({
         }
       >
         {isOwned || isDigitalSingle ? (
-          <Check size={18} className="shrink-0" aria-hidden />
+          <Check size={compact ? 16 : 18} className="shrink-0" aria-hidden />
         ) : (
-          <ShoppingCart size={18} className="shrink-0" aria-hidden />
+          <ShoppingCart size={compact ? 16 : 18} className="shrink-0" aria-hidden />
         )}
       </button>
     </article>

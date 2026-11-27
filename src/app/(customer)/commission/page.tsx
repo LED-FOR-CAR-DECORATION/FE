@@ -1,5 +1,4 @@
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import CommissionRequestList from "@/features/commission/components/CommissionRequestList";
 
 export default function CommissionPage() {
@@ -11,7 +10,6 @@ export default function CommissionPage() {
           <CommissionRequestList />
         </div>
       </main>
-      <Footer />
     </>
   );
 }

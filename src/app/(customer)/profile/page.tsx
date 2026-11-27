@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import AddAddressModal from "@/components/ui/AddAddressModal";
 import UndoToast from "@/components/ui/UndoToast";
 import { useUndoableDelete } from "@/lib/hooks/useUndoableDelete";
@@ -264,7 +263,6 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
-      <Footer />
     </>
   );
 }

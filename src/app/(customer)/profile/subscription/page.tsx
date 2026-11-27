@@ -19,7 +19,6 @@ import {
   Tag,
 } from "lucide-react";
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
-import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
@@ -517,7 +516,6 @@ export default function CustomerSubscriptionBenefitsPage() {
           </div>
         </div>
       </main>
-      <Footer />
     </>
   );
 }

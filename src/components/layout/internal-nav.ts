@@ -1,5 +1,6 @@
 /** Menu entries and role helpers for the internal (back-office) shell. */
 import {
+  Activity,
   Boxes,
   ClipboardList,
   Cpu,
@@ -129,6 +130,13 @@ export const menuItems: MenuItem[] = [
     description: "Phát hành, theo dõi và thu hồi firmware OTA cho mẫu LED",
     href: "/admin/firmware",
     icon: Cpu,
+    roles: ["ADMIN"],
+  },
+  {
+    label: "Giám sát hệ thống",
+    description: "Lưu lượng API, độ trễ, lỗi và tình trạng máy chủ",
+    href: "/admin/monitoring",
+    icon: Activity,
     roles: ["ADMIN"],
   },
 ];

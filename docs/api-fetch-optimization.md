@@ -6,7 +6,7 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 
 - [x] 0. Đo baseline (Redis BE tắt có chủ đích)
 - [x] A. Nền tảng TanStack Query + refresh token đa tab (`/users/me` đã chỉ 1 lượt/lần tải, không cần sửa)
-- [ ] B. Đơn hàng (OrderContext → query, chi tiết theo id, fulfillment)
+- [x] B. Đơn hàng (OrderContext → query, chi tiết theo id, fulfillment)
 - [ ] C. Websocket hub + chat/inbox
 - [ ] D. Khách: gallery / store / subscription
 - [ ] E. Designer
@@ -45,6 +45,21 @@ Môi trường dev chạy React StrictMode nên một số effect chạy 2 lần
 | Trang khách (`/products`, `/profile/*`, `/messages`) | – | – | Chưa đo: cần tài khoản khách |
 
 Nguyên nhân chính: `OrderProvider` trong layout staff/manager tải mọi đơn (9 status × mọi trang) rồi gọi chi tiết từng đơn, mỗi lần vào layout, kể cả các trang không dùng đơn hàng.
+
+## Sau mục B (đơn hàng)
+
+Đo cùng điều kiện với baseline (dev, admin, lần tải đầu).
+
+| Trang | Baseline | Sau B | Ghi chú |
+|---|---|---|---|
+| `/staff` | 45 (13,3s) | **18** (6,2s) | Hết fan-out chi tiết đơn; còn `staff/orders` ×9 (BE bắt buộc `status`), commissions ×6, warranty ×2 |
+| `/staff/orders` | ≥64 (>13s) | **10** (9,5s) | Chỉ summary |
+| `/manager` | 42 (12s) | **3** (5,5s) | Dashboard không còn tải đơn hàng |
+| `/staff/chat` | 11 | 13 | Hết 9 lượt đơn hàng; phần còn lại là preview chat N+1 (mục C) |
+| `/staff/orders/{id}` | ~50 | **6** | 1 chi tiết + LED models + bundle + instances (đều cache) |
+| `/staff/deliveries` | ~46 | 45 lần đầu, **15** khi quay lại | Cần địa chỉ/vận đơn → chi tiết từng đơn; đơn đã kết thúc cache suốt phiên. Muốn giảm hẳn cần API BE #8 |
+| `/manager/character-orders` (sau khi đã vào deliveries) | ~46 | **0** | Dùng lại cache |
+| Quay lại trang đã xem trong 30s | tải lại toàn bộ | **0** | Cache TanStack |
 
 ## Bảng API BE còn thiếu (đề xuất, chờ duyệt)
 

@@ -23,7 +23,7 @@ import { formatVnMobile } from "@/lib/validation/contact";
 import { useCart } from "@/features/cart/context/CartContext";
 import { useAddresses } from "@/features/address/context/AddressContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { useOrders } from "@/features/order/context/OrderContext";
+import { useOrderActions } from "@/features/order/context/OrderContext";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchStoreProductDetail } from "@/lib/api/products";
 import { formatPrice } from "@/lib/currency";
@@ -49,7 +49,7 @@ export default function CheckoutPage() {
   const [addressError, setAddressError] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const { user } = useAuth();
-  const { createOrder } = useOrders();
+  const { createOrder } = useOrderActions();
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [processing, setProcessing] = useState(false);

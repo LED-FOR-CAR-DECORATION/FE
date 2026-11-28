@@ -27,7 +27,9 @@ import {
 } from "lucide-react";
 import EditOrderDeliveryAddressModal from "@/components/ui/EditOrderDeliveryAddressModal";
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { useOrders } from "@/features/order/context/OrderContext";
+import { useOrder } from "@/features/order/context/OrderContext";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query/keys";
 import { getOrderKind } from "@/features/order/fulfillment";
 import type { OrderKind } from "@/features/order/types";
 import {
@@ -41,7 +43,6 @@ import {
   apiLinkOrderFulfillmentDevice,
   apiUnlinkOrderFulfillmentDevice,
   fetchStaffOrderDetail,
-  type BackendStaffOrderDetail,
   type LinkOrderFulfillmentDeviceResponse,
   type UpdateStaffDeliveryAddressRequest,
 } from "@/lib/api/orders";
@@ -208,6 +209,11 @@ function formatShortTime(isoDate?: string, addMinutes = 0) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const REFERENCE_STALE_MS = 5 * 60_000;
+const INSTANCES_STALE_MS = 30_000;
+const LED_MODELS_KEY = ["led", "managedModels"] as const;
+const ledInstancesKey = (modelId: number, status: string) => ["led", "instances", modelId, status] as const;
+
 export default function OrderDetailPage({
   params,
 }: {
@@ -215,15 +221,17 @@ export default function OrderDetailPage({
 }) {
   const { orderId } = use(params);
   const { isLoading: isAuthLoading } = useAuth();
+  const queryClient = useQueryClient();
   const {
-    orders,
+    order,
+    staffDetail,
     isLoading: isOrdersLoading,
     error: ordersError,
-    refreshOrders,
+    refreshOrder: refreshOrders,
     updateOrderStatus,
     updateOrderDeliveryAddress,
     dispatchOrder,
-  } = useOrders();
+  } = useOrder(orderId);
 
   const [isPrepareModalOpen, setIsPrepareModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -242,7 +250,6 @@ export default function OrderDetailPage({
   } | null>(null);
 
   // Fulfillment LED device scanning/linking state
-  const [staffDetail, setStaffDetail] = useState<BackendStaffOrderDetail | null>(null);
   const [warehouseInstances, setWarehouseInstances] = useState<LedInstanceItem[]>([]);
   const [inStockByModelId, setInStockByModelId] = useState<Record<number, LedInstanceItem[]>>({});
   const [itemModelIdsMap, setItemModelIdsMap] = useState<Record<number, number[]>>({});
@@ -255,23 +262,15 @@ export default function OrderDetailPage({
   const [lastLinkResult, setLastLinkResult] =
     useState<LinkOrderFulfillmentDeviceResponse | null>(null);
 
+  // Các danh sách tham chiếu đi qua cache: mở lại đơn khác / gán thiết bị không phải tải lại toàn bộ.
   const loadFulfillmentData = useCallback(async () => {
-    const numericOrderId = Number(orderId);
-    if (!Number.isFinite(numericOrderId) || numericOrderId <= 0) return;
+    if (!staffDetail) return;
 
     setLoadingFulfillment(true);
     try {
-      const [detailRes, modelsRes] = await Promise.allSettled([
-        fetchStaffOrderDetail(numericOrderId),
-        fetchManagedLedModels(),
-      ]);
-
-      const detail = detailRes.status === "fulfilled" ? detailRes.value : null;
-      if (detail) {
-        setStaffDetail(detail);
-      }
-
-      const managedModels = modelsRes.status === "fulfilled" ? modelsRes.value : [];
+      const managedModels = await queryClient
+        .fetchQuery({ queryKey: LED_MODELS_KEY, queryFn: () => fetchManagedLedModels(), staleTime: REFERENCE_STALE_MS })
+        .catch(() => []);
       const modelIdByProductId = new Map<number, number>();
       const modelIdByName = new Map<string, number>();
       for (const m of managedModels) {
@@ -284,7 +283,7 @@ export default function OrderDetailPage({
       }
 
       const nextItemModelIds: Record<number, number[]> = {};
-      const physicalDetailItems = (detail?.items ?? []).filter(
+      const physicalDetailItems = (staffDetail.items ?? []).filter(
         (item) => item.productType !== "CHARACTER" && item.productType !== "SUBSCRIPTION",
       );
 
@@ -292,7 +291,13 @@ export default function OrderDetailPage({
         physicalDetailItems.map(async (item) => {
           const typeUpper = (item.productType ?? "LED").toUpperCase();
           if (typeUpper === "BUNDLE") {
-            const productDetail = await fetchStoreProductDetail(item.productId).catch(() => null);
+            const productDetail = await queryClient
+              .fetchQuery({
+                queryKey: queryKeys.store.productDetail(item.productId),
+                queryFn: () => fetchStoreProductDetail(item.productId),
+                staleTime: REFERENCE_STALE_MS,
+              })
+              .catch(() => null);
             const bundleModelIds = Array.from(
               new Set(
                 (productDetail?.bundleDetails?.items ?? [])
@@ -317,30 +322,28 @@ export default function OrderDetailPage({
         new Set(Object.values(nextItemModelIds).flat()),
       );
 
+      const fetchModelInstances = (modelId: number, status?: LedInstanceFilterRequest.status) =>
+        queryClient
+          .fetchQuery({
+            queryKey: ledInstancesKey(modelId, status ?? "ALL"),
+            queryFn: () =>
+              fetchAllPages(async (page) => {
+                const res = await fetchLedInstances({ page, size: 100, modelId, status });
+                return { items: res.items, totalPages: res.meta.totalPages };
+              }),
+            staleTime: INSTANCES_STALE_MS,
+          })
+          .catch(() => [] as LedInstanceItem[]);
+
       if (uniqueModelIds.length > 0) {
         const [inStockEntries, allModelEntries] = await Promise.all([
           Promise.all(
             uniqueModelIds.map(async (modelId) => {
-              const items = await fetchAllPages(async (page) => {
-                const res = await fetchLedInstances({
-                  page,
-                  size: 100,
-                  modelId,
-                  status: LedInstanceFilterRequest.status.IN_STOCK,
-                });
-                return { items: res.items, totalPages: res.meta.totalPages };
-              }).catch(() => [] as LedInstanceItem[]);
+              const items = await fetchModelInstances(modelId, LedInstanceFilterRequest.status.IN_STOCK);
               return [modelId, items] as const;
             }),
           ),
-          Promise.all(
-            uniqueModelIds.map((modelId) =>
-              fetchAllPages(async (page) => {
-                const res = await fetchLedInstances({ page, size: 100, modelId });
-                return { items: res.items, totalPages: res.meta.totalPages };
-              }).catch(() => [] as LedInstanceItem[]),
-            ),
-          ),
+          Promise.all(uniqueModelIds.map((modelId) => fetchModelInstances(modelId))),
         ]);
 
         const nextInStockByModel: Record<number, LedInstanceItem[]> = {};
@@ -366,13 +369,18 @@ export default function OrderDetailPage({
     } finally {
       setLoadingFulfillment(false);
     }
-  }, [orderId]);
+  }, [queryClient, staffDetail]);
 
   useEffect(() => {
     void loadFulfillmentData();
   }, [loadFulfillmentData]);
 
-  const order = orders.find((entry) => String(entry.id) === String(orderId));
+  /** Sau khi gán/gỡ thiết bị: chỉ làm mới đơn này + danh sách thiết bị, không tải lại toàn bộ đơn hàng. */
+  const refreshAfterDeviceChange = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["led", "instances"] });
+    await refreshOrders();
+    await loadFulfillmentData();
+  }, [queryClient, refreshOrders, loadFulfillmentData]);
 
   if (!order && (isAuthLoading || isOrdersLoading)) {
     return (
@@ -573,7 +581,7 @@ export default function OrderDetailPage({
       setFulfillmentSuccess(
         `Đã gán thiết bị ${res.serialNumber} (${res.modelName}) vào mục #${res.orderItemId}. Tiến độ đơn: ${res.progress.orderFulfilledCount}/${res.progress.orderRequiredCount}.`,
       );
-      await Promise.allSettled([loadFulfillmentData(), refreshOrders()]);
+      await refreshAfterDeviceChange().catch(() => undefined);
     } catch (err) {
       setFulfillmentError(
         err instanceof Error ? err.message : "Gán thiết bị LED thất bại.",
@@ -594,7 +602,7 @@ export default function OrderDetailPage({
       setFulfillmentSuccess(
         `Đã gỡ thiết bị ${instance.serialNumber} khỏi đơn hàng (trả về trạng thái Trong kho).`,
       );
-      await Promise.allSettled([loadFulfillmentData(), refreshOrders()]);
+      await refreshAfterDeviceChange().catch(() => undefined);
     } catch (err) {
       setFulfillmentError(
         err instanceof Error ? err.message : "Gỡ thiết bị LED thất bại.",

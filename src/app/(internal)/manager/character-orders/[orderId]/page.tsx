@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use } from "react";
 import { ArrowLeft, CheckCircle, Image as ImageIcon, Loader2, Package, WalletCards } from "lucide-react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { useOrders } from "@/features/order/context/OrderContext";
+import { useOrder } from "@/features/order/context/OrderContext";
 import { getCharacterOrderComposition, getCharacterRevenue, getCharacterSaleItems } from "@/features/order/character-orders";
 import { formatPrice } from "@/lib/currency";
 
@@ -34,8 +34,7 @@ function formatCompositionVi(comp: string) {
 export default function CharacterOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
   const { isLoading: isAuthLoading } = useAuth();
-  const { orders, isLoading: isOrdersLoading } = useOrders();
-  const order = orders.find((entry) => String(entry.id) === String(orderId));
+  const { order, isLoading: isOrdersLoading } = useOrder(orderId);
 
   if (!order && (isAuthLoading || isOrdersLoading)) {
     return (

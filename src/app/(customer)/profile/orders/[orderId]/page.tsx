@@ -5,7 +5,7 @@ import Header from "@/components/layout/Header";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useGallery } from "@/features/character/context/GalleryContext";
 import SePayOrderPaymentCard from "@/features/order/components/SePayOrderPaymentCard";
-import { useOrders } from "@/features/order/context/OrderContext";
+import { useOrder } from "@/features/order/context/OrderContext";
 import { getOrderFulfillment, getOrderKind, isCharacterOnlyOrder, type OrderFulfillment } from "@/features/order/fulfillment";
 import type { OrderKind, OrderStatus, PaymentStatus } from "@/features/order/types";
 import { formatPrice } from "@/lib/currency";
@@ -317,7 +317,7 @@ function getProductBadge(productType: string) {
 export default function CustomerOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
   const { isLoading: isAuthLoading } = useAuth();
-  const { orders, isLoading: isOrdersLoading, refreshOrders, confirmOrderDelivery, cancelCustomerOrder } = useOrders();
+  const { order, isLoading: isOrdersLoading, refreshOrder: refreshOrders, confirmOrderDelivery, cancelCustomerOrder } = useOrder(orderId);
   const { entitlements, activeSubscriptions } = useGallery();
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState("");
@@ -328,8 +328,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
   const [cancelSuccessMessage, setCancelSuccessMessage] = useState("");
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-
-  const order = orders.find((entry) => String(entry.id) === String(orderId));
 
   if (!order && (isAuthLoading || isOrdersLoading)) {
     return (

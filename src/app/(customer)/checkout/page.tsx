@@ -1,5 +1,7 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { fetchStoreProductDetailCached } from "@/lib/query/store";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,11 +27,11 @@ import { useAddresses } from "@/features/address/context/AddressContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useOrderActions } from "@/features/order/context/OrderContext";
 import { getApiErrorMessage } from "@/lib/api/auth";
-import { fetchStoreProductDetail } from "@/lib/api/products";
 import { formatPrice } from "@/lib/currency";
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     selectedItems: items,
     selectedSubtotal: subtotal,
@@ -83,7 +85,7 @@ export default function CheckoutPage() {
     setCheckingBundles(true);
     Promise.all(
       targets.map(async (bundle) => {
-        const detail = await fetchStoreProductDetail(bundle.productId ?? bundle.id).catch(() => null);
+        const detail = await fetchStoreProductDetailCached(queryClient, bundle.productId ?? bundle.id).catch(() => null);
         const hasLed = detail
           ? Boolean(
               detail.components?.some((c) => c.productType === "LED_MODEL") ||

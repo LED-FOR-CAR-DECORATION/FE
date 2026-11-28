@@ -1,5 +1,7 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { fetchStoreProductDetailCached, STORE_STALE_MS } from "@/lib/query/store";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -110,11 +112,21 @@ export default function SubscriptionsStorePage() {
   const { rows, pageSize, isDesktop, ready } = useSubscriptionGridLayout();
   const [page, setPage] = usePageParam();
   const gridRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-    fetchPublicSubscriptionPlans()
+    // Danh sách gói + chi tiết từng gói (BE chưa trả quyền lợi trong danh sách) đều qua cache 5 phút.
+    queryClient
+      .fetchQuery({
+        queryKey: ["store", "subscription-plans"],
+        queryFn: () =>
+          fetchPublicSubscriptionPlans({
+            loadDetail: (productId) => fetchStoreProductDetailCached(queryClient, productId),
+          }),
+        staleTime: STORE_STALE_MS,
+      })
       .then((list) => {
         if (!cancelled) setPlans(list);
       })
@@ -127,7 +139,7 @@ export default function SubscriptionsStorePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [queryClient]);
 
   const totalPages = Math.max(1, Math.ceil(plans.length / pageSize));
   const currentPage = Math.min(page, totalPages);

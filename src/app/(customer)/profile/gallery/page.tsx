@@ -93,9 +93,6 @@ export default function GalleryPage() {
   const [previewItem, setPreviewItem] =
     useState<CustomerGalleryItem | null>(null);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
 
   const { rows, pageSize, isDesktopSplit, ready } = useGalleryGridLayout();
   const [page, setPage] = usePageParam();

@@ -8,7 +8,7 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 - [x] A. Nền tảng TanStack Query + refresh token đa tab (`/users/me` đã chỉ 1 lượt/lần tải, không cần sửa)
 - [x] B. Đơn hàng (OrderContext → query, chi tiết theo id, fulfillment)
 - [x] C. Websocket hub + chat/inbox
-- [ ] D. Khách: gallery / store / subscription
+- [x] D. Khách: gallery / store / subscription
 - [ ] E. Designer
 - [ ] F. Manager / Admin / Staff khác + monitoring double fetch
 - [ ] G. Đo lại toàn bộ, build/lint, mở PR
@@ -73,6 +73,21 @@ Nguyên nhân chính: `OrderProvider` trong layout staff/manager tải mọi đ�
 | 3 lỗi STOMP liên tiếp | dừng realtime tới khi rời trang | tự thử lại sau 60s, khi quay lại tab, khi có mạng hoặc khi mở phòng khác |
 | Đăng xuất / đổi tài khoản | socket giữ token cũ | đóng socket, xoá trạng thái từ chối; đăng nhập lại thì kết nối với token mới |
 | Topic realtime của hộp thư | 50 | 20 (giảm kiểm quyền ở BE và phạm vi ảnh hưởng khi một topic bị từ chối) |
+
+## Sau mục D (khách: store / gallery / gói hội viên)
+
+Đo khi chưa đăng nhập (chưa có tài khoản khách để đo gallery).
+
+| Tình huống | Trước | Sau |
+|---|---|---|
+| Trang chủ | `store/products?size=40` | 1 request catalogue (dùng chung) |
+| `/` → `/products` | thêm catalogue (mọi trang) + tags | **chỉ tags** (catalogue dùng lại) |
+| Chi tiết sản phẩm | chi tiết + 50 sản phẩm để lấy 4 "liên quan" | **1** (liên quan lọc từ catalogue đã cache) |
+| `/subscriptions` lần đầu | 1 + N chi tiết gói | 1 + N (4) — chờ API BE |
+| Quay lại `/products`, `/subscriptions` trong 5 phút | tải lại toàn bộ | **0** |
+| Checkout: kiểm tra bundle có LED | chi tiết từng bundle mỗi lần | dùng cache chi tiết sản phẩm |
+| Gallery: quay lại cửa sổ/tab | **2 lần** tải gallery (focus + visibilitychange), mỗi lần gọi chi tiết từng commission đã hoàn thành | chỉ khi dữ liệu cũ hơn 60s, 1 lần; chi tiết commission COMPLETED cache cả phiên |
+| Gallery: vào `/profile/gallery` | gọi `refresh()` mỗi lần mount | dùng cache nếu còn mới |
 
 ## Bảng API BE còn thiếu (đề xuất, chờ duyệt)
 

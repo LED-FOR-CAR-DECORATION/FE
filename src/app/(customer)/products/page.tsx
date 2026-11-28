@@ -1,5 +1,7 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { fetchStoreCatalogCached, fetchStoreTagsCached } from "@/lib/query/store";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -27,8 +29,6 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getRoleHomePath } from "@/features/auth/services/auth.service";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { isRequestCancelled } from "@/features/commission/errors";
-import { fetchAllPages } from "@/lib/api/paging";
-import { fetchStoreProducts, fetchStoreTags } from "@/lib/api/products";
 import {
   ProductCard,
   StoreCartToast,
@@ -105,6 +105,7 @@ function parseTypeParam(raw: string | null): ProductType | null {
 
 function StorefrontContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const activeSearchQuery = searchParams.get("search")?.trim() ?? "";
   const urlType = parseTypeParam(searchParams.get("type"));
@@ -153,9 +154,11 @@ function StorefrontContent() {
     let cancelled = false;
     setLoadingProducts(true);
     setLoadError(null);
+    // Nút "Tải lại" (reloadTick > 0) bỏ qua cache; mở lại trang trong 5 phút dùng cache.
+    const force = reloadTick > 0;
     Promise.all([
-      fetchAllPages((pageIdx) => fetchStoreProducts({ page: pageIdx, size: 100 })),
-      fetchStoreTags(),
+      fetchStoreCatalogCached(queryClient, { force }),
+      fetchStoreTagsCached(queryClient, { force }),
     ])
       .then(([allItems, tagsRes]) => {
         if (!cancelled) {
@@ -175,7 +178,7 @@ function StorefrontContent() {
     return () => {
       cancelled = true;
     };
-  }, [isInternalUser, isLoading, reloadTick]);
+  }, [isInternalUser, isLoading, reloadTick, queryClient]);
 
   useEffect(() => {
     if (!tagPopoverOpen) return;

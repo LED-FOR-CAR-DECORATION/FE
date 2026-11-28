@@ -133,8 +133,12 @@ export async function fetchCustomerOwnedCharacters(): Promise<
   }));
 }
 
+type CommissionDetailLoader = (commissionId: number) => Promise<Awaited<ReturnType<typeof getCustomerCommission>>>;
+
 /** Accepted artwork remains persisted by Commission; use its authorized, fresh media URLs. */
-async function fetchAcceptedCommissionArtwork(): Promise<CustomerAcceptedCommissionItem[]> {
+async function fetchAcceptedCommissionArtwork(
+  loadDetail: CommissionDetailLoader = getCustomerCommission,
+): Promise<CustomerAcceptedCommissionItem[]> {
   const commissions: CustomerCommissionSummaryItem[] = [];
   const size = 100;
   for (let page = 0; ; page++) {
@@ -149,7 +153,7 @@ async function fetchAcceptedCommissionArtwork(): Promise<CustomerAcceptedCommiss
   const artwork: CustomerAcceptedCommissionItem[] = [];
   // Bound parallel detail requests for accounts with a large commission history.
   for (let offset = 0; offset < commissions.length; offset += 6) {
-    const details = await Promise.all(commissions.slice(offset, offset + 6).map((item) => getCustomerCommission(item.commissionId!)));
+    const details = await Promise.all(commissions.slice(offset, offset + 6).map((item) => loadDetail(item.commissionId!)));
     for (const { data } of details) {
       if (data.status !== "COMPLETED") continue;
       const accepted = data.deliveredPreviews.find((preview) =>
@@ -169,8 +173,17 @@ async function fetchAcceptedCommissionArtwork(): Promise<CustomerAcceptedCommiss
   return artwork;
 }
 
-export async function fetchCustomerGallery(): Promise<CustomerGalleryItem[]> {
-  const [purchases, commissions] = await Promise.all([fetchCustomerOwnedCharacters(), fetchAcceptedCommissionArtwork()]);
+/**
+ * `loadCommissionDetail` cho phép cache chi tiết commission (đã COMPLETED thì ảnh được duyệt không đổi),
+ * để mỗi lần làm mới gallery không phải gọi lại chi tiết từng commission. BE chưa có API gộp (docs: API #7).
+ */
+export async function fetchCustomerGallery(
+  options: { loadCommissionDetail?: CommissionDetailLoader } = {},
+): Promise<CustomerGalleryItem[]> {
+  const [purchases, commissions] = await Promise.all([
+    fetchCustomerOwnedCharacters(),
+    fetchAcceptedCommissionArtwork(options.loadCommissionDetail),
+  ]);
   return [...purchases, ...commissions].sort((a, b) =>
     (Date.parse(b.purchasedAt) || 0) - (Date.parse(a.purchasedAt) || 0),
   );

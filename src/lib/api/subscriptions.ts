@@ -112,7 +112,10 @@ export async function apiUpdateSubscription(
 }
 
 /** Fetch all PUBLISHED subscription plans with full details for the Customer storefront */
-export async function fetchPublicSubscriptionPlans(): Promise<CatalogProduct[]> {
+export async function fetchPublicSubscriptionPlans(
+  options: { loadDetail?: (productId: string | number) => Promise<CatalogProduct | null> } = {},
+): Promise<CatalogProduct[]> {
+  const loadDetail = options.loadDetail ?? fetchStoreProductDetail;
   const listRes = await fetchStoreProducts({
     productType: ProductFilterRequest.productType.SUBSCRIPTION,
     page: 0,
@@ -122,7 +125,7 @@ export async function fetchPublicSubscriptionPlans(): Promise<CatalogProduct[]> 
   const hydrated = await Promise.all(
     listRes.items.map(async (item) => {
       try {
-        const detail = await fetchStoreProductDetail(item.id);
+        const detail = await loadDetail(item.id);
         return detail ?? item;
       } catch {
         return item;

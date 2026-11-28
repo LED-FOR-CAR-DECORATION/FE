@@ -6,8 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   ArrowDownUp,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   Eye,
   Grid,
@@ -20,8 +18,10 @@ import {
 import { CustomerCommissionsService } from "@/api_client/services/CustomerCommissionsService";
 import { CustomerCommissionFilterRequest } from "@/api_client/models/CustomerCommissionFilterRequest";
 import type { CustomerCommissionSummaryItem } from "@/api_client/models/CustomerCommissionSummaryItem";
+import Pagination from "@/components/ui/Pagination";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { canReadHistory } from "@/features/commission-chat/services/commission-messages.api";
+import { isRequestCancelled } from "@/features/commission/errors";
 import { formatPrice } from "@/lib/currency";
 import CommissionDetailDialog from "./CommissionDetailDialog";
 import {
@@ -33,8 +33,6 @@ import {
 } from "../config/statusMeta";
 
 type TabKey = "ALL" | "PENDING_REVIEW" | "PAYMENT" | "DESIGNING" | "COMPLETED" | "CANCELLED";
-
-const PAGE_SIZE = 10;
 
 const COMMISSION_TABS: Array<{ key: TabKey; label: string }> = [
   { key: "ALL", label: "Tất cả" },
@@ -79,20 +77,69 @@ function getPaginationMetaNumbers(rawMeta: unknown): {
   };
 }
 
-function buildPageWindow(currentPage: number, totalPages: number): Array<number | "ellipsis"> {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, i) => i);
-  }
-  const pages = new Set<number>([0, totalPages - 1, currentPage, currentPage - 1, currentPage + 1]);
-  const sorted = [...pages].filter((p) => p >= 0 && p < totalPages).sort((a, b) => a - b);
-  const result: Array<number | "ellipsis"> = [];
-  for (let i = 0; i < sorted.length; i += 1) {
-    if (i > 0 && sorted[i] - sorted[i - 1] > 1) {
-      result.push("ellipsis");
-    }
-    result.push(sorted[i]);
-  }
-  return result;
+function useCommissionGridLayout(): {
+  columns: 1 | 2;
+  rows: number;
+  pageSize: number;
+  isDesktop: boolean;
+  ready: boolean;
+} {
+  const [layout, setLayout] = useState<{
+    columns: 1 | 2;
+    rows: number;
+    isDesktop: boolean;
+    ready: boolean;
+  }>({
+    columns: 2,
+    rows: 2,
+    isDesktop: true,
+    ready: false,
+  });
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const compute = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const isDesktop = width >= 1024;
+      const columns: 1 | 2 = width >= 768 ? 2 : 1;
+      // Header (106px) + main py (24px) + heading (48px) + tabs bar (54px) + pager (52px) + gaps (30px) = ~314px
+      const chromeHeight = 314;
+      const estimatedRowHeight = 176;
+      const rowGap = 12;
+      const rows = isDesktop
+        ? Math.max(
+            1,
+            Math.min(
+              4,
+              Math.floor((Math.max(0, height - chromeHeight) + rowGap) / (estimatedRowHeight + rowGap)),
+            ),
+          )
+        : columns === 2
+          ? 2
+          : 4;
+      setLayout({ columns, rows, isDesktop, ready: true });
+    };
+
+    compute();
+    const onResize = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(compute, 120);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  return {
+    columns: layout.columns,
+    rows: layout.rows,
+    pageSize: layout.columns * layout.rows,
+    isDesktop: layout.isDesktop,
+    ready: layout.ready,
+  };
 }
 
 export default function CommissionRequestList() {
@@ -100,38 +147,45 @@ export default function CommissionRequestList() {
   const userId = user?.role === "CUSTOMER" ? user.userId : undefined;
 
   return (
-    <section aria-labelledby="commission-list-heading" className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-black pb-4">
-        <div className="flex items-center gap-3">
-          <Sparkles size={28} className="shrink-0 text-primary-ink" />
+    <section
+      aria-labelledby="commission-list-heading"
+      className="flex flex-col gap-2.5 lg:h-full lg:min-h-0"
+    >
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-2.5">
+        <div className="flex items-center gap-2.5">
+          <Sparkles size={24} className="shrink-0 text-primary-ink" />
           <div>
-            <h1 id="commission-list-heading" className="text-3xl font-black uppercase tracking-tight">
+            <h1 id="commission-list-heading" className="text-xl font-black uppercase tracking-tight sm:text-2xl">
               Yêu cầu thiết kế riêng
             </h1>
-            <p className="mt-1 text-xs font-semibold text-text-muted">
+            <p className="text-[11px] font-semibold text-text-muted">
               Theo dõi báo giá, thanh toán và trao đổi trực tiếp với họa sĩ thiết kế Pixel Art.
             </p>
           </div>
         </div>
         <Link
           href="/commission/new"
-          className="btn-primary inline-flex min-h-11 items-center gap-2 text-xs font-black uppercase"
+          className="btn-primary inline-flex h-9 items-center gap-1.5 px-3.5! py-0! text-xs font-black uppercase"
         >
-          <Plus size={16} />
+          <Plus size={15} />
           Tạo yêu cầu mới
         </Link>
       </div>
 
       {isLoading ? (
-        <div className="space-y-4" aria-label="Đang tải danh sách yêu cầu">
-          {Array.from({ length: 3 }).map((_, idx) => (
-            <div key={idx} className="neo-box-no-hover h-36 animate-pulse bg-gray-100 p-5" />
+        <div
+          aria-busy="true"
+          className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-2"
+          aria-label="Đang tải danh sách yêu cầu"
+        >
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="neo-box-no-hover h-44 animate-pulse bg-gray-100 p-3.5" />
           ))}
         </div>
       ) : userId ? (
         <ServerCommissionRequests key={userId} />
       ) : (
-        <div className="neo-box-no-hover bg-white p-8 text-center">
+        <div className="neo-box-no-hover flex flex-1 flex-col items-center justify-center bg-white p-8 text-center">
           <p className="text-sm font-bold text-text-main">
             Đăng nhập bằng tài khoản khách hàng để xem các yêu cầu thiết kế riêng của bạn.
           </p>
@@ -154,6 +208,7 @@ interface FetchState {
 }
 
 function ServerCommissionRequests() {
+  const { rows, pageSize, isDesktop, ready } = useCommissionGridLayout();
   const [activeTab, setActiveTab] = useState<TabKey>("ALL");
   const [sortDirection, setSortDirection] = useState<"DESC" | "ASC">("DESC");
   const [page, setPage] = useState(0);
@@ -166,9 +221,10 @@ function ServerCommissionRequests() {
   const isGroupedTab = activeTab === "PAYMENT" || activeTab === "DESIGNING" || activeTab === "CANCELLED";
   const requestKey = isGroupedTab
     ? `${activeTab}:${sortDirection}:${retryCount}`
-    : `${activeTab}:${sortDirection}:${page}:${retryCount}`;
+    : `${activeTab}:${sortDirection}:${page}:${pageSize}:${retryCount}`;
 
   useEffect(() => {
+    if (!ready) return;
     setFailedKey(undefined);
     setErrorTraceId(undefined);
     let active = true;
@@ -184,7 +240,7 @@ function ServerCommissionRequests() {
       ...(singleStatus ? { status: singleStatus } : {}),
       sortDirection,
       page: isGroupedTab ? 0 : page,
-      size: isGroupedTab ? 100 : PAGE_SIZE,
+      size: isGroupedTab ? 100 : pageSize,
     });
 
     request
@@ -197,7 +253,6 @@ function ServerCommissionRequests() {
             key: requestKey,
             items: filtered,
             totalElements: filtered.length,
-            totalPages: Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)),
             isClientSliced: true,
           });
         } else {
@@ -213,7 +268,7 @@ function ServerCommissionRequests() {
         }
       })
       .catch((error: unknown) => {
-        if (!active) return;
+        if (!active || isRequestCancelled(error)) return;
         setFailedKey(requestKey);
         if (error && typeof error === "object" && "body" in error) {
           const body = error.body;
@@ -227,23 +282,37 @@ function ServerCommissionRequests() {
       active = false;
       request.cancel();
     };
-  }, [activeTab, isGroupedTab, page, requestKey, retryCount, sortDirection]);
+  }, [activeTab, isGroupedTab, page, pageSize, ready, requestKey, retryCount, sortDirection]);
 
   const currentData = result?.key === requestKey ? result : undefined;
+  const tabSortPrefix = `${activeTab}:${sortDirection}:`;
+  const activeMetaSource = currentData ?? (result?.key.startsWith(tabSortPrefix) ? result : undefined);
 
   const visibleItems = useMemo(() => {
     if (!currentData) return undefined;
     if (!currentData.isClientSliced) return currentData.items;
-    return currentData.items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  }, [currentData, page]);
+    return currentData.items.slice(page * pageSize, (page + 1) * pageSize);
+  }, [currentData, page, pageSize]);
 
-  const totalElements = currentData?.totalElements;
-  const totalPages = currentData?.totalPages ?? (currentData ? (currentData.hasNext ? page + 2 : Math.max(1, page + 1)) : 1);
-  const canGoNext = currentData
-    ? currentData.isClientSliced
-      ? (page + 1) * PAGE_SIZE < currentData.items.length
-      : currentData.hasNext ?? (currentData.totalPages !== undefined ? page + 1 < currentData.totalPages : currentData.items.length === PAGE_SIZE)
-    : false;
+  const totalElements = activeMetaSource?.totalElements;
+  const derivedTotalPages = useMemo(() => {
+    if (!activeMetaSource) return undefined;
+    if (activeMetaSource.isClientSliced) {
+      return Math.max(1, Math.ceil(activeMetaSource.items.length / pageSize));
+    }
+    if (activeMetaSource.totalPages !== undefined) {
+      return Math.max(1, activeMetaSource.totalPages);
+    }
+    return Math.max(1, activeMetaSource.hasNext ? page + 2 : page + 1);
+  }, [activeMetaSource, page, pageSize]);
+
+  // Clamp out-of-range page when resize increases pageSize and shrinks totalPages
+  useEffect(() => {
+    if (!currentData || derivedTotalPages === undefined) return;
+    if (page >= derivedTotalPages) {
+      setPage(Math.max(0, derivedTotalPages - 1));
+    }
+  }, [currentData, derivedTotalPages, page]);
 
   const handleTabChange = (nextTab: TabKey) => {
     if (nextTab === activeTab) return;
@@ -256,15 +325,15 @@ function ServerCommissionRequests() {
     setPage(0);
   };
 
-  const rangeStart = visibleItems && visibleItems.length > 0 ? page * PAGE_SIZE + 1 : 0;
-  const rangeEnd = visibleItems ? page * PAGE_SIZE + visibleItems.length : 0;
-  const pageWindow = buildPageWindow(page, totalPages);
+  const isEmpty = visibleItems !== undefined && visibleItems.length === 0;
+  const totalPages = derivedTotalPages ?? Math.max(1, page + 1);
+  const currentOneBasedPage = Math.min(page + 1, totalPages);
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-1 flex-col gap-2.5 lg:min-h-0">
       {/* Status Tabs & Sort Bar */}
-      <div className="neo-box-no-hover flex flex-col gap-3 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div role="tablist" aria-label="Lọc theo trạng thái Commission" className="flex flex-wrap gap-2">
+      <div className="neo-box-no-hover flex shrink-0 flex-col gap-2 bg-white p-2 sm:flex-row sm:items-center sm:justify-between">
+        <div role="tablist" aria-label="Lọc theo trạng thái Commission" className="flex flex-wrap gap-1.5">
           {COMMISSION_TABS.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
@@ -274,7 +343,7 @@ function ServerCommissionRequests() {
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => handleTabChange(tab.key)}
-                className={`min-h-11 cursor-pointer border-2 border-black px-3 py-1.5 text-xs uppercase transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                className={`h-9 cursor-pointer border-2 border-black px-2.5 text-[11px] uppercase transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                   isActive
                     ? "bg-primary font-black text-black shadow-[2px_2px_0_0_#000]"
                     : "bg-white font-bold text-black hover:bg-gray-50"
@@ -289,16 +358,16 @@ function ServerCommissionRequests() {
         <button
           type="button"
           onClick={toggleSort}
-          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 border-2 border-black bg-white px-3 py-1.5 text-xs font-bold uppercase text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+          className="inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 border-2 border-black bg-white px-2.5 text-[11px] font-bold uppercase text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
         >
-          <ArrowDownUp size={14} />
+          <ArrowDownUp size={13} />
           {sortDirection === "DESC" ? "Mới nhất" : "Cũ nhất"}
         </button>
       </div>
 
       {/* Main Content */}
       {failedKey === requestKey ? (
-        <div role="alert" className="neo-box-no-hover space-y-3 border-l-8 border-l-red-600 bg-white p-5">
+        <div role="alert" className="neo-box-no-hover flex flex-1 flex-col justify-center space-y-3 border-l-8 border-l-red-600 bg-white p-6">
           <div className="flex items-start gap-2 text-sm font-bold text-red-700">
             <AlertCircle size={18} className="mt-0.5 shrink-0" />
             <p>Không tải được danh sách yêu cầu thiết kế riêng. Vui lòng thử lại.</p>
@@ -306,27 +375,36 @@ function ServerCommissionRequests() {
           {errorTraceId && (
             <p className="break-all text-xs font-semibold text-text-muted">Mã hỗ trợ: {errorTraceId}</p>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setFailedKey(undefined);
-              setResult(undefined);
-              setRetryCount((count) => count + 1);
-            }}
-            className="btn-secondary min-h-11 text-xs font-black uppercase"
-          >
-            Thử lại
-          </button>
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                setFailedKey(undefined);
+                setResult(undefined);
+                setRetryCount((count) => count + 1);
+              }}
+              className="btn-secondary min-h-10 text-xs font-black uppercase"
+            >
+              Thử lại
+            </button>
+          </div>
         </div>
-      ) : !visibleItems ? (
-        <div className="space-y-4" role="status" aria-label="Đang tải yêu cầu Commission">
-          {Array.from({ length: 3 }).map((_, idx) => (
-            <div key={idx} className="neo-box-no-hover h-40 animate-pulse bg-gray-100 p-5" />
+      ) : !ready || !visibleItems ? (
+        <div
+          className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-2"
+          style={isDesktop ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : undefined}
+          role="status"
+          aria-busy="true"
+          aria-label="Đang tải yêu cầu Commission"
+        >
+          <span className="sr-only">Đang tải danh sách yêu cầu thiết kế riêng...</span>
+          {Array.from({ length: ready ? pageSize : 4 }).map((_, idx) => (
+            <div key={idx} aria-hidden="true" className="neo-box-no-hover h-full min-h-[160px] animate-pulse bg-gray-100 p-3" />
           ))}
         </div>
-      ) : visibleItems.length === 0 ? (
-        <div className="neo-box-no-hover bg-white p-12 text-center">
-          <Sparkles size={42} className="mx-auto mb-3 text-primary-ink" />
+      ) : isEmpty ? (
+        <div className="neo-box-no-hover flex flex-1 flex-col items-center justify-center bg-white p-10 text-center">
+          <Sparkles size={40} className="mx-auto mb-3 text-primary-ink" />
           <p className="text-base font-black uppercase text-black">
             {activeTab === "ALL"
               ? "Bạn chưa có yêu cầu thiết kế riêng nào"
@@ -342,14 +420,14 @@ function ServerCommissionRequests() {
               <button
                 type="button"
                 onClick={() => handleTabChange("ALL")}
-                className="btn-secondary min-h-11 text-xs font-black uppercase"
+                className="btn-secondary min-h-10 text-xs font-black uppercase"
               >
                 Xem tất cả yêu cầu
               </button>
             )}
             <Link
               href="/commission/new"
-              className="btn-primary inline-flex min-h-11 items-center gap-1.5 text-xs font-black uppercase"
+              className="btn-primary inline-flex min-h-10 items-center gap-1.5 text-xs font-black uppercase"
             >
               <Plus size={15} />
               Tạo yêu cầu mới
@@ -357,97 +435,107 @@ function ServerCommissionRequests() {
           </div>
         </div>
       ) : (
-        <ul className="space-y-4">
+        <ul
+          className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-2"
+          style={
+            isDesktop && visibleItems.length > 0
+              ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }
+              : undefined
+          }
+        >
           {visibleItems.map((item) => {
             const statusMeta = getStatusMeta(item.status);
             const paymentPending = isPaymentPendingStatus(item.status);
             const chatReadable = canReadHistory(item.status);
 
             return (
-              <li key={item.commissionId} className="neo-box-no-hover bg-white p-5">
-                {/* Header Strip */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="border border-black bg-gray-100 px-2 py-0.5 font-black tabular-nums">
-                      #{item.commissionId}
-                    </span>
-                    <span className="border border-black bg-white px-2 py-0.5 text-[11px] font-black uppercase">
-                      {getTierLabel(item.tierCode)}
-                    </span>
-                    {item.createdAt && (
-                      <span className="font-semibold text-text-muted">
-                        Gửi ngày {formatCommissionDate(item.createdAt)}
+              <li key={item.commissionId} className="h-full min-h-0">
+                <article className="neo-box-no-hover flex h-full min-h-0 flex-col justify-between bg-white p-3">
+                  {/* Header Strip */}
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b-2 border-black pb-1.5">
+                    <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
+                      <span className="shrink-0 border border-black bg-gray-100 px-1.5 py-0.5 font-black tabular-nums">
+                        #{item.commissionId}
                       </span>
+                      <span className="shrink-0 border border-black bg-white px-1.5 py-0.5 text-[10px] font-black uppercase">
+                        {getTierLabel(item.tierCode)}
+                      </span>
+                      {item.createdAt && (
+                        <span className="truncate font-semibold text-text-muted">
+                          {formatCommissionDate(item.createdAt)}
+                        </span>
+                      )}
+                    </div>
+
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-1 border-2 px-2 py-0.5 text-[10px] font-black uppercase ${
+                        STATUS_TONE_CLASS[statusMeta.tone]
+                      }`}
+                    >
+                      {statusMeta.label}
+                    </span>
+                  </div>
+
+                  {/* Body */}
+                  <div className="flex min-h-0 flex-1 items-center justify-between gap-3 py-2">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <h2
+                        title={item.title}
+                        className="line-clamp-1 text-sm font-black uppercase tracking-tight text-text-main"
+                      >
+                        {item.title}
+                      </h2>
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] font-semibold text-text-muted">
+                        {item.targetMatrixDimensions && (
+                          <span className="inline-flex items-center gap-1">
+                            <Grid size={12} className="text-primary-ink" />
+                            LED {item.targetMatrixDimensions}
+                          </span>
+                        )}
+                        {item.maxRevisions !== undefined && (
+                          <span className="inline-flex items-center gap-1">
+                            <RefreshCw size={12} className="text-primary-ink" />
+                            {item.revisionsUsed ?? 0}/{item.maxRevisions} lượt sửa
+                          </span>
+                        )}
+                        {paymentPending && item.quoteExpiresAt && (
+                          <span className="inline-flex items-center gap-1 font-bold text-amber-800">
+                            <Clock size={12} />
+                            Hạn TT: {formatCommissionDate(item.quoteExpiresAt, true)}
+                          </span>
+                        )}
+                      </div>
+
+                      <p title={statusMeta.helper} className="line-clamp-1 text-[11px] font-medium text-text-muted">
+                        {statusMeta.helper}
+                      </p>
+                    </div>
+
+                    {item.totalPrice !== undefined && (
+                      <div className="shrink-0 text-right">
+                        <p className="text-[10px] font-bold uppercase text-text-muted">Tổng chi phí</p>
+                        <p className="text-base font-black tabular-nums text-primary-ink">
+                          {formatPrice(item.totalPrice)}
+                        </p>
+                        {(item.extraRevisionFee ?? 0) > 0 && (
+                          <p className="text-[10px] font-semibold text-text-muted">
+                            (Phí sửa {formatPrice(item.extraRevisionFee!)})
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  <span
-                    className={`inline-flex items-center gap-1.5 border-2 px-2.5 py-0.5 text-xs font-black uppercase ${
-                      STATUS_TONE_CLASS[statusMeta.tone]
-                    }`}
-                  >
-                    {statusMeta.label}
-                  </span>
-                </div>
-
-                {/* Body */}
-                <div className="flex flex-col justify-between gap-4 py-4 sm:flex-row sm:items-center">
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <h2 className="break-words text-lg font-black uppercase tracking-tight text-text-main">
-                      {item.title}
-                    </h2>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs font-semibold text-text-muted">
-                      {item.targetMatrixDimensions && (
-                        <span className="inline-flex items-center gap-1">
-                          <Grid size={14} className="text-primary-ink" />
-                          LED {item.targetMatrixDimensions}
-                        </span>
-                      )}
-                      {item.maxRevisions !== undefined && (
-                        <span className="inline-flex items-center gap-1">
-                          <RefreshCw size={14} className="text-primary-ink" />
-                          {item.revisionsUsed ?? 0}/{item.maxRevisions} lượt sửa miễn phí
-                        </span>
-                      )}
-                      {paymentPending && item.quoteExpiresAt && (
-                        <span className="inline-flex items-center gap-1 font-bold text-amber-800">
-                          <Clock size={14} />
-                          Hạn TT: {formatCommissionDate(item.quoteExpiresAt, true)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {item.totalPrice !== undefined && (
-                    <div className="shrink-0 sm:text-right">
-                      <p className="text-xs font-bold uppercase text-text-muted">Tổng chi phí</p>
-                      <p className="text-xl font-black tabular-nums text-primary-ink">
-                        {formatPrice(item.totalPrice)}
-                      </p>
-                      {(item.extraRevisionFee ?? 0) > 0 && (
-                        <p className="text-xs font-semibold text-text-muted">
-                          (Gồm phí sửa {formatPrice(item.extraRevisionFee!)})
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Footer */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-dashed border-black pt-3">
-                  <p className="min-w-0 flex-1 text-xs font-medium text-text-muted">
-                    {statusMeta.helper}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-2.5">
+                  {/* Action Footer */}
+                  <div className="flex shrink-0 items-center justify-end gap-2 border-t-2 border-dashed border-black pt-2">
                     {item.commissionId !== undefined && (
                       <button
                         type="button"
                         onClick={() => setSelectedDetailId(item.commissionId!)}
-                        className="btn-secondary inline-flex min-h-11 items-center gap-1.5 text-xs font-black uppercase"
+                        className="btn-secondary inline-flex h-8 items-center gap-1.5 px-3! py-0! text-[11px] font-black uppercase"
                       >
-                        <Eye size={15} />
+                        <Eye size={13} />
                         Xem chi tiết
                       </button>
                     )}
@@ -455,9 +543,9 @@ function ServerCommissionRequests() {
                     {paymentPending && item.commissionId !== undefined && (
                       <Link
                         href={`/commission/${item.commissionId}/payment`}
-                        className="btn-primary inline-flex min-h-11 items-center gap-1.5 text-xs font-black uppercase"
+                        className="btn-primary inline-flex h-8 items-center gap-1.5 px-3! py-0! text-[11px] font-black uppercase"
                       >
-                        <QrCode size={15} />
+                        <QrCode size={13} />
                         Thanh toán ngay
                         <span className="sr-only"> cho {item.title}</span>
                       </Link>
@@ -466,76 +554,35 @@ function ServerCommissionRequests() {
                     {!paymentPending && chatReadable && item.commissionId !== undefined && (
                       <Link
                         href={`/messages?commissionId=${item.commissionId}`}
-                        className="btn-primary inline-flex min-h-11 items-center gap-1.5 text-xs font-black uppercase"
+                        className="btn-primary inline-flex h-8 items-center gap-1.5 px-3! py-0! text-[11px] font-black uppercase"
                       >
-                        <MessageSquare size={15} />
+                        <MessageSquare size={13} />
                         {item.status === "COMPLETED" ? "Xem trao đổi" : "Mở trao đổi"}
                         <span className="sr-only"> cho {item.title}</span>
                       </Link>
                     )}
                   </div>
-                </div>
+                </article>
               </li>
             );
           })}
         </ul>
       )}
 
-      {/* Pagination Bar */}
-      {visibleItems && visibleItems.length > 0 && (totalPages > 1 || page > 0 || canGoNext) && (
-        <nav
-          aria-label="Phân trang yêu cầu Commission"
-          className="neo-box-no-hover flex flex-wrap items-center justify-between gap-3 bg-white p-4"
-        >
-          <p className="text-xs font-bold uppercase text-text-muted">
-            {totalElements !== undefined
-              ? `Hiển thị ${rangeStart} - ${rangeEnd} / ${totalElements} yêu cầu`
-              : `Trang ${page + 1}`}
-          </p>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              disabled={page === 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="grid min-h-11 min-w-11 cursor-pointer place-items-center border-2 border-black bg-white text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
-              aria-label="Trang trước"
-            >
-              <ChevronLeft size={16} />
-            </button>
-
-            {pageWindow.map((entry, idx) =>
-              entry === "ellipsis" ? (
-                <span key={`ellipsis-${idx}`} className="px-2 text-xs font-black text-text-muted">
-                  …
-                </span>
-              ) : (
-                <button
-                  key={entry}
-                  type="button"
-                  onClick={() => setPage(entry)}
-                  aria-current={page === entry ? "page" : undefined}
-                  aria-label={`Trang ${entry + 1}`}
-                  className={`min-h-11 min-w-11 cursor-pointer border-2 border-black px-3 text-xs font-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 ${
-                    page === entry ? "bg-primary text-black" : "bg-white text-black hover:bg-gray-50"
-                  }`}
-                >
-                  {entry + 1}
-                </button>
-              ),
-            )}
-
-            <button
-              type="button"
-              disabled={!canGoNext}
-              onClick={() => setPage((p) => p + 1)}
-              className="grid min-h-11 min-w-11 cursor-pointer place-items-center border-2 border-black bg-white text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
-              aria-label="Trang sau"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </nav>
+      {/* Bottom-Pinned Pagination Bar */}
+      {!isEmpty && failedKey !== requestKey && (
+        <Pagination
+          page={currentOneBasedPage}
+          totalPages={totalPages}
+          onPageChange={(nextPage) => setPage(nextPage - 1)}
+          totalItems={totalElements}
+          pageSize={pageSize}
+          itemLabel="yêu cầu"
+          ariaLabel="Phân trang yêu cầu Commission"
+          variant="neo"
+          alwaysShow
+          className="mt-auto shrink-0 py-2!"
+        />
       )}
 
       {/* Detail Modal */}

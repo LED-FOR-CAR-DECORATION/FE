@@ -11,7 +11,28 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 - [x] D. Khách: gallery / store / subscription
 - [x] E. Designer
 - [x] F. Manager / Admin / Staff khác + địa chỉ chỉ tải khi cần (monitoring giữ nguyên: poll 15s là đúng)
-- [ ] G. Đo lại toàn bộ, build/lint, mở PR
+- [x] G. Build production OK, tổng kết, mở PR
+
+## Tổng kết (lần tải đầu, dev, 28/11)
+
+| Trang | Trước | Sau | Quay lại trong thời gian cache |
+|---|---|---|---|
+| `/staff` | 45 · 13,3s | 14 | 0 |
+| `/staff/orders` | ≥64 · >13s | 10 | 0 |
+| `/staff/orders/{id}` | ~50 | 6 | — |
+| `/manager` | 42 · 12s | 3 | — |
+| `/staff/pricing` | 9 | 4 | 0 |
+| `/staff/commission/pricing` | 16 | 8 | 0 |
+| `/staff/chat` | 11 (gồm 9 lượt đơn hàng thừa) | 1 + N lịch sử | 0 |
+| Mở hội thoại từ hộp thư | +1 lịch sử | 0 lịch sử | — |
+| Trang chủ → `/products` → chi tiết | 1 + (catalogue + tags) + (chi tiết + 50) | 1 + 1 + 1 | 0 |
+| Gallery khi quay lại cửa sổ | 2 lượt gallery đầy đủ (kèm N+1 commission) | 0 nếu < 60s | — |
+| Designer: publish → studio → store-uploads | mỗi trang tải toàn bộ nhân vật + versions | 3 → 0 → 0 | 0 |
+| `/users/me/addresses` | mọi trang | chỉ hồ sơ/checkout | — |
+
+Kiểm tra: `tsc --noEmit` sạch, `npm run build` thành công. Dự án chưa có cấu hình ESLint nên `npm run lint` không chạy.
+
+Chưa tự bấm (tránh ghi dữ liệu thật lên BE dev): đổi trạng thái đơn, gán thiết bị, giao AhaMove, thanh toán, sửa giá/tiêu chí, đăng tải/xoá phiên bản, thêm/xoá địa chỉ.
 
 ## Baseline
 

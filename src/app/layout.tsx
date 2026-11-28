@@ -3,7 +3,6 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/features/auth/context/AuthContext";
 import { CartProvider } from "@/features/cart/context/CartContext";
-import { AddressProvider } from "@/features/address/context/AddressContext";
 import { GalleryProvider } from "@/features/character/context/GalleryContext";
 import QueryProvider from "@/lib/query/QueryProvider";
 
@@ -28,7 +27,7 @@ export default function RootLayout({
       <body suppressHydrationWarning className="min-h-screen bg-gray-50 flex flex-col text-gray-900">
         <QueryProvider>
           <AuthProvider>
-            <CartProvider><AddressProvider><GalleryProvider>{children}</GalleryProvider></AddressProvider></CartProvider>
+            <CartProvider><GalleryProvider>{children}</GalleryProvider></CartProvider>
           </AuthProvider>
         </QueryProvider>
       </body>

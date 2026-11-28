@@ -10,7 +10,7 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 - [x] C. Websocket hub + chat/inbox
 - [x] D. Khách: gallery / store / subscription
 - [x] E. Designer
-- [ ] F. Manager / Admin / Staff khác + monitoring double fetch
+- [x] F. Manager / Admin / Staff khác + monitoring double fetch + địa chỉ chỉ tải khi cần
 - [ ] G. Đo lại toàn bộ, build/lint, mở PR
 
 ## Baseline
@@ -119,6 +119,19 @@ Nguyên nhân chính: `OrderProvider` trong layout staff/manager tải mọi đ�
 | `/designer/commissions` (danh sách, ≥3 thẻ) | `commissions/assigned` ×3 (3 status) + `characters/my?type=COMMISSION` ×1 (trước: 1/thẻ) |
 | Mở workspace commission | **2** (chi tiết + versions); trước: chi tiết + COMMISSION ×2 + versions; không poll trong 25s (trước 10s/lần) |
 
+## Sau mục F (manager / staff / admin / dùng chung)
+
+| Trang / tình huống | Trước | Sau |
+|---|---|---|
+| `/staff` (tài khoản staff) | 45 (baseline), 18 (sau B) | **14**; quay lại **0** (đếm việc cần làm cache 30s, "Làm mới" bỏ cache) |
+| `/staff/pricing` (Niêm yết & giá) | 9: `admin/store/products` ×5, `bundles` ×2, `subscriptions` ×2 | **4**; quay lại **0** |
+| `/staff/commission/pricing` | 16: `pricing` ×2, `pricing/rules/{id}` ×14 | **8** (1 + 7 rule, chờ API BE #22); quay lại **0** |
+| `/manager/inventory` sau trang giá | `admin/store/products` + `led-models` | chỉ `led-models` (sản phẩm LED dùng lại cache) |
+| `/admin/monitoring` | `system/metrics` ×2 khi mở | ×1; poll 15s chỉ khi tab hiện |
+| `/users/me/addresses` | **mọi trang** (provider ở root layout) | chỉ trang dùng địa chỉ (hồ sơ, checkout), cache 5 phút |
+
+Mọi thao tác ghi sản phẩm/bundle/gói/tag/LED model gọi `markStoreChanged()` → bỏ cache quản lý và cache cửa hàng công khai.
+
 ## Bảng API BE còn thiếu (đề xuất, chờ duyệt)
 
 FE không làm các mục này trong PR. Khi BE có API thì FE sẽ chuyển sang dùng.
@@ -147,4 +160,5 @@ FE không làm các mục này trong PR. Khi BE có API thì FE sẽ chuyển sa
 | 18 | P2 | Filter nhiều status + `sort` cho commission queue; `GET /api/management/commissions/counts?assigned=` | 1 call/status; đếm bằng nhiều call `size:1` | Designer/staff dashboard | 3–N → 1 |
 | 19 | P2 | `status=A,B,C` + `sort` cho `/warranty-claims`; 1 endpoint role-aware | 3 status × mọi trang; thử URL manager rồi fallback staff | Warranty queue | 3×pages → 1 |
 | 20 | P3 | `GET /api/management/admin/firmware/rollback-target?modelId` | Tải 100 release, sort semver client | Firmware deprecate | Nhỏ |
-| 21 | P3 | Kênh STOMP theo user `/user/queue/commissions` | Inbox subscribe tới 50 topic | Inbox | 50 SUBSCRIBE → 1 |
+| 21 | P3 | Kênh STOMP theo user `/user/queue/commissions` | Inbox subscribe tới 20 topic | Inbox | 20 SUBSCRIBE → 1 |
+| 22 | P1 | Trả `options` (và `description`, `dependsOn*`) trong `GET /api/management/commissions/pricing` | Gọi `pricing/rules/{id}` cho từng rule (7) | Cấu hình giá commission | 1 + 7 → 1; monitoring: `rules/{ruleId}` 98 lượt, TB 2,6s |

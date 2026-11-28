@@ -1,3 +1,4 @@
+import { cachedManagerStore, markStoreChanged } from "@/lib/query/manager-store";
 import axios from "axios";
 import {
   ProductFilterRequest,
@@ -155,6 +156,7 @@ export async function apiCreateStoreTag(payload: { name: string; description?: s
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return data.data;
 }
 
@@ -172,6 +174,7 @@ export async function apiUpdateStoreTag(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return data.data;
 }
 
@@ -182,6 +185,7 @@ export async function apiDeleteStoreTag(id: number): Promise<void> {
     withCredentials: OpenAPI.WITH_CREDENTIALS,
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
+  markStoreChanged();
 }
 
 export type BackendProductStatus = "UNPUBLISHED" | "PUBLISHED" | "ARCHIVED" | "DELETED";
@@ -200,7 +204,7 @@ export interface ManagedStoreProductItem {
   updatedAt?: string | null;
 }
 
-export async function fetchManagedStoreProducts(params?: {
+async function fetchManagedStoreProductsUncached(params?: {
   productType?: "LED" | "CHARACTER" | "BUNDLE" | "SUBSCRIPTION";
   status?: BackendProductStatus;
   page?: number;
@@ -229,6 +233,11 @@ export async function fetchManagedStoreProducts(params?: {
   };
 }
 
+/** Có cache ngắn hạn dùng chung (lib/query/manager-store.ts). */
+export function fetchManagedStoreProducts(params?: Parameters<typeof fetchManagedStoreProductsUncached>[0]) {
+  return cachedManagerStore("products", params, () => fetchManagedStoreProductsUncached(params));
+}
+
 export async function apiUpdateProductStatus(
   productId: number,
   status: "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED",
@@ -243,6 +252,7 @@ export async function apiUpdateProductStatus(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
 }
 
 export async function apiCreateStoreProduct(
@@ -258,6 +268,7 @@ export async function apiCreateStoreProduct(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return data.data;
 }
 
@@ -275,6 +286,7 @@ export async function apiUpdateStoreProduct(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return data.data;
 }
 
@@ -289,10 +301,12 @@ export async function apiDeleteStoreProduct(productId: number): Promise<void> {
   } catch (err: any) {
     if (err?.response?.status === 404) {
       // Đã được xóa mềm trên server trước đó
+      markStoreChanged();
       return;
     }
     throw err;
   }
+  markStoreChanged();
 }
 
 export interface AdminCharacterSummary {

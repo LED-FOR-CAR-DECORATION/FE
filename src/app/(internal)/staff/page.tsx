@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -117,20 +118,26 @@ export default function StaffDashboard() {
   const [statsLoading, setStatsLoading] = useState(true);
   const latestCountsReqRef = useRef<symbol | null>(null);
 
-  const loadOperationalCounts = useCallback(async () => {
+  const queryClient = useQueryClient();
+  const loadOperationalCounts = useCallback(async (force = false) => {
     const token = Symbol();
     latestCountsReqRef.current = token;
     setStatsLoading(true);
-    const reqs = [
-      getCommissionQueue({ page: 0, size: 1, status: "PENDING_REVIEW" }),
-      getCommissionQueue({ page: 0, size: 1, status: "PAID" }),
-      getCommissionQueue({ page: 0, size: 1, status: "INTERNAL_REVIEW" }),
-    ];
     try {
-      const [commResults, warrantyPending] = await Promise.all([
-        Promise.all(reqs),
-        getManagementWarrantyClaims({ status: "APPROVED", page: 0, size: 1 }),
-      ]);
+      // Cache 30s: quay lại trang chủ staff không đếm lại; nút "Làm mới" bỏ qua cache.
+      const [commResults, warrantyPending] = await queryClient.fetchQuery({
+        queryKey: ["staff", "home-counts"],
+        staleTime: force ? 0 : 30_000,
+        queryFn: () =>
+          Promise.all([
+            Promise.all([
+              getCommissionQueue({ page: 0, size: 1, status: "PENDING_REVIEW" }),
+              getCommissionQueue({ page: 0, size: 1, status: "PAID" }),
+              getCommissionQueue({ page: 0, size: 1, status: "INTERNAL_REVIEW" }),
+            ]),
+            getManagementWarrantyClaims({ status: "APPROVED", page: 0, size: 1 }),
+          ]),
+      });
       if (latestCountsReqRef.current !== token) return;
       const totalComm =
         (commResults[0]?.meta?.totalElements ?? commResults[0]?.data.length ?? 0) +
@@ -147,7 +154,7 @@ export default function StaffDashboard() {
         setStatsLoading(false);
       }
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     void loadOperationalCounts();
@@ -158,7 +165,7 @@ export default function StaffDashboard() {
 
   const handleRefreshAll = () => {
     void refreshOrders();
-    void loadOperationalCounts();
+    void loadOperationalCounts(true);
   };
 
   const pendingQueueOrders = useMemo(() => {
@@ -466,7 +473,7 @@ export default function StaffDashboard() {
         <StaffCommissionTodoModal
           onClose={() => setActiveTodoModal(null)}
           onMutated={() => {
-            void loadOperationalCounts();
+            void loadOperationalCounts(true);
           }}
         />
       )}
@@ -475,7 +482,7 @@ export default function StaffDashboard() {
         <StaffWarrantyTodoModal
           onClose={() => setActiveTodoModal(null)}
           onMutated={() => {
-            void loadOperationalCounts();
+            void loadOperationalCounts(true);
           }}
         />
       )}

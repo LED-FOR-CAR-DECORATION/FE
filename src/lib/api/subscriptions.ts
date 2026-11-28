@@ -1,3 +1,4 @@
+import { cachedManagerStore, markStoreChanged } from "@/lib/query/manager-store";
 import axios from "axios";
 import { getApiBaseUrl, OpenAPI } from "./client";
 import { getSessionToken } from "../auth/session";
@@ -65,7 +66,7 @@ interface ApiEnvelope<T> {
   meta?: unknown;
 }
 
-export async function fetchManagedSubscriptions(): Promise<ManagedSubscriptionPlan[]> {
+async function fetchManagedSubscriptionsUncached(): Promise<ManagedSubscriptionPlan[]> {
   const token = await getSessionToken();
   const { data: envelope } = await axios.get<ApiEnvelope<ManagedSubscriptionPlan[]>>(
     "/api/management/admin/store/subscriptions",
@@ -76,6 +77,11 @@ export async function fetchManagedSubscriptions(): Promise<ManagedSubscriptionPl
     },
   );
   return Array.isArray(envelope?.data) ? envelope.data : [];
+}
+
+/** Có cache ngắn hạn dùng chung (lib/query/manager-store.ts). */
+export function fetchManagedSubscriptions() {
+  return cachedManagerStore("subscriptions", null, () => fetchManagedSubscriptionsUncached());
 }
 
 export async function apiCreateSubscription(
@@ -91,6 +97,7 @@ export async function apiCreateSubscription(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return envelope.data;
 }
 
@@ -108,6 +115,7 @@ export async function apiUpdateSubscription(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return envelope.data;
 }
 

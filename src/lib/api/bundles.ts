@@ -1,3 +1,4 @@
+import { cachedManagerStore, markStoreChanged } from "@/lib/query/manager-store";
 import axios from "axios";
 import { getApiBaseUrl, OpenAPI } from "./client";
 import { getSessionToken } from "../auth/session";
@@ -195,7 +196,7 @@ export interface ManagedBundleListResponse {
  * Lấy danh sách bundles cho Manager quản lý
  * GET /api/management/admin/store/bundles
  */
-export async function fetchManagedBundles(params?: {
+async function fetchManagedBundlesUncached(params?: {
   page?: number;
   size?: number;
   status?: string;
@@ -233,6 +234,11 @@ export async function fetchManagedBundles(params?: {
   };
 }
 
+/** Có cache ngắn hạn dùng chung (lib/query/manager-store.ts). */
+export function fetchManagedBundles(params?: Parameters<typeof fetchManagedBundlesUncached>[0]) {
+  return cachedManagerStore("bundles", params, () => fetchManagedBundlesUncached(params));
+}
+
 /**
  * Lấy chi tiết bundle và các item cấu thành
  * GET /api/management/admin/store/bundles/{id}
@@ -265,6 +271,7 @@ export async function apiCreateBundle(payload: CreateBundlePayload): Promise<Man
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return data.data;
 }
 
@@ -286,6 +293,7 @@ export async function apiUpdateBundle(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return data.data;
 }
 
@@ -300,5 +308,6 @@ export async function apiDeleteBundle(id: number): Promise<void> {
     withCredentials: OpenAPI.WITH_CREDENTIALS,
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
+  markStoreChanged();
 }
 

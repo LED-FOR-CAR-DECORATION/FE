@@ -118,7 +118,7 @@ export default function EditBundleModal({
 
         // Map initial constituent items
         const mappedItems: SelectedBundleItem[] = (detail.items ?? []).map((rawItem, idx) => {
-          const isLed = rawItem.modelId != null;
+          const isLed = rawItem.itemType === "LED" || rawItem.modelId != null;
           const foundOption = isLed
             ? leds.find((o) => o.targetId === rawItem.modelId)
             : chars.find((o) => o.targetId === rawItem.versionId);
@@ -129,13 +129,20 @@ export default function EditBundleModal({
             versionId: rawItem.versionId ?? undefined,
             name:
               foundOption?.name ??
-              (isLed ? `Mẫu LED #${rawItem.modelId}` : `Nhân vật #${rawItem.versionId}`),
+              (isLed
+                ? rawItem.modelName || `Tấm LED #${rawItem.modelId}`
+                : rawItem.characterName || `Nhân vật #${rawItem.versionId}`),
             itemType: isLed ? "LED" : "CHARACTER",
             unitPrice:
               foundOption?.price ??
-              (detail!.originalPrice / Math.max(1, (detail!.items ?? []).length)),
+              (rawItem.unitPrice != null
+                ? Number(rawItem.unitPrice)
+                : detail!.originalPrice / Math.max(1, (detail!.items ?? []).length)),
             quantity: rawItem.quantity,
-            previewUrl: foundOption?.previewUrl,
+            previewUrl:
+              foundOption?.previewUrl ??
+              (isLed ? rawItem.thumbnailUrl : rawItem.previewGifUrl || rawItem.thumbnailUrl) ??
+              undefined,
           };
         });
 

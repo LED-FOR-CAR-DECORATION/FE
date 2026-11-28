@@ -16,13 +16,14 @@ import {
   STORE_TABLE_CLASS,
   STORE_THEAD_CLASS,
   STORE_TH_CLASS,
-  StoreActionButton,
   StoreEmptyRow,
   StoreErrorRow,
+  StoreHoverActionButton,
   StoreSkeletonRows,
-  StoreTableFooter,
+  StoreTablePagination,
   StoreThumbnail,
   storeRowClass,
+  useStoreTablePagination,
 } from "./StoreTablePrimitives";
 
 type CatalogKind = Extract<ProductType, "LED_MODEL" | "BUNDLE">;
@@ -148,20 +149,30 @@ export default function CatalogListingTable({
   );
 
   const hasFilters = statusFilter !== "ALL" || searchQuery !== "";
+  const {
+    page,
+    setPage,
+    pageSize,
+    ready,
+    totalPages,
+    totalElements,
+    pagedItems,
+  } = useStoreTablePagination(filteredItems, `${searchQuery}::${statusFilter}`);
+
   const resetFilters = () => {
     setStatusFilter("ALL");
     setSearchQuery("");
   };
 
   const isBundle = kind === "BUNDLE";
-  const headings = [
-    "Mã sản phẩm",
-    "Ảnh đại diện",
-    COPY[kind].nameHeading,
-    isBundle ? "Thành phần gói" : "Mô tả",
-    "Giá bán",
-    "Trạng thái",
-    ...(!isBundle ? ["Thao tác"] : []),
+  const headings: { label: string; className?: string }[] = [
+    { label: "Mã sản phẩm", className: "w-[108px]" },
+    { label: "Ảnh đại diện", className: "w-[88px]" },
+    { label: COPY[kind].nameHeading, className: "w-[220px]" },
+    { label: isBundle ? "Thành phần gói" : "Mô tả" },
+    { label: "Giá bán", className: "w-[130px]" },
+    { label: "Trạng thái", className: "w-[132px]" },
+    ...(!isBundle ? [{ label: "Thao tác", className: "w-[260px] text-right" }] : []),
   ];
 
   const actionTitle = canManage ? undefined : STORE_FORBIDDEN_HINT;
@@ -181,28 +192,34 @@ export default function CatalogListingTable({
         canReset={hasFilters}
       />
 
-      <div className="overflow-x-auto">
-        <table className={STORE_TABLE_CLASS}>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className={`${STORE_TABLE_CLASS} min-w-[1080px]`}>
           <caption className="sr-only">
             Danh sách {COPY[kind].label} đang quản lý trên cửa hàng
           </caption>
           <thead className={STORE_THEAD_CLASS}>
             <tr>
               {headings.map((heading) => (
-                <th key={heading} scope="col" className={STORE_TH_CLASS}>
-                  {heading}
+                <th
+                  key={heading.label}
+                  scope="col"
+                  className={`${STORE_TH_CLASS} ${heading.className ?? ""}`}
+                >
+                  {heading.label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <StoreSkeletonRows columns={headings.length} />}
+            {(isLoading || !ready) && (
+              <StoreSkeletonRows columns={headings.length} rows={pageSize} />
+            )}
 
-            {!isLoading && error && (
+            {!isLoading && ready && error && (
               <StoreErrorRow colSpan={headings.length} message={error} onRetry={onRefresh} />
             )}
 
-            {!isLoading && !error && filteredItems.length === 0 && (
+            {!isLoading && ready && !error && filteredItems.length === 0 && (
               <StoreEmptyRow
                 colSpan={headings.length}
                 message={
@@ -216,19 +233,20 @@ export default function CatalogListingTable({
             )}
 
             {!isLoading &&
+              ready &&
               !error &&
-              filteredItems.map((item) => {
+              pagedItems.map((item) => {
                 const status: BackendProductStatus = item.status ?? "UNPUBLISHED";
                 const isDeleted = status === "DELETED";
 
                 return (
                   <tr key={item.id} className={storeRowClass(isDeleted)}>
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
                         #{item.productId ?? item.id}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2.5">
                       <StoreThumbnail
                         src={item.previewUrl}
                         alt={`Ảnh đại diện của ${item.name}`}
@@ -236,18 +254,24 @@ export default function CatalogListingTable({
                         pixelated
                       />
                     </td>
-                    <td className="px-4 py-3.5">
-                      <p className={`text-xs font-black uppercase sm:text-sm ${isDeleted ? "text-text-muted line-through" : "text-black"}`}>
+                    <td className="px-4 py-2.5">
+                      <p
+                        title={item.name}
+                        className={`truncate text-xs font-black uppercase sm:text-sm ${isDeleted ? "text-text-muted line-through" : "text-black"}`}
+                      >
                         {item.name}
                       </p>
                       {item.updatedAt && (
-                        <p className="text-[11px] font-medium text-text-muted tabular-nums">
+                        <p className="truncate text-[11px] font-medium text-text-muted tabular-nums">
                           Cập nhật lúc {formatDateTime(item.updatedAt)}
                         </p>
                       )}
                     </td>
-                    <td className="max-w-xs px-4 py-3.5 text-xs font-medium text-text-muted">
-                      <span className="line-clamp-2">
+                    <td className="px-4 py-2.5 text-xs font-medium text-text-muted">
+                      <span
+                        title={item.description || undefined}
+                        className="line-clamp-2"
+                      >
                         {isBundle
                           ? `${item.components?.length ?? 0} sản phẩm: ${(item.components ?? [])
                               .map((component) => component.name)
@@ -255,70 +279,72 @@ export default function CatalogListingTable({
                           : item.description || "—"}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-sm font-black text-primary-ink tabular-nums">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-sm font-black text-primary-ink tabular-nums">
                       {formatVnd(item.price)}
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2.5">
                       <StatusBadge status={status} />
                     </td>
                     {!isBundle && (
-                      <td className="px-4 py-3.5">
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right">
                         {isDeleted ? null : (
-                          <div className="flex flex-wrap items-center gap-1.5">
+                          <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
                             {onEdit && (
-                              <StoreActionButton
-                                variant="secondary"
+                              <StoreHoverActionButton
+                                tone="primary"
+                                label="Sửa"
+                                aria-label={`Sửa ${item.name}`}
                                 disabled={!canManage}
-                                title={actionTitle}
+                                title={actionTitle ?? "Sửa"}
                                 onClick={() => onEdit(item)}
-                                icon={<Edit size={13} />}
-                              >
-                                Sửa
-                              </StoreActionButton>
+                                icon={<Edit className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                              />
                             )}
                             {status === "UNPUBLISHED" && onPublish && (
-                              <StoreActionButton
-                                variant="primary"
+                              <StoreHoverActionButton
+                                tone="approve"
+                                label="Mở bán"
+                                aria-label={`Mở bán ${item.name}`}
                                 disabled={!canManage}
-                                title={actionTitle}
+                                title={actionTitle ?? "Mở bán"}
                                 onClick={() => onPublish(item)}
-                                icon={<CheckCircle2 size={13} />}
-                              >
-                                Mở bán
-                              </StoreActionButton>
+                                icon={<CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                              />
                             )}
                             {status === "ARCHIVED" && onPublish && (
-                              <StoreActionButton
-                                variant="primary"
+                              <StoreHoverActionButton
+                                tone="approve"
+                                labelSize="medium"
+                                label="Mở bán lại"
+                                aria-label={`Mở bán lại ${item.name}`}
                                 disabled={!canManage}
-                                title={actionTitle}
+                                title={actionTitle ?? "Mở bán lại"}
                                 onClick={() => onPublish(item)}
-                                icon={<Undo2 size={13} />}
-                              >
-                                Mở bán lại
-                              </StoreActionButton>
+                                icon={<Undo2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                              />
                             )}
                             {status !== "ARCHIVED" && onArchive && (
-                              <StoreActionButton
-                                variant="secondary"
+                              <StoreHoverActionButton
+                                tone="neutral"
+                                labelSize="medium"
+                                label="Ngừng bán"
+                                aria-label={`Ngừng bán ${item.name}`}
                                 disabled={!canManage}
-                                title={actionTitle}
+                                title={actionTitle ?? "Ngừng bán"}
                                 onClick={() => onArchive(item)}
-                                icon={<Archive size={13} />}
-                              >
-                                Ngừng bán
-                              </StoreActionButton>
+                                icon={<Archive className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                              />
                             )}
                             {onDelete && (
-                              <StoreActionButton
-                                variant="danger"
+                              <StoreHoverActionButton
+                                tone="danger"
+                                label="Xóa"
+                                aria-label={`Xóa ${item.name}`}
                                 disabled={!canManage}
-                                title={actionTitle}
+                                title={actionTitle ?? "Xóa"}
                                 onClick={() => onDelete(item)}
-                                icon={<Trash2 size={13} />}
-                              >
-                                Xóa
-                              </StoreActionButton>
+                                icon={<Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                              />
                             )}
                           </div>
                         )}
@@ -331,11 +357,17 @@ export default function CatalogListingTable({
         </table>
       </div>
 
-      {!isLoading && !error && (
-        <StoreTableFooter
-          filteredCount={filteredItems.length}
-          totalCount={items.length}
+      {!error && (
+        <StoreTablePagination
+          page={page}
+          size={pageSize}
+          totalElements={totalElements}
+          totalPages={totalPages}
+          totalUnfilteredCount={items.length}
           unitLabel={COPY[kind].unitLabel}
+          onPageChange={setPage}
+          disabled={isLoading || !ready}
+          ariaLabel={`Phân trang danh sách ${COPY[kind].unitLabel}`}
         />
       )}
     </>

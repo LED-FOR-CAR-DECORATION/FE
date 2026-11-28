@@ -1,26 +1,47 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, BarChart3, CalendarDays, CheckCircle2, ClipboardList, Layers, Package, ShoppingCart, Truck } from "lucide-react";
-import { useAuth } from "@/features/auth/hooks/useAuth";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ClipboardList,
+  Eye,
+  MessageSquare,
+  Package,
+  RefreshCw,
+  ShieldCheck,
+  ShoppingCart,
+} from "lucide-react";
 import { useOrders } from "@/features/order/context/OrderContext";
 import type { MockOrder, OrderStatus } from "@/features/order/types";
-import { getAvailableStock, getInventoryStatus, LED_INVENTORY } from "@/features/product/inventory";
+import { getCommissionQueue } from "@/features/commission/services/management-commission.api";
+import { isRequestCancelled } from "@/features/commission/errors";
+import CommissionPagination from "@/features/commission/components/CommissionPagination";
+import { getManagementWarrantyClaims } from "@/lib/api/warranty";
+import { useAdaptiveListRows } from "@/hooks/useAdaptiveListRows";
+import {
+  HoverIconAction,
+  StaffCommissionTodoModal,
+  StaffPendingOrdersModal,
+  StaffWarrantyTodoModal,
+  type ModalSortMode,
+} from "@/features/staff/components/StaffTodoModals";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING_PAYMENT: "Chờ thanh toán",
   PROCESSING: "Chờ đóng hàng",
-  PARTIALLY_FULFILLED: "Đã cấp nhân vật và chờ đóng hàng",
+  PARTIALLY_FULFILLED: "Đã cấp nhân vật & chờ đóng hàng",
   SHIPPING: "Đang vận chuyển",
   DELIVERED: "Đã giao",
   COMPLETED: "Đã hoàn thành",
   DELIVERY_FAILED: "Vận chuyển thất bại",
   REFUNDED: "Đã hoàn tiền",
   CANCELED: "Đã hủy",
-  // Aliases for compatibility
   PendingPayment: "Chờ thanh toán",
   Preparing: "Chờ đóng hàng",
-  HandedOver: "Đã cấp nhân vật và chờ đóng hàng",
+  HandedOver: "Đã cấp nhân vật & chờ đóng hàng",
   Shipping: "Đang vận chuyển",
   Delivered: "Đã giao",
   Completed: "Đã hoàn thành",
@@ -30,111 +51,441 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 };
 
 const STATUS_CLASS: Record<OrderStatus, string> = {
-  PENDING_PAYMENT: "bg-amber-50 text-amber-700",
-  PROCESSING: "bg-blue-50 text-blue-700",
-  PARTIALLY_FULFILLED: "bg-purple-50 text-purple-700",
-  SHIPPING: "bg-[#e3f2e9] text-[#155e59]",
-  DELIVERED: "bg-teal-50 text-teal-700",
-  COMPLETED: "bg-emerald-50 text-emerald-700",
-  DELIVERY_FAILED: "bg-orange-50 text-orange-700",
-  REFUNDED: "bg-gray-50 text-gray-700",
-  CANCELED: "bg-red-50 text-red-700",
-  // Aliases for compatibility
-  PendingPayment: "bg-amber-50 text-amber-700",
-  Preparing: "bg-blue-50 text-blue-700",
-  HandedOver: "bg-purple-50 text-purple-700",
-  Shipping: "bg-[#e3f2e9] text-[#155e59]",
-  Delivered: "bg-teal-50 text-teal-700",
-  Completed: "bg-emerald-50 text-emerald-700",
-  Cancelled: "bg-red-50 text-red-700",
-  Pending: "bg-amber-50 text-amber-700",
-  Confirmed: "bg-blue-50 text-blue-700",
+  PENDING_PAYMENT: "border-black bg-[#fef08a] text-black",
+  PROCESSING: "border-black bg-[#e0f2fe] text-black",
+  PARTIALLY_FULFILLED: "border-black bg-[#ede9fe] text-black",
+  SHIPPING: "border-black bg-[#e0f2fe] text-black",
+  DELIVERED: "border-black bg-primary/40 text-black",
+  COMPLETED: "border-black bg-primary/25 text-primary-ink",
+  DELIVERY_FAILED: "border-amber-700 bg-[#fed7aa] text-black",
+  REFUNDED: "border-black bg-gray-200 text-black",
+  CANCELED: "border-red-600 bg-red-50 text-red-700",
+  PendingPayment: "border-black bg-[#fef08a] text-black",
+  Preparing: "border-black bg-[#e0f2fe] text-black",
+  HandedOver: "border-black bg-[#ede9fe] text-black",
+  Shipping: "border-black bg-[#e0f2fe] text-black",
+  Delivered: "border-black bg-primary/40 text-black",
+  Completed: "border-black bg-primary/25 text-primary-ink",
+  Cancelled: "border-red-600 bg-red-50 text-red-700",
+  Pending: "border-black bg-[#fef08a] text-black",
+  Confirmed: "border-black bg-[#e0f2fe] text-black",
 };
+
+const PENDING_ORDER_PRIORITY: Record<string, number> = {
+  DELIVERY_FAILED: 1,
+  PROCESSING: 2,
+  Confirmed: 2,
+  Preparing: 2,
+  PARTIALLY_FULFILLED: 3,
+  HandedOver: 3,
+};
+
+type ActiveStaffTodoModal = "orders" | "commissions" | "warranty" | null;
 
 function formatMoney(value: number) {
   return `${value.toLocaleString("vi-VN")} VNĐ`;
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
-}
-
-function StatCard({ label, value, helper, icon, href, tone = "default" }: { label: string; value: number; helper: string; icon: React.ReactNode; href?: string; tone?: "default" | "warning" }) {
-  const content = <div className={`rounded-xl border border-[#e2e4db] bg-white p-5 shadow-sm transition ${href ? "hover:-translate-y-0.5 hover:border-[#8fc7a0] hover:shadow-md" : ""}`}>
-    <div className="flex items-start justify-between"><div className={`grid h-10 w-10 place-items-center rounded-lg ${tone === "warning" ? "bg-amber-50 text-amber-700" : "bg-[#e3f2e9] text-[#155e59]"}`}>{icon}</div>{href && <ArrowRight size={16} className="text-[#66736b]" />}</div>
-    <p className="mt-4 text-sm font-semibold text-[#66736b]">{label}</p>
-    <p className="mt-1 text-3xl font-black text-[#26352f]">{value.toLocaleString("vi-VN")}</p>
-    <p className="mt-1 text-xs text-[#66736b]">{helper}</p>
-  </div>;
-  return href ? <Link href={href}>{content}</Link> : content;
-}
-
-function StatusBadge({ status }: { status: OrderStatus }) {
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${STATUS_CLASS[status]}`}>{STATUS_LABEL[status]}</span>;
-}
-
-function getLastSevenDays() {
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - (6 - index));
-    return date;
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
 export default function StaffDashboard() {
-  const { user } = useAuth();
-  const { orders } = useOrders();
-  const days = getLastSevenDays();
-  const pendingOrders = orders.filter((order) =>
-    order.status === "PROCESSING" ||
-    order.status === "PARTIALLY_FULFILLED" ||
-    order.status === "Pending" ||
-    order.status === "Confirmed" ||
-    order.status === "Preparing"
-  ).length;
-  const shippingOrders = orders.filter((order) => order.status === "SHIPPING" || order.status === "Shipping").length;
-  const lowStockItems = LED_INVENTORY.filter((item) => getInventoryStatus(item) !== "In stock");
-  const recentOrders = [...orders].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 5);
-  const orderCounts = days.map((day) => orders.filter((order) => {
-    const created = new Date(order.createdAt);
-    return created.getFullYear() === day.getFullYear() && created.getMonth() === day.getMonth() && created.getDate() === day.getDate();
-  }).length);
-  const maxOrders = Math.max(1, ...orderCounts);
+  const { orders, isLoading: ordersLoading, refreshOrders } = useOrders();
+  const { rows: pageSize } = useAdaptiveListRows({
+    estimatedRowHeight: 58,
+    rowGap: 0,
+    chromeHeight: 416,
+    minRows: 3,
+    maxRows: 12,
+    defaultRows: 6,
+  });
+
+  const [page, setPage] = useState(1);
+  const [activeTodoModal, setActiveTodoModal] = useState<ActiveStaffTodoModal>(null);
+  const [modalSortMode, setModalSortMode] = useState<ModalSortMode>("PRIORITY_FIFO");
+
+  const [commissionActionCount, setCommissionActionCount] = useState(0);
+  const [pendingWarrantyCount, setPendingWarrantyCount] = useState(0);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const latestCountsReqRef = useRef<symbol | null>(null);
+
+  const queryClient = useQueryClient();
+  const loadOperationalCounts = useCallback(async (force = false) => {
+    const token = Symbol();
+    latestCountsReqRef.current = token;
+    setStatsLoading(true);
+    try {
+      // Cache 30s: quay lại trang chủ staff không đếm lại; nút "Làm mới" bỏ qua cache.
+      const [commResults, warrantyPending] = await queryClient.fetchQuery({
+        queryKey: ["staff", "home-counts"],
+        staleTime: force ? 0 : 30_000,
+        queryFn: () =>
+          Promise.all([
+            Promise.all([
+              getCommissionQueue({ page: 0, size: 1, status: "PENDING_REVIEW" }),
+              getCommissionQueue({ page: 0, size: 1, status: "PAID" }),
+              getCommissionQueue({ page: 0, size: 1, status: "INTERNAL_REVIEW" }),
+            ]),
+            getManagementWarrantyClaims({ status: "APPROVED", page: 0, size: 1 }),
+          ]),
+      });
+      if (latestCountsReqRef.current !== token) return;
+      const totalComm =
+        (commResults[0]?.meta?.totalElements ?? commResults[0]?.data.length ?? 0) +
+        (commResults[1]?.meta?.totalElements ?? commResults[1]?.data.length ?? 0) +
+        (commResults[2]?.meta?.totalElements ?? commResults[2]?.data.length ?? 0);
+      setCommissionActionCount(totalComm);
+      setPendingWarrantyCount(warrantyPending.totalElements);
+    } catch (failure) {
+      if (latestCountsReqRef.current === token && !isRequestCancelled(failure)) {
+        // Keep previous counts on transient failure
+      }
+    } finally {
+      if (latestCountsReqRef.current === token) {
+        setStatsLoading(false);
+      }
+    }
+  }, [queryClient]);
+
+  useEffect(() => {
+    void loadOperationalCounts();
+    return () => {
+      latestCountsReqRef.current = null;
+    };
+  }, [loadOperationalCounts]);
+
+  const handleRefreshAll = () => {
+    void refreshOrders();
+    void loadOperationalCounts(true);
+  };
+
+  const pendingQueueOrders = useMemo(() => {
+    const actionable = orders.filter((order) => PENDING_ORDER_PRIORITY[order.status] !== undefined);
+    return [...actionable].sort((a, b) => {
+      const ta = Date.parse(a.createdAt) || 0;
+      const tb = Date.parse(b.createdAt) || 0;
+      if (modalSortMode === "NEWEST") {
+        return tb - ta;
+      }
+      const pa = PENDING_ORDER_PRIORITY[a.status] ?? 99;
+      const pb = PENDING_ORDER_PRIORITY[b.status] ?? 99;
+      if (pa !== pb) return pa - pb;
+      return ta - tb;
+    });
+  }, [orders, modalSortMode]);
+
+  const sortedRecentOrders = useMemo(
+    () => [...orders].sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)),
+    [orders],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(sortedRecentOrders.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const pagedOrders = useMemo(
+    () => sortedRecentOrders.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [sortedRecentOrders, safePage, pageSize],
+  );
+
+  const isRefreshing = ordersLoading || statsLoading;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="manager-neo-dashboard flex min-h-[calc(100dvh-114px)] flex-col gap-3 font-sans xl:h-[calc(100dvh-114px)]">
+      {/* 1. Workspace Header (Aligned with /staff/commission standard) */}
+      <header className="flex shrink-0 flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#155e59]">Tổng quan nhân viên</p>
-          <h1 className="mt-1 text-3xl font-black text-[#26352f]">Xin chào, {user?.fullName || "Nhân viên"}!</h1>
-          <p className="mt-1 text-sm text-[#66736b]">Tổng quan đơn hàng và nghiệp vụ xử lý hằng ngày.</p>
+          <p className="font-mono text-xs font-black uppercase tracking-widest text-primary-ink">
+            Staff Workspace
+          </p>
+          <h1 className="mt-0.5 pt-0.5 text-xl font-black uppercase leading-tight tracking-tight text-black sm:text-2xl">
+            Tổng quan Nhân viên
+          </h1>
+          <p className="mt-0.5 text-xs text-black/75 sm:text-sm">
+            Theo dõi việc cần làm, tiếp nhận đóng gói đơn hàng, xử lý yêu cầu thiết kế và bảo hành tại quầy.
+          </p>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-lg border border-[#e2e4db] bg-white px-3 py-2 text-sm font-semibold text-[#26352f] shadow-sm"><CalendarDays size={16} className="text-[#155e59]" /> 7 ngày gần nhất</div>
-      </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Đơn chờ xử lý" value={pendingOrders} helper="Cần tiếp nhận & đóng gói" icon={<Package size={20} />} href="/staff/orders" />
-        <StatCard label="Chờ giao" value={shippingOrders} helper="Đang trong luồng giao hàng" icon={<Truck size={20} />} href="/staff/orders" />
-        <StatCard label="Tồn kho LED" value={LED_INVENTORY.reduce((sum, item) => sum + getAvailableStock(item), 0)} helper="Số lượng khả dụng" icon={<Layers size={20} />} />
-        <StatCard label="Sắp hết hàng" value={lowStockItems.length} helper="Model cần lưu ý" icon={<AlertTriangle size={20} />} tone="warning" />
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/staff/orders"
+            className="btn-secondary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold"
+          >
+            <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
+            Quản lý đơn ({sortedRecentOrders.length})
+          </Link>
+          <button
+            type="button"
+            onClick={handleRefreshAll}
+            disabled={isRefreshing}
+            className="btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-black disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+            Làm mới
+          </button>
+        </div>
+      </header>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,.8fr)]">
-        <section className="rounded-xl border border-[#e2e4db] bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><BarChart3 size={18} className="text-[#155e59]" /><h2 className="text-lg font-black text-[#26352f]">Tổng quan đơn hàng</h2></div><p className="mt-1 text-sm text-[#66736b]">Số đơn được tạo trong 7 ngày gần nhất.</p></div><span className="rounded-full bg-[#e3f2e9] px-3 py-1 text-xs font-bold text-[#155e59]">{orders.length} tổng đơn</span></div>
-          <div className="mt-8 flex h-48 items-end gap-3 border-b border-[#e2e4db] px-2">{orderCounts.map((count, index) => <div key={days[index].toISOString()} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><span className="text-xs font-bold text-[#66736b]">{count}</span><div className="w-full max-w-10 rounded-t-md bg-[#8fc7a0] transition-all hover:bg-[#155e59]" style={{ height: `${Math.max(count ? 12 : 3, (count / maxOrders) * 100)}%` }} /><span className="text-[11px] text-[#66736b]">{days[index].toLocaleDateString("vi-VN", { weekday: "short" })}</span></div>)}</div>
-        </section>
-        <section className="rounded-xl border border-[#e2e4db] bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Layers size={18} className="text-[#155e59]" /><h2 className="text-lg font-black text-[#26352f]">Trạng thái kho LED</h2></div><Link href="/staff/orders" className="text-xs font-bold text-[#155e59] hover:underline">Xử lý đơn <ArrowRight size={13} className="inline" /></Link></div>
-          <div className="mt-3 divide-y divide-[#e2e4db]">{LED_INVENTORY.slice().sort((a, b) => getAvailableStock(a) - getAvailableStock(b)).slice(0, 4).map((item) => { const inventoryStatus = getInventoryStatus(item); return <div key={item.productId} className="flex items-center gap-3 py-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#f8f7ef] text-[#155e59]"><Layers size={16} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-[#26352f]">{item.name}</p><div className="mt-1 h-1.5 rounded-full bg-[#edf0ea]"><div className={`h-full rounded-full ${inventoryStatus === "In stock" ? "bg-[#8fc7a0]" : "bg-amber-400"}`} style={{ width: `${Math.min(100, (getAvailableStock(item) / Math.max(item.minimumStock * 4, 1)) * 100)}%` }} /></div></div><span className="text-xs font-bold text-[#66736b]">{getAvailableStock(item)}</span></div>; })}</div>
-        </section>
-      </div>
+      {/* 2. Việc cần làm (4 Action Cards opening inline Modals / Inbox) */}
+      <section aria-label="Việc cần làm" className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <button
+          type="button"
+          onClick={() => setActiveTodoModal("orders")}
+          className="neo-box group flex cursor-pointer items-center gap-3 bg-white p-3 text-left transition-transform hover:-translate-y-0.5"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center border-2 border-black bg-[#e0f2fe] text-black shadow-[2px_2px_0_0_#000]">
+            <Package size={18} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate pt-0.5 text-xs font-black uppercase leading-normal text-black group-hover:underline">
+              Tiếp nhận &amp; đóng gói đơn
+            </span>
+            <span className="block truncate text-[11px] font-medium leading-snug text-black/65">
+              Bấm để mở danh sách xử lý
+            </span>
+          </span>
+          <span className="shrink-0 border-2 border-black bg-[#e0f2fe] px-2 py-0.5 font-mono text-xs font-black text-black">
+            {pendingQueueOrders.length}
+          </span>
+        </button>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,.8fr)]">
-        <section className="rounded-xl border border-[#e2e4db] bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><ShoppingCart size={18} className="text-[#155e59]" /><h2 className="text-lg font-black text-[#26352f]">Đơn hàng gần đây</h2></div><Link href="/staff/orders" className="text-xs font-bold text-[#155e59] hover:underline">Xem tất cả <ArrowRight size={13} className="inline" /></Link></div>{recentOrders.length ? <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead><tr className="border-b border-[#e2e4db] text-left text-xs uppercase text-[#66736b]"><th className="pb-3">Mã đơn</th><th className="pb-3">Khách hàng</th><th className="pb-3">Tổng tiền</th><th className="pb-3">Trạng thái</th><th className="pb-3">Ngày</th></tr></thead><tbody>{recentOrders.map((order: MockOrder) => <tr key={order.id} className="border-b border-[#f0f2ed] last:border-0"><td className="py-3 font-bold text-[#155e59]">#{order.id}</td><td className="py-3"><p className="font-semibold">{order.customer.fullName}</p><p className="text-xs text-[#66736b]">{order.customer.email}</p></td><td className="py-3 font-bold">{formatMoney(order.total)}</td><td className="py-3"><StatusBadge status={order.status} /></td><td className="py-3 text-xs text-[#66736b]">{formatDate(order.createdAt)}</td></tr>)}</tbody></table></div> : <div className="mt-4 rounded-lg bg-[#f8f7ef] p-8 text-center text-sm text-[#66736b]"><CheckCircle2 className="mx-auto mb-2 text-[#8fc7a0]" />Chưa có đơn hàng nào được ghi nhận.</div>}</section>
-        <section className="rounded-xl border border-[#e2e4db] bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><ClipboardList size={18} className="text-[#155e59]" /><h2 className="text-lg font-black text-[#26352f]">Việc cần làm</h2></div><div className="mt-4 space-y-2"><Link href="/staff/orders" className="flex items-center gap-3 rounded-lg border border-[#e2e4db] p-3 transition hover:border-[#8fc7a0] hover:bg-[#f8f7ef]"><ShoppingCart size={17} className="text-[#155e59]" /><span className="flex-1 text-sm font-semibold">Tiếp nhận &amp; đóng gói đơn hàng</span><strong className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{pendingOrders}</strong></Link><Link href="/staff/commission" className="flex items-center gap-3 rounded-lg border border-[#e2e4db] p-3 transition hover:border-[#8fc7a0] hover:bg-[#f8f7ef]"><ClipboardList size={17} className="text-[#155e59]" /><span className="flex-1 text-sm font-semibold">Xử lý yêu cầu thiết kế</span><ArrowRight size={15} className="text-[#66736b]" /></Link><Link href="/staff/orders" className="flex items-center gap-3 rounded-lg border border-[#e2e4db] p-3 transition hover:border-[#8fc7a0] hover:bg-[#f8f7ef]"><Truck size={17} className="text-[#155e59]" /><span className="flex-1 text-sm font-semibold">Theo dõi đơn đang giao</span><strong className="rounded-full bg-[#e3f2e9] px-2 py-1 text-xs text-[#155e59]">{shippingOrders}</strong></Link></div></section>
-      </div>
+        <button
+          type="button"
+          onClick={() => setActiveTodoModal("commissions")}
+          className="neo-box group flex cursor-pointer items-center gap-3 bg-white p-3 text-left transition-transform hover:-translate-y-0.5"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center border-2 border-black bg-[#fef08a] text-black shadow-[2px_2px_0_0_#000]">
+            <ClipboardList size={18} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate pt-0.5 text-xs font-black uppercase leading-normal text-black group-hover:underline">
+              Yêu cầu thiết kế
+            </span>
+            <span className="block truncate text-[11px] font-medium leading-snug text-black/65">
+              Chờ duyệt, gán họa sĩ, nháp
+            </span>
+          </span>
+          <span className="shrink-0 border-2 border-black bg-[#fef08a] px-2 py-0.5 font-mono text-xs font-black text-black">
+            {commissionActionCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTodoModal("warranty")}
+          className="neo-box group flex cursor-pointer items-center gap-3 bg-white p-3 text-left transition-transform hover:-translate-y-0.5"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center border-2 border-black bg-[#fed7aa] text-black shadow-[2px_2px_0_0_#000]">
+            <ShieldCheck size={18} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate pt-0.5 text-xs font-black uppercase leading-normal text-black group-hover:underline">
+              Xử lý bảo hành tại quầy
+            </span>
+            <span className="block truncate text-[11px] font-medium leading-snug text-black/65">
+              Phiếu đang chờ tại quầy
+            </span>
+          </span>
+          <span className="shrink-0 border-2 border-black bg-[#fed7aa] px-2 py-0.5 font-mono text-xs font-black text-black">
+            {pendingWarrantyCount}
+          </span>
+        </button>
+
+        <Link
+          href="/staff/chat"
+          className="neo-box group flex items-center gap-3 bg-white p-3 transition-transform hover:-translate-y-0.5"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center border-2 border-black bg-primary text-black shadow-[2px_2px_0_0_#000]">
+            <MessageSquare size={18} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate pt-0.5 text-xs font-black uppercase leading-normal text-black group-hover:underline">
+              Trao đổi khách hàng (Inbox)
+            </span>
+            <span className="block truncate text-[11px] font-medium leading-snug text-black/65">
+              Mở phòng chat commission
+            </span>
+          </span>
+          <ArrowRight
+            size={16}
+            className="shrink-0 text-black transition-transform group-hover:translate-x-0.5"
+            aria-hidden="true"
+          />
+        </Link>
+      </section>
+
+      {/* 3. Đơn hàng gần đây (Matches /staff/commission table box) */}
+      <section
+        aria-label="Đơn hàng gần đây"
+        className="neo-box-no-hover flex min-h-0 flex-1 flex-col overflow-hidden bg-white"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b-2 border-black bg-[#f7fbf8] px-3.5 py-2">
+          <div className="flex items-center gap-2">
+            <ShoppingCart size={15} className="text-primary-ink" aria-hidden="true" />
+            <h2 className="pt-0.5 text-xs font-black uppercase leading-normal tracking-wider text-black">
+              Đơn hàng gần đây
+            </h2>
+          </div>
+          <Link
+            href="/staff/orders"
+            className="inline-flex items-center gap-1 text-xs font-black uppercase text-primary-ink hover:underline"
+          >
+            Xem tất cả ({sortedRecentOrders.length}) <ArrowRight size={13} aria-hidden="true" />
+          </Link>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b-2 border-black bg-[#f7fbf8] text-xs font-black uppercase tracking-wider text-black">
+                <th className="w-[100px] px-3.5 py-2.5">Mã đơn</th>
+                <th className="px-3.5 py-2.5">Khách hàng</th>
+                <th className="w-[160px] px-3.5 py-2.5 text-right">Tổng tiền</th>
+                <th className="w-[220px] px-3.5 py-2.5">Trạng thái</th>
+                <th className="w-[165px] px-3.5 py-2.5">Ngày tạo</th>
+                <th className="w-[128px] px-3 py-2.5 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y-2 divide-black/15">
+              {ordersLoading && orders.length === 0 ? (
+                Array.from({ length: pageSize }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse">
+                    <td className="px-3.5 py-2.5">
+                      <div className="h-4 w-14 bg-gray-200" />
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <div className="h-3.5 w-32 bg-gray-200" />
+                      <div className="mt-1.5 h-3 w-40 bg-gray-100" />
+                    </td>
+                    <td className="px-3.5 py-2.5 text-right">
+                      <div className="ml-auto h-4 w-24 bg-gray-200" />
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <div className="h-5 w-28 bg-gray-200" />
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <div className="h-3.5 w-28 bg-gray-100" />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="ml-auto h-8 w-10 bg-gray-200" />
+                    </td>
+                  </tr>
+                ))
+              ) : pagedOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-sm font-bold text-black/60">
+                    <CheckCircle2 className="mx-auto mb-2 text-primary-ink" size={22} />
+                    Chưa có đơn hàng nào được ghi nhận.
+                  </td>
+                </tr>
+              ) : (
+                pagedOrders.map((order: MockOrder) => (
+                  <tr key={order.id} className="transition-colors hover:bg-[#f3faf5]">
+                    <td className="whitespace-nowrap px-3.5 py-2 align-middle">
+                      <Link
+                        href={`/staff/orders/${order.id}`}
+                        className="font-mono text-xs font-black text-black hover:underline"
+                      >
+                        #{order.id}
+                      </Link>
+                    </td>
+                    <td className="px-3.5 py-2 align-middle">
+                      <p title={order.customer.fullName} className="truncate font-bold text-black">
+                        {order.customer.fullName}
+                      </p>
+                      <p title={order.customer.email} className="truncate text-xs text-black/65">
+                        {order.customer.email}
+                      </p>
+                    </td>
+                    <td className="whitespace-nowrap px-3.5 py-2 text-right align-middle font-mono text-sm font-black text-primary-ink tabular-nums">
+                      {formatMoney(order.total)}
+                    </td>
+                    <td className="whitespace-nowrap px-3.5 py-2 align-middle">
+                      <span
+                        title={STATUS_LABEL[order.status]}
+                        className={`inline-flex max-w-full truncate border-2 px-2 py-0.5 text-xs font-black leading-normal ${STATUS_CLASS[order.status]}`}
+                      >
+                        {STATUS_LABEL[order.status]}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3.5 py-2 align-middle font-mono text-xs font-semibold text-black/65">
+                      {formatDateTime(order.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right align-middle">
+                      <HoverIconAction
+                        href={`/staff/orders/${order.id}`}
+                        label="Chi tiết"
+                        ariaLabel={`Xem chi tiết đơn hàng #${order.id}`}
+                        tone="primary"
+                        icon={<Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                      />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* 4. Detached Bottom Pagination (Exact /staff/commission style) */}
+      <CommissionPagination
+        page={safePage - 1}
+        size={pageSize}
+        totalElements={sortedRecentOrders.length}
+        totalPages={totalPages}
+        onPageChange={(nextZeroBased) => setPage(nextZeroBased + 1)}
+        ariaLabel="Phân trang đơn hàng gần đây"
+        disabled={ordersLoading && orders.length === 0}
+        className="mt-auto shrink-0"
+      />
+
+      {activeTodoModal === "orders" && (
+        <StaffPendingOrdersModal
+          orders={pendingQueueOrders}
+          sortMode={modalSortMode}
+          onToggleSort={() =>
+            setModalSortMode((prev) => (prev === "PRIORITY_FIFO" ? "NEWEST" : "PRIORITY_FIFO"))
+          }
+          onClose={() => setActiveTodoModal(null)}
+          statusLabel={STATUS_LABEL}
+          statusClass={STATUS_CLASS}
+          formatMoney={formatMoney}
+          formatDateTime={formatDateTime}
+        />
+      )}
+
+      {activeTodoModal === "commissions" && (
+        <StaffCommissionTodoModal
+          onClose={() => setActiveTodoModal(null)}
+          onMutated={() => {
+            void loadOperationalCounts(true);
+          }}
+        />
+      )}
+
+      {activeTodoModal === "warranty" && (
+        <StaffWarrantyTodoModal
+          onClose={() => setActiveTodoModal(null)}
+          onMutated={() => {
+            void loadOperationalCounts(true);
+          }}
+        />
+      )}
     </div>
   );
 }

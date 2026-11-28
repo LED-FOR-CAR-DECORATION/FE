@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { PaymentSessionResponse } from "@/api_client";
 import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
-import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
+import { emitOrdersChanged } from "@/features/order/services/order.service";
 import { fetchOrderDetail } from "@/lib/api/orders";
 import { fetchPaymentSession, mockPaymentSuccess } from "@/lib/api/payments";
 import { formatPrice } from "@/lib/currency";
@@ -27,9 +27,9 @@ type SePayOrderPaymentCardProps = {
   onPaymentSuccess?: (session: PaymentSessionResponse) => void;
   onAmountLoaded?: (amount: number) => void;
 } & (
-  | { orderId: string; initialPaymentCode?: string; redirectOnSuccess?: boolean; commissionId?: never }
-  | { commissionId: number; initialPaymentCode: string; orderId?: never; redirectOnSuccess?: never }
-);
+    | { orderId: string; initialPaymentCode?: string; redirectOnSuccess?: boolean; commissionId?: never }
+    | { commissionId: number; initialPaymentCode: string; orderId?: never; redirectOnSuccess?: never }
+  );
 
 const POLL_INTERVAL_MS = 3000;
 const REDIRECT_DELAY_MS = 1600;
@@ -95,7 +95,7 @@ export default function SePayOrderPaymentCard({
       setError("");
 
       if (orderId !== undefined && typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+        emitOrdersChanged(orderId);
         window.dispatchEvent(new CustomEvent(ENTITLEMENTS_CHANGED_EVENT));
       }
       onPaymentSuccessRef.current?.(latestSession);
@@ -355,11 +355,10 @@ export default function SePayOrderPaymentCard({
 
             {countdown && session.status === "PENDING" && (
               <div
-                className={`mt-3 inline-flex items-center gap-1.5 border-2 border-black px-2.5 py-1 text-xs font-black tabular-nums ${
-                  isExpired
+                className={`mt-3 inline-flex items-center gap-1.5 border-2 border-black px-2.5 py-1 text-xs font-black tabular-nums ${isExpired
                     ? "bg-red-100 text-red-800"
                     : "bg-amber-300 text-black"
-                }`}
+                  }`}
               >
                 <Clock size={13} />
                 {isExpired ? "Đã hết hạn thanh toán" : `Hết hạn sau: ${countdown}`}
@@ -452,7 +451,7 @@ export default function SePayOrderPaymentCard({
                     ) : (
                       <Zap size={12} className="text-black" />
                     )}
-                    Giả lập thanh toán
+
                   </button>
                 )}
                 <button

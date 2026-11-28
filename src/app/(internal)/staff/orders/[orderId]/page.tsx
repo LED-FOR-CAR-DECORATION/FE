@@ -26,7 +26,10 @@ import {
   XCircle,
 } from "lucide-react";
 import EditOrderDeliveryAddressModal from "@/components/ui/EditOrderDeliveryAddressModal";
-import { useOrders } from "@/features/order/context/OrderContext";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useOrder } from "@/features/order/context/OrderContext";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query/keys";
 import { getOrderKind } from "@/features/order/fulfillment";
 import type { OrderKind } from "@/features/order/types";
 import {
@@ -40,7 +43,6 @@ import {
   apiLinkOrderFulfillmentDevice,
   apiUnlinkOrderFulfillmentDevice,
   fetchStaffOrderDetail,
-  type BackendStaffOrderDetail,
   type LinkOrderFulfillmentDeviceResponse,
   type UpdateStaffDeliveryAddressRequest,
 } from "@/lib/api/orders";
@@ -161,30 +163,30 @@ const BADGE_CONFIG: Record<
   string,
   { label: string; bg: string; text: string }
 > = {
-  PENDING_PAYMENT: { label: "CHỜ THANH TOÁN", bg: "bg-amber-600", text: "text-white" },
-  PROCESSING: { label: "CHỜ ĐÓNG HÀNG", bg: "bg-blue-600", text: "text-white" },
-  PARTIALLY_FULFILLED: { label: "ĐÃ CẤP NV & CHỜ ĐÓNG HÀNG", bg: "bg-purple-700", text: "text-white" },
-  SHIPPING: { label: "ĐANG VẬN CHUYỂN", bg: "bg-[#1E293B]", text: "text-white" },
-  DELIVERED: { label: "ĐÃ GIAO", bg: "bg-teal-600", text: "text-white" },
-  COMPLETED: { label: "ĐÃ HOÀN THÀNH", bg: "bg-emerald-700", text: "text-white" },
-  DELIVERY_FAILED: { label: "VẬN CHUYỂN THẤT BẠI", bg: "bg-orange-600", text: "text-white" },
-  REFUNDED: { label: "ĐÃ HOÀN TIỀN", bg: "bg-gray-600", text: "text-white" },
-  CANCELED: { label: "ĐÃ HỦY", bg: "bg-red-600", text: "text-white" },
-  PendingPayment: { label: "CHỜ THANH TOÁN", bg: "bg-amber-600", text: "text-white" },
-  Preparing: { label: "CHỜ ĐÓNG HÀNG", bg: "bg-blue-600", text: "text-white" },
-  HandedOver: { label: "ĐÃ CẤP NV & CHỜ ĐÓNG HÀNG", bg: "bg-purple-700", text: "text-white" },
-  Shipping: { label: "ĐANG VẬN CHUYỂN", bg: "bg-[#1E293B]", text: "text-white" },
-  Delivered: { label: "ĐÃ GIAO", bg: "bg-teal-600", text: "text-white" },
-  Completed: { label: "ĐÃ HOÀN THÀNH", bg: "bg-emerald-700", text: "text-white" },
-  Cancelled: { label: "ĐÃ HỦY", bg: "bg-red-600", text: "text-white" },
-  Pending: { label: "CHỜ THANH TOÁN", bg: "bg-amber-600", text: "text-white" },
-  Confirmed: { label: "CHỜ ĐÓNG HÀNG", bg: "bg-blue-600", text: "text-white" },
+  PENDING_PAYMENT: { label: "CHỜ THANH TOÁN", bg: "bg-[#fef08a]", text: "text-black" },
+  PROCESSING: { label: "CHỜ ĐÓNG HÀNG", bg: "bg-[#e0f2fe]", text: "text-black" },
+  PARTIALLY_FULFILLED: { label: "ĐÃ CẤP NV & CHỜ ĐÓNG HÀNG", bg: "bg-[#ede9fe]", text: "text-black" },
+  SHIPPING: { label: "ĐANG VẬN CHUYỂN", bg: "bg-[#e0f2fe]", text: "text-black" },
+  DELIVERED: { label: "ĐÃ GIAO", bg: "bg-primary/50", text: "text-black" },
+  COMPLETED: { label: "ĐÃ HOÀN THÀNH", bg: "bg-primary", text: "text-black" },
+  DELIVERY_FAILED: { label: "VẬN CHUYỂN THẤT BẠI", bg: "bg-[#fed7aa]", text: "text-black" },
+  REFUNDED: { label: "ĐÃ HOÀN TIỀN", bg: "bg-gray-200", text: "text-black" },
+  CANCELED: { label: "ĐÃ HỦY", bg: "bg-[#fecaca]", text: "text-black" },
+  PendingPayment: { label: "CHỜ THANH TOÁN", bg: "bg-[#fef08a]", text: "text-black" },
+  Preparing: { label: "CHỜ ĐÓNG HÀNG", bg: "bg-[#e0f2fe]", text: "text-black" },
+  HandedOver: { label: "ĐÃ CẤP NV & CHỜ ĐÓNG HÀNG", bg: "bg-[#ede9fe]", text: "text-black" },
+  Shipping: { label: "ĐANG VẬN CHUYỂN", bg: "bg-[#e0f2fe]", text: "text-black" },
+  Delivered: { label: "ĐÃ GIAO", bg: "bg-primary/50", text: "text-black" },
+  Completed: { label: "ĐÃ HOÀN THÀNH", bg: "bg-primary", text: "text-black" },
+  Cancelled: { label: "ĐÃ HỦY", bg: "bg-[#fecaca]", text: "text-black" },
+  Pending: { label: "CHỜ THANH TOÁN", bg: "bg-[#fef08a]", text: "text-black" },
+  Confirmed: { label: "CHỜ ĐÓNG HÀNG", bg: "bg-[#e0f2fe]", text: "text-black" },
 };
 
 const ORDER_KIND_BADGE: Record<OrderKind, { label: string; className: string }> = {
-  PHYSICAL: { label: "Physical", className: "border border-sky-300 bg-sky-100 text-sky-800" },
-  MIXED: { label: "Mixed", className: "border border-purple-300 bg-purple-100 text-purple-800" },
-  DIGITAL: { label: "Character", className: "border border-emerald-300 bg-emerald-100 text-emerald-800" },
+  PHYSICAL: { label: "Physical", className: "border border-black bg-[#e0f2fe] text-black" },
+  MIXED: { label: "Mixed", className: "border border-black bg-[#ede9fe] text-black" },
+  DIGITAL: { label: "Character", className: "border border-black bg-primary/40 text-black" },
 };
 
 function formatMoney(value: number) {
@@ -207,13 +209,29 @@ function formatShortTime(isoDate?: string, addMinutes = 0) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const REFERENCE_STALE_MS = 5 * 60_000;
+const INSTANCES_STALE_MS = 30_000;
+const LED_MODELS_KEY = ["led", "managedModels"] as const;
+const ledInstancesKey = (modelId: number, status: string) => ["led", "instances", modelId, status] as const;
+
 export default function OrderDetailPage({
   params,
 }: {
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = use(params);
-  const { orders, refreshOrders, updateOrderStatus, updateOrderDeliveryAddress, dispatchOrder } = useOrders();
+  const { isLoading: isAuthLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const {
+    order,
+    staffDetail,
+    isLoading: isOrdersLoading,
+    error: ordersError,
+    refreshOrder: refreshOrders,
+    updateOrderStatus,
+    updateOrderDeliveryAddress,
+    dispatchOrder,
+  } = useOrder(orderId);
 
   const [isPrepareModalOpen, setIsPrepareModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -232,7 +250,6 @@ export default function OrderDetailPage({
   } | null>(null);
 
   // Fulfillment LED device scanning/linking state
-  const [staffDetail, setStaffDetail] = useState<BackendStaffOrderDetail | null>(null);
   const [warehouseInstances, setWarehouseInstances] = useState<LedInstanceItem[]>([]);
   const [inStockByModelId, setInStockByModelId] = useState<Record<number, LedInstanceItem[]>>({});
   const [itemModelIdsMap, setItemModelIdsMap] = useState<Record<number, number[]>>({});
@@ -245,23 +262,15 @@ export default function OrderDetailPage({
   const [lastLinkResult, setLastLinkResult] =
     useState<LinkOrderFulfillmentDeviceResponse | null>(null);
 
+  // Các danh sách tham chiếu đi qua cache: mở lại đơn khác / gán thiết bị không phải tải lại toàn bộ.
   const loadFulfillmentData = useCallback(async () => {
-    const numericOrderId = Number(orderId);
-    if (!Number.isFinite(numericOrderId) || numericOrderId <= 0) return;
+    if (!staffDetail) return;
 
     setLoadingFulfillment(true);
     try {
-      const [detailRes, modelsRes] = await Promise.allSettled([
-        fetchStaffOrderDetail(numericOrderId),
-        fetchManagedLedModels(),
-      ]);
-
-      const detail = detailRes.status === "fulfilled" ? detailRes.value : null;
-      if (detail) {
-        setStaffDetail(detail);
-      }
-
-      const managedModels = modelsRes.status === "fulfilled" ? modelsRes.value : [];
+      const managedModels = await queryClient
+        .fetchQuery({ queryKey: LED_MODELS_KEY, queryFn: () => fetchManagedLedModels(), staleTime: REFERENCE_STALE_MS })
+        .catch(() => []);
       const modelIdByProductId = new Map<number, number>();
       const modelIdByName = new Map<string, number>();
       for (const m of managedModels) {
@@ -274,7 +283,7 @@ export default function OrderDetailPage({
       }
 
       const nextItemModelIds: Record<number, number[]> = {};
-      const physicalDetailItems = (detail?.items ?? []).filter(
+      const physicalDetailItems = (staffDetail.items ?? []).filter(
         (item) => item.productType !== "CHARACTER" && item.productType !== "SUBSCRIPTION",
       );
 
@@ -282,7 +291,13 @@ export default function OrderDetailPage({
         physicalDetailItems.map(async (item) => {
           const typeUpper = (item.productType ?? "LED").toUpperCase();
           if (typeUpper === "BUNDLE") {
-            const productDetail = await fetchStoreProductDetail(item.productId).catch(() => null);
+            const productDetail = await queryClient
+              .fetchQuery({
+                queryKey: queryKeys.store.productDetail(item.productId),
+                queryFn: () => fetchStoreProductDetail(item.productId),
+                staleTime: REFERENCE_STALE_MS,
+              })
+              .catch(() => null);
             const bundleModelIds = Array.from(
               new Set(
                 (productDetail?.bundleDetails?.items ?? [])
@@ -307,30 +322,28 @@ export default function OrderDetailPage({
         new Set(Object.values(nextItemModelIds).flat()),
       );
 
+      const fetchModelInstances = (modelId: number, status?: LedInstanceFilterRequest.status) =>
+        queryClient
+          .fetchQuery({
+            queryKey: ledInstancesKey(modelId, status ?? "ALL"),
+            queryFn: () =>
+              fetchAllPages(async (page) => {
+                const res = await fetchLedInstances({ page, size: 100, modelId, status });
+                return { items: res.items, totalPages: res.meta.totalPages };
+              }),
+            staleTime: INSTANCES_STALE_MS,
+          })
+          .catch(() => [] as LedInstanceItem[]);
+
       if (uniqueModelIds.length > 0) {
         const [inStockEntries, allModelEntries] = await Promise.all([
           Promise.all(
             uniqueModelIds.map(async (modelId) => {
-              const items = await fetchAllPages(async (page) => {
-                const res = await fetchLedInstances({
-                  page,
-                  size: 100,
-                  modelId,
-                  status: LedInstanceFilterRequest.status.IN_STOCK,
-                });
-                return { items: res.items, totalPages: res.meta.totalPages };
-              }).catch(() => [] as LedInstanceItem[]);
+              const items = await fetchModelInstances(modelId, LedInstanceFilterRequest.status.IN_STOCK);
               return [modelId, items] as const;
             }),
           ),
-          Promise.all(
-            uniqueModelIds.map((modelId) =>
-              fetchAllPages(async (page) => {
-                const res = await fetchLedInstances({ page, size: 100, modelId });
-                return { items: res.items, totalPages: res.meta.totalPages };
-              }).catch(() => [] as LedInstanceItem[]),
-            ),
-          ),
+          Promise.all(uniqueModelIds.map((modelId) => fetchModelInstances(modelId))),
         ]);
 
         const nextInStockByModel: Record<number, LedInstanceItem[]> = {};
@@ -356,25 +369,83 @@ export default function OrderDetailPage({
     } finally {
       setLoadingFulfillment(false);
     }
-  }, [orderId]);
+  }, [queryClient, staffDetail]);
 
   useEffect(() => {
     void loadFulfillmentData();
   }, [loadFulfillmentData]);
 
-  const order = orders.find((entry) => String(entry.id) === String(orderId));
+  /** Sau khi gán/gỡ thiết bị: chỉ làm mới đơn này + danh sách thiết bị, không tải lại toàn bộ đơn hàng. */
+  const refreshAfterDeviceChange = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["led", "instances"] });
+    await refreshOrders();
+    await loadFulfillmentData();
+  }, [queryClient, refreshOrders, loadFulfillmentData]);
+
+  if (!order && (isAuthLoading || isOrdersLoading)) {
+    return (
+      <div className="manager-neo-dashboard mx-auto flex w-full max-w-4xl flex-col items-center justify-center py-20 text-center font-sans">
+        <div
+          role="status"
+          aria-live="polite"
+          className="neo-box-no-hover flex flex-col items-center bg-white p-10"
+        >
+          <Loader2 size={28} className="animate-spin text-primary-ink" aria-hidden="true" />
+          <h2 className="mt-4 text-xl font-black uppercase text-black">
+            Đang tải chi tiết đơn hàng #{orderId}...
+          </h2>
+          <p className="mt-1.5 text-sm font-medium text-text-muted">
+            Vui lòng chờ trong giây lát.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!order && ordersError) {
+    return (
+      <div className="manager-neo-dashboard mx-auto flex w-full max-w-4xl flex-col items-center justify-center py-20 text-center font-sans">
+        <div role="alert" className="neo-box-no-hover bg-white p-8">
+          <AlertTriangle size={28} className="mx-auto mb-3 text-red-700" aria-hidden="true" />
+          <h2 className="mb-2 text-2xl font-black uppercase text-black">
+            Không thể tải đơn hàng #{orderId}
+          </h2>
+          <p className="mb-6 text-sm font-medium text-text-muted">{ordersError}</p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => void refreshOrders()}
+              className="btn-primary inline-flex items-center gap-2 px-5! py-2.5! text-xs font-black uppercase"
+            >
+              <RefreshCw size={15} /> Thử lại
+            </button>
+            <Link
+              href="/staff/orders"
+              className="btn-secondary inline-flex items-center gap-2 px-5! py-2.5! text-xs font-black uppercase"
+            >
+              <ArrowLeft size={15} /> Quay lại danh sách đơn hàng
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!order) {
     return (
-      <div className="mx-auto flex w-full max-w-4xl flex-col items-center justify-center py-20 text-center">
-        <h2 className="mb-3 text-2xl font-black text-gray-800">Không tìm thấy đơn hàng #{orderId}</h2>
-        <p className="mb-6 text-sm text-gray-500">Đơn hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.</p>
-        <Link
-          href="/staff/orders"
-          className="inline-flex items-center gap-2 rounded-lg bg-[#0F5B38] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#0c4a2d]"
-        >
-          <ArrowLeft size={16} /> Quay lại danh sách đơn hàng
-        </Link>
+      <div className="manager-neo-dashboard mx-auto flex w-full max-w-4xl flex-col items-center justify-center py-20 text-center font-sans">
+        <div className="neo-box-no-hover bg-white p-8">
+          <h2 className="mb-2 text-2xl font-black uppercase text-black">Không tìm thấy đơn hàng #{orderId}</h2>
+          <p className="mb-6 text-sm font-medium text-text-muted">
+            Đơn hàng không tồn tại hoặc đã bị xóa khỏi hệ thống.
+          </p>
+          <Link
+            href="/staff/orders"
+            className="btn-primary inline-flex items-center gap-2 px-5! py-2.5! text-xs font-black uppercase"
+          >
+            <ArrowLeft size={15} /> Quay lại danh sách đơn hàng
+          </Link>
+        </div>
       </div>
     );
   }
@@ -510,7 +581,7 @@ export default function OrderDetailPage({
       setFulfillmentSuccess(
         `Đã gán thiết bị ${res.serialNumber} (${res.modelName}) vào mục #${res.orderItemId}. Tiến độ đơn: ${res.progress.orderFulfilledCount}/${res.progress.orderRequiredCount}.`,
       );
-      await Promise.allSettled([loadFulfillmentData(), refreshOrders()]);
+      await refreshAfterDeviceChange().catch(() => undefined);
     } catch (err) {
       setFulfillmentError(
         err instanceof Error ? err.message : "Gán thiết bị LED thất bại.",
@@ -531,7 +602,7 @@ export default function OrderDetailPage({
       setFulfillmentSuccess(
         `Đã gỡ thiết bị ${instance.serialNumber} khỏi đơn hàng (trả về trạng thái Trong kho).`,
       );
-      await Promise.allSettled([loadFulfillmentData(), refreshOrders()]);
+      await refreshAfterDeviceChange().catch(() => undefined);
     } catch (err) {
       setFulfillmentError(
         err instanceof Error ? err.message : "Gỡ thiết bị LED thất bại.",
@@ -763,22 +834,24 @@ export default function OrderDetailPage({
   const timelineMilestones = getTimelineMilestones();
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 p-2 md:p-4">
+    <div className="manager-neo-dashboard mx-auto flex w-full max-w-[1400px] flex-col gap-5 font-sans text-black">
       {/* Top Navigation & Stepper Bar */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+      <div className="neo-box-no-hover bg-white p-4 md:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b-2 border-black pb-3">
           <Link
             href="/staff/orders"
-            className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200"
+            className="btn-secondary inline-flex items-center gap-1.5 px-3! py-1.5! text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
           >
             <ArrowLeft size={14} /> Quay lại danh sách
           </Link>
-          <h2 className="text-base font-bold text-gray-900">Trạng thái đơn hàng</h2>
+          <h2 className="text-sm font-black uppercase tracking-wider text-black">
+            Tiến trình xử lý đơn hàng
+          </h2>
           <div className="hidden w-12 md:block" />
         </div>
 
         {/* Stepper */}
-        <div className="relative mt-4 flex items-center justify-between overflow-x-auto py-2">
+        <div className="relative mt-3 flex items-center justify-between overflow-x-auto py-1.5">
           {orderSteps.map((step, idx) => {
             const isDone = idx < currentStepIndex;
             const isCurrent = idx === currentStepIndex;
@@ -788,24 +861,24 @@ export default function OrderDetailPage({
                 <div className="flex flex-col items-center gap-1.5">
                   {isDone ? (
                     <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0F5B38] text-white">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center border-2 border-black bg-primary text-black">
                         <Check size={14} strokeWidth={3} />
                       </div>
-                      <span className="whitespace-pre-line text-center text-xs font-bold text-[#0F5B38]">
+                      <span className="whitespace-pre-line text-center text-xs font-black text-primary-ink">
                         {step.label}
                       </span>
                     </div>
                   ) : isCurrent ? (
-                    <div className="flex items-center gap-1.5 rounded-full bg-[#1E293B] px-3.5 py-1.5 text-xs font-black text-white shadow">
+                    <div className="flex items-center gap-1.5 border-2 border-black bg-primary px-3 py-1 text-xs font-black text-black shadow-[2px_2px_0_0_#000]">
                       <Truck size={14} className="animate-pulse" />
                       <span>{step.label.toUpperCase().replace("\n", " ")}</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-gray-300 bg-gray-100 text-gray-400">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center border-2 border-black/30 bg-gray-100 text-gray-400">
                         <Circle size={10} />
                       </div>
-                      <span className="whitespace-pre-line text-center text-xs font-medium text-gray-400">
+                      <span className="whitespace-pre-line text-center text-xs font-bold text-text-muted">
                         {step.label}
                       </span>
                     </div>
@@ -815,7 +888,7 @@ export default function OrderDetailPage({
                 {idx < orderSteps.length - 1 && (
                   <div className="mx-2 flex-1">
                     {idx < currentStepIndex ? (
-                      <div className="h-1 w-full bg-[#0F5B38]" />
+                      <div className="h-0.5 w-full bg-black" />
                     ) : (
                       <div className="h-0.5 w-full border-t-2 border-dashed border-gray-300" />
                     )}
@@ -831,13 +904,13 @@ export default function OrderDetailPage({
       {dispatchSuccessBanner && (
         <div
           role="status"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm"
+          className="neo-box-no-hover flex flex-wrap items-center justify-between gap-3 border-l-8 border-l-[#2d6a4f] bg-primary/25 px-4 py-3 text-xs font-bold text-black sm:text-sm"
         >
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+            <CheckCircle2 size={18} className="shrink-0 text-primary-ink" />
             <span>
               Đóng gói và bàn giao AhaMove thành công! Mã vận đơn:{" "}
-              <strong>#{dispatchSuccessBanner.trackingNumber}</strong>
+              <strong className="font-mono">#{dispatchSuccessBanner.trackingNumber}</strong>
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -846,7 +919,7 @@ export default function OrderDetailPage({
                 href={dispatchSuccessBanner.trackingUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-bold text-[#0F5B38] underline"
+                className="inline-flex items-center gap-1 text-xs font-black uppercase text-primary-ink underline"
               >
                 <ExternalLink size={13} /> Theo dõi hành trình tài xế
               </a>
@@ -854,10 +927,10 @@ export default function OrderDetailPage({
             <button
               type="button"
               onClick={() => setDispatchSuccessBanner(null)}
-              className="text-emerald-700 hover:text-emerald-950"
+              className="btn-secondary p-1!"
               aria-label="Đóng thông báo"
             >
-              <X size={16} />
+              <X size={14} />
             </button>
           </div>
         </div>
@@ -867,19 +940,19 @@ export default function OrderDetailPage({
       {actionSuccessBanner && (
         <div
           role="status"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm"
+          className="neo-box-no-hover flex flex-wrap items-center justify-between gap-3 border-l-8 border-l-[#2d6a4f] bg-primary/25 px-4 py-3 text-xs font-bold text-black sm:text-sm"
         >
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
-            <span className="font-medium">{actionSuccessBanner}</span>
+            <CheckCircle2 size={18} className="shrink-0 text-primary-ink" />
+            <span>{actionSuccessBanner}</span>
           </div>
           <button
             type="button"
             onClick={() => setActionSuccessBanner("")}
-            className="text-emerald-700 hover:text-emerald-950"
+            className="btn-secondary p-1!"
             aria-label="Đóng thông báo"
           >
-            <X size={16} />
+            <X size={14} />
           </button>
         </div>
       )}
@@ -888,15 +961,15 @@ export default function OrderDetailPage({
       {isDeliveryFailedOrder && (
         <div
           role="alert"
-          className="rounded-xl border border-orange-300 bg-orange-50/90 p-4 shadow-sm"
+          className="neo-box-no-hover border-l-8 border-l-orange-500 bg-[#fff7ed] p-4"
         >
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle size={20} className="mt-0.5 shrink-0 text-orange-600" />
-              <div className="space-y-1 text-sm text-orange-950">
+              <AlertTriangle size={20} className="mt-0.5 shrink-0 text-orange-700" />
+              <div className="space-y-1 text-sm text-black">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-black">Đơn hàng giao thất bại — Cần nhân viên xử lý</p>
-                  <span className="rounded-full border border-orange-300 bg-white px-2.5 py-0.5 text-[11px] font-bold text-orange-800">
+                  <p className="font-black uppercase">Đơn hàng giao thất bại — Cần nhân viên xử lý</p>
+                  <span className="border border-black bg-[#fed7aa] px-2 py-0.5 text-[11px] font-black text-black">
                     Số lần giao: {deliveryAttemptCount}/{maxDeliveryAttempts}
                     {remainingRedeliveries > 0
                       ? ` (Còn ${remainingRedeliveries}/${maxRedeliveryAttempts} lần giao lại)`
@@ -904,11 +977,11 @@ export default function OrderDetailPage({
                   </span>
                 </div>
                 {deliveryFailureReason && (
-                  <p className="text-xs text-orange-900">
+                  <p className="text-xs font-medium text-black">
                     <strong>Lý do từ đơn vị vận chuyển:</strong> {deliveryFailureReason}
                   </p>
                 )}
-                <p className="text-xs text-orange-800">
+                <p className="text-xs font-medium text-text-muted">
                   {canRedeliver
                     ? "Bạn có thể sửa thông tin người nhận (nếu cần) rồi chọn \"Chuẩn bị giao lại\" để tạo vận đơn AhaMove mới, hoặc chọn \"Hoàn hàng & Hoàn tiền\" nếu khách không nhận nữa."
                     : `Đơn hàng đã đạt giới hạn tối đa ${maxRedeliveryAttempts} lần giao lại. Vui lòng thực hiện \"Hoàn hàng & Hoàn tiền\" để nhập lại kho thiết bị LED và thu hồi nhân vật số đi kèm.`}
@@ -929,7 +1002,7 @@ export default function OrderDetailPage({
                     ? "Chuyển đơn về Chờ đóng hàng để tạo vận đơn giao lại"
                     : `Đã đạt tối đa ${maxRedeliveryAttempts} lần giao lại`
                 }
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F5B38] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#0c4a2d] disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-primary inline-flex items-center gap-1.5 px-3.5! py-1.5! text-xs font-black uppercase"
               >
                 <RefreshCw size={13} className={isSubmitting ? "animate-spin" : ""} />
                 Chuẩn bị giao lại
@@ -942,7 +1015,7 @@ export default function OrderDetailPage({
                   setIsRefundModalOpen(true);
                 }}
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50"
+                className="btn-danger inline-flex items-center gap-1.5 px-3.5! py-1.5! text-xs font-black uppercase"
               >
                 <RotateCcw size={13} /> Hoàn hàng &amp; Hoàn tiền
               </button>
@@ -952,16 +1025,20 @@ export default function OrderDetailPage({
       )}
 
       {/* Order Header: ID, Badge, Date & Action Buttons */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-2 border-black border-l-8 border-l-primary bg-white px-5 py-4 shadow-[4px_4px_0_0_#000]">
         <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-2xl font-black text-gray-900">Đơn hàng #ORD-{order.id}</h1>
-          <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${badge.bg} ${badge.text}`}>
+          <h1 className="font-mono text-xl font-black uppercase tracking-tight text-black sm:text-2xl">
+            Đơn hàng #ORD-{order.id}
+          </h1>
+          <span
+            className={`border border-black px-2.5 py-0.5 text-[11px] font-black uppercase shadow-[1px_1px_0_0_#000] ${badge.bg} ${badge.text}`}
+          >
             {badge.label}
           </span>
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${kindBadge.className}`}>
+          <span className={`px-2 py-0.5 text-[11px] font-black uppercase ${kindBadge.className}`}>
             Loại: {kindBadge.label}
           </span>
-          <span className="text-xs font-medium text-gray-500">
+          <span className="font-mono text-xs font-semibold text-text-muted">
             Ngày tạo: {formatDate(order.createdAt)}
           </span>
         </div>
@@ -971,7 +1048,7 @@ export default function OrderDetailPage({
           <button
             type="button"
             onClick={handlePrintInvoice}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-gray-200 px-3.5 py-1.5 text-xs font-bold text-gray-800 transition hover:bg-gray-300"
+            className="btn-secondary inline-flex items-center gap-1.5 px-3.5! py-1.5! text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
           >
             <Printer size={14} /> In hóa đơn
           </button>
@@ -980,7 +1057,7 @@ export default function OrderDetailPage({
             <button
               type="button"
               onClick={handleOpenPrepareModal}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#48BB78] px-4 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#38A169]"
+              className="btn-primary inline-flex items-center gap-1.5 px-4! py-1.5! text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
             >
               <Package size={14} /> Chuẩn bị hàng
             </button>
@@ -993,7 +1070,7 @@ export default function OrderDetailPage({
                 setErrorMessage("");
                 setIsCancelModalOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3.5 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100"
+              className="btn-danger inline-flex items-center gap-1.5 px-3.5! py-1.5! text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
             >
               <XCircle size={14} /> Hủy đơn
             </button>
@@ -1002,46 +1079,49 @@ export default function OrderDetailPage({
       </div>
 
       {/* Main Content Layout: 2 Columns */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,1fr)]">
         {/* Left Column: Danh sách sản phẩm & Quét/Gán thiết bị LED */}
-        <div className="flex flex-col gap-6">
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-base font-black text-gray-900">Danh sách sản phẩm</h2>
+        <div className="flex flex-col gap-5">
+        <div className="neo-box-no-hover bg-white p-5">
+          <h2 className="mb-4 border-b-2 border-black pb-2.5 text-sm font-black uppercase tracking-wider text-black">
+            Danh sách sản phẩm
+          </h2>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[550px] text-left text-sm">
+            <table className="w-full min-w-[550px] border-collapse text-left text-xs text-black">
               <thead>
-                <tr className="border-b border-gray-200 text-xs font-bold text-gray-500">
-                  <th className="pb-3 text-left">Ảnh</th>
-                  <th className="pb-3 text-left">Tên</th>
-                  <th className="pb-3 text-left">Phân loại</th>
-                  <th className="pb-3 text-right">Đơn giá</th>
-                  <th className="pb-3 text-center">Số lượng</th>
-                  <th className="pb-3 text-right">Thành tiền</th>
+                <tr className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
+                  <th className="px-3 py-2.5 text-left">Ảnh</th>
+                  <th className="px-3 py-2.5 text-left">Tên</th>
+                  <th className="px-3 py-2.5 text-left">Phân loại</th>
+                  <th className="px-3 py-2.5 text-right">Đơn giá</th>
+                  <th className="px-3 py-2.5 text-center">SL</th>
+                  <th className="px-3 py-2.5 text-right">Thành tiền</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y-2 divide-black/10">
                 {order.items.map((item, index) => {
                   const isCharacter = item.productType === "CHARACTER";
                   const isLed = item.productType === "LED_MODEL";
 
                   return (
-                    <tr key={`${item.id}-${index}`} className="hover:bg-gray-50/50">
-                      <td className="py-3.5 pr-3">
-                        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                    <tr key={`${item.id}-${index}`} className="hover:bg-[#f3faf5]">
+                      <td className="px-3 py-3">
+                        <div className="flex h-12 w-12 items-center justify-center overflow-hidden border-2 border-black bg-gray-100">
                           {item.previewUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={item.previewUrl}
                               alt={item.name}
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <div className="text-xl">🦊</div>
+                            <div className="text-lg">🦊</div>
                           )}
                         </div>
                       </td>
-                      <td className="py-3.5 pr-3">
-                        <p className="font-bold text-gray-900">{item.name}</p>
-                        <p className="mt-0.5 text-xs text-gray-500">
+                      <td className="px-3 py-3">
+                        <p className="text-xs font-black text-black">{item.name}</p>
+                        <p className="mt-0.5 text-[11px] font-medium text-text-muted">
                           {isCharacter
                             ? "Đã cấp trực tiếp"
                             : isLed
@@ -1049,28 +1129,28 @@ export default function OrderDetailPage({
                             : "Sản phẩm hệ thống"}
                         </p>
                       </td>
-                      <td className="py-3.5 pr-3">
+                      <td className="px-3 py-3">
                         {isCharacter ? (
-                          <span className="inline-block whitespace-nowrap rounded-full bg-[#6B21A8] px-3 py-1 text-xs font-bold text-white">
+                          <span className="inline-block whitespace-nowrap border border-black bg-[#ede9fe] px-2 py-0.5 text-[10px] font-black uppercase text-black">
                             Vật phẩm ảo (Digital)
                           </span>
                         ) : isLed ? (
-                          <span className="inline-block whitespace-nowrap rounded-full bg-[#1D4ED8] px-3 py-1 text-xs font-bold text-white">
+                          <span className="inline-block whitespace-nowrap border border-black bg-[#e0f2fe] px-2 py-0.5 text-[10px] font-black uppercase text-black">
                             Bảng LED (Vật lý)
                           </span>
                         ) : (
-                          <span className="inline-block whitespace-nowrap rounded-full bg-[#0F766E] px-3 py-1 text-xs font-bold text-white">
+                          <span className="inline-block whitespace-nowrap border border-black bg-primary/40 px-2 py-0.5 text-[10px] font-black uppercase text-black">
                             Gói combo (Bundle)
                           </span>
                         )}
                       </td>
-                      <td className="py-3.5 pr-3 text-right font-semibold text-gray-700">
+                      <td className="px-3 py-3 text-right font-mono font-bold text-black">
                         {formatMoney(item.price)}
                       </td>
-                      <td className="py-3.5 pr-3 text-center font-bold text-gray-900">
+                      <td className="px-3 py-3 text-center font-mono font-black text-black">
                         {item.quantity}
                       </td>
-                      <td className="py-3.5 text-right font-black text-gray-900">
+                      <td className="px-3 py-3 text-right font-mono font-black text-black">
                         {formatMoney(item.price * item.quantity)}
                       </td>
                     </tr>
@@ -1081,25 +1161,25 @@ export default function OrderDetailPage({
           </div>
 
           {/* Pricing Summary Block */}
-          <div className="mt-6 flex flex-col items-end gap-1.5 border-t border-gray-200 pt-4 text-sm">
-            <div className="flex w-64 justify-between text-gray-600">
+          <div className="mt-5 flex flex-col items-end gap-1.5 border-t-2 border-black pt-4 text-xs">
+            <div className="flex w-64 justify-between font-semibold text-text-muted">
               <span>Tạm tính:</span>
-              <span className="font-bold text-gray-900">{formatMoney(order.subtotal)}</span>
+              <span className="font-mono font-bold text-black">{formatMoney(order.subtotal)}</span>
             </div>
-            <div className="flex w-64 justify-between text-gray-600">
+            <div className="flex w-64 justify-between font-semibold text-text-muted">
               <span>Phí vận chuyển:</span>
-              <span className="font-bold text-gray-900">{formatMoney(order.shipping)}</span>
+              <span className="font-mono font-bold text-black">{formatMoney(order.shipping)}</span>
             </div>
-            <div className="flex w-64 justify-between text-gray-600">
+            <div className="flex w-64 justify-between font-semibold text-text-muted">
               <span>Giảm giá:</span>
-              <span className="font-bold text-gray-900">{formatMoney(0)}</span>
+              <span className="font-mono font-bold text-black">{formatMoney(0)}</span>
             </div>
-            <div className="mt-1 flex w-64 justify-between border-t border-gray-200 pt-2 text-base font-black text-gray-900">
+            <div className="mt-1 flex w-64 justify-between border-t-2 border-dashed border-gray-300 pt-2 text-sm font-black uppercase text-black">
               <span>Tổng cộng:</span>
-              <span>{formatMoney(order.total)}</span>
+              <span className="font-mono">{formatMoney(order.total)}</span>
             </div>
 
-            <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-[#15803D]">
+            <div className="mt-2.5 flex items-center gap-1.5 border border-black bg-[#e9f5ed] px-2.5 py-1 text-xs font-black text-primary-ink">
               <CheckCircle2 size={14} />
               <span>
                 {order.paymentStatus === "Paid"
@@ -1112,75 +1192,77 @@ export default function OrderDetailPage({
         </div>
 
         {/* Right Column: 2 Cards */}
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5">
           {/* Card 1: Thông tin giao hàng */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-2">
-              <h2 className="text-base font-black text-gray-900">Thông tin giao hàng</h2>
+          <div className="neo-box-no-hover bg-white p-5">
+            <div className="mb-4 flex items-center justify-between gap-2 border-b-2 border-black pb-2.5">
+              <h2 className="text-sm font-black uppercase tracking-wider text-black">
+                Thông tin giao hàng
+              </h2>
               {canEditDeliveryAddress && (
                 <button
                   type="button"
                   onClick={handleOpenEditAddressModal}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-[#0F5B38] transition hover:bg-emerald-100"
+                  className="btn-secondary inline-flex items-center gap-1.5 px-2.5! py-1! text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
                 >
                   <Pencil size={12} /> Cập nhật địa chỉ
                 </button>
               )}
             </div>
-            <div className="flex flex-col gap-2.5 text-sm">
+            <div className="flex flex-col gap-2 text-xs">
               <p>
-                <strong className="text-gray-900">Khách hàng: </strong>
-                <span className="text-gray-700">
+                <strong className="font-black uppercase text-black">Khách hàng: </strong>
+                <span className="font-semibold text-black">
                   {staffDetail?.delivery?.recipientName || order.address.fullName || order.customer.fullName}
                 </span>
               </p>
               <p>
-                <strong className="text-gray-900">Điện thoại: </strong>
-                <span className="text-gray-700">
+                <strong className="font-black uppercase text-black">Điện thoại: </strong>
+                <span className="font-mono font-semibold text-black">
                   {staffDetail?.delivery?.recipientPhone || order.address.phoneNumber || "—"}
                 </span>
               </p>
               <p>
-                <strong className="text-gray-900">Địa chỉ: </strong>
-                <span className="text-gray-700">
+                <strong className="font-black uppercase text-black">Địa chỉ: </strong>
+                <span className="font-medium text-black">
                   {staffDetail?.delivery?.fullAddress || order.address.fullAddress}
                 </span>
               </p>
               <p>
-                <strong className="text-gray-900">Ghi chú: </strong>
-                <span className="text-gray-700">Giao giờ hành chính, gọi trước khi giao.</span>
+                <strong className="font-black uppercase text-black">Ghi chú: </strong>
+                <span className="font-medium text-text-muted">Giao giờ hành chính, gọi trước khi giao.</span>
               </p>
 
-              <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
+              <div className="mt-2 border-2 border-black bg-[#f7fbf8] p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-500">Đơn vị giao hàng:</span>
-                  <span className="text-xs font-black text-gray-900">AhaMove (Hỏa tốc)</span>
+                  <span className="text-[11px] font-black uppercase text-text-muted">Đơn vị giao hàng:</span>
+                  <span className="text-xs font-black text-black">AhaMove (Hỏa tốc)</span>
                 </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-500">Mã vận đơn:</span>
-                  <span className="text-xs font-bold text-blue-600">
+                <div className="mt-1.5 flex items-center justify-between">
+                  <span className="text-[11px] font-black uppercase text-text-muted">Mã vận đơn:</span>
+                  <span className="font-mono text-xs font-black text-primary-ink">
                     {isJourneyActive
                       ? order.delivery?.orderId || `DEL-${order.id}`
                       : "Chưa tạo vận đơn"}
                   </span>
                 </div>
                 {hasPhysicalItem && (
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="text-xs font-bold text-gray-500">Lượt giao hàng:</span>
-                    <span className="text-xs font-bold text-gray-900">
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase text-text-muted">Lượt giao hàng:</span>
+                    <span className="font-mono text-xs font-black text-black">
                       {deliveryAttemptCount}/{maxDeliveryAttempts} (tối đa {maxRedeliveryAttempts} lần giao lại)
                     </span>
                   </div>
                 )}
                 {deliveryFailureReason && (
-                  <div className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs text-orange-900">
+                  <div className="mt-2 border border-black bg-[#fed7aa] px-2.5 py-1.5 text-xs font-medium text-black">
                     <strong>Ghi chú sự cố:</strong> {deliveryFailureReason}
                   </div>
                 )}
                 {typeof order.delivery?.carrierFee === "number" && (
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="text-xs font-bold text-gray-500">Cước AhaMove:</span>
-                    <span className="text-xs font-bold text-gray-900">
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase text-text-muted">Cước AhaMove:</span>
+                    <span className="font-mono text-xs font-black text-black">
                       {formatMoney(order.delivery.carrierFee)}
                     </span>
                   </div>
@@ -1191,7 +1273,7 @@ export default function OrderDetailPage({
                       href={order.delivery.trackingUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-bold text-[#0F5B38] hover:underline"
+                      className="inline-flex items-center gap-1 text-xs font-black uppercase text-primary-ink underline"
                     >
                       <ExternalLink size={12} /> Theo dõi lộ trình trên AhaMove
                     </a>
@@ -1202,30 +1284,32 @@ export default function OrderDetailPage({
           </div>
 
           {/* Card 2: Hành trình vận chuyển */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-black text-gray-900">Hành trình vận chuyển</h2>
+          <div className="neo-box-no-hover bg-white p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2.5">
+              <h2 className="text-sm font-black uppercase tracking-wider text-black">
+                Hành trình vận chuyển
+              </h2>
               {isJourneyActive ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-ping" />
+                <span className="inline-flex items-center gap-1.5 border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase text-black">
+                  <span className="h-1.5 w-1.5 animate-ping bg-black" />
                   Đang hoạt động
                 </span>
               ) : (
-                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-bold text-gray-500">
+                <span className="inline-flex items-center border border-black bg-gray-100 px-2 py-0.5 text-[10px] font-black uppercase text-text-muted">
                   Chưa kích hoạt
                 </span>
               )}
             </div>
 
             {!isJourneyActive && (
-              <div className="mb-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+              <div className="mb-4 border-2 border-dashed border-black/30 bg-[#f7fbf8] px-3 py-2 text-xs font-medium text-text-muted">
                 Hành trình sẽ tự động kích hoạt sau khi bạn bấm{" "}
-                <strong className="text-gray-700">Chuẩn bị hàng</strong> ➔{" "}
-                <strong className="text-gray-700">Đóng gói hàng</strong> để bàn giao cho AhaMove.
+                <strong className="font-black text-black">Chuẩn bị hàng</strong> ➔{" "}
+                <strong className="font-black text-black">Đóng gói hàng</strong> để bàn giao cho AhaMove.
               </div>
             )}
 
-            <div className="relative flex flex-col gap-4 pl-2">
+            <div className="relative flex flex-col gap-3.5 pl-2">
               {timelineMilestones.map((milestone, idx) => {
                 const isLast = idx === timelineMilestones.length - 1;
 
@@ -1233,37 +1317,39 @@ export default function OrderDetailPage({
                   <div key={milestone.title} className="relative flex items-start gap-3">
                     {!isLast && (
                       <div
-                        className={`absolute left-[7px] top-[18px] bottom-[-16px] w-0.5 ${
-                          milestone.status === "done" ? "bg-[#15803D]" : "bg-gray-200"
+                        className={`absolute left-[7px] top-[18px] bottom-[-14px] w-0.5 ${
+                          milestone.status === "done" ? "bg-black" : "bg-gray-200"
                         }`}
                       />
                     )}
 
                     <div className="relative z-10 shrink-0">
                       {milestone.status === "done" ? (
-                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#15803D] text-white shadow-sm">
+                        <div className="flex h-4 w-4 items-center justify-center border border-black bg-primary text-black">
                           <Check size={10} strokeWidth={3} />
                         </div>
                       ) : milestone.status === "current" ? (
-                        <div className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#15803D] bg-white">
-                          <div className="h-2 w-2 rounded-full bg-[#15803D]" />
+                        <div className="flex h-4 w-4 items-center justify-center border-2 border-black bg-[#fef08a]">
+                          <div className="h-1.5 w-1.5 bg-black" />
                         </div>
                       ) : (
-                        <div className="h-4 w-4 rounded-full border-2 border-gray-300 bg-white" />
+                        <div className="h-4 w-4 border-2 border-gray-300 bg-white" />
                       )}
                     </div>
 
                     <div className="flex-1 pb-1">
                       <div className="flex flex-wrap items-center gap-2">
                         {milestone.time && (
-                          <span className="text-xs font-medium text-gray-500">{milestone.time} -</span>
+                          <span className="font-mono text-[11px] font-bold text-text-muted">
+                            {milestone.time} -
+                          </span>
                         )}
                         <span
-                          className={`text-xs font-bold ${
+                          className={`text-xs font-black ${
                             milestone.status === "done"
-                              ? "text-[#15803D]"
+                              ? "text-primary-ink"
                               : milestone.status === "current"
-                              ? "text-gray-900"
+                              ? "text-black"
                               : "text-gray-400"
                           }`}
                         >
@@ -1271,7 +1357,7 @@ export default function OrderDetailPage({
                         </span>
                       </div>
                       {milestone.status !== "pending" && milestone.subTitle && (
-                        <p className="mt-0.5 text-xs text-gray-500">{milestone.subTitle}</p>
+                        <p className="mt-0.5 text-[11px] font-medium text-text-muted">{milestone.subTitle}</p>
                       )}
                     </div>
                   </div>
@@ -1292,19 +1378,19 @@ export default function OrderDetailPage({
         >
           <form
             onSubmit={handleDispatchPackage}
-            className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden border-2 border-black bg-white shadow-[6px_6px_0_0_#000]"
           >
             {/* Header Pop-up */}
-            <div className="flex items-center justify-between border-b border-gray-200 bg-[#f8faf9] px-6 py-4">
+            <div className="flex items-center justify-between border-b-2 border-black bg-[#f7fbf8] px-6 py-4">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0F5B38] text-white">
+                <div className="flex h-9 w-9 items-center justify-center border-2 border-black bg-primary text-black shadow-[2px_2px_0_0_#000]">
                   <Package size={18} />
                 </div>
                 <div>
-                  <h3 id="prepare-order-title" className="text-base font-black text-gray-900">
+                  <h3 id="prepare-order-title" className="text-sm font-black uppercase text-black sm:text-base">
                     Chuẩn bị hàng &amp; Bàn giao vận chuyển AhaMove
                   </h3>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs font-medium text-text-muted">
                     Đơn hàng #ORD-{order.id} · Truy xuất thông tin khách hàng &amp; kiện hàng trước khi xuất kho
                   </p>
                 </div>
@@ -1313,10 +1399,10 @@ export default function OrderDetailPage({
                 type="button"
                 onClick={() => setIsPrepareModalOpen(false)}
                 disabled={isSubmitting}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                className="btn-secondary p-1.5!"
                 aria-label="Đóng"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -1326,8 +1412,8 @@ export default function OrderDetailPage({
                 {/* Cột trái: Thông tin nhận hàng + Quét/Gán thiết bị LED */}
                 <div className="flex flex-col gap-5 lg:col-span-7">
                   {/* 1. Thông tin khách hàng & Địa chỉ giao hàng truy xuất từ đơn hàng */}
-                  <section className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
-                    <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
+                  <section className="border-2 border-black bg-[#f7fbf8] p-4">
+                    <h4 className="mb-3 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
                       <User size={14} /> Thông tin khách hàng nhận hàng
                     </h4>
                     <div className="grid grid-cols-1 gap-2.5 text-xs sm:grid-cols-2">
@@ -1392,24 +1478,25 @@ export default function OrderDetailPage({
                 {/* Cột phải: Sản phẩm cần đóng gói + Thông số AhaMove */}
                 <div className="flex flex-col gap-5 lg:col-span-5">
                   {/* 2. Danh sách sản phẩm trong đơn hàng cần đóng gói */}
-                  <section className="rounded-xl border border-gray-200 bg-white p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-gray-700">
+                  <section className="border-2 border-black bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between border-b-2 border-black pb-2">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-black">
                         Sản phẩm cần đóng gói ({order.items.length} mặt hàng)
                       </h4>
-                      <span className="text-xs font-black text-[#0F5B38]">
+                      <span className="font-mono text-xs font-black text-primary-ink">
                         Tổng giá trị: {formatMoney(order.total)}
                       </span>
                     </div>
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y-2 divide-black/10">
                       {order.items.map((item, idx) => (
                         <div
                           key={`${item.id}-${idx}`}
                           className="flex items-center justify-between gap-3 py-2 text-xs"
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-100">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <div className="h-9 w-9 shrink-0 overflow-hidden border-2 border-black bg-gray-100">
                               {item.previewUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={item.previewUrl}
                                   alt={item.name}
@@ -1420,8 +1507,8 @@ export default function OrderDetailPage({
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate font-bold text-gray-900">{item.name}</p>
-                              <p className="text-[11px] text-gray-500">
+                              <p className="truncate font-black text-black">{item.name}</p>
+                              <p className="text-[11px] font-medium text-text-muted">
                                 {item.productType === "CHARACTER"
                                   ? "Vật phẩm ảo (Đã cấp trực tiếp)"
                                   : item.productType === "LED_MODEL"
@@ -1431,8 +1518,8 @@ export default function OrderDetailPage({
                             </div>
                           </div>
                           <div className="shrink-0 text-right">
-                            <p className="font-bold text-gray-900">× {item.quantity}</p>
-                            <p className="text-[11px] text-gray-500">
+                            <p className="font-mono font-black text-black">× {item.quantity}</p>
+                            <p className="font-mono text-[11px] font-semibold text-text-muted">
                               {formatMoney(item.price * item.quantity)}
                             </p>
                           </div>
@@ -1442,20 +1529,20 @@ export default function OrderDetailPage({
                   </section>
 
                   {/* 3. Thông số bàn giao AhaMove */}
-                  <section className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-                    <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#0F5B38]">
+                  <section className="flex flex-col gap-3 border-2 border-black bg-[#e9f5ed] p-4">
+                    <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
                       <Truck size={14} /> Thông số điều phối AhaMove
                     </h4>
 
                     <div>
-                      <label htmlFor="dispatch-service-id" className="text-xs font-bold text-gray-700">
-                        Gói dịch vụ vận chuyển (serviceId) <span className="text-red-500">*</span>
+                      <label htmlFor="dispatch-service-id" className="text-xs font-black uppercase text-black">
+                        Gói dịch vụ vận chuyển (serviceId) <span className="text-red-600">*</span>
                       </label>
                       <select
                         id="dispatch-service-id"
                         value={serviceId}
                         onChange={(e) => setServiceId(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 outline-none focus:border-[#0F5B38]"
+                        className="mt-1 w-full border-2 border-black bg-white px-3 py-2 text-xs font-bold text-black outline-none"
                       >
                         {AHAMOVE_SERVICES.map((svc) => (
                           <option key={svc.id} value={svc.id}>
@@ -1467,7 +1554,7 @@ export default function OrderDetailPage({
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
-                        <label htmlFor="dispatch-weight" className="text-xs font-bold text-gray-700">
+                        <label htmlFor="dispatch-weight" className="text-xs font-black uppercase text-black">
                           Khối lượng kiện hàng (kg)
                         </label>
                         <input
@@ -1479,21 +1566,21 @@ export default function OrderDetailPage({
                           value={weight}
                           onChange={(e) => setWeight(e.target.value)}
                           placeholder="1.5"
-                          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-900 outline-none focus:border-[#0F5B38]"
+                          className="mt-1 w-full border-2 border-black bg-white px-3 py-2 font-mono text-xs font-bold text-black outline-none"
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-bold text-gray-700">Đơn vị giao vận</label>
+                        <label className="text-xs font-black uppercase text-black">Đơn vị giao vận</label>
                         <input
                           readOnly
                           value="AhaMove Partner v3"
-                          className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-bold text-gray-600"
+                          className="mt-1 w-full border-2 border-black bg-gray-100 px-3 py-2 text-xs font-bold text-text-muted"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label htmlFor="dispatch-remarks" className="text-xs font-bold text-gray-700">
+                      <label htmlFor="dispatch-remarks" className="text-xs font-black uppercase text-black">
                         Ghi chú dặn dò tài xế (remarks)
                       </label>
                       <textarea
@@ -1503,7 +1590,7 @@ export default function OrderDetailPage({
                         value={remarks}
                         onChange={(e) => setRemarks(e.target.value)}
                         placeholder="Ví dụ: Linh kiện LED dễ vỡ, gọi trước khi giao..."
-                        className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 outline-none focus:border-[#0F5B38]"
+                        className="mt-1 w-full border-2 border-black bg-white px-3 py-2 text-xs font-medium text-black outline-none"
                       />
                     </div>
                   </section>
@@ -1513,7 +1600,7 @@ export default function OrderDetailPage({
               {errorMessage && !isEditAddressModalOpen && (
                 <div
                   role="alert"
-                  className="mt-4 flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-700"
+                  className="mt-4 flex items-start gap-2 border-2 border-black bg-[#fee2e2] p-3 text-xs font-bold text-red-800"
                 >
                   <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                   <span>{errorMessage}</span>
@@ -1522,19 +1609,19 @@ export default function OrderDetailPage({
             </div>
 
             {/* Footer Pop-up với nút "Đóng gói hàng" */}
-            <div className="flex items-center justify-end gap-2.5 border-t border-gray-200 bg-gray-50 px-6 py-4">
+            <div className="flex items-center justify-end gap-2.5 border-t-2 border-black bg-[#f7fbf8] px-6 py-4">
               <button
                 type="button"
                 onClick={() => setIsPrepareModalOpen(false)}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100"
+                className="btn-secondary px-4! py-2! text-xs font-black uppercase"
               >
                 Hủy
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#0F5B38] px-5 py-2 text-xs font-black text-white shadow transition hover:bg-[#0c4a2d] disabled:opacity-50"
+                className="btn-primary inline-flex items-center gap-2 px-5! py-2! text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
               >
                 <Truck size={15} />
                 {isSubmitting ? "Đang gửi đơn AhaMove..." : "Đóng gói hàng"}
@@ -1546,19 +1633,19 @@ export default function OrderDetailPage({
 
       {/* Modal Hủy đơn */}
       {isCancelModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <div className="flex items-center gap-2 text-red-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md border-2 border-black bg-white p-6 shadow-[6px_6px_0_0_#000]">
+            <div className="flex items-center gap-2 text-red-700">
               <AlertTriangle size={20} />
-              <h3 className="text-lg font-black">Xác nhận hủy đơn hàng</h3>
+              <h3 className="text-base font-black uppercase text-black">Xác nhận hủy đơn hàng</h3>
             </div>
-            <p className="mt-2 text-xs text-gray-600">
-              Bạn có chắc chắn muốn hủy đơn hàng <strong>#ORD-{order.id}</strong> không? Hành động này sẽ
-              đổi trạng thái đơn thành <strong>CANCELED</strong>.
+            <p className="mt-2 text-xs font-medium text-text-muted">
+              Bạn có chắc chắn muốn hủy đơn hàng <strong className="text-black">#ORD-{order.id}</strong> không? Hành động này sẽ
+              đổi trạng thái đơn thành <strong className="font-mono text-black">CANCELED</strong>.
             </p>
 
             {errorMessage && (
-              <p className="mt-3 text-xs font-semibold text-red-600">{errorMessage}</p>
+              <p className="mt-3 text-xs font-bold text-red-700">{errorMessage}</p>
             )}
 
             <div className="mt-6 flex justify-end gap-2.5">
@@ -1566,7 +1653,7 @@ export default function OrderDetailPage({
                 type="button"
                 onClick={() => setIsCancelModalOpen(false)}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                className="btn-secondary px-4! py-2! text-xs font-black uppercase"
               >
                 Không, giữ lại
               </button>
@@ -1574,7 +1661,7 @@ export default function OrderDetailPage({
                 type="button"
                 onClick={handleCancelOrder}
                 disabled={isSubmitting}
-                className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+                className="btn-danger px-4! py-2! text-xs font-black uppercase"
               >
                 {isSubmitting ? "Đang hủy..." : "Xác nhận hủy đơn"}
               </button>
@@ -1585,17 +1672,19 @@ export default function OrderDetailPage({
 
       {/* Modal Xác nhận Hoàn hàng & Hoàn tiền (DELIVERY_FAILED -> REFUNDED) */}
       {isRefundModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="flex items-center gap-2 text-red-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg border-2 border-black bg-white p-6 shadow-[6px_6px_0_0_#000]">
+            <div className="flex items-center gap-2 text-red-700">
               <RotateCcw size={20} />
-              <h3 className="text-lg font-black">Xác nhận hoàn hàng &amp; hoàn tiền</h3>
+              <h3 className="text-base font-black uppercase text-black">
+                Xác nhận hoàn hàng &amp; hoàn tiền
+              </h3>
             </div>
-            <p className="mt-2 text-xs text-gray-600">
-              Đơn hàng <strong>#ORD-{order.id}</strong> sẽ được chuyển sang trạng thái{" "}
-              <strong>REFUNDED (Đã hoàn tiền)</strong>. Hệ thống sẽ tự động thực hiện:
+            <p className="mt-2 text-xs font-medium text-text-muted">
+              Đơn hàng <strong className="text-black">#ORD-{order.id}</strong> sẽ được chuyển sang trạng thái{" "}
+              <strong className="font-mono text-black">REFUNDED (Đã hoàn tiền)</strong>. Hệ thống sẽ tự động thực hiện:
             </p>
-            <ul className="mt-2.5 list-disc space-y-1 pl-5 text-xs text-gray-700">
+            <ul className="mt-2.5 list-disc space-y-1 pl-5 text-xs font-medium text-black">
               <li>Cộng trả lại tồn kho <strong>mẫu LED</strong> trong hệ thống.</li>
               <li>Gỡ liên kết serial thiết bị LED đã đóng gói và trả về trạng thái <strong>Trong kho (IN_STOCK)</strong>.</li>
               <li>Thu hồi toàn bộ <strong>quyền sở hữu nhân vật số</strong> đi kèm đơn hàng này (nếu là đơn kết hợp).</li>
@@ -1603,7 +1692,7 @@ export default function OrderDetailPage({
             </ul>
 
             <div className="mt-4">
-              <label htmlFor="refund-reason-input" className="text-xs font-bold text-gray-700">
+              <label htmlFor="refund-reason-input" className="text-xs font-black uppercase text-black">
                 Lý do hoàn hàng / hoàn tiền
               </label>
               <textarea
@@ -1613,12 +1702,12 @@ export default function OrderDetailPage({
                 value={refundReason}
                 onChange={(e) => setRefundReason(e.target.value)}
                 placeholder="Ví dụ: Khách từ chối nhận hàng sau 2 lần giao lại, xác nhận nhập kho và hoàn tiền..."
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 outline-none focus:border-red-500"
+                className="mt-1 w-full border-2 border-black bg-white px-3 py-2 text-xs font-medium text-black outline-none"
               />
             </div>
 
             {errorMessage && (
-              <p className="mt-3 text-xs font-semibold text-red-600">{errorMessage}</p>
+              <p className="mt-3 text-xs font-bold text-red-700">{errorMessage}</p>
             )}
 
             <div className="mt-6 flex justify-end gap-2.5">
@@ -1626,7 +1715,7 @@ export default function OrderDetailPage({
                 type="button"
                 onClick={() => setIsRefundModalOpen(false)}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                className="btn-secondary px-4! py-2! text-xs font-black uppercase"
               >
                 Đóng
               </button>
@@ -1634,7 +1723,7 @@ export default function OrderDetailPage({
                 type="button"
                 onClick={() => void handleConfirmRefund()}
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+                className="btn-danger inline-flex items-center gap-1.5 px-4! py-2! text-xs font-black uppercase"
               >
                 <RotateCcw size={14} />
                 {isSubmitting ? "Đang xử lý hoàn tiền..." : "Xác nhận hoàn tiền"}
@@ -1714,20 +1803,20 @@ function FulfillmentDevicesPanel({
     <section
       className={
         compact
-          ? "rounded-xl border border-blue-200 bg-blue-50/40 p-4"
-          : "rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+          ? "border-2 border-black bg-[#f7fbf8] p-4"
+          : "neo-box-no-hover bg-white p-5"
       }
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2.5">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+          <div className="flex h-8 w-8 items-center justify-center border-2 border-black bg-[#e0f2fe] text-black shadow-[2px_2px_0_0_#000]">
             <QrCode size={16} />
           </div>
           <div>
-            <h2 className="text-sm font-black text-gray-900">
+            <h2 className="text-xs font-black uppercase tracking-wider text-black sm:text-sm">
               Quét QR &amp; Gán thiết bị LED đóng hàng
             </h2>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] font-medium text-text-muted">
               Gán Serial Number thiết bị trong kho cho từng sản phẩm trước khi bàn giao vận chuyển
             </p>
           </div>
@@ -1735,10 +1824,10 @@ function FulfillmentDevicesPanel({
 
         <div className="flex items-center gap-2">
           <span
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
+            className={`inline-flex items-center border border-black px-2 py-0.5 font-mono text-[11px] font-black ${
               isComplete
-                ? "bg-emerald-100 text-emerald-800"
-                : "bg-amber-100 text-amber-800"
+                ? "bg-primary text-black"
+                : "bg-[#fef08a] text-black"
             }`}
           >
             Đã gán {totalLinked} / {totalRequired} thiết bị LED
@@ -1748,7 +1837,7 @@ function FulfillmentDevicesPanel({
             onClick={onRefresh}
             disabled={isLoading}
             title="Làm mới danh sách thiết bị"
-            className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            className="btn-secondary p-1.5!"
           >
             <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />
           </button>
@@ -1758,7 +1847,7 @@ function FulfillmentDevicesPanel({
       {errorMessage && (
         <div
           role="alert"
-          className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
+          className="mb-3 flex items-start gap-2 border-2 border-black bg-[#fee2e2] px-3 py-2 text-xs font-bold text-red-800"
         >
           <AlertTriangle size={14} className="mt-0.5 shrink-0" />
           <span>{errorMessage}</span>
@@ -1768,15 +1857,15 @@ function FulfillmentDevicesPanel({
       {successMessage && (
         <div
           role="status"
-          className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800"
+          className="mb-3 flex items-start gap-2 border-2 border-black bg-primary/25 px-3 py-2 text-xs font-bold text-black"
         >
-          <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+          <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-primary-ink" />
           <span>{successMessage}</span>
         </div>
       )}
 
       {physicalLineItems.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-center text-xs text-gray-500">
+        <p className="border-2 border-dashed border-black/30 bg-[#f7fbf8] px-3 py-4 text-center text-xs font-medium text-text-muted">
           {isLoading
             ? "Đang tải chi tiết Order Item từ hệ thống..."
             : "Không có mục LED / Bundle cần gán thiết bị hoặc thiếu orderItemId."}
@@ -1792,19 +1881,19 @@ function FulfillmentDevicesPanel({
             return (
               <div
                 key={line.orderItemId}
-                className="rounded-xl border border-gray-200 bg-gray-50/70 p-3.5"
+                className="border-2 border-black bg-[#f7fbf8] p-3.5"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-[11px] font-bold text-slate-800">
+                      <span className="border border-black bg-primary px-1.5 py-0.5 font-mono text-[10px] font-black text-black">
                         Item #{line.orderItemId}
                       </span>
-                      <span className="text-xs font-black text-gray-900">
+                      <span className="text-xs font-black text-black">
                         {line.productName}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-gray-500">
+                    <p className="mt-1 text-[11px] font-semibold text-text-muted">
                       Số lượng đặt: {line.quantity} · Đã gán: {linkedList.length} thiết bị
                     </p>
                   </div>
@@ -1816,17 +1905,17 @@ function FulfillmentDevicesPanel({
                     {linkedList.map((inst) => (
                       <div
                         key={inst.instanceId}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs"
+                        className="flex flex-wrap items-center justify-between gap-2 border-2 border-black bg-white px-3 py-2 text-xs"
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <Cpu size={14} className="text-emerald-600" />
-                          <span className="font-mono font-bold text-gray-900">
+                          <Cpu size={14} className="text-primary-ink" />
+                          <span className="font-mono font-black text-black">
                             {inst.serialNumber}
                           </span>
-                          <span className="text-[11px] text-gray-500">
+                          <span className="font-mono text-[11px] font-semibold text-text-muted">
                             MAC: {inst.macAddress}
                           </span>
-                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                          <span className="border border-black bg-[#e0f2fe] px-1.5 py-0.5 text-[10px] font-black uppercase text-black">
                             {inst.status}
                           </span>
                         </div>
@@ -1835,7 +1924,7 @@ function FulfillmentDevicesPanel({
                             type="button"
                             disabled={unlinkingInstanceId === inst.instanceId}
                             onClick={() => onUnlink(inst)}
-                            className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                            className="btn-danger inline-flex items-center gap-1 px-2! py-1! text-[10px] font-black uppercase"
                           >
                             {unlinkingInstanceId === inst.instanceId ? (
                               <Loader2 size={11} className="animate-spin" />
@@ -1866,7 +1955,7 @@ function FulfillmentDevicesPanel({
                         onChange={(e) =>
                           onSerialChange(line.orderItemId, e.target.value)
                         }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-800 outline-none focus:border-blue-600"
+                        className="w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-bold text-black outline-none"
                       >
                         <option value="">
                           -- Chọn nhanh thiết bị IN_STOCK của mẫu này ({matchingInStock.length}) --
@@ -1879,7 +1968,7 @@ function FulfillmentDevicesPanel({
                       </select>
                     ) : (
                       !isLoading && (
-                        <p className="rounded-lg border border-dashed border-amber-200 bg-amber-50/70 px-3 py-1.5 text-[11px] font-medium text-amber-800">
+                        <p className="border-2 border-dashed border-black/40 bg-[#fef08a] px-3 py-1.5 text-[11px] font-bold text-black">
                           Không còn thiết bị IN_STOCK thuộc mẫu LED này trong kho.
                         </p>
                       )
@@ -1894,13 +1983,13 @@ function FulfillmentDevicesPanel({
                         }
                         placeholder="Nhập hoặc quét Serial Number (VD: LMT-64X64-SEED-0001)"
                         aria-label={`Serial Number cho mục ${line.orderItemId}`}
-                        className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-mono text-xs text-gray-900 outline-none focus:border-blue-600"
+                        className="flex-1 border-2 border-black bg-white px-3 py-1.5 font-mono text-xs font-bold text-black outline-none"
                       />
                       <button
                         type="button"
                         disabled={isLinkingThis}
                         onClick={() => onLink(line.orderItemId)}
-                        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#0F5B38] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-[#0c4a2d] disabled:opacity-50"
+                        className="btn-primary inline-flex shrink-0 items-center justify-center gap-1.5 px-3.5! py-1.5! text-xs font-black uppercase"
                       >
                         {isLinkingThis ? (
                           <Loader2 size={13} className="animate-spin" />
@@ -1912,7 +2001,7 @@ function FulfillmentDevicesPanel({
                     </div>
                   </div>
                 ) : (
-                  <p className="mt-2 text-[11px] italic text-gray-500">
+                  <p className="mt-2 text-[11px] font-medium italic text-text-muted">
                     Đơn hàng không ở trạng thái Chờ đóng hàng (PROCESSING / PARTIALLY_FULFILLED) nên không thể chỉnh sửa gán thiết bị.
                   </p>
                 )}

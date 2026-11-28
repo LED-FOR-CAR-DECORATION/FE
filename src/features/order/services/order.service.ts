@@ -1,5 +1,5 @@
 import { CheckoutRequest, type OrderDetailResponse, type OrderSummaryItem } from "@/api_client";
-import { fetchAllPages, mapWithConcurrency } from "@/lib/api/paging";
+import { fetchAllPages } from "@/lib/api/paging";
 import type { Address } from "@/features/address/types";
 import type { AuthUser } from "@/features/auth/types";
 import type { CartItem } from "@/features/cart/types";
@@ -14,7 +14,6 @@ import {
   apiUpdateStaffOrderStatus,
   fetchMyOrders,
   fetchOrderDetail,
-  fetchStaffOrderDetail,
   fetchStaffOrders,
   type BackendStaffOrderDetail,
   type BackendStaffOrderSummary,
@@ -26,8 +25,19 @@ import { mapBackendProductType } from "@/lib/api/products";
 
 export const ORDERS_CHANGED_EVENT = "led-controller-orders-changed";
 
+export interface OrdersChangedDetail {
+  /** Đơn vừa thay đổi; bỏ trống khi không rõ (vd. thanh toán xong ở trang kết quả). */
+  orderId?: string;
+}
+
+/** Báo cho cache đơn hàng (và gallery/quyền lợi) biết đơn của khách vừa đổi. */
+export function emitOrdersChanged(orderId?: string | number): void {
+  if (typeof window === "undefined") return;
+  const detail: OrdersChangedDetail = { orderId: orderId === undefined ? undefined : String(orderId) };
+  window.dispatchEvent(new CustomEvent<OrdersChangedDetail>(ORDERS_CHANGED_EVENT, { detail }));
+}
+
 /** Số request chi tiết đơn chạy song song tối đa (tránh dội hàng chục request cùng lúc). */
-const DETAIL_CONCURRENCY = 6;
 
 export function mapBackendOrderStatus(status?: string): OrderStatus {
   switch (status) {
@@ -107,6 +117,13 @@ function mapBackendOrderType(orderType?: string): OrderType | undefined {
   }
 }
 
+function resolveFallbackProductType(orderType?: string): CartItem["productType"] {
+  if (orderType === "SUBSCRIPTION") return "SUBSCRIPTION";
+  if (orderType === "DIGITAL") return "CHARACTER";
+  if (orderType === "BUNDLE" || orderType === "MIXED") return "BUNDLE";
+  return "LED_MODEL";
+}
+
 function resolveEffectiveOrderStatus(
   rawStatus: OrderStatus,
   paymentStatus: PaymentStatus,
@@ -120,7 +137,7 @@ function resolveEffectiveOrderStatus(
     ) {
       if (orderKind === "PHYSICAL") return "PROCESSING";
       if (orderKind === "MIXED") return "PARTIALLY_FULFILLED";
-      if (rawStatus === "PENDING_PAYMENT") return "COMPLETED";
+      if (orderKind === "DIGITAL") return "COMPLETED";
     }
   }
   return rawStatus;
@@ -168,7 +185,7 @@ export function mapOrderSummaryAndDetailToOrder(
     : [
         {
           id: String(summary.orderId),
-          productType: summary.orderType === "DIGITAL" ? "CHARACTER" : "LED_MODEL",
+          productType: resolveFallbackProductType(summary.orderType),
           name: summary.primaryProductName,
           price: Number(summary.totalAmount ?? 0),
           quantity: summary.totalItems || 1,
@@ -177,7 +194,11 @@ export function mapOrderSummaryAndDetailToOrder(
       ];
 
   const orderType = mapBackendOrderType(detail?.orderType ?? summary.orderType);
-  const orderKind = getOrderKind({ orderType, items });
+  const orderKind = getOrderKind({
+    orderType,
+    items,
+    hasDelivery: detail ? Boolean(detail.delivery) : undefined,
+  });
   const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
   const paymentStatus = mapBackendPaymentStatus(detail?.status ?? summary.status, detail?.payment?.status);
   const status = resolveEffectiveOrderStatus(rawStatus, paymentStatus, orderKind);
@@ -249,7 +270,7 @@ export function mapStaffOrderSummaryAndDetailToOrder(
     : [
         {
           id: String(summary.orderId),
-          productType: summary.orderType === "DIGITAL" ? "CHARACTER" : "LED_MODEL",
+          productType: resolveFallbackProductType(summary.orderType),
           name: summary.primaryProductName,
           price: Number(summary.totalAmount ?? 0),
           quantity: summary.totalItems || 1,
@@ -258,7 +279,11 @@ export function mapStaffOrderSummaryAndDetailToOrder(
       ];
 
   const orderType = mapBackendOrderType(detail?.orderType ?? summary.orderType);
-  const orderKind = getOrderKind({ orderType, items });
+  const orderKind = getOrderKind({
+    orderType,
+    items,
+    hasDelivery: detail ? Boolean(detail.delivery) : summary.deliveryStatus ? true : undefined,
+  });
   const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
   const paymentStatus = mapBackendPaymentStatus(
     detail?.status ?? summary.status,
@@ -313,24 +338,14 @@ export function mapStaffOrderSummaryAndDetailToOrder(
 }
 
 export const orderService = {
-  async fetchCustomerOrders(customer: AuthUser | null): Promise<MockOrder[]> {
-    if (!customer || customer.role !== "CUSTOMER") return [];
-    const summaries = await fetchAllPages((page) => fetchMyOrders({ page, size: 50 }));
-    const details = await mapWithConcurrency(summaries, DETAIL_CONCURRENCY, (s) =>
-      fetchOrderDetail(s.orderId).catch(() => null),
-    );
-    return summaries.map((summary, idx) =>
-      mapOrderSummaryAndDetailToOrder(summary, details[idx] ?? null, customer),
-    );
+  /** Chỉ danh sách summary của khách; chi tiết từng đơn được cache riêng theo id (xem useOrders). */
+  async fetchCustomerOrderSummaries(): Promise<OrderSummaryItem[]> {
+    return fetchAllPages((page) => fetchMyOrders({ page, size: 50 }));
   },
-  async fetchStaffOrders(): Promise<MockOrder[]> {
-    const { items: summaries } = await fetchStaffOrders({ allStatuses: true, size: 50 });
-    const details = await mapWithConcurrency(summaries, DETAIL_CONCURRENCY, (s) =>
-      fetchStaffOrderDetail(s.orderId).catch(() => null),
-    );
-    return summaries.map((summary, idx) =>
-      mapStaffOrderSummaryAndDetailToOrder(summary, details[idx] ?? null),
-    );
+  /** Chỉ danh sách summary của staff (BE bắt buộc status nên vẫn là 9 status × số trang). */
+  async fetchStaffOrderSummaries(): Promise<BackendStaffOrderSummary[]> {
+    const { items } = await fetchStaffOrders({ allStatuses: true, size: 50 });
+    return items;
   },
   async updateStaffStatus(orderId: number | string, status: string, reason?: string): Promise<void> {
     let backendStatus = status;
@@ -339,18 +354,12 @@ export const orderService = {
     else if (status === "REFUNDED") backendStatus = "REFUNDED";
     else if (status === "Cancelled" || status === "CANCELED") backendStatus = "CANCELED";
     await apiUpdateStaffOrderStatus(orderId, backendStatus, reason);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
-    }
   },
   async updateStaffDeliveryAddress(
     orderId: number | string,
     payload: UpdateStaffDeliveryAddressRequest,
   ) {
     const result = await apiUpdateStaffOrderDeliveryAddress(orderId, payload);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
-    }
     return result;
   },
   async dispatchOrderToAhamove(
@@ -358,9 +367,6 @@ export const orderService = {
     payload: DispatchOrderRequest,
   ): Promise<DispatchOrderResponse> {
     const result = await apiDispatchOrder(orderId, payload);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
-    }
     return result;
   },
   async checkout(input: {
@@ -383,9 +389,7 @@ export const orderService = {
       paymentGateway: CheckoutRequest.paymentGateway.SEPAY,
     });
     const detail = await fetchOrderDetail(res.orderId).catch(() => null);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
-    }
+    emitOrdersChanged(res.orderId);
     return {
       orderId: String(res.orderId),
       paymentCode: detail?.payment?.paymentContent ?? undefined,
@@ -393,16 +397,12 @@ export const orderService = {
   },
   async confirmDelivery(orderId: number | string) {
     const result = await apiConfirmOrderDelivery(orderId);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
-    }
+    emitOrdersChanged(orderId);
     return result;
   },
   async cancelCustomerOrder(orderId: number | string, reason?: string) {
     const result = await apiCancelOrder(orderId, reason);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
-    }
+    emitOrdersChanged(orderId);
     return result;
   },
 };

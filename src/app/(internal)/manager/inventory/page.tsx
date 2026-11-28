@@ -9,17 +9,14 @@ import {
   Boxes,
   Check,
   CheckCircle,
-  ChevronLeft,
   ChevronRight,
   Copy,
   Cpu,
   Edit3,
   ExternalLink,
   Eye,
-  List,
   Loader2,
   Lock,
-  PackageCheck,
   PackagePlus,
   Plus,
   Printer,
@@ -57,7 +54,8 @@ import {
 import LedModelFormModal from "@/features/product/components/LedModelFormModal";
 import DeprecateLedModelModal from "@/features/product/components/DeprecateLedModelModal";
 import StockInLedInstancesModal from "@/features/product/components/StockInLedInstancesModal";
-import { fetchAllPages } from "@/lib/api/paging";
+import { useAdaptiveListRows } from "@/hooks/useAdaptiveListRows";
+import CommissionPagination from "@/features/commission/components/CommissionPagination";
 
 type InstanceStatusValue =
   | LedInstanceItem.status
@@ -123,8 +121,6 @@ const LED_MODEL_STATUS_STYLE: Record<LedModelItem.status, string> = {
   DEPRECATED: "bg-gray-200 text-black",
 };
 
-const PAGE_SIZE = 10;
-
 function formatDateTime(value?: string | null, includeTime = true): string {
   if (!value) return "—";
   const parsed = new Date(value);
@@ -178,6 +174,15 @@ export default function InventoryPage() {
   const { user } = useAuth();
   const canManageCatalog = user?.role === "ADMIN" || user?.role === "MANAGER";
 
+  const { rows: pageSize, ready } = useAdaptiveListRows({
+    estimatedRowHeight: 56,
+    rowGap: 0,
+    chromeHeight: 438,
+    minRows: 2,
+    maxRows: 10,
+    defaultRows: 6,
+  });
+
   // Unified Master -> Detail state: null = LED models list, non-null = instances of that LED model
   const [selectedModel, setSelectedModel] = useState<ManagedLedModelItem | null>(null);
   const [instanceReloadKey, setInstanceReloadKey] = useState(0);
@@ -186,7 +191,7 @@ export default function InventoryPage() {
   const [models, setModels] = useState<ManagedLedModelItem[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({
     page: 0,
-    size: PAGE_SIZE,
+    size: 6,
     totalElements: 0,
     totalPages: 1,
     hasNext: false,
@@ -194,15 +199,6 @@ export default function InventoryPage() {
   });
   const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [modelsError, setModelsError] = useState<string | null>(null);
-
-  // Summary metrics across full catalog (up to 100 models)
-  const [summaryStats, setSummaryStats] = useState({
-    totalStock: 0,
-    totalModels: 0,
-    lowStockCount: 0,
-    activeCount: 0,
-    linkedProductCount: 0,
-  });
 
   // Filters
   const [searchInput, setSearchInput] = useState("");
@@ -232,53 +228,33 @@ export default function InventoryPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Load summary metrics
-  useEffect(() => {
-    let cancelled = false;
-    fetchAllPages(async (page) => {
-      const res = await fetchLedModelsPage({ page, size: 100 });
-      return { items: res.items, totalPages: res.meta.totalPages };
-    })
-      .then((list) => {
-        if (cancelled) return;
-        const nonDeprecated = list.filter((m) => m.status !== LedModelItem.status.DEPRECATED);
-        setSummaryStats({
-          totalStock: nonDeprecated.reduce((sum, m) => sum + (m.stockQuantity ?? 0), 0),
-          totalModels: list.length,
-          lowStockCount: nonDeprecated.filter((m) => m.isLowStock).length,
-          activeCount: list.filter((m) => m.status === LedModelItem.status.ACTIVE).length,
-          linkedProductCount: list.filter((m) => m.productId != null).length,
-        });
-        setSelectedModel((prev) => {
-          if (!prev) return null;
-          return list.find((m) => m.modelId === prev.modelId) ?? prev;
-        });
-      })
-      .catch(() => {
-        // Summary stays last known values
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
   // Load paginated models (DEV-01)
   useEffect(() => {
+    if (!ready) return;
     let cancelled = false;
     setIsLoadingModels(true);
     setModelsError(null);
 
     fetchLedModelsPage({
       page,
-      size: PAGE_SIZE,
+      size: pageSize,
       keyword: debouncedKeyword || undefined,
       status: statusFilter === "ALL" ? undefined : statusFilter,
       lowStockOnly: lowStockOnly ? true : undefined,
     })
       .then((res) => {
         if (cancelled) return;
+        const nextTotalPages = Math.max(1, res.meta.totalPages || 1);
+        if (page > 0 && page >= nextTotalPages) {
+          setPage(Math.max(0, nextTotalPages - 1));
+          return;
+        }
         setModels(res.items);
         setMeta(res.meta);
+        setSelectedModel((prev) => {
+          if (!prev) return null;
+          return res.items.find((m) => m.modelId === prev.modelId) ?? prev;
+        });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -293,7 +269,7 @@ export default function InventoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedKeyword, statusFilter, lowStockOnly, reloadKey]);
+  }, [ready, page, pageSize, debouncedKeyword, statusFilter, lowStockOnly, reloadKey]);
 
   const triggerReload = useCallback(() => {
     setReloadKey((k) => k + 1);
@@ -310,11 +286,11 @@ export default function InventoryPage() {
 
   return (
     <div className="manager-neo-dashboard mx-auto w-full max-w-[1440px] font-sans text-text-main">
-      <div className="flex flex-col gap-6">
-        {/* Top Row: Storefront-aligned Header Banner & View Mode Tabs */}
-        <header className="border-2 border-black border-l-8 border-l-primary bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="min-w-0 space-y-1.5">
+      <div className="flex min-h-[calc(100dvh-114px)] flex-col gap-3 xl:h-[calc(100dvh-114px)]">
+        {/* Top Row: Compact Header Banner */}
+        <header className="shrink-0 border-2 border-black border-l-8 border-l-primary bg-white px-4 py-2.5 shadow-[4px_4px_0_0_#000] sm:px-5 sm:py-3">
+          <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
                   KHO THIẾT BỊ LED
@@ -331,25 +307,25 @@ export default function InventoryPage() {
 
               <div className="flex items-center gap-2.5">
                 <Boxes
-                  size={24}
+                  size={20}
                   className="shrink-0 text-primary-ink"
                   aria-hidden="true"
                 />
-                <h1 className="text-xl font-black uppercase tracking-tight text-black sm:text-2xl">
+                <h1 className="text-lg font-black uppercase tracking-tight text-black sm:text-xl">
                   QUẢN LÝ KHO LED
                 </h1>
               </div>
 
-              <p className="text-xs font-medium text-text-muted sm:text-sm">
+              <p className="text-xs font-medium text-text-muted">
                 Quản lý danh mục mẫu LED phần cứng, tồn kho, thông số kỹ thuật và theo dõi từng thiết bị trong kho.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={triggerReload}
-                className="btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                className="btn-secondary inline-flex items-center gap-2 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
               >
                 <RefreshCw
                   size={14}
@@ -363,7 +339,7 @@ export default function InventoryPage() {
                 <button
                   type="button"
                   onClick={() => setCreateModalOpen(true)}
-                  className="btn-primary inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                  className="btn-primary inline-flex items-center gap-2 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
                 >
                   <Plus size={15} aria-hidden="true" />
                   Thêm mẫu LED
@@ -371,53 +347,12 @@ export default function InventoryPage() {
               )}
             </div>
           </div>
-
-          {/* View Mode Switcher Bar */}
-          <div className="mt-5 flex flex-wrap items-center gap-2 border-t-2 border-dashed border-gray-200 pt-4">
-            <span className="text-[11px] font-black uppercase tracking-wider text-text-muted">
-              Chế độ xem:
-            </span>
-            <button
-              type="button"
-              aria-pressed={!selectedModel}
-              onClick={() => setSelectedModel(null)}
-              className={`inline-flex cursor-pointer items-center gap-1.5 border-2 border-black px-3 py-1.5 text-xs font-black uppercase tracking-wide transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
-                !selectedModel
-                  ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
-                  : "bg-white text-black hover:bg-primary/20"
-              }`}
-            >
-              <List size={14} aria-hidden="true" />
-              Danh mục mẫu LED ({summaryStats.totalModels})
-            </button>
-
-            <button
-              type="button"
-              aria-pressed={Boolean(selectedModel)}
-              disabled={!selectedModel && models.length === 0}
-              onClick={() => {
-                if (!selectedModel && models.length > 0) {
-                  setSelectedModel(models[0]);
-                }
-              }}
-              className={`inline-flex cursor-pointer items-center gap-1.5 border-2 border-black px-3 py-1.5 text-xs font-black uppercase tracking-wide transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-50 ${
-                selectedModel
-                  ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
-                  : "bg-white text-black hover:bg-primary/20"
-              }`}
-            >
-              <Cpu size={14} aria-hidden="true" />
-              {selectedModel
-                ? `Thiết bị · ${selectedModel.modelName}`
-                : "Thiết bị vật lý (Serial/MAC)"}
-            </button>
-          </div>
         </header>
 
         {!canManageCatalog && (
           <div
             role="status"
-            className="flex items-center gap-2.5 border-2 border-black bg-[#fef08a] px-4 py-3 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
+            className="flex shrink-0 items-center gap-2.5 border-2 border-black bg-[#fef08a] px-4 py-2.5 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
           >
             <Lock size={15} className="shrink-0 text-black" aria-hidden="true" />
             <span>
@@ -429,7 +364,7 @@ export default function InventoryPage() {
         {notice && (
           <div
             role={notice.type === "error" ? "alert" : "status"}
-            className={`flex items-center justify-between gap-3 border-2 border-black px-4 py-3 text-xs font-bold text-black shadow-[4px_4px_0_0_#000] ${
+            className={`flex shrink-0 items-center justify-between gap-3 border-2 border-black px-4 py-2.5 text-xs font-bold text-black shadow-[4px_4px_0_0_#000] ${
               notice.type === "error" ? "bg-[#fee2e2]" : "bg-primary/30"
             }`}
           >
@@ -452,479 +387,377 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* KPI Stat Cards */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard
-            icon={<Boxes size={18} strokeWidth={2.25} aria-hidden="true" />}
-            label="Tổng tồn kho khả dụng"
-            subtitle="Thiết bị sẵn sàng trong kho"
-            value={summaryStats.totalStock}
-            badgeLabel="Khả dụng"
-            badgeClassName="bg-primary text-black"
-            iconBoxClassName="bg-primary"
-            helper="Không tính mẫu đã ngừng kinh doanh"
-          />
-          <SummaryCard
-            icon={<List size={18} strokeWidth={2.25} aria-hidden="true" />}
-            label="Tổng mẫu LED"
-            subtitle="Danh mục phần cứng"
-            value={summaryStats.totalModels}
-            badgeLabel={`${summaryStats.linkedProductCount} gắn Store`}
-            badgeClassName="bg-[#e0f2fe] text-black"
-            iconBoxClassName="bg-[#e0f2fe]"
-            helper={`${summaryStats.linkedProductCount} mẫu đã gắn sản phẩm Cửa hàng`}
-          />
-          <SummaryCard
-            icon={<AlertTriangle size={18} strokeWidth={2.25} aria-hidden="true" />}
-            label="Mẫu LED sắp hết hàng"
-            subtitle="Ngưỡng cảnh báo < 5 chiếc"
-            value={summaryStats.lowStockCount}
-            badgeLabel={summaryStats.lowStockCount > 0 ? "Cần nhập thêm" : "Ổn định"}
-            badgeClassName={
-              summaryStats.lowStockCount > 0
-                ? "bg-[#fef08a] text-black"
-                : "bg-primary text-black"
-            }
-            iconBoxClassName={
-              summaryStats.lowStockCount > 0 ? "bg-[#fef08a]" : "bg-primary/60"
-            }
-            helper="Tồn kho dưới 5 chiếc"
-            tone={summaryStats.lowStockCount > 0 ? "warning" : "default"}
-          />
-          <SummaryCard
-            icon={<PackageCheck size={18} strokeWidth={2.25} aria-hidden="true" />}
-            label="Đang kinh doanh"
-            subtitle="Trạng thái ACTIVE"
-            value={summaryStats.activeCount}
-            badgeLabel="Hoạt động"
-            badgeClassName="bg-primary text-black"
-            iconBoxClassName="bg-primary"
-            helper="Sẵn sàng cấp phát & bày bán"
-          />
-        </div>
-
         {/* Main Workspace Card */}
-        <section className="border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
           {selectedModel ? (
-            <div className="flex flex-col gap-5">
-              {/* Selected Model Header */}
-              <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-black pb-4">
-                <div className="flex flex-wrap items-start gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedModel(null)}
-                    className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-                  >
-                    <ArrowLeft size={14} aria-hidden="true" />
-                    Danh sách mẫu LED
-                  </button>
-
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-black uppercase tracking-tight text-black sm:text-lg">
-                        {selectedModel.modelName}
-                      </h2>
-                      <span className="border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-black text-black">
-                        #{selectedModel.modelId}
-                      </span>
-                      {selectedModel.spec?.widthPx && selectedModel.spec?.heightPx && (
-                        <span className="border border-black bg-white px-2 py-0.5 font-mono text-[10px] font-black text-black">
-                          {selectedModel.spec.widthPx}×{selectedModel.spec.heightPx} px
-                        </span>
-                      )}
-                      <span
-                        className={`${BADGE_BASE_CLASS} ${
-                          LED_MODEL_STATUS_STYLE[selectedModel.status]
-                        }`}
-                      >
-                        {MODEL_STATUS_LABEL[selectedModel.status] ?? selectedModel.status}
-                      </span>
+            <LedInstancesSection
+              model={selectedModel}
+              pageSize={pageSize}
+              ready={ready}
+              externalReloadKey={instanceReloadKey}
+              canManageCatalog={canManageCatalog}
+              onBack={() => setSelectedModel(null)}
+              onEditModel={() => setEditingModel(selectedModel)}
+              onOpenStockIn={() => setStockInModel(selectedModel)}
+            />
+          ) : (
+            <>
+              <section className="flex min-h-0 flex-1 flex-col gap-2.5 border-2 border-black bg-white p-3.5 shadow-[4px_4px_0_0_#000] sm:p-4">
+                {/* Models Section Header */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5 border-b-2 border-black pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center border-2 border-black bg-primary shadow-[2px_2px_0_0_#000]">
+                      <Cpu className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
                     </div>
-                    <p className="mt-1 text-xs font-medium text-text-muted">
-                      Tồn kho khả dụng:{" "}
-                      <strong className="font-black text-black tabular-nums">
-                        {selectedModel.stockQuantity} thiết bị
-                      </strong>{" "}
-                      · Xem toàn bộ thiết bị (Serial/MAC) thuộc mẫu LED này và nhập kho kèm mã thiết bị.
-                    </p>
+                    <div>
+                      <h2 className="text-sm font-black uppercase tracking-wider text-black">
+                        DANH SÁCH MẪU LED TRONG KHO
+                      </h2>
+                      <p className="text-[11px] font-medium text-text-muted">
+                        Bấm vào một mẫu LED để xem danh sách thiết bị (Serial/MAC) và nhập kho thiết bị mới.
+                      </p>
+                    </div>
                   </div>
+
+                  <span className={`${BADGE_BASE_CLASS} bg-white`}>
+                    Tổng {meta.totalElements} mẫu
+                  </span>
                 </div>
 
-                {canManageCatalog && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {selectedModel.status !== LedModelItem.status.DEPRECATED && (
-                      <button
-                        type="button"
-                        onClick={() => setStockInModel(selectedModel)}
-                        className="btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-                      >
-                        <PackagePlus size={14} aria-hidden="true" />
-                        Nhập kho thiết bị
-                      </button>
-                    )}
+                {/* Filter Toolbar */}
+                <div className="grid shrink-0 gap-2.5 md:grid-cols-[1fr_210px_auto_auto]">
+                  <div className="relative">
+                    <Search
+                      size={14}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black"
+                      aria-hidden="true"
+                    />
+                    <input
+                      value={searchInput}
+                      onChange={(event) => setSearchInput(event.target.value)}
+                      aria-label="Tìm theo tên mẫu LED"
+                      className="w-full border-2 border-black bg-gray-50 py-1.5 pl-9 pr-3 text-xs font-bold text-black focus:bg-white"
+                      placeholder="Tìm theo tên mẫu LED..."
+                    />
+                  </div>
+
+                  <select
+                    value={statusFilter}
+                    onChange={(event) => {
+                      setStatusFilter(event.target.value as LedModelItem.status | "ALL");
+                      setPage(0);
+                    }}
+                    aria-label="Lọc theo trạng thái mẫu LED"
+                    className="border-2 border-black bg-gray-50 px-3 py-1.5 text-xs font-bold text-black focus:bg-white"
+                  >
+                    <option value="ALL">Trạng thái: Tất cả</option>
+                    <option value={LedModelItem.status.ACTIVE}>Đang kinh doanh</option>
+                    <option value={LedModelItem.status.OUT_OF_STOCK}>Hết hàng</option>
+                    <option value={LedModelItem.status.DEPRECATED}>Ngừng kinh doanh</option>
+                  </select>
+
+                  <label className="inline-flex cursor-pointer items-center gap-2 border-2 border-black bg-gray-50 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-black transition-colors hover:bg-primary/20">
+                    <input
+                      type="checkbox"
+                      checked={lowStockOnly}
+                      onChange={(e) => {
+                        setLowStockOnly(e.target.checked);
+                        setPage(0);
+                      }}
+                      className="h-3.5 w-3.5 cursor-pointer accent-black"
+                    />
+                    Chỉ mẫu sắp hết (&lt; 5)
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                  >
+                    <RotateCcw size={13} aria-hidden="true" /> Đặt lại
+                  </button>
+                </div>
+
+                {modelsError && (
+                  <div
+                    role="alert"
+                    className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-2 border-black bg-[#fee2e2] px-4 py-2.5 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
+                  >
+                    <span className="flex items-center gap-2">
+                      <AlertTriangle size={16} className="shrink-0 text-red-700" aria-hidden="true" />
+                      {modelsError}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => setEditingModel(selectedModel)}
-                      className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                      onClick={triggerReload}
+                      className="btn-secondary px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
                     >
-                      <Edit3 size={13} aria-hidden="true" />
-                      Cập nhật mẫu
+                      Thử lại
                     </button>
                   </div>
                 )}
-              </div>
 
-              <LedInstancesSection
-                model={selectedModel}
-                externalReloadKey={instanceReloadKey}
-                canManageCatalog={canManageCatalog}
-                onOpenStockIn={() => setStockInModel(selectedModel)}
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col gap-5">
-              {/* Models Section Header */}
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black pb-4">
-                <div className="flex items-start gap-2.5">
-                  <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center border-2 border-black bg-primary shadow-[2px_2px_0_0_#000]">
-                    <Cpu className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-black uppercase tracking-wider text-black sm:text-base">
-                      DANH SÁCH MẪU LED TRONG KHO
-                    </h2>
-                    <p className="mt-0.5 text-xs font-medium text-text-muted">
-                      Bấm vào một mẫu LED để xem danh sách thiết bị (Serial/MAC) và nhập kho thiết bị mới.
-                    </p>
-                  </div>
-                </div>
-
-                <span className={`${BADGE_BASE_CLASS} bg-white`}>
-                  Tổng {meta.totalElements} mẫu
-                </span>
-              </div>
-
-              {/* Filter Toolbar */}
-              <div className="grid gap-3 md:grid-cols-[1fr_220px_auto_auto]">
-                <div className="relative">
-                  <Search
-                    size={15}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black"
-                    aria-hidden="true"
-                  />
-                  <input
-                    value={searchInput}
-                    onChange={(event) => setSearchInput(event.target.value)}
-                    aria-label="Tìm theo tên mẫu LED"
-                    className="w-full border-2 border-black bg-gray-50 py-2 pl-9 pr-3 text-xs font-bold text-black focus:bg-white"
-                    placeholder="Tìm theo tên mẫu LED..."
-                  />
-                </div>
-
-                <select
-                  value={statusFilter}
-                  onChange={(event) => {
-                    setStatusFilter(event.target.value as LedModelItem.status | "ALL");
-                    setPage(0);
-                  }}
-                  aria-label="Lọc theo trạng thái mẫu LED"
-                  className="border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black focus:bg-white"
-                >
-                  <option value="ALL">Trạng thái: Tất cả</option>
-                  <option value={LedModelItem.status.ACTIVE}>Đang kinh doanh</option>
-                  <option value={LedModelItem.status.OUT_OF_STOCK}>Hết hàng</option>
-                  <option value={LedModelItem.status.DEPRECATED}>Ngừng kinh doanh</option>
-                </select>
-
-                <label className="inline-flex cursor-pointer items-center gap-2 border-2 border-black bg-gray-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-black transition-colors hover:bg-primary/20">
-                  <input
-                    type="checkbox"
-                    checked={lowStockOnly}
-                    onChange={(e) => {
-                      setLowStockOnly(e.target.checked);
-                      setPage(0);
-                    }}
-                    className="h-3.5 w-3.5 cursor-pointer accent-black"
-                  />
-                  Chỉ mẫu sắp hết (&lt; 5)
-                </label>
-
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-                >
-                  <RotateCcw size={14} aria-hidden="true" /> Đặt lại
-                </button>
-              </div>
-
-              {modelsError && (
-                <div
-                  role="alert"
-                  className="flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-[#fee2e2] px-4 py-3 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
-                >
-                  <span className="flex items-center gap-2">
-                    <AlertTriangle size={16} className="shrink-0 text-red-700" aria-hidden="true" />
-                    {modelsError}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={triggerReload}
-                    className="btn-secondary px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-                  >
-                    Thử lại
-                  </button>
-                </div>
-              )}
-
-              {/* Models Table */}
-              <div className="overflow-x-auto border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
-                <table className="w-full min-w-[1040px] table-fixed border-collapse text-sm">
-                  <colgroup>
-                    <col className="w-[27%]" />
-                    <col className="w-[11%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[27%]" />
-                  </colgroup>
-                  <thead className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
-                    <tr>
-                      <th className="px-4 py-3 text-left">
-                        Mẫu LED &amp; Thông số
-                      </th>
-                      <th className="px-3 py-3 text-center">
-                        Kích thước
-                      </th>
-                      <th className="px-2 py-3 text-center">
-                        Tồn kho
-                      </th>
-                      <th className="px-3 py-3 text-center">
-                        Sản phẩm liên kết
-                      </th>
-                      <th className="px-2 py-3 text-center">
-                        Trạng thái
-                      </th>
-                      <th className="px-4 py-3 text-right">
-                        Thao tác
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y-2 divide-black/10 bg-white">
-                    {isLoadingModels ? (
+                {/* Models Table */}
+                <div className="min-h-0 flex-1 overflow-auto border-2 border-black bg-white">
+                  <table className="w-full min-w-[1000px] table-fixed border-collapse text-sm">
+                    <colgroup>
+                      <col className="w-[31%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[24%]" />
+                    </colgroup>
+                    <thead className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
                       <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-xs font-bold text-text-muted">
-                          <span className="inline-flex items-center gap-2">
-                            <Loader2 size={18} className="animate-spin text-primary-ink" aria-hidden="true" />
-                            Đang tải danh sách mẫu LED từ máy chủ...
-                          </span>
-                        </td>
+                        <th className="px-4 py-2.5 text-left">
+                          Mẫu LED &amp; Thông số
+                        </th>
+                        <th className="px-3 py-2.5 text-center">
+                          Kích thước
+                        </th>
+                        <th className="px-2 py-2.5 text-center">
+                          Tồn kho
+                        </th>
+                        <th className="px-3 py-2.5 text-center">
+                          Sản phẩm liên kết
+                        </th>
+                        <th className="px-2 py-2.5 text-center">
+                          Trạng thái
+                        </th>
+                        <th className="px-4 py-2.5 text-right">
+                          Thao tác
+                        </th>
                       </tr>
-                    ) : models.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="px-4 py-12 text-center text-xs font-black uppercase tracking-wide text-text-muted"
-                        >
-                          Không tìm thấy mẫu LED phù hợp.
-                        </td>
-                      </tr>
-                    ) : (
-                      models.map((item) => {
-                        const width = item.spec?.widthPx;
-                        const height = item.spec?.heightPx;
-                        const isDeprecated = item.status === LedModelItem.status.DEPRECATED;
-                        const specPreview =
-                          item.spec?.attributes
-                            ?.slice(0, 2)
-                            .map((a) => `${a.label}: ${a.value}`)
-                            .join(" • ") ?? "";
-
-                        return (
-                          <tr
-                            key={item.modelId}
-                            onClick={() => setSelectedModel(item)}
-                            className={`cursor-pointer transition-colors duration-150 hover:bg-[#f3faf5] ${
-                              isDeprecated ? "bg-gray-50 opacity-80" : ""
-                            }`}
-                          >
-                            <td className="px-4 py-3.5">
-                              <div className="flex items-start gap-3">
-                                <div className="grid h-10 w-10 shrink-0 place-items-center border-2 border-black bg-primary/30 text-black shadow-[2px_2px_0_0_#000]">
-                                  <Cpu size={17} aria-hidden="true" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <p className="truncate text-xs font-black uppercase leading-snug text-black sm:text-sm">
-                                      {item.modelName}
-                                    </p>
-                                    <span className="border border-black bg-gray-100 px-1.5 py-0.2 font-mono text-[10px] font-black text-black">
-                                      #{item.modelId}
-                                    </span>
-                                  </div>
-                                  {specPreview ? (
-                                    <p className="mt-0.5 truncate text-[11px] font-medium text-text-muted">
-                                      {specPreview}
-                                    </p>
-                                  ) : (
-                                    <p className="mt-0.5 text-[11px] font-medium text-text-muted">
-                                      Chưa khai báo thông số phụ
-                                    </p>
-                                  )}
-                                  <p className="mt-1 text-[11px] font-black uppercase tracking-wide text-primary-ink">
-                                    Bấm để xem thiết bị (Serial) →
-                                  </p>
+                    </thead>
+                    <tbody className="divide-y-2 divide-black/10 bg-white">
+                      {isLoadingModels ? (
+                        Array.from({ length: pageSize }).map((_, idx) => (
+                          <tr key={`skeleton-model-${idx}`} className="animate-pulse">
+                            <td className="px-4 py-2">
+                              <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 shrink-0 bg-gray-200" />
+                                <div className="space-y-1.5">
+                                  <div className="h-3.5 w-36 bg-gray-200" />
+                                  <div className="h-3 w-48 bg-gray-100" />
                                 </div>
                               </div>
                             </td>
-
-                            <td className="px-3 py-3.5 text-center">
-                              <span className="inline-block whitespace-nowrap border border-black bg-gray-100 px-2 py-0.5 font-mono text-xs font-black text-black tabular-nums">
-                                {width && height ? `${width}×${height} px` : "—"}
-                              </span>
+                            <td className="px-3 py-2 text-center">
+                              <div className="mx-auto h-5 w-16 bg-gray-200" />
                             </td>
-
-                            <td className="px-2 py-3.5 text-center">
-                              <div className="flex flex-col items-center gap-1">
-                                <span
-                                  className={`text-sm font-black tabular-nums ${
-                                    item.stockQuantity === 0
-                                      ? "text-red-700"
-                                      : item.isLowStock
-                                        ? "text-amber-800"
-                                        : "text-black"
-                                  }`}
-                                >
-                                  {item.stockQuantity}
-                                </span>
-                                {item.isLowStock && !isDeprecated && (
-                                  <span className={`${BADGE_BASE_CLASS} bg-[#fef08a]`}>
-                                    Sắp hết
-                                  </span>
-                                )}
-                              </div>
+                            <td className="px-2 py-2 text-center">
+                              <div className="mx-auto h-4 w-8 bg-gray-200" />
                             </td>
-
-                            <td
-                              className="px-3 py-3.5 text-center"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {item.productId != null ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setViewingProductId(item.productId!)}
-                                  title={`Xem chi tiết sản phẩm #${item.productId}`}
-                                  aria-label={`Xem chi tiết sản phẩm #${item.productId}`}
-                                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center border-2 border-black bg-primary/40 text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 hover:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-                                >
-                                  <Eye size={14} aria-hidden="true" />
-                                </button>
-                              ) : (
-                                <span className="text-xs font-bold text-text-muted">—</span>
-                              )}
+                            <td className="px-3 py-2 text-center">
+                              <div className="mx-auto h-8 w-8 bg-gray-200" />
                             </td>
-
-                            <td className="px-2 py-3.5 text-center">
-                              <span
-                                className={`${BADGE_BASE_CLASS} ${
-                                  LED_MODEL_STATUS_STYLE[item.status]
-                                }`}
-                              >
-                                {MODEL_STATUS_LABEL[item.status] ?? item.status}
-                              </span>
+                            <td className="px-2 py-2 text-center">
+                              <div className="mx-auto h-5 w-24 bg-gray-200" />
                             </td>
-
-                            <td
-                              className="px-4 py-3.5 text-right"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                                {canManageCatalog && !isDeprecated && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setStockInModel(item)}
-                                    className="btn-primary inline-flex items-center gap-1 whitespace-nowrap px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
-                                    title="Nhập kho thiết bị kèm Serial/MAC"
-                                  >
-                                    <PackagePlus size={13} aria-hidden="true" />
-                                    Nhập kho
-                                  </button>
-                                )}
-                                {canManageCatalog && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingModel(item)}
-                                    className="btn-secondary inline-flex items-center gap-1 whitespace-nowrap px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
-                                    title="Cập nhật tên & thông số kỹ thuật"
-                                  >
-                                    <Edit3 size={13} aria-hidden="true" />
-                                    Cập nhật
-                                  </button>
-                                )}
-                                {canManageCatalog && !isDeprecated && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeprecatingModel(item)}
-                                    className="btn-danger inline-flex items-center gap-1 whitespace-nowrap px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
-                                    title="Ngừng kinh doanh mẫu LED này"
-                                  >
-                                    <ShieldOff size={13} aria-hidden="true" />
-                                    Ngừng KD
-                                  </button>
-                                )}
-                                {!canManageCatalog && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedModel(item)}
-                                    className="btn-secondary inline-flex items-center gap-1 whitespace-nowrap px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
-                                  >
-                                    <Boxes size={13} aria-hidden="true" />
-                                    Thiết bị
-                                  </button>
-                                )}
+                            <td className="px-4 py-2 text-right">
+                              <div className="ml-auto flex justify-end gap-1.5">
+                                <div className="h-8 w-8 bg-gray-200" />
+                                <div className="h-8 w-8 bg-gray-200" />
+                                <div className="h-8 w-8 bg-gray-200" />
                               </div>
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                        ))
+                      ) : models.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="px-4 py-12 text-center text-xs font-black uppercase tracking-wide text-text-muted"
+                          >
+                            Không tìm thấy mẫu LED phù hợp.
+                          </td>
+                        </tr>
+                      ) : (
+                        models.map((item) => {
+                          const width = item.spec?.widthPx;
+                          const height = item.spec?.heightPx;
+                          const isDeprecated = item.status === LedModelItem.status.DEPRECATED;
+                          const specPreview =
+                            item.spec?.attributes
+                              ?.slice(0, 2)
+                              .map((a) => `${a.label}: ${a.value}`)
+                              .join(" • ") ?? "";
 
-              {/* Pagination */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-dashed border-gray-200 pt-3">
-                <p className="text-xs font-medium text-text-muted tabular-nums">
-                  Trang <strong className="font-black text-black">{meta.page + 1}</strong> /{" "}
-                  <strong className="font-black text-black">{Math.max(1, meta.totalPages)}</strong> · Tổng{" "}
-                  <strong className="font-black text-black">{meta.totalElements}</strong> mẫu LED
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => Math.max(0, current - 1))}
-                    disabled={!meta.hasPrevious || isLoadingModels}
-                    className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-                    aria-label="Trang trước"
-                  >
-                    <ChevronLeft size={14} aria-hidden="true" />
-                    Trước
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => current + 1)}
-                    disabled={!meta.hasNext || isLoadingModels}
-                    className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-                    aria-label="Trang sau"
-                  >
-                    Sau
-                    <ChevronRight size={14} aria-hidden="true" />
-                  </button>
+                          return (
+                            <tr
+                              key={item.modelId}
+                              onClick={() => setSelectedModel(item)}
+                              title="Bấm để xem thiết bị (Serial/MAC)"
+                              className={`cursor-pointer transition-colors duration-150 hover:bg-[#f3faf5] ${
+                                isDeprecated ? "bg-gray-50 opacity-80" : ""
+                              }`}
+                            >
+                              <td className="px-4 py-2">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="grid h-9 w-9 shrink-0 place-items-center border-2 border-black bg-primary/30 text-black shadow-[2px_2px_0_0_#000]">
+                                    <Cpu size={16} aria-hidden="true" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="truncate text-xs font-black uppercase leading-snug text-black sm:text-sm">
+                                        {item.modelName}
+                                      </p>
+                                      <span className="shrink-0 border border-black bg-gray-100 px-1.5 py-0.2 font-mono text-[10px] font-black text-black">
+                                        #{item.modelId}
+                                      </span>
+                                    </div>
+                                    <p className="mt-0.5 truncate text-[11px] font-medium text-text-muted">
+                                      {specPreview || "Chưa khai báo thông số phụ"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="px-3 py-2 text-center">
+                                <span className="inline-block whitespace-nowrap border border-black bg-gray-100 px-2 py-0.5 font-mono text-xs font-black text-black tabular-nums">
+                                  {width && height ? `${width}×${height} px` : "—"}
+                                </span>
+                              </td>
+
+                              <td className="px-2 py-2 text-center">
+                                <div className="inline-flex items-center justify-center gap-1.5">
+                                  <span
+                                    className={`text-sm font-black tabular-nums ${
+                                      item.stockQuantity === 0
+                                        ? "text-red-700"
+                                        : item.isLowStock
+                                          ? "text-amber-800"
+                                          : "text-black"
+                                    }`}
+                                  >
+                                    {item.stockQuantity}
+                                  </span>
+                                  {item.isLowStock && !isDeprecated && (
+                                    <span className={`${BADGE_BASE_CLASS} bg-[#fef08a]`}>
+                                      Sắp hết
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td
+                                className="px-3 py-2 text-center"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {item.productId != null ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingProductId(item.productId!)}
+                                    title={`Xem chi tiết sản phẩm #${item.productId}`}
+                                    aria-label={`Xem chi tiết sản phẩm #${item.productId}`}
+                                    className="group/btn inline-flex h-8 cursor-pointer items-center border-2 border-black bg-primary/40 px-2 text-xs font-black uppercase text-black shadow-[2px_2px_0_0_#000] transition-colors hover:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                                  >
+                                    <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                    <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 motion-reduce:transition-none group-hover/btn:ml-1.5 group-hover/btn:max-w-[84px] group-hover/btn:opacity-100 group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[84px] group-focus-visible/btn:opacity-100">
+                                      Sản phẩm
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <span className="text-xs font-bold text-text-muted">—</span>
+                                )}
+                              </td>
+
+                              <td className="px-2 py-2 text-center">
+                                <span
+                                  className={`${BADGE_BASE_CLASS} ${
+                                    LED_MODEL_STATUS_STYLE[item.status]
+                                  }`}
+                                >
+                                  {MODEL_STATUS_LABEL[item.status] ?? item.status}
+                                </span>
+                              </td>
+
+                              <td
+                                className="px-4 py-2 text-right"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
+                                  {canManageCatalog && !isDeprecated && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setStockInModel(item)}
+                                      aria-label={`Nhập kho thiết bị cho ${item.modelName}`}
+                                      title="Nhập kho thiết bị kèm Serial/MAC"
+                                      className="group/btn inline-flex h-8 cursor-pointer items-center border-2 border-black bg-white px-2 text-xs font-black uppercase text-black transition-colors hover:bg-primary/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                                    >
+                                      <PackagePlus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                      <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 motion-reduce:transition-none group-hover/btn:ml-1.5 group-hover/btn:max-w-[84px] group-hover/btn:opacity-100 group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[84px] group-focus-visible/btn:opacity-100">
+                                        Nhập kho
+                                      </span>
+                                    </button>
+                                  )}
+                                  {canManageCatalog && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingModel(item)}
+                                      aria-label={`Cập nhật mẫu ${item.modelName}`}
+                                      title="Cập nhật tên & thông số kỹ thuật"
+                                      className="group/btn inline-flex h-8 cursor-pointer items-center border-2 border-black bg-white px-2 text-xs font-black uppercase text-black transition-colors hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                      <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 motion-reduce:transition-none group-hover/btn:ml-1.5 group-hover/btn:max-w-[84px] group-hover/btn:opacity-100 group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[84px] group-focus-visible/btn:opacity-100">
+                                        Cập nhật
+                                      </span>
+                                    </button>
+                                  )}
+                                  {canManageCatalog && !isDeprecated && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeprecatingModel(item)}
+                                      aria-label={`Ngừng kinh doanh ${item.modelName}`}
+                                      title="Ngừng kinh doanh mẫu LED này"
+                                      className="group/btn inline-flex h-8 cursor-pointer items-center border-2 border-black bg-white px-2 text-xs font-black uppercase text-black transition-colors hover:bg-[#fecaca] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                                    >
+                                      <ShieldOff className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                      <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 motion-reduce:transition-none group-hover/btn:ml-1.5 group-hover/btn:max-w-[88px] group-hover/btn:opacity-100 group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[88px] group-focus-visible/btn:opacity-100">
+                                        Ngừng KD
+                                      </span>
+                                    </button>
+                                  )}
+                                  {!canManageCatalog && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedModel(item)}
+                                      aria-label={`Xem thiết bị của ${item.modelName}`}
+                                      title="Xem danh sách thiết bị (Serial/MAC)"
+                                      className="group/btn inline-flex h-8 cursor-pointer items-center border-2 border-black bg-white px-2 text-xs font-black uppercase text-black transition-colors hover:bg-primary/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                                    >
+                                      <Boxes className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                      <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 motion-reduce:transition-none group-hover/btn:ml-1.5 group-hover/btn:max-w-[84px] group-hover/btn:opacity-100 group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[84px] group-focus-visible/btn:opacity-100">
+                                        Thiết bị
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-            </div>
+              </section>
+
+              <CommissionPagination
+                page={meta.page}
+                size={meta.size || pageSize}
+                totalElements={meta.totalElements}
+                totalPages={meta.totalPages}
+                onPageChange={(nextPage) => setPage(nextPage)}
+                ariaLabel="Phân trang danh sách mẫu LED"
+                disabled={isLoadingModels}
+                className="mt-auto shrink-0"
+              />
+            </>
           )}
-        </section>
+        </div>
       </div>
 
       {/* DEV-02: Tạo mới Mẫu LED */}
@@ -1039,19 +872,27 @@ export default function InventoryPage() {
 
 function LedInstancesSection({
   model,
+  pageSize,
+  ready,
   externalReloadKey,
   canManageCatalog,
+  onBack,
+  onEditModel,
   onOpenStockIn,
 }: {
   model: ManagedLedModelItem;
+  pageSize: number;
+  ready: boolean;
   externalReloadKey: number;
   canManageCatalog: boolean;
+  onBack: () => void;
+  onEditModel: () => void;
   onOpenStockIn: () => void;
 }) {
   const [instances, setInstances] = useState<LedInstanceItem[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({
     page: 0,
-    size: PAGE_SIZE,
+    size: 4,
     totalElements: 0,
     totalPages: 1,
     hasNext: false,
@@ -1089,19 +930,25 @@ function LedInstancesSection({
   }, [searchInput, debouncedSearch]);
 
   useEffect(() => {
+    if (!ready) return;
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
 
     fetchLedInstances({
       page,
-      size: PAGE_SIZE,
+      size: pageSize,
       modelId: model.modelId,
       status: statusFilter || undefined,
       search: debouncedSearch || undefined,
     })
       .then((result) => {
         if (cancelled) return;
+        const nextTotalPages = Math.max(1, result.meta.totalPages || 1);
+        if (page > 0 && page >= nextTotalPages) {
+          setPage(Math.max(0, nextTotalPages - 1));
+          return;
+        }
         setInstances(result.items);
         setMeta(result.meta);
       })
@@ -1124,7 +971,7 @@ function LedInstancesSection({
     return () => {
       cancelled = true;
     };
-  }, [page, model.modelId, statusFilter, debouncedSearch, reloadKey, externalReloadKey]);
+  }, [ready, page, pageSize, model.modelId, statusFilter, debouncedSearch, reloadKey, externalReloadKey]);
 
   const handleReset = () => {
     setSearchInput("");
@@ -1137,308 +984,360 @@ function LedInstancesSection({
     setReloadKey((prev) => prev + 1);
   };
 
-  const rangeStart =
-    meta.totalElements === 0 ? 0 : meta.page * meta.size + 1;
-  const rangeEnd = Math.min(
-    (meta.page + 1) * meta.size,
-    meta.totalElements,
-  );
-
   return (
     <>
-      {/* Filter bar */}
-      <div className="grid gap-3 md:grid-cols-[1fr_220px_auto_auto]">
-        <div className="relative">
-          <Search
-            size={15}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black"
-            aria-hidden="true"
-          />
-          <input
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            aria-label="Tìm Serial Number hoặc địa chỉ MAC"
-            className="w-full border-2 border-black bg-gray-50 py-2 pl-9 pr-3 text-xs font-bold text-black focus:bg-white"
-            placeholder="Tìm Serial Number hoặc địa chỉ MAC..."
-          />
+      <section className="flex min-h-0 flex-1 flex-col gap-2.5 border-2 border-black bg-white p-3.5 shadow-[4px_4px_0_0_#000] sm:p-4">
+        {/* Selected Model Header */}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onBack}
+              className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+            >
+              <ArrowLeft size={14} aria-hidden="true" />
+              Danh sách mẫu LED
+            </button>
+
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-black uppercase tracking-tight text-black sm:text-base">
+                  {model.modelName}
+                </h2>
+                <span className="border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-black text-black">
+                  #{model.modelId}
+                </span>
+                {model.spec?.widthPx && model.spec?.heightPx && (
+                  <span className="border border-black bg-white px-2 py-0.5 font-mono text-[10px] font-black text-black">
+                    {model.spec.widthPx}×{model.spec.heightPx} px
+                  </span>
+                )}
+                <span
+                  className={`${BADGE_BASE_CLASS} ${
+                    LED_MODEL_STATUS_STYLE[model.status]
+                  }`}
+                >
+                  {MODEL_STATUS_LABEL[model.status] ?? model.status}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] font-medium text-text-muted">
+                Tồn kho khả dụng:{" "}
+                <strong className="font-black text-black tabular-nums">
+                  {model.stockQuantity} thiết bị
+                </strong>{" "}
+                · Thiết bị (Serial/MAC) thuộc mẫu LED này.
+              </p>
+            </div>
+          </div>
+
+          {canManageCatalog && (
+            <div className="flex flex-wrap items-center gap-2">
+              {model.status !== LedModelItem.status.DEPRECATED && (
+                <button
+                  type="button"
+                  onClick={onOpenStockIn}
+                  className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                >
+                  <PackagePlus size={14} aria-hidden="true" />
+                  Nhập kho thiết bị
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onEditModel}
+                className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+              >
+                <Edit3 size={13} aria-hidden="true" />
+                Cập nhật mẫu
+              </button>
+            </div>
+          )}
         </div>
 
-        <select
-          value={statusFilter}
-          onChange={(event) => {
-            setStatusFilter(
-              event.target.value as LedInstanceFilterRequest.status | "",
-            );
-            setPage(0);
-          }}
-          aria-label="Lọc theo trạng thái thiết bị"
-          className="border-2 border-black bg-gray-50 px-3 py-2 text-xs font-bold text-black focus:bg-white"
-        >
-          <option value="">Trạng thái: Tất cả</option>
-          <option value={LedInstanceFilterRequest.status.IN_STOCK}>
-            Trong kho
-          </option>
-          <option value={LedInstanceFilterRequest.status.IN_TRANSIT}>
-            Đang vận chuyển
-          </option>
-          <option value={LedInstanceFilterRequest.status.BOUND}>
-            Đã kích hoạt
-          </option>
-          <option value={LedInstanceFilterRequest.status.RETURNED}>
-            Đã hoàn trả
-          </option>
-          <option value={LedInstanceFilterRequest.status.DECOMMISSIONED}>
-            Ngừng lưu hành
-          </option>
-        </select>
-
-        <button
-          type="button"
-          onClick={handleReset}
-          className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-        >
-          <RotateCcw size={14} aria-hidden="true" /> Đặt lại
-        </button>
-
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={isLoading}
-          className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-        >
-          <RefreshCw
-            size={14}
-            className={isLoading ? "animate-spin" : ""}
-            aria-hidden="true"
-          />
-          Làm mới
-        </button>
-      </div>
-
-      {/* Error alert */}
-      {errorMessage && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-[#fee2e2] px-4 py-3 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
-        >
-          <div className="flex items-center gap-2">
-            <ShieldAlert size={17} className="shrink-0 text-red-700" aria-hidden="true" />
-            <span>{errorMessage}</span>
+        {/* Filter bar */}
+        <div className="grid shrink-0 gap-2.5 md:grid-cols-[1fr_210px_auto_auto]">
+          <div className="relative">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black"
+              aria-hidden="true"
+            />
+            <input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              aria-label="Tìm Serial Number hoặc địa chỉ MAC"
+              className="w-full border-2 border-black bg-gray-50 py-1.5 pl-9 pr-3 text-xs font-bold text-black focus:bg-white"
+              placeholder="Tìm Serial Number hoặc địa chỉ MAC..."
+            />
           </div>
+
+          <select
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(
+                event.target.value as LedInstanceFilterRequest.status | "",
+              );
+              setPage(0);
+            }}
+            aria-label="Lọc theo trạng thái thiết bị"
+            className="border-2 border-black bg-gray-50 px-3 py-1.5 text-xs font-bold text-black focus:bg-white"
+          >
+            <option value="">Trạng thái: Tất cả</option>
+            <option value={LedInstanceFilterRequest.status.IN_STOCK}>
+              Trong kho
+            </option>
+            <option value={LedInstanceFilterRequest.status.IN_TRANSIT}>
+              Đang vận chuyển
+            </option>
+            <option value={LedInstanceFilterRequest.status.BOUND}>
+              Đã kích hoạt
+            </option>
+            <option value={LedInstanceFilterRequest.status.RETURNED}>
+              Đã hoàn trả
+            </option>
+            <option value={LedInstanceFilterRequest.status.DECOMMISSIONED}>
+              Ngừng lưu hành
+            </option>
+          </select>
+
+          <button
+            type="button"
+            onClick={handleReset}
+            className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+          >
+            <RotateCcw size={13} aria-hidden="true" /> Đặt lại
+          </button>
+
           <button
             type="button"
             onClick={handleRefresh}
-            className="btn-secondary px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+            disabled={isLoading}
+            className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
           >
-            Thử lại
+            <RefreshCw
+              size={13}
+              className={isLoading ? "animate-spin" : ""}
+              aria-hidden="true"
+            />
+            Làm mới
           </button>
         </div>
-      )}
 
-      {/* Table */}
-      <div className="overflow-x-auto border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
-        <table className="w-full min-w-[1020px] table-fixed border-collapse text-sm">
-          <colgroup>
-            <col className="w-[17%]" />
-            <col className="w-[18%]" />
-            <col className="w-[13%]" />
-            <col className="w-[12%]" />
-            <col className="w-[14%]" />
-            <col className="w-[11%]" />
-            <col className="w-[7.5%]" />
-            <col className="w-[7.5%]" />
-          </colgroup>
-          <thead className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
-            <tr>
-              <th className="px-4 py-3 text-left">Serial &amp; ID</th>
-              <th className="px-4 py-3 text-left">Model LED</th>
-              <th className="px-3 py-3 text-left">Địa chỉ MAC</th>
-              <th className="px-3 py-3 text-center">Trạng thái</th>
-              <th className="px-4 py-3 text-left">Đơn hàng / Chủ sở hữu</th>
-              <th className="px-3 py-3 text-left">Bảo hành / Ngày SX</th>
-              <th className="px-2 py-3 text-center">QR Nhà máy</th>
-              <th className="px-4 py-3 text-right">Chi tiết</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y-2 divide-black/10 bg-white">
-            {isLoading ? (
+        {/* Error alert */}
+        {errorMessage && (
+          <div
+            role="alert"
+            className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-2 border-black bg-[#fee2e2] px-4 py-2.5 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={17} className="shrink-0 text-red-700" aria-hidden="true" />
+              <span>{errorMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="btn-secondary px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
+
+        {/* Table */}
+        <div className="min-h-0 flex-1 overflow-auto border-2 border-black bg-white">
+          <table className="w-full min-w-[1000px] table-fixed border-collapse text-sm">
+            <colgroup>
+              <col className="w-[17%]" />
+              <col className="w-[17%]" />
+              <col className="w-[13%]" />
+              <col className="w-[12%]" />
+              <col className="w-[14%]" />
+              <col className="w-[11%]" />
+              <col className="w-[7%]" />
+              <col className="w-[9%]" />
+            </colgroup>
+            <thead className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center">
-                  <div className="inline-flex items-center gap-2 text-xs font-bold text-text-muted">
-                    <Loader2 size={18} className="animate-spin text-primary-ink" aria-hidden="true" />
-                    <span>Đang tải danh sách thiết bị LED...</span>
-                  </div>
-                </td>
+                <th className="px-4 py-2.5 text-left">Serial &amp; ID</th>
+                <th className="px-4 py-2.5 text-left">Model LED</th>
+                <th className="px-3 py-2.5 text-left">Địa chỉ MAC</th>
+                <th className="px-3 py-2.5 text-center">Trạng thái</th>
+                <th className="px-4 py-2.5 text-left">Đơn hàng / Chủ sở hữu</th>
+                <th className="px-3 py-2.5 text-left">Bảo hành / Ngày SX</th>
+                <th className="px-2 py-2.5 text-center">QR Nhà máy</th>
+                <th className="px-4 py-2.5 text-right">Thao tác</th>
               </tr>
-            ) : instances.length > 0 ? (
-              instances.map((row) => {
-                const statusBadge =
-                  INSTANCE_STATUS_CONFIG[row.status] ?? {
-                    label: row.status,
-                    className: "bg-gray-200 text-black",
-                  };
-                const hasQrPayload = Boolean(row.qrPayload);
-
-                return (
-                  <tr
-                    key={row.instanceId}
-                    className="transition-colors duration-150 hover:bg-[#f3faf5]"
-                  >
-                    <td className="px-4 py-3.5">
-                      <p className="font-mono text-xs font-black text-black break-all">
-                        {row.serialNumber}
-                      </p>
-                      <span className="mt-0.5 inline-block border border-black bg-gray-100 px-1.5 py-0.2 font-mono text-[10px] font-bold text-black">
-                        #{row.instanceId}
-                      </span>
+            </thead>
+            <tbody className="divide-y-2 divide-black/10 bg-white">
+              {isLoading ? (
+                Array.from({ length: pageSize }).map((_, idx) => (
+                  <tr key={`skeleton-instance-${idx}`} className="animate-pulse">
+                    <td className="px-4 py-2">
+                      <div className="h-3.5 w-28 bg-gray-200" />
+                      <div className="mt-1 h-3 w-12 bg-gray-100" />
                     </td>
+                    <td className="px-4 py-2"><div className="h-3.5 w-28 bg-gray-200" /></td>
+                    <td className="px-3 py-2"><div className="h-3.5 w-24 bg-gray-200" /></td>
+                    <td className="px-3 py-2 text-center"><div className="mx-auto h-5 w-20 bg-gray-200" /></td>
+                    <td className="px-4 py-2"><div className="h-3.5 w-24 bg-gray-200" /></td>
+                    <td className="px-3 py-2"><div className="h-3.5 w-20 bg-gray-100" /></td>
+                    <td className="px-2 py-2 text-center"><div className="mx-auto h-5 w-14 bg-gray-200" /></td>
+                    <td className="px-4 py-2 text-right"><div className="ml-auto h-8 w-8 bg-gray-200" /></td>
+                  </tr>
+                ))
+              ) : instances.length > 0 ? (
+                instances.map((row) => {
+                  const statusBadge =
+                    INSTANCE_STATUS_CONFIG[row.status] ?? {
+                      label: row.status,
+                      className: "bg-gray-200 text-black",
+                    };
+                  const hasQrPayload = Boolean(row.qrPayload);
 
-                    <td className="px-4 py-3.5">
-                      <p className="text-xs font-black uppercase text-black">
-                        {row.modelName ?? `Model #${row.modelId}`}
-                      </p>
-                      {row.deviceName && (
-                        <p className="mt-0.5 text-[11px] font-medium text-text-muted">
-                          Tên hiển thị: {row.deviceName}
+                  return (
+                    <tr
+                      key={row.instanceId}
+                      className="transition-colors duration-150 hover:bg-[#f3faf5]"
+                    >
+                      <td className="px-4 py-2">
+                        <p className="truncate font-mono text-xs font-black text-black" title={row.serialNumber}>
+                          {row.serialNumber}
                         </p>
-                      )}
-                    </td>
+                        <span className="mt-0.5 inline-block border border-black bg-gray-100 px-1.5 py-0.2 font-mono text-[10px] font-bold text-black">
+                          #{row.instanceId}
+                        </span>
+                      </td>
 
-                    <td className="px-3 py-3.5 font-mono text-xs font-bold text-black">
-                      {row.macAddress}
-                    </td>
+                      <td className="px-4 py-2">
+                        <p className="truncate text-xs font-black uppercase text-black">
+                          {row.modelName ?? `Model #${row.modelId}`}
+                        </p>
+                        {row.deviceName && (
+                          <p className="mt-0.5 truncate text-[11px] font-medium text-text-muted">
+                            Tên hiển thị: {row.deviceName}
+                          </p>
+                        )}
+                      </td>
 
-                    <td className="px-3 py-3.5 text-center">
-                      <span className={`${BADGE_BASE_CLASS} ${statusBadge.className}`}>
-                        {statusBadge.label}
-                      </span>
-                    </td>
+                      <td className="px-3 py-2 font-mono text-xs font-bold text-black">
+                        {row.macAddress}
+                      </td>
 
-                    <td className="px-4 py-3.5 text-xs">
-                      {row.fulfillment || row.owner ? (
-                        <div className="space-y-0.5">
-                          {row.fulfillment && (
-                            <p className="font-black text-black tabular-nums">
-                              Đơn #{row.fulfillment.orderId}
-                            </p>
-                          )}
-                          {row.owner && (
-                            <p className="font-medium text-text-muted">
-                              {row.owner.fullName ||
-                                row.owner.email ||
-                                `KH #${row.owner.customerId}`}
-                            </p>
-                          )}
+                      <td className="px-3 py-2 text-center">
+                        <span className={`${BADGE_BASE_CLASS} ${statusBadge.className}`}>
+                          {statusBadge.label}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-2 text-xs">
+                        {row.fulfillment || row.owner ? (
+                          <div className="space-y-0.5">
+                            {row.fulfillment && (
+                              <p className="font-black text-black tabular-nums">
+                                Đơn #{row.fulfillment.orderId}
+                              </p>
+                            )}
+                            {row.owner && (
+                              <p className="truncate font-medium text-text-muted">
+                                {row.owner.fullName ||
+                                  row.owner.email ||
+                                  `KH #${row.owner.customerId}`}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="font-bold text-text-muted">—</span>
+                        )}
+                      </td>
+
+                      <td className="px-3 py-2 text-xs font-medium text-black tabular-nums">
+                        {row.warrantyExpiresAt ? (
+                          <span>
+                            BH đến {formatDateTime(row.warrantyExpiresAt, false)}
+                          </span>
+                        ) : row.manufacturedAt ? (
+                          <span>
+                            SX {formatDateTime(row.manufacturedAt, false)}
+                          </span>
+                        ) : (
+                          <span className="text-text-muted">—</span>
+                        )}
+                      </td>
+
+                      <td className="px-2 py-2 text-center">
+                        {hasQrPayload ? (
+                          <span className={`${BADGE_BASE_CLASS} gap-1 bg-primary`}>
+                            <QrCode size={11} aria-hidden="true" /> Có sẵn
+                          </span>
+                        ) : (
+                          <span className={`${BADGE_BASE_CLASS} bg-gray-200`}>
+                            Đã ẩn
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-2 text-right">
+                        <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedInstanceId(row.instanceId)}
+                            aria-label={`Xem chi tiết thiết bị ${row.serialNumber}`}
+                            title="Xem chi tiết thiết bị"
+                            className="group/btn inline-flex h-8 cursor-pointer items-center border-2 border-black bg-white px-2 text-xs font-black uppercase text-black transition-colors hover:bg-primary/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                          >
+                            <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 motion-reduce:transition-none group-hover/btn:ml-1.5 group-hover/btn:max-w-[84px] group-hover/btn:opacity-100 group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[84px] group-focus-visible/btn:opacity-100">
+                              Chi tiết
+                            </span>
+                          </button>
                         </div>
-                      ) : (
-                        <span className="font-bold text-text-muted">—</span>
-                      )}
-                    </td>
-
-                    <td className="px-3 py-3.5 text-xs font-medium text-black tabular-nums">
-                      {row.warrantyExpiresAt ? (
-                        <span>
-                          BH đến {formatDateTime(row.warrantyExpiresAt, false)}
-                        </span>
-                      ) : row.manufacturedAt ? (
-                        <span>
-                          SX {formatDateTime(row.manufacturedAt, false)}
-                        </span>
-                      ) : (
-                        <span className="text-text-muted">—</span>
-                      )}
-                    </td>
-
-                    <td className="px-2 py-3.5 text-center">
-                      {hasQrPayload ? (
-                        <span className={`${BADGE_BASE_CLASS} gap-1 bg-primary`}>
-                          <QrCode size={11} aria-hidden="true" /> Có sẵn
-                        </span>
-                      ) : (
-                        <span className={`${BADGE_BASE_CLASS} bg-gray-200`}>
-                          Đã ẩn
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3.5 text-right">
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-4 py-12 text-center text-xs text-text-muted"
+                  >
+                    <div className="mx-auto mb-3 grid h-12 w-12 place-items-center border-2 border-black bg-primary/30 shadow-[2px_2px_0_0_#000]">
+                      <Boxes size={22} className="text-black" aria-hidden="true" />
+                    </div>
+                    <p className="text-sm font-black uppercase tracking-wide text-black">
+                      Chưa có thiết bị LED vật lý nào cho mẫu {model.modelName}.
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-text-muted">
+                      Thử thay đổi bộ lọc trạng thái / từ khóa hoặc nhập kho thiết bị (Serial/MAC) mới.
+                    </p>
+                    {canManageCatalog && model.status !== LedModelItem.status.DEPRECATED && (
                       <button
                         type="button"
-                        onClick={() => setSelectedInstanceId(row.instanceId)}
-                        className="btn-secondary inline-flex items-center gap-1 whitespace-nowrap px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
+                        onClick={onOpenStockIn}
+                        className="btn-primary mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
                       >
-                        <Eye size={13} aria-hidden="true" /> Chi tiết
+                        <PackagePlus size={14} aria-hidden="true" />
+                        Nhập kho thiết bị ngay
                       </button>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td
-                  colSpan={8}
-                  className="px-4 py-12 text-center text-xs text-text-muted"
-                >
-                  <div className="mx-auto mb-3 grid h-12 w-12 place-items-center border-2 border-black bg-primary/30 shadow-[2px_2px_0_0_#000]">
-                    <Boxes size={22} className="text-black" aria-hidden="true" />
-                  </div>
-                  <p className="text-sm font-black uppercase tracking-wide text-black">
-                    Chưa có thiết bị LED vật lý nào cho mẫu {model.modelName}.
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-text-muted">
-                    Thử thay đổi bộ lọc trạng thái / từ khóa hoặc nhập kho thiết bị (Serial/MAC) mới.
-                  </p>
-                  {canManageCatalog && model.status !== LedModelItem.status.DEPRECATED && (
-                    <button
-                      type="button"
-                      onClick={onOpenStockIn}
-                      className="btn-primary mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-                    >
-                      <PackagePlus size={14} aria-hidden="true" />
-                      Nhập kho thiết bị ngay
-                    </button>
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-dashed border-gray-200 pt-3">
-        <p className="text-xs font-medium text-text-muted tabular-nums">
-          Hiển thị <strong className="font-black text-black">{rangeStart}</strong> -{" "}
-          <strong className="font-black text-black">{rangeEnd}</strong> /{" "}
-          <strong className="font-black text-black">{meta.totalElements}</strong> thiết bị
-        </p>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPage((current) => Math.max(0, current - 1))}
-            disabled={isLoading || !meta.hasPrevious}
-            className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-            aria-label="Trang trước"
-          >
-            <ChevronLeft size={14} aria-hidden="true" /> Trước
-          </button>
-
-          <span className="border-2 border-black bg-white px-2.5 py-1.5 text-xs font-black text-black tabular-nums">
-            Trang {meta.page + 1} / {Math.max(1, meta.totalPages)}
-          </span>
-
-          <button
-            type="button"
-            onClick={() => setPage((current) => current + 1)}
-            disabled={isLoading || !meta.hasNext}
-            className="btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
-            aria-label="Trang sau"
-          >
-            Sau <ChevronRight size={14} aria-hidden="true" />
-          </button>
+                    )}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </section>
+
+      <CommissionPagination
+        page={meta.page}
+        size={meta.size || pageSize}
+        totalElements={meta.totalElements}
+        totalPages={meta.totalPages}
+        onPageChange={(nextPage) => setPage(nextPage)}
+        ariaLabel="Phân trang danh sách thiết bị LED"
+        disabled={isLoading}
+        className="mt-auto shrink-0"
+      />
 
       {/* Detail Modal */}
       {selectedInstanceId !== null && (
@@ -1954,74 +1853,6 @@ function InfoField({
       >
         {value}
       </p>
-    </div>
-  );
-}
-
-function SummaryCard({
-  icon,
-  label,
-  subtitle,
-  value,
-  badgeLabel,
-  badgeClassName,
-  iconBoxClassName,
-  helper,
-  tone = "default",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  subtitle: string;
-  value: number;
-  badgeLabel: string;
-  badgeClassName: string;
-  iconBoxClassName: string;
-  helper: string;
-  tone?: "default" | "warning";
-}) {
-  return (
-    <div className="flex h-full flex-col justify-between border-2 border-black bg-white p-4 shadow-[4px_4px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_#000] sm:p-5">
-      <div>
-        <div className="flex items-start justify-between gap-2.5">
-          <div className="flex min-w-0 items-start gap-2.5">
-            <div
-              className={`grid h-9 w-9 shrink-0 place-items-center border-2 border-black text-black shadow-[2px_2px_0_0_#000] ${iconBoxClassName}`}
-            >
-              {icon}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase leading-snug tracking-wider text-black">
-                {label}
-              </p>
-              <p className="mt-0.5 text-[11px] font-medium leading-snug text-text-muted">
-                {subtitle}
-              </p>
-            </div>
-          </div>
-
-          <span className={`${BADGE_BASE_CLASS} shrink-0 ${badgeClassName}`}>
-            {badgeLabel}
-          </span>
-        </div>
-
-        <p
-          className={`mt-4 text-xl font-black tracking-tight tabular-nums sm:text-2xl ${
-            tone === "warning" ? "text-amber-800" : "text-black"
-          }`}
-        >
-          {value.toLocaleString("vi-VN")}
-        </p>
-      </div>
-
-      <div className="mt-4 border-t-2 border-dashed border-gray-200 pt-3">
-        <span
-          className={`text-xs font-medium ${
-            tone === "warning" ? "font-bold text-black" : "text-text-muted"
-          }`}
-        >
-          {helper}
-        </span>
-      </div>
     </div>
   );
 }

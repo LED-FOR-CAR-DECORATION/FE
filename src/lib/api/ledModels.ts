@@ -1,3 +1,4 @@
+import { markStoreChanged } from "@/lib/query/manager-store";
 import axios from "axios";
 import {
   ApiError,
@@ -230,6 +231,7 @@ export async function apiCreateLedModel(
   if (!data?.data) {
     throw new Error("Không nhận được dữ liệu mẫu LED từ máy chủ.");
   }
+  markStoreChanged();
   return data.data;
 }
 
@@ -254,6 +256,7 @@ export async function apiUpdateLedModel(
   if (!data?.data) {
     throw new Error("Không nhận được dữ liệu mẫu LED sau khi cập nhật.");
   }
+  markStoreChanged();
   return data.data;
 }
 
@@ -314,4 +317,5 @@ export async function apiDeprecateLedModel(modelId: number): Promise<void> {
     withCredentials: OpenAPI.WITH_CREDENTIALS,
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
+  markStoreChanged();
 }

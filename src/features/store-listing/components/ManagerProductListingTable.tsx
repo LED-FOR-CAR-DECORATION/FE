@@ -8,7 +8,6 @@ import {
   Clock,
   Edit,
   Eye,
-  Loader2,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -18,12 +17,23 @@ import type { StoreCharacterRow } from "../types";
 import { formatVnd, formatDateTime } from "../format";
 import StatusBadge from "./StatusBadge";
 import StoreModal from "./StoreModal";
+import EditStoreProductModal from "./EditStoreProductModal";
+import {
+  STORE_FORBIDDEN_HINT,
+  STORE_THEAD_CLASS,
+  STORE_TH_CLASS,
+  StoreHoverActionButton,
+  StoreSkeletonRows,
+  StoreTablePagination,
+  useStoreTablePagination,
+} from "./StoreTablePrimitives";
 
 interface ManagerProductListingTableProps {
   rows: StoreCharacterRow[];
   isLoading: boolean;
   canManage: boolean;
-  onApprove: (character: StoreCharacterRow, price?: number) => Promise<void>;
+  onApprove?: (character: StoreCharacterRow, price?: number) => Promise<void>;
+  onOpenApprove?: (character: StoreCharacterRow) => void;
   onRefresh: () => void;
   onEdit?: (character: StoreCharacterRow) => void;
   externalQuery?: string;
@@ -34,18 +44,17 @@ export default function ManagerProductListingTable({
   rows,
   isLoading,
   canManage,
-  onApprove,
+  onOpenApprove,
   onRefresh,
   onEdit,
   externalQuery,
   hideHeader = false,
 }: ManagerProductListingTableProps) {
   const [query, setQuery] = useState("");
-  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [zoomedRow, setZoomedRow] = useState<StoreCharacterRow | null>(null);
+  const [approveTarget, setApproveTarget] = useState<StoreCharacterRow | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [prices, setPrices] = useState<Record<string, string>>({});
 
   // Filter ONLY UNPUBLISHED ("Chờ duyệt") character products
   const unpublishedRows = useMemo(() => {
@@ -65,38 +74,31 @@ export default function ManagerProductListingTable({
     );
   }, [activeQuery, unpublishedRows]);
 
-  const handleApproveClick = async (row: StoreCharacterRow) => {
-    if (approvingId !== null || !canManage) return;
-    const priceInput = prices[row.characterId] ?? (row.draft?.basePrice ? String(row.draft.basePrice) : "");
-    const price = Number(priceInput);
-    if (row.draft && (!/^\d{1,10}(?:\.\d{1,2})?$/.test(priceInput) || !Number.isFinite(price))) {
-      setActionError("Nhập giá bán hợp lệ cho sản phẩm trước khi duyệt. Nhập 0 nếu muốn phát hành miễn phí.");
+  const {
+    page,
+    setPage,
+    pageSize,
+    ready,
+    totalPages,
+    totalElements,
+    pagedItems,
+  } = useStoreTablePagination(filteredRows, activeQuery);
+
+  const handleOpenApprove = (row: StoreCharacterRow) => {
+    if (!canManage) return;
+    setActionError(null);
+    if (onOpenApprove) {
+      onOpenApprove(row);
       return;
     }
-    setApprovingId(row.characterId);
-    setActionNotice(null);
-    setActionError(null);
-    try {
-      await onApprove(row, row.draft ? price : undefined);
-      setActionNotice(
-        `Đã phê duyệt nhân vật "${row.name}" (#${row.characterId}) và mở bán PUBLISHED trên Store!`,
-      );
-    } catch (err) {
-      setActionError(
-        err instanceof Error
-          ? err.message
-          : "Phê duyệt nhân vật thất bại. Vui lòng thử lại.",
-      );
-    } finally {
-      setApprovingId(null);
-    }
+    setApproveTarget(row);
   };
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Header bar */}
       {!hideHeader && (
-        <div className="flex flex-col gap-3 border-b-2 border-black bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex shrink-0 flex-col gap-3 border-b-2 border-black bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
             <span className="grid h-9 w-9 shrink-0 place-items-center border-2 border-black bg-[#fef08a] text-black shadow-[2px_2px_0_0_#000]">
               <Clock size={16} aria-hidden="true" />
@@ -144,7 +146,7 @@ export default function ManagerProductListingTable({
       {actionNotice && (
         <div
           role="status"
-          className="m-4 flex items-center justify-between gap-2 border-2 border-black bg-primary/25 px-4 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+          className="m-4 flex shrink-0 items-center justify-between gap-2 border-2 border-black bg-primary/25 px-4 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
         >
           <span className="flex items-center gap-2">
             <CheckCircle2 size={15} className="shrink-0 text-primary-ink" aria-hidden="true" />
@@ -164,7 +166,7 @@ export default function ManagerProductListingTable({
       {actionError && (
         <div
           role="alert"
-          className="m-4 flex items-center justify-between gap-2 border-2 border-black bg-[#fee2e2] px-4 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
+          className="m-4 flex shrink-0 items-center justify-between gap-2 border-2 border-black bg-[#fee2e2] px-4 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
         >
           <span className="flex items-center gap-2">
             <AlertCircle size={15} className="shrink-0 text-red-700" aria-hidden="true" />
@@ -182,31 +184,24 @@ export default function ManagerProductListingTable({
       )}
 
       {/* Data Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px] border-collapse text-left text-sm">
-          <thead className="border-b-2 border-black bg-[#e9f5ed]">
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full min-w-[880px] table-fixed border-collapse text-left text-sm">
+          <thead className={STORE_THEAD_CLASS}>
             <tr>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Mã sản phẩm</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Ảnh đại diện</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Tên nhân vật</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Nhà thiết kế</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Phiên bản</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Giá đề xuất</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Trạng thái</th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-black uppercase tracking-wider text-black">Thao tác</th>
+              <th className={`${STORE_TH_CLASS} w-[108px]`}>Mã sản phẩm</th>
+              <th className={`${STORE_TH_CLASS} w-[88px]`}>Ảnh đại diện</th>
+              <th className={STORE_TH_CLASS}>Tên nhân vật</th>
+              <th className={`${STORE_TH_CLASS} w-[170px]`}>Nhà thiết kế</th>
+              <th className={`${STORE_TH_CLASS} w-[136px]`}>Trạng thái</th>
+              <th className={`${STORE_TH_CLASS} w-[200px] text-right`}>Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y-2 divide-black/10 bg-white">
-            {isLoading ? (
-              <tr>
-                <td colSpan={8} className="py-14 text-center text-xs font-bold text-text-muted">
-                  <Loader2 size={18} className="mx-auto mb-2 animate-spin text-primary-ink" aria-hidden="true" />
-                  Đang tải danh sách chờ duyệt...
-                </td>
-              </tr>
+            {isLoading || !ready ? (
+              <StoreSkeletonRows columns={6} rows={pageSize} />
             ) : filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-14 text-center">
+                <td colSpan={6} className="px-4 py-14 text-center">
                   <div className="mx-auto flex max-w-md flex-col items-center border-2 border-dashed border-black/25 bg-gray-50 px-5 py-8">
                     <div className="grid h-11 w-11 place-items-center border-2 border-black bg-primary text-black shadow-[2px_2px_0_0_#000]">
                       <ShieldCheck size={22} aria-hidden="true" />
@@ -225,21 +220,20 @@ export default function ManagerProductListingTable({
                 </td>
               </tr>
             ) : (
-              filteredRows.map((row) => {
-                const isProcessing = approvingId === row.characterId;
+              pagedItems.map((row) => {
                 return (
                   <tr
                     key={row.characterId}
                     className="transition-colors duration-150 hover:bg-[#f3faf5]"
                   >
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
                         #{row.characterId}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3.5">
-                      <div className="group relative h-12 w-12 cursor-pointer overflow-hidden border-2 border-black bg-gray-50">
+                    <td className="px-4 py-2.5">
+                      <div className="group relative h-11 w-11 cursor-pointer overflow-hidden border-2 border-black bg-gray-50">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={row.thumbnailUrl}
@@ -259,83 +253,50 @@ export default function ManagerProductListingTable({
                       </div>
                     </td>
 
-                    <td className="px-4 py-3.5">
-                      <p className="text-xs font-black uppercase text-black sm:text-sm">{row.name}</p>
-                      <p className="line-clamp-1 max-w-xs text-xs font-medium text-text-muted">
+                    <td className="px-4 py-2.5">
+                      <p title={row.name} className="truncate text-xs font-black uppercase text-black sm:text-sm">{row.name}</p>
+                      <p className="line-clamp-1 text-xs font-medium text-text-muted">
                         {row.description || "Chưa có mô tả chi tiết."}
                       </p>
-                      <p className="mt-0.5 text-[11px] font-medium text-text-muted tabular-nums">
+                      <p className="mt-0.5 truncate text-[11px] font-medium text-text-muted tabular-nums">
                         Cập nhật: {formatDateTime(row.updatedAt)}
                       </p>
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3.5 text-xs font-bold text-black">
+                    <td className="truncate whitespace-nowrap px-4 py-2.5 text-xs font-bold text-black">
                       {row.creatorName}
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3.5">
-                      {row.activeVersion ? (
-                        <span className="inline-flex items-center border border-black bg-primary/40 px-2 py-0.5 font-mono text-[11px] font-black text-black shadow-[1px_1px_0_0_#000]">
-                          v{row.activeVersion.versionNumber}
-                        </span>
-                      ) : (
-                        <span className="font-mono text-xs font-bold text-text-muted">v1 (mặc định)</span>
-                      )}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3.5 font-black text-primary-ink tabular-nums">
-                      {row.draft ? (
-                        <input
-                          type="number"
-                          min={0}
-                          max={9999999999.99}
-                          step={0.01}
-                          aria-label={`Giá bán của ${row.name}`}
-                          className="w-36 border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-black text-primary-ink tabular-nums focus:bg-white disabled:opacity-50"
-                          placeholder="Nhập giá (VNĐ)"
-                          disabled={!canManage || isProcessing}
-                          value={prices[row.characterId] ?? (row.draft.basePrice ? String(row.draft.basePrice) : "")}
-                          onChange={(event) => setPrices((current) => ({ ...current, [row.characterId]: event.target.value }))}
-                        />
-                      ) : (
-                        formatVnd(199000)
-                      )}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       <StatusBadge status={row.status} />
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3.5">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                      <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
                         {onEdit && (
-                          <button
-                            type="button"
+                          <StoreHoverActionButton
+                            tone="primary"
+                            labelSize="medium"
+                            label="Sửa / Gắn thẻ"
+                            aria-label={`Sửa và gắn thẻ ${row.name}`}
+                            disabled={!canManage}
+                            title={canManage ? "Chỉnh sửa chi tiết, mô tả hoặc gắn thẻ" : STORE_FORBIDDEN_HINT}
                             onClick={() => onEdit(row)}
-                            disabled={!canManage || isProcessing}
-                            title="Chỉnh sửa chi tiết, mô tả hoặc gắn thẻ"
-                            className="btn-secondary inline-flex items-center gap-1 px-2.5! py-1.5! text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
-                          >
-                            <Edit size={13} aria-hidden="true" />
-                            Sửa / Gắn thẻ
-                          </button>
+                            icon={<Edit className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                          />
                         )}
 
-                        {/* Dedicated "Approve" (Duyệt mở bán) button */}
-                        <button
-                          type="button"
-                          onClick={() => void handleApproveClick(row)}
-                          disabled={!canManage || isProcessing}
-                          title="Phê duyệt và chuyển sang trạng thái Đang mở bán"
-                          className="btn-primary inline-flex items-center gap-1.5 px-3! py-1.5! text-[11px] font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
-                        >
-                          {isProcessing ? (
-                            <Loader2 size={13} className="animate-spin" aria-hidden="true" />
-                          ) : (
-                            <Check size={13} aria-hidden="true" />
-                          )}
-                          {isProcessing ? "Đang duyệt..." : "Duyệt mở bán"}
-                        </button>
+                        {/* Dedicated "Approve" (Xét duyệt) button */}
+                        <StoreHoverActionButton
+                          tone="approve"
+                          labelSize="medium"
+                          label="Xét duyệt"
+                          aria-label={`Xét duyệt ${row.name}`}
+                          disabled={!canManage}
+                          title={canManage ? "Mở hộp thoại xét duyệt thông tin, đặt giá bán và mở bán lên cửa hàng" : STORE_FORBIDDEN_HINT}
+                          onClick={() => handleOpenApprove(row)}
+                          icon={<Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -345,6 +306,18 @@ export default function ManagerProductListingTable({
           </tbody>
         </table>
       </div>
+
+      <StoreTablePagination
+        page={page}
+        size={pageSize}
+        totalElements={totalElements}
+        totalPages={totalPages}
+        totalUnfilteredCount={unpublishedRows.length}
+        unitLabel="nhân vật chờ duyệt"
+        onPageChange={setPage}
+        disabled={isLoading || !ready}
+        ariaLabel="Phân trang hàng đợi phê duyệt nhân vật"
+      />
 
       {/* Zoom Artwork Modal */}
       {zoomedRow && (
@@ -368,13 +341,13 @@ export default function ManagerProductListingTable({
                 onClick={() => {
                   const target = zoomedRow;
                   setZoomedRow(null);
-                  void handleApproveClick(target);
+                  handleOpenApprove(target);
                 }}
                 disabled={!canManage}
                 className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
               >
                 <Check size={14} aria-hidden="true" />
-                Duyệt mở bán sản phẩm này
+                Xét duyệt sản phẩm này
               </button>
             </>
           }
@@ -390,6 +363,33 @@ export default function ManagerProductListingTable({
             </div>
           </div>
         </StoreModal>
+      )}
+
+      {/* Fallback Approve Modal based on EditStoreProductModal */}
+      {approveTarget && (
+        <EditStoreProductModal
+          mode="approve"
+          creatorName={approveTarget.creatorName}
+          previewFallbackUrl={approveTarget.thumbnailUrl}
+          product={{
+            id: approveTarget.characterId,
+            productType: "CHARACTER",
+            productName: approveTarget.name,
+            basePrice: approveTarget.draft?.basePrice ?? approveTarget.basePrice ?? 0,
+            description: approveTarget.description,
+            thumbnailUrl: approveTarget.draft?.thumbnailUrl ?? undefined,
+            galleryUrls: approveTarget.draft?.galleryUrls ?? approveTarget.galleryUrls ?? [],
+            tags: approveTarget.tags ?? [],
+          }}
+          onClose={() => setApproveTarget(null)}
+          onSuccess={(productName, savedPrice) => {
+            const priceLabel = savedPrice !== undefined ? ` (${formatVnd(savedPrice)})` : "";
+            setActionNotice(
+              `Đã xét duyệt nhân vật "${productName}"${priceLabel} sang trạng thái Đang bán!`,
+            );
+            onRefresh();
+          }}
+        />
       )}
     </div>
   );

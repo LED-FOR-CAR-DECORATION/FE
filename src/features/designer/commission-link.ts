@@ -1,8 +1,8 @@
 import {
   createDesignerCharacter,
-  fetchMyCharacters,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
+import { fetchCommissionCharactersCached } from "./designer-characters-cache";
 import { setStoredMatrixSize, type MatrixSize } from "./context/DesignerCharactersContext";
 
 /**
@@ -47,7 +47,7 @@ function recalled(commissionId: number) {
 
 /** Tìm character đã liên kết với commission trong thư viện của designer hiện tại. */
 export async function findCommissionCharacter(commissionId: number): Promise<DesignerCharacterItem | undefined> {
-  const { items } = await fetchMyCharacters({ page: 0, size: 100, characterType: "COMMISSION" });
+  const items = await fetchCommissionCharactersCached();
   const cachedId = recalled(commissionId);
   const matches = (item: DesignerCharacterItem) =>
     item.commissionId === commissionId || linkedCommissionId(item.description) === commissionId;

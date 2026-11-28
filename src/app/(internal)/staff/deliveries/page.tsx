@@ -97,8 +97,10 @@ function ActivityTimeline({ delivery }: { delivery: Delivery }) {
   );
 }
 
+const DELIVERY_DETAILS = ["delivery"] as const;
+
 export default function DeliveriesPage() {
-  const { orders, isLoading, refreshOrders } = useOrders();
+  const { orders, isLoading, refreshOrders } = useOrders({ details: DELIVERY_DETAILS });
   const [selectedId, setSelectedId] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");

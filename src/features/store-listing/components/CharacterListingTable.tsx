@@ -20,13 +20,14 @@ import {
   STORE_TABLE_CLASS,
   STORE_THEAD_CLASS,
   STORE_TH_CLASS,
-  StoreActionButton,
   StoreEmptyRow,
   StoreErrorRow,
+  StoreHoverActionButton,
   StoreSkeletonRows,
-  StoreTableFooter,
+  StoreTablePagination,
   StoreThumbnail,
   storeRowClass,
+  useStoreTablePagination,
 } from "./StoreTablePrimitives";
 
 type StatusFilter = StoreProductStatus | "All";
@@ -58,13 +59,13 @@ const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "DELETED", label: STATUS_LABEL.DELETED },
 ];
 
-const HEADINGS = [
-  "Mã sản phẩm",
-  "Ảnh đại diện",
-  "Tên nhân vật",
-  "Nhà thiết kế",
-  "Trạng thái",
-  "Thao tác",
+const HEADINGS: { label: string; className?: string }[] = [
+  { label: "Mã sản phẩm", className: "w-[108px]" },
+  { label: "Ảnh đại diện", className: "w-[88px]" },
+  { label: "Tên nhân vật" },
+  { label: "Nhà thiết kế", className: "w-[170px]" },
+  { label: "Trạng thái", className: "w-[136px]" },
+  { label: "Thao tác", className: "w-[276px] text-right" },
 ];
 
 export default function CharacterListingTable({
@@ -103,6 +104,16 @@ export default function CharacterListingTable({
   }, [effectiveQuery, effectiveStatus, rows]);
 
   const hasFilters = effectiveQuery !== "" || effectiveStatus !== "All";
+  const {
+    page,
+    setPage,
+    pageSize,
+    ready,
+    totalPages,
+    totalElements,
+    pagedItems,
+  } = useStoreTablePagination(filtered, `${effectiveQuery}::${effectiveStatus}`);
+
   const reset = () => {
     if (onResetFilters) {
       onResetFilters();
@@ -115,7 +126,7 @@ export default function CharacterListingTable({
   return (
     <>
       {!hideControls && (
-        <div className="grid gap-3 border-b-2 border-black bg-white p-4 md:grid-cols-[1fr_220px_auto]">
+        <div className="grid shrink-0 gap-3 border-b-2 border-black bg-white p-4 md:grid-cols-[1fr_220px_auto]">
           <div className="relative">
             <Search
               size={15}
@@ -168,7 +179,7 @@ export default function CharacterListingTable({
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         <table className={STORE_TABLE_CLASS}>
           <caption className="sr-only">
             Danh sách nhân vật chờ duyệt hoặc đang niêm yết trên cửa hàng
@@ -176,20 +187,26 @@ export default function CharacterListingTable({
           <thead className={STORE_THEAD_CLASS}>
             <tr>
               {HEADINGS.map((heading) => (
-                <th key={heading} scope="col" className={STORE_TH_CLASS}>
-                  {heading}
+                <th
+                  key={heading.label}
+                  scope="col"
+                  className={`${STORE_TH_CLASS} ${heading.className ?? ""}`}
+                >
+                  {heading.label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <StoreSkeletonRows columns={HEADINGS.length} />}
+            {(isLoading || !ready) && (
+              <StoreSkeletonRows columns={HEADINGS.length} rows={pageSize} />
+            )}
 
-            {!isLoading && error && (
+            {!isLoading && ready && error && (
               <StoreErrorRow colSpan={HEADINGS.length} message={error} onRetry={onRetry} />
             )}
 
-            {!isLoading && !error && filtered.length === 0 && (
+            {!isLoading && ready && !error && filtered.length === 0 && (
               <StoreEmptyRow
                 colSpan={HEADINGS.length}
                 message={
@@ -214,17 +231,18 @@ export default function CharacterListingTable({
             )}
 
             {!isLoading &&
+              ready &&
               !error &&
-              filtered.map((row) => {
+              pagedItems.map((row) => {
                 const isDeleted = row.status === "DELETED";
                 return (
                   <tr key={row.characterId} className={storeRowClass(isDeleted)}>
-                    <td className="whitespace-nowrap px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5">
                       <span className="inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-black text-black tabular-nums">
                         #{row.characterId}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2.5">
                       <StoreThumbnail
                         src={row.thumbnailUrl}
                         alt={`Ảnh đại diện của ${row.name}`}
@@ -232,19 +250,22 @@ export default function CharacterListingTable({
                         pixelated
                       />
                     </td>
-                    <td className="px-4 py-3.5">
-                      <p className={`text-xs font-black uppercase sm:text-sm ${isDeleted ? "line-through text-text-muted" : "text-black"}`}>
+                    <td className="px-4 py-2.5">
+                      <p
+                        title={row.name}
+                        className={`truncate text-xs font-black uppercase sm:text-sm ${isDeleted ? "line-through text-text-muted" : "text-black"}`}
+                      >
                         {row.name}
                       </p>
-                      <p className="text-[11px] font-medium text-text-muted tabular-nums">
+                      <p className="truncate text-[11px] font-medium text-text-muted tabular-nums">
                         Cập nhật lúc {formatDateTime(row.updatedAt)}
                       </p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-xs font-bold text-black">{row.creatorName}</td>
-                    <td className="px-4 py-3.5">
+                    <td className="truncate whitespace-nowrap px-4 py-2.5 text-xs font-bold text-black">{row.creatorName}</td>
+                    <td className="px-4 py-2.5">
                       <StatusBadge status={row.status} />
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
                       <RowActions
                         row={row}
                         canManage={canManage}
@@ -262,11 +283,17 @@ export default function CharacterListingTable({
         </table>
       </div>
 
-      {!isLoading && !error && (
-        <StoreTableFooter
-          filteredCount={filtered.length}
-          totalCount={rows.length}
+      {!error && (
+        <StoreTablePagination
+          page={page}
+          size={pageSize}
+          totalElements={totalElements}
+          totalPages={totalPages}
+          totalUnfilteredCount={rows.length}
           unitLabel="nhân vật"
+          onPageChange={setPage}
+          disabled={isLoading || !ready}
+          ariaLabel="Phân trang danh sách nhân vật"
         />
       )}
     </>
@@ -299,78 +326,82 @@ function RowActions({
   const title = canManage ? undefined : STORE_FORBIDDEN_HINT;
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
       {onEdit && (
-        <StoreActionButton
-          variant="secondary"
+        <StoreHoverActionButton
+          tone="primary"
+          label="Sửa"
+          aria-label={`Sửa ${row.name}`}
           disabled={!canManage}
-          title={title}
+          title={title ?? "Sửa"}
           onClick={() => onEdit(row)}
-          icon={<Edit size={13} />}
-        >
-          Sửa
-        </StoreActionButton>
+          icon={<Edit className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+        />
       )}
 
       {row.status === "UNPUBLISHED" && (
         <>
-          <StoreActionButton
-            variant="primary"
+          <StoreHoverActionButton
+            tone="approve"
+            labelSize="medium"
+            label="Duyệt mở bán"
+            aria-label={`Duyệt mở bán ${row.name}`}
             disabled={!canManage}
-            title={title}
+            title={title ?? "Duyệt mở bán"}
             onClick={() => onPublish(row, "review")}
-            icon={<CheckCircle2 size={13} />}
-          >
-            Duyệt mở bán
-          </StoreActionButton>
+            icon={<CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+          />
           {onArchive && (
-            <StoreActionButton
-              variant="secondary"
+            <StoreHoverActionButton
+              tone="neutral"
+              labelSize="medium"
+              label="Ngừng bán"
+              aria-label={`Ngừng bán ${row.name}`}
               disabled={!canManage}
-              title={title}
+              title={title ?? "Ngừng bán"}
               onClick={() => onArchive(row)}
-              icon={<Archive size={13} />}
-            >
-              Ngừng bán
-            </StoreActionButton>
+              icon={<Archive className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+            />
           )}
         </>
       )}
 
       {row.status === "PUBLISHED" && onArchive && (
-        <StoreActionButton
-          variant="secondary"
+        <StoreHoverActionButton
+          tone="neutral"
+          labelSize="medium"
+          label="Ngừng bán"
+          aria-label={`Ngừng bán ${row.name}`}
           disabled={!canManage}
-          title={title}
+          title={title ?? "Ngừng bán"}
           onClick={() => onArchive(row)}
-          icon={<Archive size={13} />}
-        >
-          Ngừng bán
-        </StoreActionButton>
+          icon={<Archive className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+        />
       )}
 
       {row.status === "ARCHIVED" && (
-        <StoreActionButton
-          variant="primary"
+        <StoreHoverActionButton
+          tone="approve"
+          labelSize="medium"
+          label="Mở bán lại"
+          aria-label={`Mở bán lại ${row.name}`}
           disabled={!canManage}
-          title={title}
+          title={title ?? "Mở bán lại"}
           onClick={() => onPublish(row, "republish")}
-          icon={<Undo2 size={13} />}
-        >
-          Mở bán lại
-        </StoreActionButton>
+          icon={<Undo2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+        />
       )}
 
       {onDelete && (
-        <StoreActionButton
-          variant="danger"
+        <StoreHoverActionButton
+          tone="danger"
+          label="Xóa"
+          aria-label={`Xóa ${row.name}`}
           disabled={!canManage}
-          title={title}
+          title={title ?? "Xóa"}
           onClick={() => onDelete(row)}
-          icon={<Trash2 size={13} />}
-        >
-          Xóa
-        </StoreActionButton>
+          icon={<Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+        />
       )}
     </div>
   );

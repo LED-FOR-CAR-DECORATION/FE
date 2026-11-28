@@ -11,6 +11,10 @@ export type BundleItemDetail = {
      */
     itemType: BundleItemDetail.itemType;
     /**
+     * Store product identifier of the included component
+     */
+    productId?: number | null;
+    /**
      * Included LED model identifier (for LED items)
      */
     modelId?: number | null;
@@ -22,6 +26,10 @@ export type BundleItemDetail = {
      * Current available hardware stock of the LED model (for LED items)
      */
     stockQuantity?: number | null;
+    /**
+     * Technical specifications map of the LED model (for LED items)
+     */
+    specifications?: Record<string, unknown> | null;
     /**
      * Included character version identifier (for CHARACTER items)
      */
@@ -42,6 +50,14 @@ export type BundleItemDetail = {
      * Animated preview GIF URL of the character (for CHARACTER items)
      */
     previewGifUrl?: string | null;
+    /**
+     * Cover thumbnail URL of the included component product
+     */
+    thumbnailUrl?: string | null;
+    /**
+     * Individual selling price of the included component product in VND
+     */
+    unitPrice?: number | null;
     /**
      * Quantity of this item included per bundle unit
      */

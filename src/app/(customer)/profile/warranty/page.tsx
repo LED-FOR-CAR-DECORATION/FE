@@ -24,7 +24,6 @@ import {
   X,
 } from "lucide-react";
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
-import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CustomerDeviceItem } from "@/api_client/models/CustomerDeviceItem";
@@ -772,8 +771,6 @@ export default function CustomerWarrantyPage() {
           </div>
         </div>
       )}
-
-      <Footer />
     </div>
   );
 }

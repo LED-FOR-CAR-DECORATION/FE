@@ -33,6 +33,36 @@ export interface CustomerActiveSubscription {
   maxMobileProfiles: number;
   activatedAt: string;
   expiresAt: string | null;
+  paidPrice: number | null;
+}
+
+export interface CustomerSubscriptionHistoryItem {
+  subscriptionId: number;
+  productId: number;
+  orderId: number | null;
+  planCode: string | null;
+  planName: string | null;
+  isLifetime: boolean;
+  durationDays: number | null;
+  allAccessCharacters: boolean;
+  maxCommissionRevisions: number;
+  maxMobileProfiles: number;
+  status: string;
+  activatedAt: string;
+  expiresAt: string | null;
+  paidPrice: number | null;
+}
+
+export interface CustomerSubscriptionBenefits {
+  hasActiveSubscription: boolean;
+  allAccessCharacters: boolean;
+  defaultMobileProfiles: number;
+  maxMobileProfiles: number;
+  defaultCommissionRevisions: number;
+  maxCommissionRevisions: number;
+  upgradeCreditAvailable: number;
+  activeSubscriptions: CustomerActiveSubscription[];
+  subscriptionHistory: CustomerSubscriptionHistoryItem[];
 }
 
 export interface CustomerAcceptedCommissionItem extends Omit<CustomerOwnedCharacterItem, "sourceType" | "characterId"> {
@@ -103,8 +133,12 @@ export async function fetchCustomerOwnedCharacters(): Promise<
   }));
 }
 
+type CommissionDetailLoader = (commissionId: number) => Promise<Awaited<ReturnType<typeof getCustomerCommission>>>;
+
 /** Accepted artwork remains persisted by Commission; use its authorized, fresh media URLs. */
-async function fetchAcceptedCommissionArtwork(): Promise<CustomerAcceptedCommissionItem[]> {
+async function fetchAcceptedCommissionArtwork(
+  loadDetail: CommissionDetailLoader = getCustomerCommission,
+): Promise<CustomerAcceptedCommissionItem[]> {
   const commissions: CustomerCommissionSummaryItem[] = [];
   const size = 100;
   for (let page = 0; ; page++) {
@@ -119,7 +153,7 @@ async function fetchAcceptedCommissionArtwork(): Promise<CustomerAcceptedCommiss
   const artwork: CustomerAcceptedCommissionItem[] = [];
   // Bound parallel detail requests for accounts with a large commission history.
   for (let offset = 0; offset < commissions.length; offset += 6) {
-    const details = await Promise.all(commissions.slice(offset, offset + 6).map((item) => getCustomerCommission(item.commissionId!)));
+    const details = await Promise.all(commissions.slice(offset, offset + 6).map((item) => loadDetail(item.commissionId!)));
     for (const { data } of details) {
       if (data.status !== "COMPLETED") continue;
       const accepted = data.deliveredPreviews.find((preview) =>
@@ -139,8 +173,17 @@ async function fetchAcceptedCommissionArtwork(): Promise<CustomerAcceptedCommiss
   return artwork;
 }
 
-export async function fetchCustomerGallery(): Promise<CustomerGalleryItem[]> {
-  const [purchases, commissions] = await Promise.all([fetchCustomerOwnedCharacters(), fetchAcceptedCommissionArtwork()]);
+/**
+ * `loadCommissionDetail` cho phép cache chi tiết commission (đã COMPLETED thì ảnh được duyệt không đổi),
+ * để mỗi lần làm mới gallery không phải gọi lại chi tiết từng commission. BE chưa có API gộp (docs: API #7).
+ */
+export async function fetchCustomerGallery(
+  options: { loadCommissionDetail?: CommissionDetailLoader } = {},
+): Promise<CustomerGalleryItem[]> {
+  const [purchases, commissions] = await Promise.all([
+    fetchCustomerOwnedCharacters(),
+    fetchAcceptedCommissionArtwork(options.loadCommissionDetail),
+  ]);
   return [...purchases, ...commissions].sort((a, b) =>
     (Date.parse(b.purchasedAt) || 0) - (Date.parse(a.purchasedAt) || 0),
   );
@@ -165,6 +208,7 @@ function normalizeActiveSubscription(
     maxMobileProfiles: Number(raw.maxMobileProfiles ?? 3),
     activatedAt: raw.activatedAt ?? "",
     expiresAt: raw.expiresAt ?? null,
+    paidPrice: raw.paidPrice != null ? Number(raw.paidPrice) : null,
   };
 }
 
@@ -197,5 +241,51 @@ export async function fetchActiveCustomerSubscriptions(): Promise<CustomerActive
     const single = await fetchActiveCustomerSubscription().catch(() => null);
     return single ? [single] : [];
   }
+}
+
+export async function fetchCustomerSubscriptionBenefits(): Promise<CustomerSubscriptionBenefits> {
+  const res = await request<ApiEnvelope<CustomerSubscriptionBenefits>>(OpenAPI, {
+    method: "GET",
+    url: "/api/customer/subscriptions/benefits",
+    errors: {
+      401: "Authentication is required.",
+      403: "Access is denied.",
+    },
+  });
+
+  const raw = res.data;
+  const activeSubscriptions = Array.isArray(raw?.activeSubscriptions)
+    ? raw.activeSubscriptions.map(normalizeActiveSubscription)
+    : [];
+  const subscriptionHistory = Array.isArray(raw?.subscriptionHistory)
+    ? raw.subscriptionHistory.map((item) => ({
+        subscriptionId: Number(item.subscriptionId),
+        productId: Number(item.productId),
+        orderId: item.orderId != null ? Number(item.orderId) : null,
+        planCode: item.planCode ?? null,
+        planName: item.planName ?? null,
+        isLifetime: Boolean(item.isLifetime),
+        durationDays: item.durationDays ?? null,
+        allAccessCharacters: Boolean(item.allAccessCharacters),
+        maxCommissionRevisions: Number(item.maxCommissionRevisions ?? 0),
+        maxMobileProfiles: Number(item.maxMobileProfiles ?? 3),
+        status: item.status ?? "EXPIRED",
+        activatedAt: item.activatedAt ?? "",
+        expiresAt: item.expiresAt ?? null,
+        paidPrice: item.paidPrice != null ? Number(item.paidPrice) : null,
+      }))
+    : [];
+
+  return {
+    hasActiveSubscription: Boolean(raw?.hasActiveSubscription),
+    allAccessCharacters: Boolean(raw?.allAccessCharacters),
+    defaultMobileProfiles: Number(raw?.defaultMobileProfiles ?? 3),
+    maxMobileProfiles: Number(raw?.maxMobileProfiles ?? 3),
+    defaultCommissionRevisions: Number(raw?.defaultCommissionRevisions ?? 1),
+    maxCommissionRevisions: Number(raw?.maxCommissionRevisions ?? 1),
+    upgradeCreditAvailable: Number(raw?.upgradeCreditAvailable ?? 0),
+    activeSubscriptions,
+    subscriptionHistory,
+  };
 }
 

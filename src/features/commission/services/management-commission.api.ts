@@ -6,30 +6,40 @@ const endpoint = "/api/management/commissions";
 
 export type CommissionQueueItem = {
   commissionId: number;
+  customerId?: number;
   title: string;
   status: string;
   customerName?: string | null;
+  customerEmail?: string | null;
+  tierCode?: string | null;
   targetMatrixDimensions?: string | null;
+  initialPrice?: number;
+  extraRevisionFee?: number;
   totalPrice?: number;
+  revisionsUsed?: number;
+  maxRevisions?: number;
   assignedStaffName?: string | null;
   assignedStaffId?: number | null;
   assignedDesignerName?: string | null;
   assignedDesignerId?: number | null;
+  isSlaOverdue?: boolean;
+  quoteExpiresAt?: string | null;
+  slaDueAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export type CommissionManagementDetail = CommissionQueueItem & {
   description?: string | null;
   attachments?: { attachmentId: number; imageUrl: string; caption?: string | null }[];
   customerPhone?: string | null;
-  tierCode?: string | null;
-  initialPrice?: number;
-  extraRevisionFee?: number;
   revisionsUsed?: number;
   maxRevisions?: number;
   chatActive?: boolean;
-  slaDueAt?: string | null;
-  createdAt?: string | null;
   autoCompleteAt?: string | null;
+  activePaymentCode?: string | null;
+  approvedSubmissionId?: number | null;
+  rejectionReason?: string | null;
   submissions?: CommissionSubmissionItem[];
   revisionRequests?: CommissionRevisionRequest[];
 };
@@ -50,25 +60,66 @@ export type CommissionRevisionRequest = {
 
 export type CommissionSubmissionItem = {
   submissionId: number;
+  designerId?: number;
   versionNumber: number;
   imageUrl: string;
   designerNote?: string | null;
   characterVersionId?: number | null;
+  revisionRequestId?: number | null;
   designerName?: string | null;
   status: string;
   staffReviewNote?: string | null;
   reviewerStaffName?: string | null;
   reviewedAt?: string | null;
   deliveredAt?: string | null;
+  createdAt?: string | null;
+};
+
+export type CommissionQueueMeta = {
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+};
+
+export type CommissionQueueQueryOptions = {
+  page?: number;
+  size?: number;
+  status?: string;
+  sortDirection?: "ASC" | "DESC";
+  assigned?: boolean;
 };
 
 export type DesignerOption = { designerId: number; fullName: string };
 
-export function getCommissionQueue(page: number, assigned: boolean) {
-  return request<{ data: CommissionQueueItem[]; meta?: { hasNext: boolean } }>(OpenAPI, {
+export type DesignerQueryOptions = {
+  search?: string;
+  page?: number;
+  size?: number;
+};
+
+export function getCommissionQueue(
+  pageOrOptions: number | CommissionQueueQueryOptions,
+  assignedLegacy = false,
+) {
+  const opts: CommissionQueueQueryOptions =
+    typeof pageOrOptions === "number"
+      ? { page: pageOrOptions, assigned: assignedLegacy }
+      : pageOrOptions;
+  const page = opts.page ?? 0;
+  const size = opts.size ?? 20;
+  const assigned = Boolean(opts.assigned);
+  return request<{ data: CommissionQueueItem[]; meta?: CommissionQueueMeta }>(OpenAPI, {
     method: "GET",
     url: assigned ? endpoint + "/assigned" : endpoint,
-    query: { page, size: 20 },
+    query: {
+      page,
+      size,
+      ...(opts.status ? { status: opts.status } : {}),
+      ...(opts.sortDirection ? { sortDirection: opts.sortDirection } : {}),
+    },
   });
 }
 
@@ -78,8 +129,20 @@ export function getManagementCommission(id: number) {
   });
 }
 
-export function listCommissionDesigners() {
-  return request<{ data: DesignerOption[] }>(OpenAPI, { method: "GET", url: endpoint + "/designers" });
+export function listCommissionDesigners(options?: DesignerQueryOptions) {
+  return request<{ data: DesignerOption[]; meta?: CommissionQueueMeta }>(OpenAPI, {
+    method: "GET",
+    url: endpoint + "/designers",
+    ...(options
+      ? {
+          query: {
+            ...(options.search?.trim() ? { search: options.search.trim() } : {}),
+            ...(options.page !== undefined ? { page: options.page } : {}),
+            ...(options.size !== undefined ? { size: options.size } : {}),
+          },
+        }
+      : {}),
+  });
 }
 
 export function approveCommission(id: number) {

@@ -20,8 +20,10 @@ function isInDateRange(createdAt: string, from: string, to: string) {
   return (!from || date >= from) && (!to || date <= to);
 }
 
+const CHARACTER_DETAILS = ["character"] as const;
+
 export default function CharacterOrdersPage() {
-  const { orders } = useOrders();
+  const { orders } = useOrders({ details: CHARACTER_DETAILS });
   const [query, setQuery] = useState("");
   const [payment, setPayment] = useState<PaymentStatus | "All">("All");
   const [compositionFilter, setCompositionFilter] = useState<CharacterOrderComposition | "All">("All");

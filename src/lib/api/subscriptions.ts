@@ -1,3 +1,4 @@
+import { cachedManagerStore, markStoreChanged } from "@/lib/query/manager-store";
 import axios from "axios";
 import { getApiBaseUrl, OpenAPI } from "./client";
 import { getSessionToken } from "../auth/session";
@@ -21,6 +22,7 @@ export interface ManagedSubscriptionPlan {
   durationDays: number | null;
   allAccessCharacters: boolean;
   maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
   status: SubscriptionPlanStatus;
   createdAt: string;
 }
@@ -42,6 +44,7 @@ export interface CreateSubscriptionPayload {
   durationDays?: number | null;
   allAccessCharacters: boolean;
   maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
   tagIds?: number[];
 }
 
@@ -53,6 +56,7 @@ export interface UpdateSubscriptionPayload {
   durationDays?: number | null;
   allAccessCharacters: boolean;
   maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
 }
 
 interface ApiEnvelope<T> {
@@ -62,7 +66,7 @@ interface ApiEnvelope<T> {
   meta?: unknown;
 }
 
-export async function fetchManagedSubscriptions(): Promise<ManagedSubscriptionPlan[]> {
+async function fetchManagedSubscriptionsUncached(): Promise<ManagedSubscriptionPlan[]> {
   const token = await getSessionToken();
   const { data: envelope } = await axios.get<ApiEnvelope<ManagedSubscriptionPlan[]>>(
     "/api/management/admin/store/subscriptions",
@@ -73,6 +77,11 @@ export async function fetchManagedSubscriptions(): Promise<ManagedSubscriptionPl
     },
   );
   return Array.isArray(envelope?.data) ? envelope.data : [];
+}
+
+/** Có cache ngắn hạn dùng chung (lib/query/manager-store.ts). */
+export function fetchManagedSubscriptions() {
+  return cachedManagerStore("subscriptions", null, () => fetchManagedSubscriptionsUncached());
 }
 
 export async function apiCreateSubscription(
@@ -88,6 +97,7 @@ export async function apiCreateSubscription(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return envelope.data;
 }
 
@@ -105,11 +115,15 @@ export async function apiUpdateSubscription(
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     },
   );
+  markStoreChanged();
   return envelope.data;
 }
 
 /** Fetch all PUBLISHED subscription plans with full details for the Customer storefront */
-export async function fetchPublicSubscriptionPlans(): Promise<CatalogProduct[]> {
+export async function fetchPublicSubscriptionPlans(
+  options: { loadDetail?: (productId: string | number) => Promise<CatalogProduct | null> } = {},
+): Promise<CatalogProduct[]> {
+  const loadDetail = options.loadDetail ?? fetchStoreProductDetail;
   const listRes = await fetchStoreProducts({
     productType: ProductFilterRequest.productType.SUBSCRIPTION,
     page: 0,
@@ -119,7 +133,7 @@ export async function fetchPublicSubscriptionPlans(): Promise<CatalogProduct[]> 
   const hydrated = await Promise.all(
     listRes.items.map(async (item) => {
       try {
-        const detail = await fetchStoreProductDetail(item.id);
+        const detail = await loadDetail(item.id);
         return detail ?? item;
       } catch {
         return item;

@@ -1061,7 +1061,11 @@ export default function ManagerDashboard() {
                     className: "bg-[#fef08a] text-black",
                   }
             }
-            footerText={`${kpi.pendingCommissionsCount} yêu cầu thiết kế chờ duyệt`}
+            footerText={
+              pendingCount > 0
+                ? "Đang chờ duyệt mở bán trên Store"
+                : "Không có nhân vật chờ duyệt trên Store"
+            }
             footerAction={
               <Link
                 href="/staff/pricing"
@@ -1096,7 +1100,7 @@ export default function ManagerDashboard() {
             }
             footerAction={
               <Link
-                href="/staff/inventory"
+                href="/manager/inventory"
                 className="inline-flex shrink-0 items-center border-2 border-black bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-[2px_2px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:bg-primary active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
                 Xem chi tiết
@@ -1107,7 +1111,7 @@ export default function ManagerDashboard() {
           <MetricCard
             title="Bảo hành cần xử lý"
             subtitle="Phiếu bảo hành đang chờ duyệt"
-            value={`${kpi.pendingWarrantyClaimsCount} Phiếu`}
+            value={`Còn ${kpi.pendingWarrantyClaimsCount} phiếu cần duyệt`}
             icon={ShieldAlert}
             iconBoxClass={kpi.pendingWarrantyClaimsCount > 0 ? "bg-[#fed7aa]" : "bg-primary/50"}
             badge={
@@ -1123,12 +1127,12 @@ export default function ManagerDashboard() {
             }
             footerText={
               warrantyAlerts.length > 0
-                ? `${warrantyAlerts.length} phiếu đang mở theo dõi`
+                ? `Trên tổng số ${warrantyAlerts.length} phiếu chưa hoàn thành`
                 : "Không có phiếu bảo hành tồn đọng"
             }
             footerAction={
               <Link
-                href="/staff/warranty"
+                href="/manager/warranty"
                 className="inline-flex shrink-0 items-center border-2 border-black bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-[2px_2px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:bg-primary active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
                 Xử lý ngay
@@ -1528,7 +1532,7 @@ export default function ManagerDashboard() {
             </div>
 
             <Link
-              href="/staff/warranty"
+              href="/manager/warranty"
               className="btn-secondary inline-flex items-center px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
             >
               Xử lý bảo hành
@@ -1603,7 +1607,7 @@ export default function ManagerDashboard() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3.5 text-right">
                         <Link
-                          href={`/staff/warranty?ticketId=${encodeURIComponent(ticket.ticketId)}`}
+                          href={`/manager/warranty?ticketId=${encodeURIComponent(ticket.ticketId)}`}
                           className="btn-secondary inline-flex items-center px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
                         >
                           Xử lý
@@ -1634,7 +1638,7 @@ export default function ManagerDashboard() {
               Hiển thị <strong className="font-black text-black">{warrantyAlerts.length}</strong> phiếu bảo hành đang mở ({kpi.pendingWarrantyClaimsCount} phiếu chờ tiếp nhận).
             </span>
             <Link
-              href="/staff/warranty"
+              href="/manager/warranty"
               className="font-black uppercase tracking-wide text-primary-ink hover:underline"
             >
               Mở trang quản lý Bảo hành →

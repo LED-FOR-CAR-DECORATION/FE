@@ -4,8 +4,10 @@ import type { MockOrder, OrderKind } from "./types";
 export interface OrderFulfillment {
   hasLED: boolean;
   hasCharacter: boolean;
+  hasSubscription: boolean;
   requiresDelivery: boolean;
   requiresCharacterEntitlement: boolean;
+  requiresSubscriptionActivation: boolean;
   characterIds: string[];
 }
 
@@ -21,9 +23,29 @@ function classifyItem(item: ProductDefinition, result: OrderFulfillment): void {
     if (!result.characterIds.includes(item.id)) result.characterIds.push(item.id);
     return;
   }
+  if (item.productType === "SUBSCRIPTION") {
+    result.hasSubscription = true;
+    result.requiresSubscriptionActivation = true;
+    return;
+  }
   if (item.productType === "BUNDLE") {
     if (item.components?.length) {
       item.components.forEach((component) => classifyItem(component, result));
+    } else if (item.bundleDetails?.items?.length) {
+      item.bundleDetails.items.forEach((bItem) => {
+        const itemType = String(bItem.itemType ?? "").toUpperCase();
+        if (itemType === "LED" || itemType === "LED_MODEL") {
+          result.hasLED = true;
+          result.requiresDelivery = true;
+        } else if (itemType === "CHARACTER") {
+          result.hasCharacter = true;
+          result.requiresCharacterEntitlement = true;
+          const charId = String(bItem.productId ?? bItem.versionId ?? "");
+          if (charId && !result.characterIds.includes(charId)) {
+            result.characterIds.push(charId);
+          }
+        }
+      });
     } else {
       result.hasLED = true;
       result.requiresDelivery = true;
@@ -39,26 +61,39 @@ export function getOrderFulfillment(order: { items: ProductDefinition[] }): Orde
   const result: OrderFulfillment = {
     hasLED: false,
     hasCharacter: false,
+    hasSubscription: false,
     requiresDelivery: false,
     requiresCharacterEntitlement: false,
+    requiresSubscriptionActivation: false,
     characterIds: [],
   };
   order.items.forEach((item) => classifyItem(item, result));
   return result;
 }
 
-export function getOrderKind(order: { orderType?: string; items: ProductDefinition[] }): OrderKind {
+export function getOrderKind(order: {
+  orderType?: string;
+  items: ProductDefinition[];
+  hasDelivery?: boolean;
+}): OrderKind {
   const fulfillment = getOrderFulfillment(order);
-  if (fulfillment.hasLED && fulfillment.hasCharacter) {
+  const hasDigital = fulfillment.hasCharacter || fulfillment.hasSubscription;
+  if (order.hasDelivery === false && !order.items.some((item) => item.productType === "LED_MODEL")) {
+    return "DIGITAL";
+  }
+  if (fulfillment.hasLED && hasDigital) {
     return "MIXED";
   }
   if (order.orderType === "MIXED" || order.orderType === "BUNDLE") {
+    if (order.items.length > 0 && !fulfillment.hasLED && hasDigital) {
+      return "DIGITAL";
+    }
     return "MIXED";
   }
   if (fulfillment.hasLED || order.orderType === "PHYSICAL") {
     return "PHYSICAL";
   }
-  if (fulfillment.hasCharacter || order.orderType === "DIGITAL" || order.orderType === "SUBSCRIPTION") {
+  if (hasDigital || order.orderType === "DIGITAL" || order.orderType === "SUBSCRIPTION") {
     return "DIGITAL";
   }
   return "PHYSICAL";

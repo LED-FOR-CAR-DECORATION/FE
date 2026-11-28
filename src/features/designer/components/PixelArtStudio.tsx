@@ -2960,8 +2960,8 @@ export default function PixelArtStudio({
             disabled={Boolean(lockedMatrixSize)}
             title={
               lockedMatrixSize
-                ? `Kích thước ma trận đã khóa cố định ở mức ${lockedMatrixSize}`
-                : "Chọn kích thước ma trận"
+                ? `Kích thước bản vẽ đã khóa cố định ở mức ${lockedMatrixSize}`
+                : "Chọn kích thước bản vẽ"
             }
             onChange={(e) =>
               handleSizePresetChange(e.target.value as "32x32" | "64x32" | "64x64")
@@ -3714,8 +3714,138 @@ export default function PixelArtStudio({
           </button>
         </aside>
 
-        {/* Center Pane: Canvas Pasteboard + Bottom Status Bar */}
+        {/* Center Pane: Top Frame Timeline Strip + Canvas Pasteboard + Bottom Status Bar */}
         <div className="order-1 flex min-h-0 w-full min-w-0 flex-1 flex-col lg:order-2">
+          {/* Compact Aseprite GIF Animation Timeline Strip (Top Row above Canvas) */}
+          <div
+            aria-label="Timeline khung hình GIF"
+            className="flex flex-wrap items-center gap-2 border-b-2 border-[#8a948e] bg-[#dfe4e1] px-2.5 py-1.5"
+          >
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                disabled={frames.length <= 1}
+                onClick={() => setIsPlaying((p) => !p)}
+                title={
+                  frames.length <= 1
+                    ? "Thêm ít nhất 2 frame để chạy thử GIF (Space)"
+                    : effectivePlaying
+                      ? "Dừng phát thử (Space)"
+                      : "Phát thử GIF trên Live LED Preview (Space)"
+                }
+                aria-pressed={effectivePlaying}
+                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold"
+              >
+                {effectivePlaying ? <Pause size={12} /> : <Play size={12} />}
+                {effectivePlaying ? "Dừng" : "Phát GIF"}
+              </button>
+
+              <select
+                value={frameDelayMs}
+                onChange={(e) => {
+                  userDirtyRef.current = true;
+                  setFrameDelayMs(Number(e.target.value));
+                }}
+                aria-label="Tốc độ khung hình GIF"
+                title="Thời gian trễ mỗi frame (GIF frame delay)"
+                className="ase-input cursor-pointer px-1.5 py-1 font-mono text-[10px] font-bold"
+              >
+                <option value={60}>60ms (16fps)</option>
+                <option value={100}>100ms (10fps)</option>
+                <option value={150}>150ms (6.7fps)</option>
+                <option value={200}>200ms (5fps)</option>
+                <option value={300}>300ms (3.3fps)</option>
+                <option value={500}>500ms (2fps)</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => setShowOnionSkin((v) => !v)}
+                aria-pressed={showOnionSkin}
+                title="Hiển thị mờ frame trước đó phía sau bảng vẽ"
+                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
+              >
+                <Layers size={11} />
+                Onion
+              </button>
+
+              <span className="mx-0.5 h-4 w-px bg-[#9aa49e]" aria-hidden="true" />
+
+              <button
+                type="button"
+                onClick={handleAddFrame}
+                title="Thêm frame trống mới"
+                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
+              >
+                <Plus size={11} /> Frame
+              </button>
+              <button
+                type="button"
+                onClick={handleDuplicateFrame}
+                title="Nhân bản frame hiện tại để sửa tiếp chuyển động"
+                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
+              >
+                <CopyPlus size={11} /> Nhân bản
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMoveFrame(-1)}
+                disabled={activeFrameIndex === 0}
+                title="Đưa frame sang trái"
+                aria-label="Đưa frame sang trái"
+                className="ase-btn p-1"
+              >
+                <ChevronLeft size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMoveFrame(1)}
+                disabled={activeFrameIndex >= frames.length - 1}
+                title="Đưa frame sang phải"
+                aria-label="Đưa frame sang phải"
+                className="ase-btn p-1"
+              >
+                <ChevronRight size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteFrame}
+                disabled={frames.length <= 1}
+                title="Xóa frame hiện tại"
+                aria-label="Xóa frame hiện tại"
+                className="ase-btn p-1 text-red-700"
+              >
+                <Trash size={11} />
+              </button>
+            </div>
+
+            {/* Frame Thumbnails Strip */}
+            <div className="flex min-w-[160px] flex-1 items-center gap-1.5 overflow-x-auto py-0.5">
+              {frames.map((frameDoc, idx) => {
+                const isSelected = idx === activeFrameIndex;
+                const isPlaybackHighlight =
+                  effectivePlaying && idx === playbackFrameIndex % frames.length;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleSelectFrame(idx)}
+                    title={`Frame ${idx + 1}`}
+                    className={`ase-btn relative flex shrink-0 items-center gap-1.5 px-1.5 py-1 ${
+                      isPlaybackHighlight ? "ring-2 ring-[#2d6a4f]" : ""
+                    }`}
+                  >
+                    <FrameMiniCanvas frameDoc={frameDoc} />
+                    <span className="font-mono text-[10px] font-black text-[#1f2a24]">
+                      F{idx + 1}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div
             ref={pasteboardRef}
             className={`ps-pasteboard flex min-h-0 flex-1 items-center justify-center p-2.5 sm:p-3 ${
@@ -3888,136 +4018,6 @@ export default function PixelArtStudio({
                   />
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Compact Aseprite GIF Animation Timeline Strip */}
-          <div
-            aria-label="Timeline khung hình GIF"
-            className="flex flex-wrap items-center gap-2 border-t-2 border-[#8a948e] bg-[#dfe4e1] px-2.5 py-1.5"
-          >
-            <div className="flex flex-wrap items-center gap-1">
-              <button
-                type="button"
-                disabled={frames.length <= 1}
-                onClick={() => setIsPlaying((p) => !p)}
-                title={
-                  frames.length <= 1
-                    ? "Thêm ít nhất 2 frame để chạy thử GIF (Space)"
-                    : effectivePlaying
-                      ? "Dừng phát thử (Space)"
-                      : "Phát thử GIF trên Live LED Preview (Space)"
-                }
-                aria-pressed={effectivePlaying}
-                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold"
-              >
-                {effectivePlaying ? <Pause size={12} /> : <Play size={12} />}
-                {effectivePlaying ? "Dừng" : "Phát GIF"}
-              </button>
-
-              <select
-                value={frameDelayMs}
-                onChange={(e) => {
-                  userDirtyRef.current = true;
-                  setFrameDelayMs(Number(e.target.value));
-                }}
-                aria-label="Tốc độ khung hình GIF"
-                title="Thời gian trễ mỗi frame (GIF frame delay)"
-                className="ase-input cursor-pointer px-1.5 py-1 font-mono text-[10px] font-bold"
-              >
-                <option value={60}>60ms (16fps)</option>
-                <option value={100}>100ms (10fps)</option>
-                <option value={150}>150ms (6.7fps)</option>
-                <option value={200}>200ms (5fps)</option>
-                <option value={300}>300ms (3.3fps)</option>
-                <option value={500}>500ms (2fps)</option>
-              </select>
-
-              <button
-                type="button"
-                onClick={() => setShowOnionSkin((v) => !v)}
-                aria-pressed={showOnionSkin}
-                title="Hiển thị mờ frame trước đó phía sau bảng vẽ"
-                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
-              >
-                <Layers size={11} />
-                Onion
-              </button>
-
-              <span className="mx-0.5 h-4 w-px bg-[#9aa49e]" aria-hidden="true" />
-
-              <button
-                type="button"
-                onClick={handleAddFrame}
-                title="Thêm frame trống mới"
-                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
-              >
-                <Plus size={11} /> Frame
-              </button>
-              <button
-                type="button"
-                onClick={handleDuplicateFrame}
-                title="Nhân bản frame hiện tại để sửa tiếp chuyển động"
-                className="ase-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold"
-              >
-                <CopyPlus size={11} /> Nhân bản
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMoveFrame(-1)}
-                disabled={activeFrameIndex === 0}
-                title="Đưa frame sang trái"
-                aria-label="Đưa frame sang trái"
-                className="ase-btn p-1"
-              >
-                <ChevronLeft size={11} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMoveFrame(1)}
-                disabled={activeFrameIndex >= frames.length - 1}
-                title="Đưa frame sang phải"
-                aria-label="Đưa frame sang phải"
-                className="ase-btn p-1"
-              >
-                <ChevronRight size={11} />
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteFrame}
-                disabled={frames.length <= 1}
-                title="Xóa frame hiện tại"
-                aria-label="Xóa frame hiện tại"
-                className="ase-btn p-1 text-red-700"
-              >
-                <Trash size={11} />
-              </button>
-            </div>
-
-            {/* Frame Thumbnails Strip */}
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-0.5">
-              {frames.map((frameDoc, idx) => {
-                const isSelected = idx === activeFrameIndex;
-                const isPlaybackHighlight =
-                  effectivePlaying && idx === playbackFrameIndex % frames.length;
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => handleSelectFrame(idx)}
-                    title={`Frame ${idx + 1}`}
-                    className={`ase-btn relative flex shrink-0 items-center gap-1.5 px-1.5 py-1 ${
-                      isPlaybackHighlight ? "ring-2 ring-[#2d6a4f]" : ""
-                    }`}
-                  >
-                    <FrameMiniCanvas frameDoc={frameDoc} />
-                    <span className="font-mono text-[10px] font-black text-[#1f2a24]">
-                      F{idx + 1}
-                    </span>
-                  </button>
-                );
-              })}
             </div>
           </div>
 

@@ -1,13 +1,12 @@
 "use client";
 
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
-import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useGallery } from "@/features/character/context/GalleryContext";
 import SePayOrderPaymentCard from "@/features/order/components/SePayOrderPaymentCard";
-import { useOrders } from "@/features/order/context/OrderContext";
-import { getOrderFulfillment, getOrderKind, isCharacterOnlyOrder } from "@/features/order/fulfillment";
+import { useOrder } from "@/features/order/context/OrderContext";
+import { getOrderFulfillment, getOrderKind, isCharacterOnlyOrder, type OrderFulfillment } from "@/features/order/fulfillment";
 import type { OrderKind, OrderStatus, PaymentStatus } from "@/features/order/types";
 import { formatPrice } from "@/lib/currency";
 import {
@@ -19,6 +18,7 @@ import {
   Circle,
   Clock,
   CreditCard,
+  Crown,
   ExternalLink,
   Loader2,
   MapPin,
@@ -82,17 +82,23 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
   Cancelled: "Đã hủy / Hoàn tiền",
 };
 
-function getOrderSteps(orderKind: OrderKind) {
+function getOrderSteps(orderKind: OrderKind, fulfillment: OrderFulfillment) {
   if (orderKind === "DIGITAL") {
+    const completionLabel =
+      fulfillment.hasSubscription && fulfillment.hasCharacter
+        ? "Đã cấp quyền lợi số & Hoàn thành"
+        : fulfillment.hasSubscription
+          ? "Đã kích hoạt gói hội viên & Hoàn thành"
+          : "Đã cấp nhân vật & Hoàn thành";
     return [
       { key: "PENDING_PAYMENT", label: "Chờ thanh toán" },
-      { key: "COMPLETED", label: "Đã cấp nhân vật & Hoàn thành" },
+      { key: "COMPLETED", label: completionLabel },
     ];
   }
   if (orderKind === "MIXED") {
     return [
       { key: "PENDING_PAYMENT", label: "Chờ thanh toán" },
-      { key: "PARTIALLY_FULFILLED", label: "Đã cấp nhân vật & Chờ đóng hàng" },
+      { key: "PARTIALLY_FULFILLED", label: "Đã cấp quyền lợi số & Chờ đóng hàng" },
       { key: "SHIPPING", label: "Đang vận chuyển" },
       { key: "DELIVERED", label: "Đã giao" },
       { key: "COMPLETED", label: "Đã hoàn thành" },
@@ -141,12 +147,14 @@ function getActiveStepIndex(status: OrderStatus, orderKind: OrderKind): number {
 function OrderStatusStepper({
   status,
   orderKind,
+  fulfillment,
   failureReason,
   attemptCount,
   maxAttempts,
 }: {
   status: OrderStatus;
   orderKind: OrderKind;
+  fulfillment: OrderFulfillment;
   failureReason?: string;
   attemptCount?: number;
   maxAttempts?: number;
@@ -157,7 +165,7 @@ function OrderStatusStepper({
     status === "REFUNDED" ||
     status === "DELIVERY_FAILED";
 
-  const steps = getOrderSteps(orderKind);
+  const steps = getOrderSteps(orderKind, fulfillment);
   const currentIdx = getActiveStepIndex(status, orderKind);
   const resolvedMaxAttempts = maxAttempts ?? 3;
   const resolvedAttempts = attemptCount ?? 0;
@@ -287,6 +295,11 @@ function getProductBadge(productType: string) {
         label: "Nhân vật kỹ thuật số",
         className: "bg-purple-50 text-purple-700 border-purple-200",
       };
+    case "SUBSCRIPTION":
+      return {
+        label: "Gói hội viên",
+        className: "bg-amber-50 text-amber-800 border-amber-200",
+      };
     case "BUNDLE":
       return {
         label: "Bộ sản phẩm (Bundle)",
@@ -304,8 +317,8 @@ function getProductBadge(productType: string) {
 export default function CustomerOrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
   const { isLoading: isAuthLoading } = useAuth();
-  const { orders, isLoading: isOrdersLoading, refreshOrders, confirmOrderDelivery, cancelCustomerOrder } = useOrders();
-  const { entitlements } = useGallery();
+  const { order, isLoading: isOrdersLoading, refreshOrder: refreshOrders, confirmOrderDelivery, cancelCustomerOrder } = useOrder(orderId);
+  const { entitlements, activeSubscriptions } = useGallery();
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState("");
   const [confirmSuccess, setConfirmSuccess] = useState(false);
@@ -315,8 +328,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
   const [cancelSuccessMessage, setCancelSuccessMessage] = useState("");
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-
-  const order = orders.find((entry) => String(entry.id) === String(orderId));
 
   if (!order && (isAuthLoading || isOrdersLoading)) {
     return (
@@ -340,7 +351,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
         </main>
-        <Footer />
       </>
     );
   }
@@ -366,7 +376,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
         </main>
-        <Footer />
       </>
     );
   }
@@ -481,18 +490,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
                     <X size={14} /> Hủy đơn
                   </button>
                 )}
-                {isDelivered && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfirmError("");
-                      setIsConfirmModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#155e59] px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:opacity-90"
-                  >
-                    <CheckCircle size={14} /> Đã nhận hàng
-                  </button>
-                )}
               </div>
             </div>
 
@@ -511,36 +508,11 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
               </div>
             )}
 
-            {isDelivered && (
-              <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-xs">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-600" />
-                  <div>
-                    <p className="text-sm font-bold text-emerald-950">
-                      Đơn hàng đã được giao đến bạn!
-                    </p>
-                    <p className="mt-0.5 text-xs text-emerald-800">
-                      Nếu bạn đã nhận và kiểm tra kiện hàng, hãy bấm xác nhận để hoàn tất đơn hàng.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmError("");
-                    setIsConfirmModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#155e59] px-4 py-2 text-xs font-bold text-white hover:opacity-90"
-                >
-                  <CheckCircle size={14} /> Xác nhận đã nhận hàng
-                </button>
-              </section>
-            )}
-
             {/* Full-width Horizontal Order Status Stepper */}
             <OrderStatusStepper
               status={order.status}
               orderKind={orderKind}
+              fulfillment={fulfillment}
               failureReason={order.delivery?.failureReason}
               attemptCount={order.delivery?.attemptCount}
               maxAttempts={order.delivery?.maxAttempts}
@@ -739,6 +711,45 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
                   </section>
                 )}
 
+                {fulfillment.requiresSubscriptionActivation && (
+                  <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
+                    <div className="mb-3.5 flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <Crown size={17} className="text-[#155e59]" />
+                      <h2 className="text-sm font-black uppercase tracking-wide text-gray-900">
+                        Gói hội viên kỹ thuật số
+                      </h2>
+                    </div>
+                    <div
+                      className={`flex items-start gap-2.5 rounded-lg border p-3.5 text-xs font-semibold ${
+                        order.paymentStatus === "Paid"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                          : "border-amber-200 bg-amber-50 text-amber-900"
+                      }`}
+                    >
+                      {order.paymentStatus === "Paid" ? (
+                        <CheckCircle size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+                      ) : (
+                        <Clock size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                      )}
+                      <p className="leading-relaxed">
+                        {order.paymentStatus !== "Paid"
+                          ? "Gói hội viên sẽ được tự động kích hoạt cho tài khoản của bạn sau khi thanh toán thành công."
+                          : activeSubscriptions.length > 0
+                            ? "Gói hội viên đã được kích hoạt cho tài khoản của bạn."
+                            : "Đơn hàng gói hội viên đã thanh toán thành công."}
+                      </p>
+                    </div>
+                    {order.paymentStatus === "Paid" && (
+                      <Link
+                        href="/profile/subscription"
+                        className="mt-3.5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#155e59] px-4 py-2 text-xs font-bold text-white transition hover:opacity-90"
+                      >
+                        Xem gói hội viên
+                      </Link>
+                    )}
+                  </section>
+                )}
+
                 {fulfillment.requiresCharacterEntitlement && (
                   <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
                     <div className="mb-3.5 flex items-center gap-2 border-b border-gray-100 pb-3">
@@ -773,6 +784,21 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
                 )}
               </div>
             </div>
+
+            {isDelivered && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmError("");
+                    setIsConfirmModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#155e59] px-5 py-2.5 text-xs font-bold text-white shadow-xs transition hover:opacity-90"
+                >
+                  <CheckCircle size={15} /> Xác nhận đã nhận hàng
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -799,8 +825,6 @@ export default function CustomerOrderDetailPage({ params }: { params: Promise<{ 
           onConfirm={() => void handleCancelOrder()}
         />
       )}
-
-      <Footer />
     </>
   );
 }

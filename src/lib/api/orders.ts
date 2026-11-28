@@ -430,6 +430,19 @@ const DISPATCH_ERROR_MESSAGES: Record<string, string> = {
   CARRIER_RESOURCE_NOT_FOUND: "Gói dịch vụ AhaMove đã chọn không khả dụng tại khu vực này.",
   NOT_ENOUGH_CREDIT: "Tài khoản AhaMove của shop không đủ số dư. Vui lòng nạp thêm tiền trước khi bàn giao.",
   INVALID_DELIVERY_AREA: "Địa chỉ người nhận nằm ngoài phạm vi phục vụ của AhaMove.",
+  INVALID_MAX_DISTANCE:
+    "Địa điểm giao hàng nằm ngoài phạm vi phục vụ của AhaMove (vượt quá khoảng cách tối đa cho phép). Vui lòng kiểm tra lại địa chỉ hoặc chọn tuyến/gói dịch vụ khác.",
+  INVALID_MIN_DISTANCE:
+    "Khoảng cách giao hàng quá ngắn so với quy định tối thiểu của gói dịch vụ AhaMove.",
+  OUT_OF_SERVICE_AREA: "Địa chỉ người nhận nằm ngoài khu vực hỗ trợ giao hàng của AhaMove.",
+  INVALID_LOCATION:
+    "Tọa độ hoặc địa chỉ giao hàng không hợp lệ trên bản đồ AhaMove. Vui lòng cập nhật lại địa chỉ.",
+  INVALID_PATH: "Tuyến đường giao hàng không hợp lệ hoặc nằm ngoài phạm vi phục vụ của AhaMove.",
+  INVALID_SERVICE: "Gói dịch vụ AhaMove đã chọn không hỗ trợ cho tuyến đường này.",
+  CARRIER_REJECTED:
+    "AhaMove từ chối tiếp nhận đơn giao hàng này. Vui lòng kiểm tra lại địa chỉ hoặc gói dịch vụ.",
+  CARRIER_AUTH_FAILED: "Xác thực kết nối với đối tác AhaMove thất bại. Vui lòng liên hệ kỹ thuật.",
+  CARRIER_INVALID_RESPONSE: "Phản hồi từ AhaMove không đầy đủ. Vui lòng thử lại sau ít phút.",
   INVALID_SERVICE_HOUR: "Gói dịch vụ đã chọn hiện đã ngoài khung giờ nhận đơn trong ngày.",
   INVALID_ORDER_STATUS_TRANSITION:
     "Đơn hàng không ở trạng thái chờ đóng hàng, là đơn hàng số, hoặc đã có chuyến giao hàng đang hoạt động.",
@@ -439,18 +452,47 @@ const DISPATCH_ERROR_MESSAGES: Record<string, string> = {
   INTERNAL_SERVER_ERROR: "Lỗi máy chủ khi tạo đơn giao vận.",
 };
 
+function formatMaxDistanceMessage(rawMessage?: string): string {
+  const distanceMatch = rawMessage?.match(/([\d.,]+)\s*km/i);
+  if (distanceMatch) {
+    return `Địa điểm giao hàng nằm ngoài phạm vi phục vụ của AhaMove (khoảng cách ${distanceMatch[1]} km vượt quá giới hạn cho phép). Vui lòng kiểm tra lại địa chỉ hoặc chọn tuyến/gói dịch vụ khác.`;
+  }
+  return DISPATCH_ERROR_MESSAGES.INVALID_MAX_DISTANCE;
+}
+
 export function getDispatchErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const body = error.body as ErrorResponse | undefined;
     const code = (body as { code?: string } | undefined)?.code;
+    const detail = body?.details?.find((d) => d.message)?.message;
+    const rawMessage = body?.message || detail || error.message;
+
+    if (
+      code === "INVALID_MAX_DISTANCE" ||
+      /INVALID_MAX_DISTANCE|Distance too far/i.test(rawMessage ?? "")
+    ) {
+      return formatMaxDistanceMessage(rawMessage);
+    }
     if (code && DISPATCH_ERROR_MESSAGES[code]) {
       return DISPATCH_ERROR_MESSAGES[code];
     }
-    const detail = body?.details?.find((d) => d.message)?.message;
+    const embeddedCode = rawMessage?.match(/AhaMove rejected[^()]*\(([A-Z0-9_]+)\)/i)?.[1]?.toUpperCase();
+    if (embeddedCode && DISPATCH_ERROR_MESSAGES[embeddedCode]) {
+      return DISPATCH_ERROR_MESSAGES[embeddedCode];
+    }
     if (body?.message) return body.message;
     if (detail) return detail;
   }
   if (error instanceof Error && error.message) {
+    if (/INVALID_MAX_DISTANCE|Distance too far/i.test(error.message)) {
+      return formatMaxDistanceMessage(error.message);
+    }
+    const embeddedCode = error.message
+      .match(/AhaMove rejected[^()]*\(([A-Z0-9_]+)\)/i)?.[1]
+      ?.toUpperCase();
+    if (embeddedCode && DISPATCH_ERROR_MESSAGES[embeddedCode]) {
+      return DISPATCH_ERROR_MESSAGES[embeddedCode];
+    }
     return error.message;
   }
   return "Không thể bàn giao đơn hàng sang AhaMove. Vui lòng thử lại.";

@@ -9,7 +9,7 @@ import StaffDraftReview from "@/features/commission/components/StaffDraftReview"
 import StaffRevisionCard from "@/features/commission/components/StaffRevisionCard";
 import { DeliverableCard, RevisionCard, type CardContext } from "./CommissionCards";
 import CommissionAvatar from "./CommissionAvatar";
-import { commissionStatusLabel } from "../commission-status";
+import { commissionStatusLabel, formatCommissionSystemMessage } from "../commission-status";
 import { useCommissionRoom, type ChatViewer, type CommissionRoomInfo, type PendingMessage } from "../hooks/useCommissionRoom";
 import { MAX_MESSAGE_LENGTH, parseMetadata, type CommissionMessage } from "../services/commission-messages.api";
 
@@ -47,17 +47,23 @@ function formatDateTime(iso?: string | null) {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
 }
 
-export default function CommissionChatRoom({ commissionId, viewer, variant = "page", onBack }: {
+export default function CommissionChatRoom({ commissionId, viewer, variant = "page", onBack, onLastMessage }: {
   commissionId: number;
   viewer: ChatViewer;
   /** "messenger": lấp đầy khung chứa (hộp thư của staff), cột thông tin cuộn riêng. */
   variant?: "page" | "messenger";
   /** Nút quay lại danh sách hội thoại (mobile, chế độ messenger). */
   onBack?: () => void;
+  /** Báo tin cuối cùng cho hộp thư để khỏi phải tải lại lịch sử của hội thoại đang mở. */
+  onLastMessage?: (message: CommissionMessage) => void;
 }) {
   const messenger = variant === "messenger";
   const room = useCommissionRoom(commissionId, viewer);
   const { info, infoError, messages, addMessages, refreshInfo, refreshHistory } = room;
+  const lastMessage = messages.length ? messages[messages.length - 1] : undefined;
+  useEffect(() => {
+    if (lastMessage) onLastMessage?.(lastMessage);
+  }, [lastMessage, onLastMessage]);
   const cardIds = useMemo(() => latestCardIds(messages), [messages]);
   const onCardChanged = useCallback((incoming?: CommissionMessage[]) => {
     if (incoming?.length) addMessages(incoming);
@@ -358,7 +364,7 @@ function MessageItem({ message, viewer, info, animate, cardCtx }: {
     return (
       <Reveal animate={animate} className="flex justify-center">
         <p className="t-stagger-line t-stagger-line--1 max-w-[85%] border-2 border-black bg-primary/10 px-3 py-1.5 text-center text-xs font-bold text-black">
-          {message.content} <span className="font-semibold text-text-muted">· {formatTime(message.createdAt)}</span>
+          {formatCommissionSystemMessage(message.content)} <span className="font-semibold text-text-muted">· {formatTime(message.createdAt)}</span>
         </p>
       </Reveal>
     );

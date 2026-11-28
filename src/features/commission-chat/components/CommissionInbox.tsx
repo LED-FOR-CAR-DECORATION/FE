@@ -5,10 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Loader2, MessageCircle, RefreshCw, Search } from "lucide-react";
 import "@/styles/transitions.css";
 import { getApiErrorMessage } from "@/lib/api/auth";
-import { commissionStatusLabel } from "../commission-status";
-import { canReadHistory, listCommissionMessages, type CommissionMessage } from "../services/commission-messages.api";
+import { commissionStatusLabel, formatCommissionSystemMessage } from "../commission-status";
+import { canReadHistory, type CommissionMessage } from "../services/commission-messages.api";
+import { appendMessagesToCache, fetchLastMessageCached, MESSAGES_STALE_MS } from "../services/messages-cache";
+import { useQueryClient } from "@tanstack/react-query";
 import CommissionAvatar from "./CommissionAvatar";
 import CommissionChatRoom from "./CommissionChatRoom";
+import { subscribeHubStatus, subscribeTopic, type StompStatus } from "../services/stomp-hub";
 import type { ChatViewer } from "../hooks/useCommissionRoom";
 
 /**
@@ -33,16 +36,19 @@ interface Conversation {
 export interface InboxFilter { key: string; label: string; statuses?: string[] }
 
 const PREVIEW_CONCURRENCY = 6;
-const PREVIEW_REFRESH_MS = 30_000;
+const PREVIEW_REFRESH_MS = 60_000;
+/**
+ * Số hội thoại (mới nhất) nhận tin realtime qua kết nối dùng chung; phần còn lại vẫn làm mới định kỳ.
+ * Giữ nhỏ: mỗi SUBSCRIBE là một lần BE kiểm quyền bằng DB, và một topic bị từ chối làm BE đóng CẢ kết nối.
+ */
+const MAX_LIVE_CONVERSATIONS = 20;
+/** Sau khi kết nối lại, gộp nhiều topic cùng kích hoạt lại thành một lần tải bù tin cuối. */
+const CATCH_UP_DELAY_MS = 500;
 
-/** Bộ lọc mặc định của staff — theo giai đoạn của commission. */
+/** Bộ lọc mặc định của staff: giữ Tất cả và Chưa đọc (bỏ lọc theo status). */
 export const STAFF_FILTERS: InboxFilter[] = [
   { key: "all", label: "Tất cả" },
   { key: "unread", label: "Chưa đọc" },
-  { key: "review", label: "Chờ duyệt bản nháp", statuses: ["INTERNAL_REVIEW"] },
-  { key: "design", label: "Đang thiết kế", statuses: ["PAID", "IN_PROGRESS", "INTERNAL_REVISION_REQUIRED", "AWAITING_ESTIMATE"] },
-  { key: "customer", label: "Chờ khách", statuses: ["PREVIEW_DELIVERED", "AWAITING_EXTRA_PAYMENT"] },
-  { key: "done", label: "Hoàn thành", statuses: ["COMPLETED"] },
 ];
 
 function readSeen(prefix: string, commissionId: number) {
@@ -59,8 +65,11 @@ function isOwn(message: CommissionMessage, viewer: ChatViewer) {
 
 function previewText(viewer: ChatViewer, message?: CommissionMessage) {
   if (!message) return "Chưa có tin nhắn";
+  if (message.messageType === "SYSTEM" || message.senderRole === "SYSTEM") {
+    return formatCommissionSystemMessage(message.content);
+  }
   const own = isOwn(message, viewer);
-  const other = message.senderRole === "SYSTEM" ? "" : viewer === "CUSTOMER" ? "LUMINTRA: " : "Khách: ";
+  const other = viewer === "CUSTOMER" ? "LUMINTRA: " : "Khách: ";
   const prefix = own ? "Bạn: " : other;
   switch (message.messageType) {
     case "IMAGE": return `${prefix}Đã gửi một ảnh${message.content ? ` · ${message.content}` : ""}`;
@@ -91,14 +100,6 @@ async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) => Prom
   return results;
 }
 
-async function loadLastMessage(commissionId: number) {
-  try {
-    const { data } = await listCommissionMessages(commissionId);
-    return data?.length ? data[data.length - 1] : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 export default function CommissionInbox({ viewer, loadItems, filters, className = "", emptyText }: {
   viewer: ChatViewer;
@@ -110,6 +111,7 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
 }) {
   const seenPrefix = viewer === "CUSTOMER" ? "customer_chat_seen_" : "staff_chat_seen_";
   const router = useRouter();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedId = Number(searchParams.get("commissionId")) || undefined;
@@ -122,6 +124,20 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
   const [revision, setRevision] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const itemsRef = useRef<InboxItem[]>([]);
+  const selectedIdRef = useRef(selectedId);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+  /** Hội thoại nhận tin realtime (chốt lúc tải danh sách để không đăng ký lại mỗi khi có tin mới). */
+  const [liveIds, setLiveIds] = useState<number[]>([]);
+  const [deniedIds, setDeniedIds] = useState<ReadonlySet<number>>(() => new Set());
+  const [hubStatus, setHubStatus] = useState<StompStatus>("disconnected");
+  useEffect(() => subscribeHubStatus(setHubStatus), []);
+  /** Giá trị mới nhất cho vòng làm mới định kỳ (đọc qua ref để interval không phải tạo lại). */
+  const pollStateRef = useRef({ liveIds, deniedIds, hubStatus });
+  useEffect(() => {
+    pollStateRef.current = { liveIds, deniedIds, hubStatus };
+  }, [liveIds, deniedIds, hubStatus]);
 
   const select = useCallback((commissionId?: number) => {
     router.replace(commissionId ? `${pathname}?commissionId=${commissionId}` : pathname, { scroll: false });
@@ -132,11 +148,27 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
     let active = true;
     (async () => {
       try {
-        const chatItems = (await loadItems()).filter((item) => canReadHistory(item.status));
+        // Bấm "Làm mới" (revision > 0) thì bỏ qua cache; mở lại hộp thư trong MESSAGES_STALE_MS dùng cache.
+        const force = revision > 0;
+        const allItems = await queryClient.fetchQuery({
+          queryKey: ["commissions", "inbox", viewer],
+          queryFn: loadItems,
+          staleTime: force ? 0 : MESSAGES_STALE_MS,
+        });
+        const chatItems = allItems.filter((item) => canReadHistory(item.status));
         itemsRef.current = chatItems;
-        const lasts = await mapLimited(chatItems, PREVIEW_CONCURRENCY, (item) => loadLastMessage(item.commissionId));
+        const lasts = await mapLimited(chatItems, PREVIEW_CONCURRENCY, (item) =>
+          fetchLastMessageCached(queryClient, item.commissionId, { force }));
         if (!active) return;
-        setConversations(chatItems.map((item, index) => ({ item, last: lasts[index] })));
+        const loaded = chatItems.map((item, index) => ({ item, last: lasts[index] }));
+        setConversations(loaded);
+        setLiveIds(
+          [...loaded]
+            .sort((a, b) => new Date(b.last?.createdAt ?? 0).getTime() - new Date(a.last?.createdAt ?? 0).getTime())
+            .slice(0, MAX_LIVE_CONVERSATIONS)
+            .map((entry) => entry.item.commissionId),
+        );
+        setDeniedIds(new Set());
         setSeen(Object.fromEntries(chatItems.map((item) => [item.commissionId, readSeen(seenPrefix, item.commissionId)])));
         setError("");
       } catch (failure) {
@@ -146,21 +178,77 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
       }
     })();
     return () => { active = false; };
-  }, [loadItems, revision, seenPrefix]);
+  }, [loadItems, revision, seenPrefix, queryClient, viewer]);
 
-  // Làm mới đoạn tin cuối định kỳ khi tab đang hiển thị.
+  /** Tải lại tin cuối cho các hội thoại chỉ định (bỏ qua hội thoại đang mở — phòng chat đã báo qua onLastMessage). */
+  const refreshPreviews = useCallback(async (ids: ReadonlySet<number> | "all") => {
+    const items = itemsRef.current.filter((item) =>
+      item.commissionId !== selectedIdRef.current && (ids === "all" || ids.has(item.commissionId)));
+    if (items.length === 0) return;
+    const lasts = await mapLimited(items, PREVIEW_CONCURRENCY, (item) =>
+      fetchLastMessageCached(queryClient, item.commissionId, { force: true }));
+    setConversations((current) => current?.map((conversation) => {
+      const index = items.findIndex((item) => item.commissionId === conversation.item.commissionId);
+      return index >= 0 && lasts[index] ? { ...conversation, last: lasts[index] } : conversation;
+    }));
+  }, [queryClient]);
+
+  // Làm mới định kỳ CHỈ cho hội thoại không có realtime: ngoài MAX_LIVE_CONVERSATIONS, bị từ chối quyền,
+  // hoặc tất cả khi kết nối chung đang mất.
   useEffect(() => {
-    const timer = setInterval(async () => {
+    const timer = setInterval(() => {
       if (document.visibilityState !== "visible" || itemsRef.current.length === 0) return;
-      const items = itemsRef.current;
-      const lasts = await mapLimited(items, PREVIEW_CONCURRENCY, (item) => loadLastMessage(item.commissionId));
-      setConversations((current) => current?.map((conversation) => {
-        const index = items.findIndex((item) => item.commissionId === conversation.item.commissionId);
-        return index >= 0 && lasts[index] ? { ...conversation, last: lasts[index] } : conversation;
-      }));
+      const { liveIds: live, deniedIds: denied, hubStatus: hub } = pollStateRef.current;
+      if (hub !== "connected") {
+        void refreshPreviews("all");
+        return;
+      }
+      const liveSet = new Set(live);
+      const targets = new Set(itemsRef.current
+        .map((item) => item.commissionId)
+        .filter((id) => !liveSet.has(id) || denied.has(id)));
+      if (targets.size > 0) void refreshPreviews(targets);
     }, PREVIEW_REFRESH_MS);
     return () => clearInterval(timer);
+  }, [refreshPreviews]);
+
+  const updateLastMessage = useCallback((message: CommissionMessage) => {
+    setConversations((current) => current?.map((conversation) =>
+      conversation.item.commissionId === message.commissionId && conversation.last?.messageId !== message.messageId
+        ? { ...conversation, last: message }
+        : conversation,
+    ));
   }, []);
+
+  // Tin realtime của các hội thoại trong hộp thư, dùng chung socket với phòng chat đang mở.
+  const catchUpTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(catchUpTimer.current), []);
+  useEffect(() => {
+    if (liveIds.length === 0) return;
+    const scheduleCatchUp = () => {
+      clearTimeout(catchUpTimer.current);
+      catchUpTimer.current = setTimeout(() => void refreshPreviews(new Set(liveIds)), CATCH_UP_DELAY_MS);
+    };
+    const unsubscribes = liveIds.map((commissionId) => subscribeTopic(`/topic/commissions/${commissionId}`, {
+      onMessage: (body) => {
+        try {
+          const message = JSON.parse(body) as CommissionMessage;
+          if (typeof message?.messageId === "number") {
+            updateLastMessage(message);
+            appendMessagesToCache(queryClient, commissionId, [message]);
+          }
+        } catch {
+          // bỏ qua frame không hợp lệ
+        }
+      },
+      // Lần đầu: tin cuối vừa tải bằng REST. Kết nối lại: tải bù một lần cho cả hộp thư.
+      onActive: (isReconnect) => {
+        if (isReconnect) scheduleCatchUp();
+      },
+      onDenied: () => setDeniedIds((current) => (current.has(commissionId) ? current : new Set(current).add(commissionId))),
+    }));
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }, [liveIds, refreshPreviews, updateLastMessage, queryClient]);
 
   // Hội thoại đang mở coi như đã đọc tới tin cuối.
   const selectedLastId = conversations?.find((entry) => entry.item.commissionId === selectedId)?.last?.messageId;
@@ -289,7 +377,7 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
       {/* Phòng chat */}
       <section aria-label="Cuộc trò chuyện" className={`${selectedId ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col bg-white`}>
         {selectedId ? (
-          <CommissionChatRoom key={selectedId} commissionId={selectedId} viewer={viewer} variant="messenger" onBack={() => select(undefined)} />
+          <CommissionChatRoom key={selectedId} commissionId={selectedId} viewer={viewer} variant="messenger" onBack={() => select(undefined)} onLastMessage={updateLastMessage} />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-background p-8 text-center text-text-muted">
             {conversations ? <MessageCircle size={44} className="text-primary-ink" /> : <Loader2 size={28} className="animate-spin text-primary-ink" />}

@@ -4,20 +4,19 @@ import "@/lib/api/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/api_client/core/ApiError";
 import { getCustomerCommission } from "@/features/commission/services/customer-commission.api";
-import { getApiBaseUrl, refreshAccessToken } from "@/lib/api/client";
 import { getApiErrorMessage } from "@/lib/api/auth";
-import { getSessionToken } from "@/lib/auth/session";
 import { getManagementCommission } from "@/features/commission/services/management-commission.api";
 import {
   CHAT_ACTIVE_STATUSES,
   canReadHistory,
-  listCommissionMessages,
   mergeMessages,
   sendCommissionMessage,
   uploadCommissionChatImage,
   type CommissionMessage,
 } from "../services/commission-messages.api";
-import { buildStompUrl, subscribeStomp, type StompStatus } from "../services/stomp-client";
+import { reconnectNow, subscribeHubStatus, subscribeTopic, type StompStatus } from "../services/stomp-hub";
+import { appendMessagesToCache, fetchMessagesCached } from "../services/messages-cache";
+import { useQueryClient } from "@tanstack/react-query";
 import { isPageVisible, scheduleVisiblePoll } from "@/lib/polling";
 
 export type ChatViewer = "CUSTOMER" | "STAFF";
@@ -57,7 +56,13 @@ export interface PendingMessage {
 
 const STATUS_POLL_MS = 4000;
 const FALLBACK_POLL_MS = 15000;
-const MAX_STOMP_ERRORS = 3;
+/**
+ * BE chưa bật heart-beat STOMP nên socket chết lặng (đổi Wi-Fi, proxy cắt kết nối rảnh, máy ngủ) vẫn báo "connected".
+ * Trong lúc đó cứ mỗi khoảng này đối chiếu lịch sử bằng REST; thấy tin cũ hơn VERIFY_GRACE_MS mà socket không nhận được
+ * thì kết nối lại. Bỏ khi BE có heart-beat (docs/api-fetch-optimization.md, mục 0a).
+ */
+const VERIFY_CONNECTED_MS = 60_000;
+const VERIFY_GRACE_MS = 5_000;
 
 async function fetchInfo(commissionId: number, viewer: ChatViewer): Promise<CommissionRoomInfo> {
   if (viewer === "CUSTOMER") {
@@ -117,13 +122,17 @@ function errorCode(error: unknown): string | undefined {
 }
 
 export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
+  const queryClient = useQueryClient();
   const [info, setInfo] = useState<CommissionRoomInfo>();
   const [infoError, setInfoError] = useState("");
   const [messages, setMessages] = useState<CommissionMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [pending, setPending] = useState<PendingMessage[]>([]);
-  const [realtime, setRealtime] = useState<StompStatus>("disconnected");
+  const [hubStatus, setHubStatus] = useState<StompStatus>("disconnected");
+  /** Server từ chối quyền vào phòng này → không có realtime, dùng poll dự phòng. */
+  const [denied, setDenied] = useState(false);
+  const realtime: StompStatus = denied ? "disconnected" : hubStatus;
   const [reloadKey, setReloadKey] = useState(0);
   /** messageId của tin đến realtime qua STOMP (để FE chạy hiệu ứng xuất hiện). Lịch sử tải từ REST không nằm trong set này. */
   const [liveIds, setLiveIds] = useState<ReadonlySet<number>>(() => new Set());
@@ -166,11 +175,16 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
   }, [loadInfo, reloadKey]);
 
   // ---- Lịch sử tin nhắn
-  const loadHistory = useCallback(async () => {
+  /** Trả về số tin đã đủ cũ (quá VERIFY_GRACE_MS) mà trước đó FE chưa biết — dùng để phát hiện socket chết lặng. */
+  const loadHistory = useCallback(async ({ force = false }: { force?: boolean } = {}): Promise<number> => {
     try {
-      const { data } = await listCommissionMessages(commissionId);
-      const list = data ?? [];
-      const hasNewStateCard = list.some(
+      const list = await fetchMessagesCached(queryClient, commissionId, { force });
+      const graceLimit = Date.now() - VERIFY_GRACE_MS;
+      const missed = knownIds.current.size === 0 ? 0 : list.filter(
+        (m) => !knownIds.current.has(m.messageId) && new Date(m.createdAt).getTime() < graceLimit,
+      ).length;
+      // Lần tải đầu (chưa biết tin nào) thì effect thông tin đã tải rồi, không coi mọi thẻ là "mới".
+      const hasNewStateCard = knownIds.current.size > 0 && list.some(
         (m) =>
           !knownIds.current.has(m.messageId) &&
           m.messageType !== "TEXT" &&
@@ -181,6 +195,7 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
       if (hasNewStateCard) {
         void loadInfo();
       }
+      return missed;
     } catch (error) {
       if (errorCode(error) === "INVALID_COMMISSION_STATUS_TRANSITION") {
         setHistoryError("Phòng chat chưa được mở cho trạng thái hiện tại.");
@@ -190,10 +205,13 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
     } finally {
       setHistoryLoaded(true);
     }
-  }, [commissionId, loadInfo]);
+    return 0;
+  }, [commissionId, loadInfo, queryClient]);
+  const refreshHistory = useCallback(() => loadHistory({ force: true }), [loadHistory]);
 
   useEffect(() => {
-    if (readable) void loadHistory();
+    // Nút "Tải lại" (reloadKey > 0) bỏ qua cache; lần mở phòng đầu dùng lịch sử hộp thư vừa tải nếu còn mới.
+    if (readable) void loadHistory({ force: reloadKey > 0 });
   }, [readable, loadHistory, reloadKey]);
 
   // Tin hệ thống / thẻ deliverable / thẻ phụ phí thường đi kèm đổi trạng thái → tải lại thông tin (gộp nhiều tin liên tiếp).
@@ -204,36 +222,20 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
   }, [loadInfo]);
   useEffect(() => () => clearTimeout(infoRefreshTimer.current), []);
 
-  // ---- Realtime STOMP /topic/commissions/{id}
+  // ---- Realtime STOMP /topic/commissions/{id} qua kết nối dùng chung của cả tab (stomp-hub).
+  useEffect(() => subscribeHubStatus(setHubStatus), []);
+
   useEffect(() => {
     if (!readable) return;
-    let url: string;
-    try {
-      url = buildStompUrl(getApiBaseUrl());
-    } catch {
-      return;
-    }
-    let errors = 0;
-    const unsubscribe = subscribeStomp({
-      url,
-      destination: `/topic/commissions/${commissionId}`,
-      getToken: getSessionToken,
-      onStatusChange: setRealtime,
-      onConnected: () => {
-        errors = 0;
-        void loadHistory(); // bù các tin bị lỡ trong lúc mất kết nối
+    setDenied(false);
+    const unsubscribe = subscribeTopic(`/topic/commissions/${commissionId}`, {
+      onActive: (isReconnect) => {
+        // Lần đầu: lịch sử & thông tin vừa được tải bằng REST ở các effect trên → không tải lại.
+        if (!isReconnect) return;
+        void loadHistory({ force: true }); // bù các tin bị lỡ trong lúc mất kết nối
         void loadInfo();
       },
-      onError: async () => {
-        errors += 1;
-        if (errors >= MAX_STOMP_ERRORS) return false;
-        try {
-          return Boolean(await refreshAccessToken());
-        } catch {
-          // Keep the existing bounded reconnect policy for temporary refresh outages.
-          return true;
-        }
-      },
+      onDenied: () => setDenied(true),
       onMessage: (body) => {
         try {
           const message = JSON.parse(body) as CommissionMessage; // STOMP gửi raw CommissionMessageResponse, không có ApiResponse envelope
@@ -243,6 +245,7 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
             setLiveIds((current) => new Set(current).add(message.messageId));
           }
           setMessages((current) => mergeMessages(current, [message]));
+          appendMessagesToCache(queryClient, commissionId, [message]);
           if (message.messageType !== "TEXT" && message.messageType !== "IMAGE") scheduleInfoRefresh();
         } catch {
           // bỏ qua frame không hợp lệ
@@ -250,19 +253,30 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
       },
     });
     return unsubscribe;
-  }, [readable, commissionId, loadHistory, loadInfo, scheduleInfoRefresh]);
+  }, [readable, commissionId, loadHistory, loadInfo, scheduleInfoRefresh, queryClient]);
 
   // Dự phòng khi WebSocket không kết nối được: poll lịch sử & trạng thái commission định kỳ.
   useEffect(() => {
     if (!readable || realtime === "connected") return;
     const timer = setInterval(() => {
       if (isPageVisible()) {
-        void loadHistory();
+        void loadHistory({ force: true });
         void loadInfo();
       }
     }, FALLBACK_POLL_MS);
     return () => clearInterval(timer);
   }, [readable, realtime, loadHistory, loadInfo]);
+
+  // Đang "connected": thỉnh thoảng đối chiếu bằng REST để bắt kết nối chết lặng (xem VERIFY_CONNECTED_MS).
+  useEffect(() => {
+    if (!readable || realtime !== "connected") return;
+    const timer = setInterval(async () => {
+      if (!isPageVisible()) return;
+      const missed = await loadHistory({ force: true });
+      if (missed > 0) reconnectNow();
+    }, VERIFY_CONNECTED_MS);
+    return () => clearInterval(timer);
+  }, [readable, realtime, loadHistory]);
 
   // ---- Gửi tin
   const deliver = useCallback(async (item: PendingMessage) => {
@@ -280,6 +294,7 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
       });
       knownIds.current.add(data.messageId); // tin của chính mình: bong bóng "đang gửi" đã hiển thị, không chạy lại hiệu ứng
       setMessages((current) => mergeMessages(current, [data]));
+      appendMessagesToCache(queryClient, commissionId, [data]);
       setPending((current) => current.filter((p) => p.tempId !== item.tempId));
       if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
     } catch (error) {
@@ -292,7 +307,7 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
           : getApiErrorMessage(error, "Gửi tin nhắn thất bại.");
       setPending((current) => current.map((p) => (p.tempId === item.tempId ? { ...p, failed: message } : p)));
     }
-  }, [commissionId, loadInfo]);
+  }, [commissionId, loadInfo, queryClient]);
 
   const send = useCallback((content: string, file?: File) => {
     const item: PendingMessage = {
@@ -323,7 +338,8 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
   const addMessages = useCallback((incoming: CommissionMessage[]) => {
     for (const message of incoming) knownIds.current.add(message.messageId);
     setMessages((current) => mergeMessages(current, incoming));
-  }, []);
+    appendMessagesToCache(queryClient, commissionId, incoming);
+  }, [queryClient, commissionId]);
 
   const reload = useCallback(() => {
     setInfoError("");
@@ -333,6 +349,6 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
 
   return {
     info, infoError, messages, liveIds, historyLoaded, historyError, pending, realtime,
-    readable, canSend, send, retry, discard, reload, refreshInfo: loadInfo, refreshHistory: loadHistory, addMessages,
+    readable, canSend, send, retry, discard, reload, refreshInfo: loadInfo, refreshHistory, addMessages,
   };
 }

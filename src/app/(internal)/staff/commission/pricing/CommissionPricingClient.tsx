@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -534,8 +535,17 @@ function EditCriterion({ rule, onSaved, onCancel, onDeleted }: {
   );
 }
 
+/** BE chưa trả `options` trong danh sách rule (docs: API #22) nên vẫn phải gọi chi tiết từng rule; cache 60s. */
+const PRICING_KEY = ["commission-pricing", "management"] as const;
+
 export default function CommissionPricingConfigPage() {
-  const [pricing, setPricing] = useState<Pricing>();
+  const queryClient = useQueryClient();
+  const [pricing, setPricingState] = useState<Pricing>();
+  // Mọi thay đổi cục bộ sau khi tạo/sửa/xoá rule cũng đánh dấu cache cũ để lần mở trang sau tải lại.
+  const setPricing: typeof setPricingState = (next) => {
+    setPricingState(next);
+    void queryClient.invalidateQueries({ queryKey: PRICING_KEY, refetchType: "none" });
+  };
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -545,11 +555,13 @@ export default function CommissionPricingConfigPage() {
 
   useEffect(() => {
     let active = true;
-    loadPricing().then((data) => { if (active) setPricing(data); }).catch((failure) => {
+    queryClient
+      .fetchQuery({ queryKey: PRICING_KEY, queryFn: loadPricing, staleTime: loadAttempt > 0 ? 0 : 60_000 })
+      .then((data) => { if (active) setPricingState(data); }).catch((failure) => {
       if (active) setError(getApiErrorMessage(failure, "Không tải được cấu hình giá Commission."));
     });
     return () => { active = false; };
-  }, [loadAttempt]);
+  }, [loadAttempt, queryClient]);
 
   return (
     <main className="manager-neo-dashboard mx-auto w-full max-w-[1440px] pb-10 font-sans text-text-main">

@@ -9,6 +9,7 @@ import {
   User,
   LogOut,
   ChevronDown,
+  Crown,
   Sparkles,
   LayoutDashboard,
   MessageCircle,
@@ -45,6 +46,12 @@ function UserDropdown() {
       label: "Lịch sử đơn mua",
       icon: ClipboardList,
       active: pathname.startsWith("/profile/orders"),
+    },
+    {
+      href: "/profile/subscription",
+      label: "Gói hội viên",
+      icon: Crown,
+      active: pathname.startsWith("/profile/subscription"),
     },
     {
       href: "/profile/gallery",
@@ -225,7 +232,7 @@ export default function Header() {
               Giới thiệu
             </Link>
             <Link
-              href="/commission"
+              href="/commission/new"
               className={`cursor-pointer inline-flex items-center gap-1.5 transition-colors hover:text-primary-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                 pathname.startsWith("/commission") ? "border-b-2 border-black pb-0.5" : ""
               }`}
@@ -338,7 +345,7 @@ export default function Header() {
             Giới thiệu
           </Link>
           <Link
-            href="/commission"
+            href="/commission/new"
             onClick={() => setMobileOpen(false)}
             className="cursor-pointer border-b-2 border-black pb-2 text-black hover:text-primary-ink"
           >

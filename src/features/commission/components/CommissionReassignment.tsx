@@ -58,34 +58,72 @@ export default function CommissionReassignment({ detail, onChanged }: {
   }
 
   return (
-    <details className="rounded-lg border border-[#cfe3d0] bg-white p-4">
-      <summary className="cursor-pointer font-semibold text-[#155e59]">Đổi người phụ trách</summary>
-      <form onSubmit={submit} className="mt-3 space-y-3 text-sm">
+    <details className="neo-box-no-hover bg-white p-4">
+      <summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-black">
+        Đổi người phụ trách (Manager / Admin)
+      </summary>
+      <form onSubmit={submit} className="mt-3 space-y-3 text-xs">
         <fieldset disabled={busy} className="space-y-3">
-          <p>Chỉ nhập người cần thay đổi. Lý do được lưu nội bộ.</p>
-          <label className="block">Mã nhân viên staff mới
-            <input type="number" min={1} step={1} value={staffId} onChange={(event) => setStaffId(event.target.value)}
-              className="mt-1 min-h-11 w-full rounded border border-[#819e8c] p-2" />
+          <p className="font-medium text-black/75">
+            Chỉ nhập người cần thay đổi. Lý do được lưu nội bộ.
+          </p>
+          <label className="block font-bold text-black">
+            Mã nhân viên staff mới
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={staffId}
+              onChange={(event) => setStaffId(event.target.value)}
+              className="mt-1 min-h-10 w-full border-2 border-black bg-white p-2 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-primary"
+            />
           </label>
-          {detail.assignedDesignerId != null && <label className="block">Designer mới
-            <select value={designerId} onChange={(event) => setDesignerId(event.target.value)}
-              className="mt-1 min-h-11 w-full rounded border border-[#819e8c] p-2">
-              <option value="">Giữ designer hiện tại</option>
-              {designers.filter((item) => item.designerId !== detail.assignedDesignerId).map((item) => (
-                <option key={item.designerId} value={item.designerId}>{item.fullName} (#{item.designerId})</option>
-              ))}
-            </select>
-          </label>}
-          <label className="block">Lý do thay đổi
-            <textarea required maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)}
-              className="mt-1 w-full rounded border border-[#819e8c] p-2" />
+          {detail.assignedDesignerId != null && (
+            <label className="block font-bold text-black">
+              Họa sĩ mới
+              <select
+                value={designerId}
+                onChange={(event) => setDesignerId(event.target.value)}
+                className="mt-1 min-h-10 w-full border-2 border-black bg-white p-2 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Giữ họa sĩ hiện tại</option>
+                {designers
+                  .filter((item) => item.designerId !== detail.assignedDesignerId)
+                  .map((item) => (
+                    <option key={item.designerId} value={item.designerId}>
+                      {item.fullName} (#{item.designerId})
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
+          <label className="block font-bold text-black">
+            Lý do thay đổi
+            <textarea
+              required
+              maxLength={500}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="mt-1 w-full border-2 border-black bg-white p-2 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-primary"
+            />
           </label>
-          <button disabled={!reason.trim() || (!staffId && !designerId)} className="min-h-11 rounded bg-[#155e59] px-4 font-semibold text-white disabled:opacity-50">
+          <button
+            disabled={!reason.trim() || (!staffId && !designerId)}
+            className="btn-primary px-4 py-2 text-xs font-black disabled:opacity-50"
+          >
             {busy ? "Đang lưu…" : "Lưu người phụ trách"}
           </button>
         </fieldset>
-        {error && <p role="alert" className="text-red-700">{error}</p>}
-        {notice && <p role="status">{notice}</p>}
+        {error && (
+          <p role="alert" className="border-2 border-red-600 bg-red-50 px-3 py-2 font-bold text-red-700">
+            {error}
+          </p>
+        )}
+        {notice && (
+          <p role="status" className="border-2 border-black bg-primary/20 px-3 py-2 font-bold text-primary-ink">
+            {notice}
+          </p>
+        )}
       </form>
     </details>
   );

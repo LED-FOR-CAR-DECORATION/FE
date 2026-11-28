@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+/**
+ * Sổ địa chỉ của khách qua TanStack Query. Trước đây là Provider ở root layout nên MỌI trang (kể cả cửa hàng,
+ * chat…) đều gọi /api/users/me/addresses; giờ chỉ tải khi một trang thật sự dùng `useAddresses()`
+ * (checkout, hồ sơ) và dùng chung cache giữa các trang đó.
+ */
+
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Address, AddressFormData } from "@/features/address/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getApiErrorMessage } from "@/lib/api/auth";
@@ -11,105 +18,71 @@ import {
   apiSetDefaultAddress,
 } from "@/lib/api/addresses";
 
-interface AddressContextValue {
-  addresses: Address[];
-  isLoading: boolean;
-  /** Rejects with a user-facing message when the backend refuses the address. */
-  addAddress: (address: AddressFormData) => Promise<void>;
-  removeAddress: (id: string) => Promise<void>;
-  setDefaultAddress: (id: string) => Promise<void>;
-  refreshAddresses: () => Promise<void>;
-}
+const EMPTY: Address[] = [];
+const ADDRESSES_STALE_MS = 5 * 60_000;
 
-const AddressContext = createContext<AddressContextValue | null>(null);
-
-export function AddressProvider({ children }: { children: ReactNode }) {
+export function useAddresses() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
+  const queryClient = useQueryClient();
   const isCustomer = isAuthenticated && user?.role === "CUSTOMER";
+  const queryKey = ["addresses", user?.userId ?? ""] as const;
+
+  const query = useQuery({
+    queryKey,
+    queryFn: () => apiListAddresses().catch(() => EMPTY),
+    enabled: !authLoading && isCustomer,
+    staleTime: ADDRESSES_STALE_MS,
+  });
 
   const refreshAddresses = useCallback(async () => {
-    if (!isCustomer) {
-      setAddresses([]);
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const list = await apiListAddresses();
-      setAddresses(list);
-    } catch {
-      setAddresses([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isCustomer]);
+    if (!isCustomer) return;
+    await queryClient.invalidateQueries({ queryKey: ["addresses"] });
+  }, [isCustomer, queryClient]);
 
-  useEffect(() => {
-    if (authLoading) return;
-    void refreshAddresses();
-  }, [authLoading, refreshAddresses]);
+  const mutate = useCallback(
+    async (action: () => Promise<unknown>, fallback: string) => {
+      try {
+        await action();
+        await refreshAddresses();
+      } catch (err) {
+        // Surface the failure so callers can keep the form open and show the reason.
+        throw new Error(getApiErrorMessage(err, fallback));
+      }
+    },
+    [refreshAddresses],
+  );
 
   const addAddress = useCallback(
     async (form: AddressFormData) => {
       if (!isCustomer) throw new Error("Vui lòng đăng nhập bằng tài khoản khách hàng để lưu địa chỉ.");
-      try {
-        await apiAddAddress(form);
-        await refreshAddresses();
-      } catch (err) {
-        // Surface the failure so callers can keep the form open and show the reason.
-        throw new Error(getApiErrorMessage(err, "Không thể lưu địa chỉ. Vui lòng thử lại."));
-      }
+      await mutate(() => apiAddAddress(form), "Không thể lưu địa chỉ. Vui lòng thử lại.");
     },
-    [isCustomer, refreshAddresses],
+    [isCustomer, mutate],
   );
 
   const removeAddress = useCallback(
     async (id: string) => {
       if (!isCustomer) return;
-      try {
-        await apiDeleteAddress(id);
-        await refreshAddresses();
-      } catch (err) {
-        // Surface the failure so callers can keep the form open and show the reason.
-        throw new Error(getApiErrorMessage(err, "Không thể xóa địa chỉ. Vui lòng thử lại."));
-      }
+      await mutate(() => apiDeleteAddress(id), "Không thể xóa địa chỉ. Vui lòng thử lại.");
     },
-    [isCustomer, refreshAddresses],
+    [isCustomer, mutate],
   );
 
   const setDefaultAddress = useCallback(
     async (id: string) => {
       if (!isCustomer) return;
-      try {
-        await apiSetDefaultAddress(id);
-        await refreshAddresses();
-      } catch (err) {
-        // Surface the failure so callers can keep the form open and show the reason.
-        throw new Error(getApiErrorMessage(err, "Không thể đặt địa chỉ mặc định. Vui lòng thử lại."));
-      }
+      await mutate(() => apiSetDefaultAddress(id), "Không thể đặt địa chỉ mặc định. Vui lòng thử lại.");
     },
-    [isCustomer, refreshAddresses],
+    [isCustomer, mutate],
   );
 
-  const value = useMemo(
-    () => ({
-      addresses,
-      isLoading,
-      addAddress,
-      removeAddress,
-      setDefaultAddress,
-      refreshAddresses,
-    }),
-    [addresses, isLoading, addAddress, removeAddress, setDefaultAddress, refreshAddresses],
-  );
-  return <AddressContext.Provider value={value}>{children}</AddressContext.Provider>;
-}
-
-export function useAddresses() {
-  const context = useContext(AddressContext);
-  if (!context) throw new Error("useAddresses must be used inside <AddressProvider>");
-  return context;
+  return {
+    addresses: isCustomer ? query.data ?? EMPTY : EMPTY,
+    isLoading: authLoading || (isCustomer && query.isPending),
+    /** Rejects with a user-facing message when the backend refuses the address. */
+    addAddress,
+    removeAddress,
+    setDefaultAddress,
+    refreshAddresses,
+  };
 }

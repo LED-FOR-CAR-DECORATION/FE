@@ -1,12 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   FileText,
+  Info,
   Layers,
   Receipt,
   ShieldCheck,
@@ -20,6 +26,7 @@ import type { PricingOptionResponse } from "@/api_client/models/PricingOptionRes
 import { loadSession } from "@/lib/auth/session";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useGallery } from "@/features/character/context/GalleryContext";
+import { isRequestCancelled } from "@/features/commission/errors";
 import { getCommissionPricing, submitCommission, uploadCommissionReference } from "../services/customer-commission.api";
 import { CommissionBrief } from "./FixedCommissionSteps";
 
@@ -27,8 +34,10 @@ type Rule = PricingRuleResponse & {
   configId: number;
 };
 
+type WizardStep = 1 | 2 | 3;
+
 const CONTROL_CLASS =
-  "mt-1.5 min-h-11 w-full border-2 border-black bg-gray-50 px-3 py-2 text-sm font-medium text-text-main transition-colors focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60";
+  "mt-1 h-9 w-full border-2 border-black bg-gray-50 px-2.5 text-xs font-semibold text-text-main transition-colors focus:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60";
 
 const REFERENCE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -37,20 +46,152 @@ function optionLabel(option: PricingOptionResponse): string {
 }
 
 function optionPriceTag(option: PricingOptionResponse, isBundled = false): string {
-  if (isBundled) return "Đã gồm trong gói";
+  if (isBundled) return "Đã gồm gói";
   const rate = option.basePrice ?? 0;
-  if (option.modifierType === "BASE_PERCENT") return `+${rate}% giá cơ bản`;
+  if (option.modifierType === "BASE_PERCENT") return `+${rate}% cơ bản`;
   if (option.modifierType === "SUBTOTAL_PERCENT") return `+${rate}% tạm tính`;
   if (rate === 0) return "Mặc định";
   return `+${formatPrice(rate)}`;
 }
 
+function isFullWidthChipRule(rule: Rule): boolean {
+  const count = (rule.options ?? []).filter((opt) => opt.optionId !== undefined).length;
+  return (
+    rule.selectionType === "MULTI_SELECT" ||
+    (rule.selectionType === "SINGLE_SELECT" && rule.uiType === "RADIO" && count <= 4)
+  );
+}
+
+function estimateRuleHeight(rule: Rule): number {
+  if (isFullWidthChipRule(rule)) {
+    const count = (rule.options ?? []).filter((opt) => opt.optionId !== undefined).length;
+    return count > 3 ? 96 : 66;
+  }
+  return rule.selectionType === "QUANTITY" ? 78 : 62;
+}
+
 /**
- * Form tạo yêu cầu thiết kế riêng Pixel Art (bố cục 2 cột đồng bộ Checkout).
+ * Splits visible dynamic pricing rules into height-fitted sub-pages on desktop
+ * so Step 2 never introduces vertical scrolling even on compact 720px laptops.
+ */
+function paginateRulesByHeight(rules: Rule[], maxBodyHeight: number, isDesktop: boolean): Rule[][] {
+  if (!isDesktop || rules.length === 0) return [rules];
+
+  const pages: Rule[][] = [];
+  let currentPage: Rule[] = [];
+  let currentHeight = 0;
+  let pendingHalfRowHeight = 0;
+  const rowGap = 10;
+
+  const flushHalfRow = () => {
+    if (pendingHalfRowHeight > 0) {
+      currentHeight += (currentHeight > 0 ? rowGap : 0) + pendingHalfRowHeight;
+      pendingHalfRowHeight = 0;
+    }
+  };
+
+  for (const rule of rules) {
+    const fullWidth = isFullWidthChipRule(rule);
+    const ruleHeight = estimateRuleHeight(rule);
+
+    if (fullWidth) {
+      const projectedHeight =
+        currentHeight +
+        (pendingHalfRowHeight > 0 ? (currentHeight > 0 ? rowGap : 0) + pendingHalfRowHeight : 0);
+      const nextHeight = projectedHeight + (projectedHeight > 0 ? rowGap : 0) + ruleHeight;
+      if (currentPage.length > 0 && nextHeight > maxBodyHeight) {
+        pages.push(currentPage);
+        currentPage = [rule];
+        currentHeight = ruleHeight;
+        pendingHalfRowHeight = 0;
+      } else {
+        flushHalfRow();
+        currentPage.push(rule);
+        currentHeight = (currentHeight > 0 ? currentHeight + rowGap : 0) + ruleHeight;
+      }
+      continue;
+    }
+
+    if (pendingHalfRowHeight > 0) {
+      // Fits into the second column of the current 2-column row
+      const pairHeight = Math.max(pendingHalfRowHeight, ruleHeight);
+      const nextHeight = (currentHeight > 0 ? currentHeight + rowGap : 0) + pairHeight;
+      if (currentPage.length > 1 && nextHeight > maxBodyHeight) {
+        pages.push(currentPage);
+        currentPage = [rule];
+        currentHeight = 0;
+        pendingHalfRowHeight = ruleHeight;
+      } else {
+        currentPage.push(rule);
+        currentHeight = nextHeight;
+        pendingHalfRowHeight = 0;
+      }
+    } else {
+      const projectedHeight = (currentHeight > 0 ? currentHeight + rowGap : 0) + ruleHeight;
+      if (currentPage.length > 0 && projectedHeight > maxBodyHeight) {
+        pages.push(currentPage);
+        currentPage = [rule];
+        currentHeight = 0;
+        pendingHalfRowHeight = ruleHeight;
+      } else {
+        currentPage.push(rule);
+        pendingHalfRowHeight = ruleHeight;
+      }
+    }
+  }
+
+  flushHalfRow();
+  if (currentPage.length > 0) pages.push(currentPage);
+  return pages.length > 0 ? pages : [rules];
+}
+
+function useCommissionWizardViewport(): {
+  isDesktop: boolean;
+  step2BodyBudget: number;
+  maxVisibleSummaryLines: number;
+} {
+  const [viewport, setViewport] = useState<{ isDesktop: boolean; height: number }>({
+    isDesktop: true,
+    height: 800,
+  });
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const compute = () => {
+      setViewport({
+        isDesktop: window.innerWidth >= 1024,
+        height: window.innerHeight,
+      });
+    };
+    compute();
+    const onResize = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(compute, 120);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  return {
+    isDesktop: viewport.isDesktop,
+    // Chrome on /commission/new lg+: Header (106) + main py (24) + top header (50) + gap (10) + card pad/borders (32) + step bar (48) + step subhead (26) + bottom nav (48) + gaps (16) = ~360px
+    step2BodyBudget: Math.max(220, viewport.height - 368),
+    maxVisibleSummaryLines: viewport.height < 780 ? 4 : 6,
+  };
+}
+
+/**
+ * Form tạo yêu cầu thiết kế riêng Pixel Art dạng Wizard 3 bước trên 1 màn hình desktop (không cuộn).
  */
 export default function ApiCommissionForm() {
   const [pricing, setPricing] = useState<PublicCommissionPricingResponse>();
   const [pricingError, setPricingError] = useState(false);
+  const [step, setStep] = useState<WizardStep>(1);
+  const [tierPage, setTierPage] = useState(0);
+  const [ruleSubPage, setRuleSubPage] = useState(0);
   const [tierCode, setTierCode] = useState("CUSTOM");
   const [choices, setChoices] = useState<Record<number, number[]>>({});
   const [values, setValues] = useState<Record<number, string>>({});
@@ -64,6 +205,7 @@ export default function ApiCommissionForm() {
   const { user } = useAuth();
   const { extraCommissionRevisions } = useGallery();
   const router = useRouter();
+  const { isDesktop, step2BodyBudget, maxVisibleSummaryLines } = useCommissionWizardViewport();
 
   useEffect(() => {
     const request = getCommissionPricing();
@@ -72,8 +214,8 @@ export default function ApiCommissionForm() {
       .then(({ data }) => {
         if (active) setPricing(data);
       })
-      .catch(() => {
-        if (active) setPricingError(true);
+      .catch((cause: unknown) => {
+        if (active && !isRequestCancelled(cause)) setPricingError(true);
       });
     return () => {
       active = false;
@@ -84,9 +226,16 @@ export default function ApiCommissionForm() {
   const tier =
     pricing?.tiers?.find((item) => item.tierCode === tierCode) ??
     pricing?.tiers?.find((item) => item.isCustom);
-  const bundledIds = new Set(tier?.isCustom ? [] : tier?.bundledOptionIds ?? []);
-  const rules: Rule[] = (pricing?.rules ?? []).flatMap((rule) =>
-    rule.configId === undefined ? [] : [{ ...rule, configId: rule.configId }],
+  const bundledIds = useMemo(
+    () => new Set(tier?.isCustom ? [] : tier?.bundledOptionIds ?? []),
+    [tier],
+  );
+  const rules: Rule[] = useMemo(
+    () =>
+      (pricing?.rules ?? []).flatMap((rule) =>
+        rule.configId === undefined ? [] : [{ ...rule, configId: rule.configId }],
+      ),
+    [pricing?.rules],
   );
   const optionsByRule = new Map(
     rules.map((rule) => [
@@ -113,6 +262,27 @@ export default function ApiCommissionForm() {
   }
 
   const visible = rules.filter((rule) => isVisible(rule));
+  const rulePages = paginateRulesByHeight(visible, step2BodyBudget, isDesktop);
+  const safeRuleSubPage = Math.min(ruleSubPage, Math.max(0, rulePages.length - 1));
+  const activeRuleSlice = rulePages[safeRuleSubPage] ?? [];
+
+  const tiers = pricing?.tiers ?? [];
+  const tiersPerPage = isDesktop && step2BodyBudget < 310 ? 4 : 6;
+  const tierTotalPages = Math.max(1, Math.ceil(tiers.length / tiersPerPage));
+  const safeTierPage = Math.min(tierPage, tierTotalPages - 1);
+  const visibleTiers = tiers.slice(safeTierPage * tiersPerPage, (safeTierPage + 1) * tiersPerPage);
+
+  useEffect(() => {
+    if (ruleSubPage >= rulePages.length) {
+      setRuleSubPage(Math.max(0, rulePages.length - 1));
+    }
+  }, [rulePages.length, ruleSubPage]);
+
+  useEffect(() => {
+    if (tierPage >= tierTotalPages) {
+      setTierPage(Math.max(0, tierTotalPages - 1));
+    }
+  }, [tierPage, tierTotalPages]);
 
   function selectTier(code: string) {
     const next = pricing?.tiers?.find((item) => item.tierCode === code);
@@ -178,6 +348,10 @@ export default function ApiCommissionForm() {
     label: rule.configName,
     cents: amounts.get(rule.configId) ?? 0,
   }));
+  const activePriceLines = priceLines.filter((line) => line.cents !== 0);
+  const visibleSummaryLines = activePriceLines.slice(0, maxVisibleSummaryLines);
+  const hiddenSummaryLines = activePriceLines.slice(maxVisibleSummaryLines);
+  const hiddenSummaryCents = hiddenSummaryLines.reduce((sum, line) => sum + line.cents, 0);
   const total = (baseCents + priceLines.reduce((sum, line) => sum + line.cents, 0)) / 100;
 
   const selectedOptions = visible.flatMap((rule): Parameters<typeof submitCommission>[0]["selectedOptions"] => {
@@ -188,6 +362,13 @@ export default function ApiCommissionForm() {
     const optionIds = optionsByRule.get(configId) ?? [];
     return optionIds.length ? [{ configId, optionIds }] : [];
   });
+
+  const missingRequiredRule = visible.find(
+    (rule) => rule.isRequired && !selectedOptions.some(({ configId }) => configId === rule.configId),
+  );
+  const step1Complete = Boolean(tier?.tierCode);
+  const step2Complete = !missingRequiredRule;
+  const step3Complete = Boolean(title.trim() && note.trim());
 
   function addReferences(files: File[]) {
     if (
@@ -203,20 +384,36 @@ export default function ApiCommissionForm() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending.current || !tier?.tierCode || user?.role !== "CUSTOMER") return;
+    if (pending.current || user?.role !== "CUSTOMER") return;
+
+    if (!tier?.tierCode) {
+      setStep(1);
+      setError("Vui lòng chọn gói thiết kế.");
+      return;
+    }
+
+    if (missingRequiredRule) {
+      const targetSubPage = rulePages.findIndex((group) =>
+        group.some((rule) => rule.configId === missingRequiredRule.configId),
+      );
+      setStep(2);
+      if (targetSubPage >= 0) setRuleSubPage(targetSubPage);
+      setError(`Vui lòng hoàn thành thông số bắt buộc: ${missingRequiredRule.configName}.`);
+      return;
+    }
+
+    const selectedIds = new Set(selectedOptions.flatMap((item) => item.optionIds ?? []));
+    if ((tier.triggerOptionIds ?? []).some((id) => !selectedIds.has(id))) {
+      setStep(1);
+      setError("Các lựa chọn hiện tại chưa đáp ứng điều kiện của gói. Hãy chọn lại gói hoặc chuyển sang tùy chỉnh.");
+      return;
+    }
+
     const trimmedTitle = title.trim();
     const trimmedDescription = note.trim();
     if (!trimmedTitle || !trimmedDescription) {
+      setStep(3);
       setError("Vui lòng nhập đầy đủ tiêu đề và mô tả ý tưởng thiết kế.");
-      return;
-    }
-    if (visible.some((rule) => rule.isRequired && !selectedOptions.some(({ configId }) => configId === rule.configId))) {
-      setError("Vui lòng điền đầy đủ các thông số bắt buộc.");
-      return;
-    }
-    const selectedIds = new Set(selectedOptions.flatMap((item) => item.optionIds ?? []));
-    if ((tier.triggerOptionIds ?? []).some((id) => !selectedIds.has(id))) {
-      setError("Các lựa chọn hiện tại chưa đáp ứng điều kiện của gói. Hãy chọn lại gói hoặc chuyển sang tùy chỉnh.");
       return;
     }
 
@@ -243,445 +440,615 @@ export default function ApiCommissionForm() {
     }
   }
 
+  const pageHeader = (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-2.5">
+      <div className="flex items-center gap-2.5">
+        <Sparkles size={22} className="shrink-0 text-primary-ink" />
+        <div>
+          <h1 className="text-xl font-black uppercase tracking-tight sm:text-2xl">
+            Tạo yêu cầu thiết kế riêng
+          </h1>
+          <p className="hidden text-[11px] font-semibold text-text-muted sm:block">
+            Chọn gói, cấu hình thông số hiển thị LED và mô tả ý tưởng để nhận báo giá từ họa sĩ.
+          </p>
+        </div>
+      </div>
+      <Link
+        href="/commission"
+        className="btn-secondary inline-flex h-9 shrink-0 items-center gap-1.5 px-3! py-0! text-xs font-black uppercase"
+      >
+        <ArrowLeft size={14} />
+        Quay lại danh sách
+      </Link>
+    </div>
+  );
+
   if (pricingError || (pricing && !tier?.tierCode)) {
     return (
-      <div role="alert" className="neo-box-no-hover flex items-start gap-2.5 border-l-8 border-l-red-600 bg-white p-5 text-sm font-bold text-red-700">
-        <AlertCircle size={18} className="mt-0.5 shrink-0" />
-        <span>Không tải được cấu hình giá thiết kế riêng. Vui lòng tải lại trang.</span>
+      <div className="flex flex-col gap-3 lg:h-full lg:min-h-0">
+        {pageHeader}
+        <div role="alert" className="neo-box-no-hover flex items-start gap-2.5 border-l-8 border-l-red-600 bg-white p-5 text-sm font-bold text-red-700">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <span>Không tải được cấu hình giá thiết kế riêng. Vui lòng tải lại trang.</span>
+        </div>
       </div>
     );
   }
 
   if (!pricing) {
     return (
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12" role="status" aria-label="Đang tải cấu hình thiết kế riêng">
-        <div className="space-y-6 lg:col-span-7 xl:col-span-8">
-          <div className="neo-box-no-hover h-44 animate-pulse bg-gray-100 p-5" />
-          <div className="neo-box-no-hover h-64 animate-pulse bg-gray-100 p-5" />
+      <div className="flex flex-col gap-3 lg:h-full lg:min-h-0" role="status" aria-label="Đang tải cấu hình thiết kế riêng">
+        {pageHeader}
+        <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-12">
+          <div className="neo-box-no-hover h-80 animate-pulse bg-gray-100 p-4 lg:col-span-7 lg:h-full xl:col-span-8" />
+          <div className="neo-box-no-hover h-72 animate-pulse bg-gray-100 p-4 lg:col-span-5 lg:h-full xl:col-span-4" />
         </div>
-        <div className="neo-box-no-hover h-72 animate-pulse bg-gray-100 p-5 lg:col-span-5 xl:col-span-4" />
       </div>
     );
   }
 
-  const tiers = pricing.tiers ?? [];
+  const wizardTabs: Array<{ id: WizardStep; label: string; icon: typeof Layers; done: boolean }> = [
+    { id: 1, label: "1. Chọn gói", icon: Layers, done: step1Complete },
+    { id: 2, label: `2. Thông số (${visible.length})`, icon: Sliders, done: step2Complete },
+    { id: 3, label: "3. Ý tưởng & ảnh", icon: FileText, done: step3Complete },
+  ];
 
   return (
-    <form onSubmit={submit} className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-start gap-3 border-b-2 border-black pb-4">
-        <Sparkles size={28} className="mt-0.5 shrink-0 text-primary-ink" />
-        <div>
-          <h1 className="text-3xl font-black uppercase tracking-tight">Tạo yêu cầu thiết kế riêng</h1>
-          <p className="mt-1 text-xs font-semibold text-text-muted">
-            Chọn gói, cấu hình thông số hiển thị LED và mô tả ý tưởng để nhận báo giá từ họa sĩ.
-          </p>
-        </div>
-      </div>
+    <form onSubmit={submit} noValidate className="flex flex-col gap-2.5 lg:h-full lg:min-h-0">
+      {pageHeader}
 
-      {/* Two-Column Checkout-Aligned Layout */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
-        {/* Left Column: Structured Form Cards */}
-        <div className="space-y-6 lg:col-span-7 xl:col-span-8">
-          {/* Card 1: Gói thiết kế */}
-          {tiers.length > 0 && (
-            <section className="neo-box-no-hover bg-white p-5">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b-2 border-black pb-3">
-                <div className="flex items-center gap-2">
-                  <Layers size={18} className="text-primary-ink" />
-                  <h2 className="font-black uppercase">1. Chọn gói thiết kế</h2>
-                </div>
-                <span className="text-xs font-bold text-text-muted">{tiers.length} gói có sẵn</span>
-              </div>
+      {/* Two-Column Zero-Scroll Wizard */}
+      <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-12 lg:items-stretch">
+        {/* Left Column: 3-Step Tabbed Card */}
+        <section className="neo-box-no-hover flex flex-col bg-white p-3.5 sm:p-4 lg:col-span-7 lg:h-full lg:min-h-0 xl:col-span-8">
+          {/* Stepper Navigation Tabs */}
+          <div
+            role="tablist"
+            aria-label="Các bước tạo yêu cầu thiết kế"
+            className="grid shrink-0 grid-cols-3 gap-2 border-b-2 border-black pb-2.5"
+          >
+            {wizardTabs.map((item) => {
+              const Icon = item.icon;
+              const isActive = step === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => {
+                    setStep(item.id);
+                    setError("");
+                  }}
+                  className={`flex h-9 cursor-pointer items-center justify-between gap-1.5 border-2 border-black px-2.5 text-left text-[11px] font-black uppercase transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                    isActive
+                      ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
+                      : "bg-gray-50 text-text-main hover:bg-white"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 truncate">
+                    <Icon size={14} className="shrink-0 text-primary-ink" />
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                  {item.done && (
+                    <span className="grid size-4 shrink-0 place-items-center border border-black bg-[#2d6a4f] text-white">
+                      <Check size={10} strokeWidth={3} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                {tiers.map((item) => {
-                  const isSelected = item.tierCode === tier?.tierCode;
-                  const priceLabel =
-                    item.isCustom && (item.basePrice ?? 0) === 0
-                      ? "Tính theo cấu hình"
-                      : formatPrice(item.basePrice ?? 0);
-
-                  return (
-                    <label
-                      key={item.tierId ?? item.tierCode}
-                      className={`flex flex-col justify-between gap-2 border-2 p-3.5 transition-colors ${
-                        busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-                      } ${
-                        isSelected
-                          ? "border-primary-ink bg-primary/10 shadow-[3px_3px_0_0_#000]"
-                          : "border-black bg-white hover:bg-gray-50"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="commission-tier"
-                            value={item.tierCode}
-                            checked={isSelected}
-                            disabled={busy}
-                            onChange={() => item.tierCode && selectTier(item.tierCode)}
-                            className="size-4 shrink-0 accent-[var(--color-primary-ink)]"
-                          />
-                          <span className="text-sm font-black uppercase text-black">{item.tierName}</span>
-                        </span>
-                        {(item.savingsAmount ?? 0) > 0 && (
-                          <span className="shrink-0 border border-black bg-primary px-1.5 py-0.5 text-[11px] font-black uppercase text-black">
-                            Tiết kiệm {formatPrice(item.savingsAmount!)}
-                          </span>
-                        )}
-                      </div>
-
-                      {item.description && (
-                        <p className="text-xs leading-relaxed text-text-muted">{item.description}</p>
-                      )}
-
-                      <div className="mt-1 flex items-center justify-between gap-2 border-t border-black/15 pt-2 text-xs">
-                        <span className="font-semibold text-text-muted">
-                          {item.maxRevisions ?? 0} lượt sửa miễn phí
-                        </span>
-                        <span className="font-black tabular-nums text-primary-ink">{priceLabel}</span>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Card 2: Thông số kỹ thuật */}
-          <section className="neo-box-no-hover bg-white p-5">
-            <div className="mb-4 flex items-center justify-between gap-3 border-b-2 border-black pb-3">
-              <div className="flex items-center gap-2">
-                <Sliders size={18} className="text-primary-ink" />
-                <h2 className="font-black uppercase">2. Thông số kỹ thuật</h2>
-              </div>
-              {!tier?.isCustom && (
-                <span className="border border-black bg-primary/15 px-2 py-0.5 text-[11px] font-black uppercase text-primary-ink">
-                  Đã áp dụng cấu hình gói
-                </span>
-              )}
-            </div>
-
-            <fieldset disabled={busy} className="grid gap-5 sm:grid-cols-2">
-              {visible.map((rule) => {
-                const id = rule.configId;
-                const descriptionId = rule.description ? `commission-rule-description-${id}` : undefined;
-                const selected = optionsByRule.get(id) ?? [];
-                const selectedPrice = priceLines.find((line) => line.id === id)?.cents ?? 0;
-                const validOptions = (rule.options ?? []).filter((opt) => opt.optionId !== undefined);
-
-                if (rule.selectionType === "MULTI_SELECT") {
-                  return (
-                    <fieldset key={id} aria-describedby={descriptionId} className="space-y-2.5 sm:col-span-2">
-                      <legend className="text-xs font-bold uppercase text-text-main">
-                        {rule.configName}
-                        {rule.isRequired && <span aria-hidden className="ml-1 text-red-600">*</span>}
-                      </legend>
-                      {rule.description && (
-                        <p id={descriptionId} className="text-xs text-text-muted">
-                          {rule.description}
-                        </p>
-                      )}
-                      <div className="grid gap-2.5 sm:grid-cols-2">
-                        {validOptions.map((option) => {
-                          const optionId = option.optionId!;
-                          const checked = selected.includes(optionId);
-                          const isBundled = bundledIds.has(optionId);
-                          return (
-                            <label
-                              key={optionId}
-                              className={`flex min-h-11 items-center justify-between gap-3 border-2 px-3 py-2 text-xs transition-colors ${
-                                isBundled ? "cursor-not-allowed opacity-75" : "cursor-pointer"
-                              } ${
-                                checked
-                                  ? "border-primary-ink bg-primary/10"
-                                  : "border-black bg-white hover:bg-gray-50"
-                              }`}
-                            >
-                              <span className="flex items-center gap-2 font-bold text-black">
-                                <input
-                                  type="checkbox"
-                                  className="size-4 shrink-0 accent-[var(--color-primary-ink)] enabled:cursor-pointer disabled:cursor-not-allowed"
-                                  disabled={isBundled}
-                                  checked={checked}
-                                  onChange={(event) =>
-                                    setChoices({
-                                      ...choices,
-                                      [id]: event.target.checked
-                                        ? [...selected, optionId]
-                                        : selected.filter((item) => item !== optionId),
-                                    })
-                                  }
-                                />
-                                {optionLabel(option)}
-                              </span>
-                              <span className="shrink-0 font-black tabular-nums text-primary-ink">
-                                {optionPriceTag(option, isBundled)}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                  );
-                }
-
-                if (rule.selectionType === "SINGLE_SELECT" && rule.uiType === "RADIO" && validOptions.length <= 4) {
-                  const isLockedByPreset = selected.some((optionId) => bundledIds.has(optionId));
-                  return (
-                    <fieldset key={id} aria-describedby={descriptionId} className="space-y-2.5 sm:col-span-2">
-                      <legend className="text-xs font-bold uppercase text-text-main">
-                        {rule.configName}
-                        {rule.isRequired && <span aria-hidden className="ml-1 text-red-600">*</span>}
-                      </legend>
-                      {rule.description && (
-                        <p id={descriptionId} className="text-xs text-text-muted">
-                          {rule.description}
-                        </p>
-                      )}
-                      <div className="grid gap-2.5 sm:grid-cols-2">
-                        {validOptions.map((option) => {
-                          const optionId = option.optionId!;
-                          const checked = selected[0] === optionId;
-                          const isBundled = bundledIds.has(optionId);
-                          return (
-                            <label
-                              key={optionId}
-                              className={`flex min-h-11 items-center justify-between gap-3 border-2 px-3 py-2 text-xs transition-colors ${
-                                isLockedByPreset ? "cursor-not-allowed opacity-75" : "cursor-pointer"
-                              } ${
-                                checked
-                                  ? "border-primary-ink bg-primary/10"
-                                  : "border-black bg-white hover:bg-gray-50"
-                              }`}
-                            >
-                              <span className="flex items-center gap-2 font-bold text-black">
-                                <input
-                                  type="radio"
-                                  name={`rule-${id}`}
-                                  value={optionId}
-                                  disabled={isLockedByPreset}
-                                  checked={checked}
-                                  onChange={() => setChoices({ ...choices, [id]: [optionId] })}
-                                  className="size-4 shrink-0 accent-[var(--color-primary-ink)]"
-                                />
-                                {optionLabel(option)}
-                              </span>
-                              <span className="shrink-0 font-black tabular-nums text-primary-ink">
-                                {optionPriceTag(option, isBundled)}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                  );
-                }
-
-                const isQuantity = rule.selectionType === "QUANTITY";
-                const isText = rule.selectionType === "TEXT_INPUT";
-                const isLockedByPreset = !isQuantity && !isText && selected.some((optionId) => bundledIds.has(optionId));
-
-                return (
-                  <div key={id}>
-                    <label className="block text-xs font-bold uppercase text-text-main">
-                      <span>
-                        {rule.configName}
-                        {rule.isRequired && <span aria-hidden className="ml-1 text-red-600">*</span>}
+          {/* Step Body */}
+          <div className="flex min-h-0 flex-1 flex-col justify-between py-2.5">
+            {step === 1 && (
+              <div className="flex min-h-0 flex-1 flex-col justify-between gap-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold text-text-muted">
+                    Chọn gói thiết kế có sẵn để áp dụng cấu hình chuẩn hoặc Gói Tùy chỉnh để tự chọn thông số.
+                  </p>
+                  {tierTotalPages > 1 && (
+                    <div className="flex shrink-0 items-center gap-1 text-[11px] font-black">
+                      <button
+                        type="button"
+                        disabled={safeTierPage <= 0}
+                        onClick={() => setTierPage((p) => Math.max(0, p - 1))}
+                        aria-label="Trang gói trước"
+                        className="grid size-7 cursor-pointer place-items-center border-2 border-black bg-white disabled:opacity-40"
+                      >
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="px-1 tabular-nums">
+                        {safeTierPage + 1}/{tierTotalPages}
                       </span>
+                      <button
+                        type="button"
+                        disabled={safeTierPage >= tierTotalPages - 1}
+                        onClick={() => setTierPage((p) => Math.min(tierTotalPages - 1, p + 1))}
+                        aria-label="Trang gói sau"
+                        className="grid size-7 cursor-pointer place-items-center border-2 border-black bg-white disabled:opacity-40"
+                      >
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
 
-                      {isText || isQuantity ? (
-                        <input
-                          className={CONTROL_CLASS}
-                          required={rule.isRequired}
-                          aria-describedby={descriptionId}
-                          type={isQuantity ? "number" : "text"}
-                          min={rule.minQuantity ?? undefined}
-                          max={rule.maxQuantity ?? undefined}
-                          maxLength={500}
-                          placeholder={isQuantity && rule.minQuantity != null ? `Tối thiểu ${rule.minQuantity}` : undefined}
-                          value={values[id] ?? ""}
-                          onChange={(event) => setValues({ ...values, [id]: event.target.value })}
-                        />
-                      ) : (
-                        <select
-                          className={`${CONTROL_CLASS} cursor-pointer`}
-                          required={rule.isRequired}
-                          aria-describedby={descriptionId}
-                          disabled={isLockedByPreset}
-                          value={selected[0] ?? ""}
-                          onChange={(event) =>
-                            setChoices({
-                              ...choices,
-                              [id]: event.target.value ? [Number(event.target.value)] : [],
-                            })
-                          }
-                        >
-                          <option value="">Chọn {rule.configName}</option>
-                          {validOptions.map((option) => (
-                            <option key={option.optionId} value={option.optionId}>
-                              {optionLabel(option)} ({optionPriceTag(option, bundledIds.has(option.optionId!))})
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </label>
+                <div className="grid min-h-0 flex-1 content-start gap-2.5 sm:grid-cols-2">
+                  {visibleTiers.map((item) => {
+                    const isSelected = item.tierCode === tier?.tierCode;
+                    const priceLabel =
+                      item.isCustom && (item.basePrice ?? 0) === 0
+                        ? "Tính theo cấu hình"
+                        : formatPrice(item.basePrice ?? 0);
 
-                    {rule.description && (
-                      <p id={descriptionId} className="mt-1.5 text-xs text-text-muted">
-                        {rule.description}
-                      </p>
-                    )}
+                    return (
+                      <label
+                        key={item.tierId ?? item.tierCode}
+                        className={`flex flex-col justify-between gap-1.5 border-2 p-3 transition-colors ${
+                          busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                        } ${
+                          isSelected
+                            ? "border-primary-ink bg-primary/10 shadow-[3px_3px_0_0_#000]"
+                            : "border-black bg-white hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="commission-tier"
+                              value={item.tierCode}
+                              checked={isSelected}
+                              disabled={busy}
+                              onChange={() => item.tierCode && selectTier(item.tierCode)}
+                              className="size-4 shrink-0 accent-[var(--color-primary-ink)]"
+                            />
+                            <span className="text-xs font-black uppercase text-black sm:text-sm">
+                              {item.tierName}
+                            </span>
+                          </span>
+                          {(item.savingsAmount ?? 0) > 0 && (
+                            <span className="shrink-0 border border-black bg-primary px-1.5 py-0.5 text-[10px] font-black uppercase text-black">
+                              Tiết kiệm {formatPrice(item.savingsAmount!)}
+                            </span>
+                          )}
+                        </div>
 
-                    {isQuantity && rule.options?.[0] && (
-                      <p className="mt-1 text-xs font-semibold text-primary-ink tabular-nums">
-                        Đơn giá: {optionPriceTag(rule.options[0])} / đơn vị · Tạm tính: {formatPrice(selectedPrice / 100)}
-                      </p>
+                        {item.description && (
+                          <p
+                            title={item.description}
+                            className="line-clamp-2 text-[11px] leading-snug text-text-muted"
+                          >
+                            {item.description}
+                          </p>
+                        )}
+
+                        <div className="mt-auto flex items-center justify-between gap-2 border-t border-black/15 pt-1.5 text-[11px]">
+                          <span className="font-semibold text-text-muted">
+                            {item.maxRevisions ?? 0} lượt sửa miễn phí
+                          </span>
+                          <span className="font-black tabular-nums text-primary-ink">{priceLabel}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-text-muted">
+                      Cấu hình hiển thị & tùy chọn bổ sung cho tác phẩm LED.
+                    </span>
+                    {!tier?.isCustom && (
+                      <span className="border border-black bg-primary/15 px-2 py-0.5 text-[10px] font-black uppercase text-primary-ink">
+                        Đang dùng gói {tier?.tierName}
+                      </span>
                     )}
                   </div>
-                );
-              })}
-            </fieldset>
-          </section>
 
-          {/* Card 3: Ý tưởng & Tài liệu tham khảo */}
-          <section className="neo-box-no-hover bg-white p-5">
-            <div className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3">
-              <FileText size={18} className="text-primary-ink" />
-              <h2 className="font-black uppercase">3. Ý tưởng & ảnh tham khảo</h2>
-            </div>
+                  {rulePages.length > 1 && (
+                    <div className="flex shrink-0 items-center gap-1 text-[11px] font-black">
+                      <span className="text-text-muted">Nhóm thông số</span>
+                      <button
+                        type="button"
+                        disabled={safeRuleSubPage <= 0}
+                        onClick={() => setRuleSubPage((p) => Math.max(0, p - 1))}
+                        aria-label="Nhóm thông số trước"
+                        className="grid size-7 cursor-pointer place-items-center border-2 border-black bg-white disabled:opacity-40"
+                      >
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="px-1 tabular-nums">
+                        {safeRuleSubPage + 1}/{rulePages.length}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={safeRuleSubPage >= rulePages.length - 1}
+                        onClick={() => setRuleSubPage((p) => Math.min(rulePages.length - 1, p + 1))}
+                        aria-label="Nhóm thông số sau"
+                        className="grid size-7 cursor-pointer place-items-center border-2 border-black bg-white disabled:opacity-40"
+                      >
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
 
-            <div className="space-y-5">
-              <div>
-                <label htmlFor="commission-title" className="block text-xs font-bold uppercase text-text-main">
-                  Tiêu đề yêu cầu <span aria-hidden className="text-red-600">*</span>
-                </label>
-                <input
-                  id="commission-title"
-                  name="title"
-                  className={CONTROL_CLASS}
-                  required
-                  maxLength={255}
-                  disabled={busy}
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="VD: Mèo Cyberpunk vẫy tay 32×32"
+                <fieldset disabled={busy} className="grid min-h-0 flex-1 content-start gap-x-4 gap-y-2.5 sm:grid-cols-2">
+                  {activeRuleSlice.map((rule) => {
+                    const id = rule.configId;
+                    const selected = optionsByRule.get(id) ?? [];
+                    const selectedPrice = priceLines.find((line) => line.id === id)?.cents ?? 0;
+                    const validOptions = (rule.options ?? []).filter((opt) => opt.optionId !== undefined);
+
+                    if (rule.selectionType === "MULTI_SELECT") {
+                      return (
+                        <fieldset key={id} className="space-y-1.5 sm:col-span-2">
+                          <legend className="flex items-center gap-1.5 text-[11px] font-black uppercase text-text-main">
+                            <span>
+                              {rule.configName}
+                              {rule.isRequired && <span aria-hidden className="ml-1 text-red-600">*</span>}
+                            </span>
+                            {rule.description && (
+                              <span title={rule.description} className="cursor-help text-text-muted" aria-label={rule.description}>
+                                <Info size={13} />
+                              </span>
+                            )}
+                          </legend>
+                          <div className="flex flex-wrap gap-1.5">
+                            {validOptions.map((option) => {
+                              const optionId = option.optionId!;
+                              const checked = selected.includes(optionId);
+                              const isBundled = bundledIds.has(optionId);
+                              return (
+                                <label
+                                  key={optionId}
+                                  className={`inline-flex h-8 items-center gap-2 border-2 px-2.5 text-[11px] transition-colors ${
+                                    isBundled ? "cursor-not-allowed opacity-75" : "cursor-pointer"
+                                  } ${
+                                    checked
+                                      ? "border-primary-ink bg-primary/15 shadow-[2px_2px_0_0_#000]"
+                                      : "border-black bg-white hover:bg-gray-50"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="size-3.5 shrink-0 accent-[var(--color-primary-ink)] enabled:cursor-pointer disabled:cursor-not-allowed"
+                                    disabled={isBundled}
+                                    checked={checked}
+                                    onChange={(event) =>
+                                      setChoices({
+                                        ...choices,
+                                        [id]: event.target.checked
+                                          ? [...selected, optionId]
+                                          : selected.filter((item) => item !== optionId),
+                                      })
+                                    }
+                                  />
+                                  <span className="font-bold text-black">{optionLabel(option)}</span>
+                                  <span className="font-black tabular-nums text-primary-ink">
+                                    {optionPriceTag(option, isBundled)}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </fieldset>
+                      );
+                    }
+
+                    if (rule.selectionType === "SINGLE_SELECT" && rule.uiType === "RADIO" && validOptions.length <= 4) {
+                      const isLockedByPreset = selected.some((optionId) => bundledIds.has(optionId));
+                      return (
+                        <fieldset key={id} className="space-y-1.5 sm:col-span-2">
+                          <legend className="flex items-center gap-1.5 text-[11px] font-black uppercase text-text-main">
+                            <span>
+                              {rule.configName}
+                              {rule.isRequired && <span aria-hidden className="ml-1 text-red-600">*</span>}
+                            </span>
+                            {rule.description && (
+                              <span title={rule.description} className="cursor-help text-text-muted" aria-label={rule.description}>
+                                <Info size={13} />
+                              </span>
+                            )}
+                          </legend>
+                          <div className="flex flex-wrap gap-1.5">
+                            {validOptions.map((option) => {
+                              const optionId = option.optionId!;
+                              const checked = selected[0] === optionId;
+                              const isBundled = bundledIds.has(optionId);
+                              return (
+                                <label
+                                  key={optionId}
+                                  className={`inline-flex h-8 items-center gap-2 border-2 px-2.5 text-[11px] transition-colors ${
+                                    isLockedByPreset ? "cursor-not-allowed opacity-75" : "cursor-pointer"
+                                  } ${
+                                    checked
+                                      ? "border-primary-ink bg-primary/15 shadow-[2px_2px_0_0_#000]"
+                                      : "border-black bg-white hover:bg-gray-50"
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`rule-${id}`}
+                                    value={optionId}
+                                    disabled={isLockedByPreset}
+                                    checked={checked}
+                                    onChange={() => setChoices({ ...choices, [id]: [optionId] })}
+                                    className="size-3.5 shrink-0 accent-[var(--color-primary-ink)]"
+                                  />
+                                  <span className="font-bold text-black">{optionLabel(option)}</span>
+                                  <span className="font-black tabular-nums text-primary-ink">
+                                    {optionPriceTag(option, isBundled)}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </fieldset>
+                      );
+                    }
+
+                    const isQuantity = rule.selectionType === "QUANTITY";
+                    const isText = rule.selectionType === "TEXT_INPUT";
+                    const isLockedByPreset = !isQuantity && !isText && selected.some((optionId) => bundledIds.has(optionId));
+
+                    return (
+                      <div key={id}>
+                        <label className="block text-[11px] font-black uppercase text-text-main">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span>
+                              {rule.configName}
+                              {rule.isRequired && <span aria-hidden className="ml-0.5 text-red-600">*</span>}
+                            </span>
+                            {rule.description && (
+                              <span title={rule.description} className="cursor-help text-text-muted" aria-label={rule.description}>
+                                <Info size={12} />
+                              </span>
+                            )}
+                          </span>
+
+                          {isText || isQuantity ? (
+                            <input
+                              className={CONTROL_CLASS}
+                              required={rule.isRequired}
+                              type={isQuantity ? "number" : "text"}
+                              min={rule.minQuantity ?? undefined}
+                              max={rule.maxQuantity ?? undefined}
+                              maxLength={500}
+                              placeholder={
+                                isQuantity && rule.minQuantity != null
+                                  ? `Tối thiểu ${rule.minQuantity}`
+                                  : rule.description || undefined
+                              }
+                              value={values[id] ?? ""}
+                              onChange={(event) => setValues({ ...values, [id]: event.target.value })}
+                            />
+                          ) : (
+                            <select
+                              className={`${CONTROL_CLASS} cursor-pointer`}
+                              required={rule.isRequired}
+                              disabled={isLockedByPreset}
+                              value={selected[0] ?? ""}
+                              onChange={(event) =>
+                                setChoices({
+                                  ...choices,
+                                  [id]: event.target.value ? [Number(event.target.value)] : [],
+                                })
+                              }
+                            >
+                              <option value="">Chọn {rule.configName}</option>
+                              {validOptions.map((option) => (
+                                <option key={option.optionId} value={option.optionId}>
+                                  {optionLabel(option)} ({optionPriceTag(option, bundledIds.has(option.optionId!))})
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </label>
+
+                        {isQuantity && rule.options?.[0] && (
+                          <p className="mt-1 text-[10px] font-semibold tabular-nums text-primary-ink">
+                            Đơn giá: {optionPriceTag(rule.options[0])} / đơn vị · Tạm tính: {formatPrice(selectedPrice / 100)}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </fieldset>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="commission-title" className="block text-xs font-bold uppercase text-text-main">
+                    Tiêu đề yêu cầu <span aria-hidden className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="commission-title"
+                    name="title"
+                    className={CONTROL_CLASS}
+                    required
+                    maxLength={255}
+                    disabled={busy}
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder="VD: Mèo Cyberpunk vẫy tay 32×32"
+                  />
+                </div>
+
+                <CommissionBrief
+                  compact
+                  note={note}
+                  onNote={setNote}
+                  references={references}
+                  onFiles={addReferences}
+                  onRemove={(index) => {
+                    setReferences((current) => current.filter((_, position) => position !== index));
+                    setReferenceError("");
+                  }}
+                  error={referenceError}
+                  maxNoteLength={2000}
                 />
               </div>
+            )}
+          </div>
 
-              <CommissionBrief
-                note={note}
-                onNote={setNote}
-                references={references}
-                onFiles={addReferences}
-                onRemove={(index) => {
-                  setReferences((current) => current.filter((_, position) => position !== index));
-                  setReferenceError("");
+          {/* Bottom Step Navigation */}
+          <div className="mt-auto flex shrink-0 items-center justify-between gap-2 border-t-2 border-black pt-2.5">
+            <button
+              type="button"
+              disabled={step === 1 || busy}
+              onClick={() => {
+                setStep((prev) => (prev > 1 ? ((prev - 1) as WizardStep) : prev));
+                setError("");
+              }}
+              className="btn-secondary inline-flex h-9 items-center gap-1.5 px-3! py-0! text-xs font-black uppercase disabled:opacity-40"
+            >
+              <ArrowLeft size={14} />
+              Bước trước
+            </button>
+
+            <span className="text-xs font-bold uppercase text-text-muted">Bước {step} / 3</span>
+
+            {step < 3 ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setStep((prev) => (prev < 3 ? ((prev + 1) as WizardStep) : prev));
+                  setError("");
                 }}
-                error={referenceError}
-                maxNoteLength={2000}
-              />
-            </div>
-          </section>
-        </div>
+                className="btn-primary inline-flex h-9 items-center gap-1.5 px-3.5! py-0! text-xs font-black uppercase"
+              >
+                Tiếp theo
+                <ArrowRight size={14} />
+              </button>
+            ) : (
+              <span className="text-[11px] font-bold text-primary-ink">
+                Kiểm tra chi phí & bấm Gửi →
+              </span>
+            )}
+          </div>
+        </section>
 
-        {/* Right Column: Sticky Cost Summary & Submit */}
-        <aside className="lg:sticky lg:top-24 lg:col-span-5 xl:col-span-4">
+        {/* Right Column: Cost Summary & Submit */}
+        <aside className="lg:col-span-5 lg:h-full lg:min-h-0 xl:col-span-4">
           <section
             aria-labelledby="commission-price-heading"
-            className="neo-box-no-hover bg-white p-5"
+            className="neo-box-no-hover flex flex-col justify-between bg-white p-3.5 sm:p-4 lg:h-full lg:min-h-0"
           >
-            <div className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3">
-              <Receipt size={18} className="text-primary-ink" />
-              <h2 id="commission-price-heading" className="font-black uppercase">
-                Tóm tắt chi phí dự kiến
-              </h2>
-            </div>
+            <div className="min-h-0 flex-1">
+              <div className="mb-2.5 flex items-center gap-2 border-b-2 border-black pb-2">
+                <Receipt size={16} className="text-primary-ink" />
+                <h2 id="commission-price-heading" className="text-sm font-black uppercase">
+                  Tóm tắt chi phí dự kiến
+                </h2>
+              </div>
 
-            <div className="mb-4 flex items-center justify-between gap-2 border-2 border-black bg-primary/10 px-3 py-2.5 text-xs">
-              <div>
-                <p className="font-black uppercase text-black">{tier?.tierName}</p>
-                <p className="font-semibold text-primary-ink">
-                  {tier?.maxRevisions ?? 0} lượt chỉnh sửa miễn phí mặc định cho đơn này
-                </p>
-                {extraCommissionRevisions > 0 && (
-                  <p className="mt-0.5 text-[11px] font-bold text-[#2d6a4f]">
-                    Ví hội viên còn +{extraCommissionRevisions} lượt miễn phí (dùng chung cho mọi đơn Commission)
+              <div className="mb-2.5 flex items-center justify-between gap-2 border-2 border-black bg-primary/10 px-2.5 py-2 text-xs">
+                <div className="min-w-0">
+                  <p className="truncate font-black uppercase text-black">{tier?.tierName}</p>
+                  <p className="text-[11px] font-semibold text-primary-ink">
+                    {Math.max(tier?.maxRevisions ?? 1, extraCommissionRevisions)} lượt chỉnh sửa miễn phí
                   </p>
-                )}
-              </div>
-              <CheckCircle2 size={18} className="shrink-0 text-primary-ink" />
-            </div>
-
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-text-muted">Giá gói cơ bản</dt>
-                <dd className="font-bold tabular-nums">{formatPrice(basePrice)}</dd>
+                  {extraCommissionRevisions > (tier?.maxRevisions ?? 1) && (
+                    <p className="text-[10px] font-bold text-[#2d6a4f]">
+                      Nâng từ {tier?.maxRevisions ?? 1} lượt nhờ gói hội viên
+                    </p>
+                  )}
+                </div>
+                <CheckCircle2 size={16} className="shrink-0 text-primary-ink" />
               </div>
 
-              {priceLines
-                .filter((line) => line.cents !== 0)
-                .map((line) => (
+              <dl className="space-y-1.5 text-xs">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-text-muted">Giá gói cơ bản</dt>
+                  <dd className="font-bold tabular-nums">{formatPrice(basePrice)}</dd>
+                </div>
+
+                {visibleSummaryLines.map((line) => (
                   <div key={line.id} className="flex justify-between gap-3">
-                    <dt className="text-text-muted">{line.label}</dt>
+                    <dt className="truncate text-text-muted">{line.label}</dt>
                     <dd className="shrink-0 font-bold tabular-nums">+{formatPrice(line.cents / 100)}</dd>
                   </div>
                 ))}
 
-              <div className="flex justify-between gap-3">
-                <dt className="text-text-muted">Phí kiểm duyệt yêu cầu</dt>
-                <dd className="font-bold text-primary-ink">Miễn phí</dd>
-              </div>
-            </dl>
+                {hiddenSummaryLines.length > 0 && (
+                  <div
+                    className="flex justify-between gap-3"
+                    title={hiddenSummaryLines
+                      .map((line) => `${line.label}: +${formatPrice(line.cents / 100)}`)
+                      .join("\n")}
+                  >
+                    <dt className="cursor-help text-text-muted underline decoration-dotted">
+                      + {hiddenSummaryLines.length} tùy chọn bổ sung khác
+                    </dt>
+                    <dd className="shrink-0 font-bold tabular-nums">
+                      +{formatPrice(hiddenSummaryCents / 100)}
+                    </dd>
+                  </div>
+                )}
 
-            <div
-              aria-live="polite"
-              className="mt-4 flex items-baseline justify-between gap-3 border-t-2 border-dashed border-black pt-3"
-            >
-              <span className="shrink-0 whitespace-nowrap text-xs font-black uppercase text-black sm:text-sm">
-                Tổng dự kiến
-              </span>
-              <span className="shrink-0 whitespace-nowrap text-xl font-black tabular-nums text-primary-ink">
-                {formatPrice(total)}
-              </span>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-text-muted">Phí kiểm duyệt yêu cầu</dt>
+                  <dd className="font-bold text-primary-ink">Miễn phí</dd>
+                </div>
+              </dl>
             </div>
 
-            {error && (
-              <div
-                role="alert"
-                className="mt-4 flex items-start gap-2 border-2 border-red-600 bg-red-50 p-3 text-xs font-bold text-red-700"
-              >
-                <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                <span>{error}</span>
+            <div className="mt-3 shrink-0 border-t-2 border-dashed border-black pt-2.5 lg:mt-auto">
+              <div aria-live="polite" className="flex items-baseline justify-between gap-3">
+                <span className="shrink-0 whitespace-nowrap text-xs font-black uppercase text-black">
+                  Tổng dự kiến
+                </span>
+                <span className="shrink-0 whitespace-nowrap text-lg font-black tabular-nums text-primary-ink">
+                  {formatPrice(total)}
+                </span>
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={busy || user?.role !== "CUSTOMER"}
-              aria-busy={busy}
-              className="btn-primary mt-5 flex min-h-12 w-full items-center justify-center gap-2 py-3.5 text-sm font-black uppercase"
-            >
-              {busy ? "Đang gửi yêu cầu…" : "Gửi yêu cầu thiết kế"}
-            </button>
+              {error && (
+                <div
+                  role="alert"
+                  className="mt-2 flex items-start gap-2 border-2 border-red-600 bg-red-50 p-2 text-[11px] font-bold text-red-700"
+                >
+                  <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
 
-            {user?.role !== "CUSTOMER" && (
-              <p className="mt-2.5 text-center text-xs font-bold text-red-600">
-                Vui lòng{" "}
-                <Link href="/login?returnUrl=/commission/new" className="underline">
-                  đăng nhập tài khoản khách hàng
-                </Link>{" "}
-                để gửi yêu cầu.
-              </p>
-            )}
+              <button
+                type="submit"
+                disabled={busy || user?.role !== "CUSTOMER"}
+                aria-busy={busy}
+                className="btn-primary mt-2.5 flex h-10 w-full items-center justify-center gap-2 text-xs font-black uppercase"
+              >
+                {busy ? "Đang gửi yêu cầu…" : "Gửi yêu cầu thiết kế"}
+              </button>
 
-            <div className="mt-4 flex items-start gap-2 border-t border-black/15 pt-3 text-xs font-medium text-text-muted">
-              <ShieldCheck size={16} className="mt-0.5 shrink-0 text-primary-ink" />
-              <span>
-                Yêu cầu sẽ được nhân viên xem xét & xác nhận báo giá trước khi mở thanh toán. Phòng trao đổi với họa sĩ mở ngay sau khi thanh toán thành công.
-              </span>
+              {user?.role !== "CUSTOMER" && (
+                <p className="mt-2 text-center text-[11px] font-bold text-red-600">
+                  Vui lòng{" "}
+                  <Link href="/login?returnUrl=/commission/new" className="underline">
+                    đăng nhập tài khoản khách hàng
+                  </Link>{" "}
+                  để gửi yêu cầu.
+                </p>
+              )}
+
+              <div className="mt-2.5 flex items-start gap-2 border-t border-black/15 pt-2 text-[11px] leading-snug font-medium text-text-muted">
+                <ShieldCheck size={14} className="mt-0.5 shrink-0 text-primary-ink" />
+                <span>
+                  Nhân viên xác nhận báo giá trước khi mở thanh toán. Phòng trao đổi với họa sĩ mở ngay sau khi thanh toán.
+                </span>
+              </div>
             </div>
           </section>
         </aside>

@@ -80,9 +80,9 @@ export default function StoreListingToolbar({
   rightAction,
 }: StoreListingToolbarProps) {
   return (
-    <div>
+    <div className="shrink-0">
       {/* Hàng 1: Thanh tìm kiếm & thao tác nhanh */}
-      <div className="flex flex-wrap items-center gap-2.5 border-b-2 border-dashed border-gray-200 bg-white p-4">
+      <div className="flex flex-wrap items-center gap-2.5 border-b-2 border-dashed border-gray-200 bg-white px-4 py-2.5">
         <div className="relative min-w-[240px] flex-1">
           <Search
             size={15}
@@ -95,7 +95,7 @@ export default function StoreListingToolbar({
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder}
-            className="w-full border-2 border-black bg-gray-50 py-2 pl-9 pr-3 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white"
+            className="w-full border-2 border-black bg-gray-50 py-1.5 pl-9 pr-3 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white"
           />
         </div>
 
@@ -104,7 +104,7 @@ export default function StoreListingToolbar({
             type="button"
             onClick={onReset}
             disabled={!canReset}
-            className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3! py-2! text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
+            className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3! py-1.5! text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
           >
             <RotateCcw size={14} aria-hidden="true" /> Đặt lại
           </button>
@@ -116,7 +116,7 @@ export default function StoreListingToolbar({
             onClick={onRefresh}
             disabled={isLoading}
             title="Làm mới danh sách"
-            className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3! py-2! text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
+            className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3! py-1.5! text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
           >
             <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} aria-hidden="true" />
             Làm mới
@@ -130,7 +130,7 @@ export default function StoreListingToolbar({
       <div
         role="tablist"
         aria-label="Lọc theo trạng thái sản phẩm"
-        className="flex flex-wrap items-center gap-2 border-b-2 border-black bg-[#f3faf5] px-4 py-3"
+        className="flex flex-wrap items-center gap-2 border-b-2 border-black bg-[#f3faf5] px-4 py-2"
       >
         {STATUS_TABS.map((tab) => {
           const selected = statusFilter === tab.id;

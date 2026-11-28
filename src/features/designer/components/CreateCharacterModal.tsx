@@ -21,7 +21,7 @@ interface CreateCharacterModalProps {
   commissionId?: number;
 }
 
-const MOCK_MATRIX_OPTIONS: Array<{ value: MatrixSize; label: string }> = [
+const CANVAS_SIZE_OPTIONS: Array<{ value: MatrixSize; label: string }> = [
   { value: "32x32", label: "32 × 32 px (Vuông tiêu chuẩn)" },
   { value: "64x64", label: "64 × 64 px (Vuông độ phân giải cao)" },
   { value: "64x32", label: "64 × 32 px (Màn hình rộng)" },
@@ -73,7 +73,7 @@ export default function CreateCharacterModal({
       onClose={onClose}
       title="Tạo nhân vật mới"
       badge="Pixel Studio"
-      description="Khởi tạo file nhân vật và cấu hình kích thước ma trận LED."
+      description="Khởi tạo file nhân vật và chọn kích thước bản vẽ."
       icon={<Sparkles className="h-5 w-5" aria-hidden="true" />}
       size="md"
       busy={isSubmitting}
@@ -168,7 +168,7 @@ export default function CreateCharacterModal({
           >
             <Grid size={14} aria-hidden="true" />
             <span>
-              Kích thước ma trận (Matrix Size) <span className="text-red-600">*</span>
+              Kích thước bản vẽ <span className="text-red-600">*</span>
             </span>
           </label>
           <select
@@ -177,7 +177,7 @@ export default function CreateCharacterModal({
             onChange={(e) => setMatrixSize(e.target.value as MatrixSize)}
             className="w-full cursor-pointer border-2 border-black bg-white px-3 py-2 font-mono text-sm font-bold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none"
           >
-            {MOCK_MATRIX_OPTIONS.map((opt) => (
+            {CANVAS_SIZE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -186,7 +186,7 @@ export default function CreateCharacterModal({
           <p className="mt-2 flex items-start gap-1.5 border border-black bg-[#fef9e7] px-2.5 py-1.5 text-[11px] font-semibold text-black">
             <Lock size={12} className="mt-0.5 shrink-0" />
             <span>
-              Mock tạm thời hỗ trợ 32×32, 64×64 và 64×32 · Kích thước ma trận được cố định cho nhân vật sau khi tạo.
+              Hỗ trợ 32×32, 64×64 và 64×32 px · Kích thước bản vẽ được cố định cho nhân vật sau khi tạo.
             </span>
           </p>
         </div>

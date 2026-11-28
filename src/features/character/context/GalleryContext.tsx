@@ -17,7 +17,7 @@ import type { UserEntitlement } from "@/features/character/types";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
 import {
-  fetchActiveCustomerSubscription,
+  fetchActiveCustomerSubscriptions,
   fetchCustomerGallery,
   formatOwnedCharactersError,
   type CustomerActiveSubscription,
@@ -27,6 +27,12 @@ import {
 interface GalleryContextValue {
   ownedCharacters: CustomerGalleryItem[];
   activeSubscription: CustomerActiveSubscription | null;
+  activeSubscriptions: CustomerActiveSubscription[];
+  hasAllAccessCharacters: boolean;
+  maxCommissionRevisions: number;
+  extraCommissionRevisions: number;
+  maxMobileProfiles: number;
+  ownedAllAccessOnlyPrice: number | null;
   entitlements: UserEntitlement[];
   isLoading: boolean;
   error: string | null;
@@ -40,8 +46,37 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
   const [ownedCharacters, setOwnedCharacters] = useState<
     CustomerGalleryItem[]
   >([]);
-  const [activeSubscription, setActiveSubscription] =
-    useState<CustomerActiveSubscription | null>(null);
+  const [activeSubscriptions, setActiveSubscriptions] =
+    useState<CustomerActiveSubscription[]>([]);
+  const activeSubscription = activeSubscriptions[0] ?? null;
+  const hasAllAccessCharacters = activeSubscriptions.some((sub) => sub.allAccessCharacters);
+  const maxCommissionRevisions = activeSubscriptions.reduce(
+    (max, sub) => Math.max(max, sub.maxCommissionRevisions ?? 0),
+    0,
+  );
+  const extraCommissionRevisions = maxCommissionRevisions;
+  const maxMobileProfiles = activeSubscriptions.reduce(
+    (max, sub) => Math.max(max, sub.maxMobileProfiles ?? 3),
+    3,
+  );
+  const alreadyOwnsAllAccessUpgrade = activeSubscriptions.some(
+    (sub) =>
+      sub.allAccessCharacters &&
+      ((sub.maxMobileProfiles ?? 3) > 3 || (sub.maxCommissionRevisions ?? 0) > 0),
+  );
+  const ownedAllAccessOnlyPrices = alreadyOwnsAllAccessUpgrade
+    ? []
+    : activeSubscriptions
+        .filter(
+          (sub) =>
+            sub.allAccessCharacters &&
+            (sub.maxMobileProfiles ?? 3) <= 3 &&
+            (sub.maxCommissionRevisions ?? 0) <= 0 &&
+            (sub.paidPrice ?? 0) > 0,
+        )
+        .map((sub) => sub.paidPrice as number);
+  const ownedAllAccessOnlyPrice =
+    ownedAllAccessOnlyPrices.length > 0 ? Math.max(...ownedAllAccessOnlyPrices) : null;
   const [entitlements, setEntitlements] = useState<UserEntitlement[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +93,7 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
 
     if (!isAuthenticated || !currentUser || currentUser.role !== "CUSTOMER") {
       setOwnedCharacters([]);
-      setActiveSubscription(null);
+      setActiveSubscriptions([]);
       setEntitlements(localEntitlements);
       setError(null);
       setIsLoading(false);
@@ -70,12 +105,12 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
 
     Promise.all([
       fetchCustomerGallery(),
-      fetchActiveCustomerSubscription().catch(() => null),
+      fetchActiveCustomerSubscriptions().catch(() => [] as CustomerActiveSubscription[]),
     ])
-      .then(([items, subscription]) => {
+      .then(([items, subscriptions]) => {
         if (requestIdRef.current !== requestId) return;
         setOwnedCharacters(items);
-        setActiveSubscription(subscription);
+        setActiveSubscriptions(subscriptions);
 
         // An accepted image is not a CharacterVersion and cannot grant LED/store access.
         const apiEntitlements: UserEntitlement[] = items.filter((item) => item.characterId !== null).map((item) => ({
@@ -104,7 +139,7 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         if (requestIdRef.current !== requestId) return;
         setOwnedCharacters([]);
-        setActiveSubscription(null);
+        setActiveSubscriptions([]);
         setEntitlements(localEntitlements);
         setError(formatOwnedCharactersError(err));
       })
@@ -138,6 +173,12 @@ export function GalleryProvider({ children }: { children: ReactNode }) {
       value={{
         ownedCharacters,
         activeSubscription,
+        activeSubscriptions,
+        hasAllAccessCharacters,
+        maxCommissionRevisions,
+        extraCommissionRevisions,
+        maxMobileProfiles,
+        ownedAllAccessOnlyPrice,
         entitlements,
         isLoading,
         error,

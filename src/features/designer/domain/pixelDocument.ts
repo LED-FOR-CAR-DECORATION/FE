@@ -54,12 +54,27 @@ export interface SelectionRect {
   y1: number;
 }
 
+export interface PixelLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+}
+
+export interface PixelLayerContent {
+  pixels: string[];
+  texts: PixelText[];
+}
+
 export interface PixelDocumentState {
   width: number;
   height: number;
   /** Empty string "" = transparent / off LED pixel, otherwise "#RRGGBB". */
   pixels: string[];
   texts: PixelText[];
+  /** Per-layer cel contents keyed by layer.id (synced with shared layer stack). */
+  layerContents?: Record<string, PixelLayerContent>;
 }
 
 export interface RgbColor {
@@ -248,18 +263,21 @@ export function brushStroke(
   size: number,
   mirror: MirrorMode,
   opacity = 100,
+  strokeBasePixels?: string[],
+  strokeTouched?: Set<number>,
 ): PixelDocumentState {
   const safeSize = Math.min(8, Math.max(1, size));
   const out = [...doc.pixels];
   const halfSize = Math.floor((safeSize - 1) / 2);
-  const touched = new Set<number>();
+  const localTouched = strokeTouched ?? new Set<number>();
 
   const put = (x: number, y: number) => {
     if (x < 0 || x >= doc.width || y < 0 || y >= doc.height) return;
     const idx = y * doc.width + x;
-    if (touched.has(idx)) return;
-    touched.add(idx);
-    out[idx] = color ? blendColorWithOpacity(color, opacity, doc.pixels[idx]) : "";
+    if (localTouched.has(idx)) return;
+    localTouched.add(idx);
+    const bgHex = strokeBasePixels ? strokeBasePixels[idx] : doc.pixels[idx];
+    out[idx] = color ? blendColorWithOpacity(color, opacity, bgHex) : "";
   };
 
   const mirrorH = mirror === "HORIZONTAL" || mirror === "BOTH";
@@ -286,36 +304,66 @@ export function floodFill(
   x: number,
   y: number,
   color: string,
+  mirror: MirrorMode = "NONE",
+  opacity = 100,
 ): PixelDocumentState {
   if (x < 0 || x >= doc.width || y < 0 || y >= doc.height) return doc;
   const normalizedColor = color ? normalizeHex(color) : "";
-  const target = doc.pixels[y * doc.width + x];
-  if (target === normalizedColor) return doc;
-
   const out = [...doc.pixels];
-  const queue: number[] = [];
+  let changed = false;
 
-  const visit = (px: number, py: number) => {
-    if (px < 0 || px >= doc.width || py < 0 || py >= doc.height) return;
-    const idx = py * doc.width + px;
-    if (out[idx] === target) {
-      out[idx] = normalizedColor;
-      queue.push(idx);
+  const fillSeed = (sx: number, sy: number) => {
+    if (sx < 0 || sx >= doc.width || sy < 0 || sy >= doc.height) return;
+    const seedIdx = sy * doc.width + sx;
+    const target = doc.pixels[seedIdx];
+    const previewColor = normalizedColor
+      ? blendColorWithOpacity(normalizedColor, opacity, target)
+      : "";
+    if (target === previewColor) return;
+
+    const visited = new Uint8Array(doc.width * doc.height);
+    const queue: number[] = [seedIdx];
+    visited[seedIdx] = 1;
+    let head = 0;
+
+    while (head < queue.length) {
+      const idx = queue[head++];
+      out[idx] = normalizedColor
+        ? blendColorWithOpacity(normalizedColor, opacity, doc.pixels[idx])
+        : "";
+      changed = true;
+
+      const px = idx % doc.width;
+      const py = Math.floor(idx / doc.width);
+      const neighbors: Array<[number, number]> = [
+        [px - 1, py],
+        [px + 1, py],
+        [px, py - 1],
+        [px, py + 1],
+      ];
+      for (const [nx, ny] of neighbors) {
+        if (nx < 0 || nx >= doc.width || ny < 0 || ny >= doc.height) continue;
+        const nIdx = ny * doc.width + nx;
+        if (!visited[nIdx] && doc.pixels[nIdx] === target) {
+          visited[nIdx] = 1;
+          queue.push(nIdx);
+        }
+      }
     }
   };
 
-  visit(x, y);
-  while (queue.length > 0) {
-    const idx = queue.shift()!;
-    const px = idx % doc.width;
-    const py = Math.floor(idx / doc.width);
-    visit(px - 1, py);
-    visit(px + 1, py);
-    visit(px, py - 1);
-    visit(px, py + 1);
+  fillSeed(x, y);
+  if (mirror === "HORIZONTAL" || mirror === "BOTH") {
+    fillSeed(doc.width - 1 - x, y);
+  }
+  if (mirror === "VERTICAL" || mirror === "BOTH") {
+    fillSeed(x, doc.height - 1 - y);
+  }
+  if (mirror === "BOTH") {
+    fillSeed(doc.width - 1 - x, doc.height - 1 - y);
   }
 
-  return { ...doc, pixels: out };
+  return changed ? { ...doc, pixels: out } : doc;
 }
 
 function insidePolygon(
@@ -336,6 +384,62 @@ function insidePolygon(
   return inside;
 }
 
+function rasterizeEllipseOutline(
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  plot: (x: number, y: number) => void,
+) {
+  let x0 = left;
+  let y0 = top;
+  let x1 = right;
+  let y1 = bottom;
+  let a = Math.abs(x1 - x0);
+  const b = Math.abs(y1 - y0);
+  let b1 = b & 1;
+  let dx = 4 * (1 - a) * b * b;
+  let dy = 4 * (b1 + 1) * a * a;
+  let err = dx + dy + b1 * a * a;
+
+  if (x0 > x1) {
+    x0 = x1;
+    x1 += a;
+  }
+  if (y0 > y1) y0 = y1;
+  y0 += Math.floor((b + 1) / 2);
+  y1 = y0 - b1;
+  a *= 8 * a;
+  b1 = 8 * b * b;
+
+  do {
+    plot(x1, y0);
+    plot(x0, y0);
+    plot(x0, y1);
+    plot(x1, y1);
+    const e2 = 2 * err;
+    if (e2 <= dy) {
+      y0++;
+      y1--;
+      dy += a;
+      err += dy;
+    }
+    if (e2 >= dx || 2 * err > dy) {
+      x0++;
+      x1--;
+      dx += b1;
+      err += dx;
+    }
+  } while (x0 <= x1);
+
+  while (y0 - y1 < b) {
+    plot(x0 - 1, y0);
+    plot(x1 + 1, y0++);
+    plot(x0 - 1, y1);
+    plot(x1 + 1, y1--);
+  }
+}
+
 export function drawShape(
   doc: PixelDocumentState,
   x0: number,
@@ -346,52 +450,79 @@ export function drawShape(
   kind: PixelShape,
   filled: boolean,
   mirror: MirrorMode,
+  brushSize = 1,
+  opacity = 100,
 ): PixelDocumentState {
   if (kind === "LINE") {
-    return brushStroke(doc, x0, y0, x1, y1, color, 1, mirror);
+    return brushStroke(doc, x0, y0, x1, y1, color, brushSize, mirror, opacity);
   }
 
   const normalizedColor = color ? normalizeHex(color) : "";
+  const safeSize = filled ? 1 : Math.min(8, Math.max(1, brushSize));
+  const halfSize = Math.floor((safeSize - 1) / 2);
   const out = [...doc.pixels];
-  const left = Math.min(x0, x1);
-  const right = Math.max(x0, x1);
-  const top = Math.min(y0, y1);
-  const bottom = Math.max(y0, y1);
+  const touched = new Set<number>();
 
   const setPixel = (x: number, y: number) => {
-    if (x >= 0 && x < doc.width && y >= 0 && y < doc.height) {
-      out[y * doc.width + x] = normalizedColor;
-    }
+    if (x < 0 || x >= doc.width || y < 0 || y >= doc.height) return;
+    const idx = y * doc.width + x;
+    if (touched.has(idx)) return;
+    touched.add(idx);
+    out[idx] = normalizedColor
+      ? blendColorWithOpacity(normalizedColor, opacity, doc.pixels[idx])
+      : "";
   };
 
   const mirrorH = mirror === "HORIZONTAL" || mirror === "BOTH";
   const mirrorV = mirror === "VERTICAL" || mirror === "BOTH";
 
-  const put = (x: number, y: number) => {
+  const putSingle = (x: number, y: number) => {
     setPixel(x, y);
     if (mirrorH) setPixel(doc.width - 1 - x, y);
     if (mirrorV) setPixel(x, doc.height - 1 - y);
     if (mirror === "BOTH") setPixel(doc.width - 1 - x, doc.height - 1 - y);
   };
 
+  const putBrush = (x: number, y: number) => {
+    for (let dy = 0; dy < safeSize; dy++) {
+      for (let dx = 0; dx < safeSize; dx++) {
+        putSingle(x + dx - halfSize, y + dy - halfSize);
+      }
+    }
+  };
+
+  const left = Math.min(x0, x1);
+  const right = Math.max(x0, x1);
+  const top = Math.min(y0, y1);
+  const bottom = Math.max(y0, y1);
+
   if (kind === "RECTANGLE") {
-    for (let y = top; y <= bottom; y++) {
-      for (let x = left; x <= right; x++) {
-        if (filled || x === left || x === right || y === top || y === bottom) {
-          put(x, y);
+    if (filled) {
+      for (let y = top; y <= bottom; y++) {
+        for (let x = left; x <= right; x++) {
+          putSingle(x, y);
         }
+      }
+    } else {
+      for (let x = left; x <= right; x++) {
+        putBrush(x, top);
+        putBrush(x, bottom);
+      }
+      for (let y = top; y <= bottom; y++) {
+        putBrush(left, y);
+        putBrush(right, y);
       }
     }
   } else if (kind === "ELLIPSE") {
     const rx = (right - left) / 2;
     const ry = (bottom - top) / 2;
     if (rx === 0 || ry === 0) {
-      return brushStroke(doc, x0, y0, x1, y1, color, 1, mirror);
+      return brushStroke(doc, x0, y0, x1, y1, color, brushSize, mirror, opacity);
     }
-    const cx = (left + right) / 2;
-    const cy = (top + bottom) / 2;
 
     if (filled) {
+      const cx = (left + right) / 2;
+      const cy = (top + bottom) / 2;
       const rxOffset = rx + 0.3;
       const ryOffset = ry + 0.3;
       for (let y = top; y <= bottom; y++) {
@@ -400,20 +531,16 @@ export function drawShape(
             Math.pow((x - cx) / rxOffset, 2) + Math.pow((y - cy) / ryOffset, 2) <=
             1
           ) {
-            put(x, y);
+            putSingle(x, y);
           }
         }
       }
     } else {
-      const steps = Math.max(24, Math.floor(Math.max(rx, ry) * 16));
-      for (let i = 0; i <= steps; i++) {
-        const a = (i * 2 * Math.PI) / steps;
-        put(Math.round(cx + rx * Math.cos(a)), Math.round(cy + ry * Math.sin(a)));
-      }
+      rasterizeEllipseOutline(left, top, right, bottom, putBrush);
     }
   } else if (kind === "STAR") {
     if (right === left || bottom === top) {
-      return brushStroke(doc, x0, y0, x1, y1, color, 1, mirror);
+      return brushStroke(doc, x0, y0, x1, y1, color, brushSize, mirror, opacity);
     }
     const cx = (left + right) / 2;
     const cy = (top + bottom) / 2;
@@ -433,7 +560,7 @@ export function drawShape(
       for (let y = top; y <= bottom; y++) {
         for (let x = left; x <= right; x++) {
           if (insidePolygon(x + 0.5, y + 0.5, vertices)) {
-            put(x, y);
+            putSingle(x, y);
           }
         }
       }
@@ -447,7 +574,7 @@ export function drawShape(
           Math.round(bx),
           Math.round(by),
         )) {
-          put(px, py);
+          putBrush(px, py);
         }
       }
     }
@@ -649,6 +776,132 @@ export function stampDocumentRegion(
     }
   });
   return { ...doc, pixels: out };
+}
+
+export function flipRegionInDocument(
+  doc: PixelDocumentState,
+  rect: SelectionRect | null,
+  axis: "HORIZONTAL" | "VERTICAL",
+): PixelDocumentState {
+  const targetRect: SelectionRect = rect ?? {
+    x0: 0,
+    y0: 0,
+    x1: doc.width - 1,
+    y1: doc.height - 1,
+  };
+  const norm = normalizeSelectionRect(targetRect);
+  const left = Math.max(0, norm.left);
+  const right = Math.min(doc.width - 1, norm.right);
+  const top = Math.max(0, norm.top);
+  const bottom = Math.min(doc.height - 1, norm.bottom);
+  if (left > right || top > bottom) return doc;
+
+  const out = [...doc.pixels];
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) {
+      const sx = axis === "HORIZONTAL" ? right - (x - left) : x;
+      const sy = axis === "VERTICAL" ? bottom - (y - top) : y;
+      out[y * doc.width + x] = doc.pixels[sy * doc.width + sx];
+    }
+  }
+  return { ...doc, pixels: out };
+}
+
+export function rasterizeTextBlockIntoPixels(
+  doc: PixelDocumentState,
+  blockId: string,
+): PixelDocumentState {
+  const block = doc.texts.find((t) => t.id === blockId);
+  if (!block) return doc;
+  const flattenedText = compositeDocument({
+    width: doc.width,
+    height: doc.height,
+    pixels: doc.pixels,
+    texts: [block],
+  });
+  return {
+    ...doc,
+    pixels: flattenedText,
+    texts: doc.texts.filter((t) => t.id !== blockId),
+  };
+}
+
+/** Composites all visible layers bottom-to-top with layer opacity into flat pixels. */
+export function flattenLayersForFrame(
+  width: number,
+  height: number,
+  layers: PixelLayer[],
+  layerContents: Record<string, PixelLayerContent>,
+): string[] {
+  const out = Array<string>(width * height).fill("");
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
+    if (!layer.visible) continue;
+    const cel = layerContents[layer.id];
+    if (!cel) continue;
+    const flatCel = compositeDocument({
+      width,
+      height,
+      pixels: cel.pixels,
+      texts: cel.texts,
+    });
+    const layerAlpha = Math.min(100, Math.max(10, layer.opacity));
+    for (let p = 0; p < out.length; p++) {
+      const fg = flatCel[p];
+      if (!fg) continue;
+      out[p] =
+        layerAlpha >= 100
+          ? fg
+          : blendColorWithOpacity(fg, layerAlpha, out[p]);
+    }
+  }
+  return out;
+}
+
+export function createDefaultLayer(id = "layer-1", name = "Layer 1"): PixelLayer {
+  return {
+    id,
+    name,
+    visible: true,
+    locked: false,
+    opacity: 100,
+  };
+}
+
+export function ensureLayeredFrame(
+  frame: PixelDocumentState,
+  layers: PixelLayer[],
+): PixelDocumentState {
+  const safeLayers = layers.length > 0 ? layers : [createDefaultLayer()];
+  const total = frame.width * frame.height;
+  const nextContents: Record<string, PixelLayerContent> = {};
+
+  for (let i = 0; i < safeLayers.length; i++) {
+    const layer = safeLayers[i];
+    const existing = frame.layerContents?.[layer.id];
+    if (existing && existing.pixels.length === total) {
+      nextContents[layer.id] = existing;
+    } else if (!frame.layerContents && i === safeLayers.length - 1) {
+      // Legacy unlayered frame migrates directly onto the bottom layer cleanly
+      nextContents[layer.id] = {
+        pixels: frame.pixels.length === total ? [...frame.pixels] : Array<string>(total).fill(""),
+        texts: frame.texts.map((t) => ({ ...t })),
+      };
+    } else {
+      nextContents[layer.id] = {
+        pixels: Array<string>(total).fill(""),
+        texts: [],
+      };
+    }
+  }
+
+  return {
+    width: frame.width,
+    height: frame.height,
+    pixels: flattenLayersForFrame(frame.width, frame.height, safeLayers, nextContents),
+    texts: [],
+    layerContents: nextContents,
+  };
 }
 
 /**

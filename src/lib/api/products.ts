@@ -55,12 +55,13 @@ export function mapProductItemToCatalog(item: ProductItem): CatalogProduct {
 
 export function mapProductDetailToCatalog(detail: ProductDetailResponse): CatalogProduct {
   const components: CatalogProduct[] | undefined = detail.bundleDetails?.items?.map((bItem, idx) => ({
-    id: String(bItem.modelId ?? bItem.versionId ?? idx),
+    id: String(bItem.productId ?? bItem.modelId ?? bItem.versionId ?? idx),
+    productId: bItem.productId ?? undefined,
     productType: bItem.itemType === "LED" ? "LED_MODEL" : "CHARACTER",
     name: bItem.modelName ?? bItem.characterName ?? "Thành phần gói",
-    price: 0,
+    price: Number(bItem.unitPrice ?? 0),
     quantity: bItem.quantity,
-    previewUrl: bItem.previewGifUrl ?? undefined,
+    previewUrl: bItem.previewGifUrl || bItem.thumbnailUrl || undefined,
   }));
 
   return {
@@ -298,6 +299,8 @@ export interface AdminCharacterSummary {
   characterId: number;
   characterName: string;
   description: string | null;
+  characterType?: "STORE" | "COMMISSION";
+  commissionId?: number | null;
   author?: {
     employeeId: number;
     fullName: string;
@@ -310,6 +313,8 @@ export interface AdminCharacterSummary {
 export async function fetchAdminCharacters(params?: {
   query?: string;
   creatorEmployeeId?: number;
+  characterType?: "STORE" | "COMMISSION";
+  commissionId?: number;
   page?: number;
   size?: number;
 }): Promise<AdminCharacterSummary[]> {
@@ -324,12 +329,18 @@ export async function fetchAdminCharacters(params?: {
         params: {
           query: params?.query || undefined,
           creatorEmployeeId: params?.creatorEmployeeId || undefined,
+          characterType: params?.characterType || undefined,
+          commissionId: params?.commissionId || undefined,
           page: params?.page ?? 0,
           size: params?.size ?? 100,
         },
       },
     );
-    return res.data?.data ?? [];
+    return (res.data?.data ?? []).map((item) => ({
+      ...item,
+      characterType: item.characterType ?? "STORE",
+      commissionId: item.commissionId ?? null,
+    }));
   } catch (err) {
     console.warn("fetchAdminCharacters backend call failed:", err);
     return [];

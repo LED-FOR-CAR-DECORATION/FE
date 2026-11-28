@@ -1,11 +1,10 @@
 "use client";
 
 import CustomerSidebar from "@/components/layout/CustomerSidebar";
-import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import { useOrders } from "@/features/order/context/OrderContext";
-import { isCharacterOnlyOrder } from "@/features/order/fulfillment";
 import type { MockOrder, OrderStatus } from "@/features/order/types";
+import { getOrderFulfillment, isCharacterOnlyOrder } from "@/features/order/fulfillment";
 import { formatPrice } from "@/lib/currency";
 import {
   CheckCircle,
@@ -20,7 +19,9 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Pagination from "@/components/ui/Pagination";
+import { scrollToTop, usePageParam } from "@/hooks/usePageParam";
 import { CancelOrderDialog, ConfirmReceivedDialog } from "@/features/order/components/OrderActionDialogs";
 
 type ShopeeTabKey =
@@ -87,8 +88,15 @@ function getHeaderStatusInfo(order: MockOrder): {
   isSuccessDelivery: boolean;
 } {
   if (isCharacterOnlyOrder(order) && order.paymentStatus === "Paid") {
+    const fulfillment = getOrderFulfillment(order);
+    const deliveryText =
+      fulfillment.hasSubscription && fulfillment.hasCharacter
+        ? "Đã kích hoạt gói hội viên & cấp nhân vật"
+        : fulfillment.hasSubscription
+          ? "Đã kích hoạt gói hội viên"
+          : "Đã cấp nhân vật vào thư viện";
     return {
-      deliveryText: "Đã cấp nhân vật vào thư viện",
+      deliveryText,
       statusText: "HOÀN THÀNH",
       statusColor: "text-[#155e59]",
       isSuccessDelivery: true,
@@ -211,6 +219,13 @@ function getHeaderStatusInfo(order: MockOrder): {
 
 function getFooterHint(order: MockOrder): string {
   if (isCharacterOnlyOrder(order) && order.paymentStatus === "Paid") {
+    const fulfillment = getOrderFulfillment(order);
+    if (fulfillment.hasSubscription && fulfillment.hasCharacter) {
+      return "Gói hội viên và nhân vật kỹ thuật số đã được mở khóa trong tài khoản của bạn.";
+    }
+    if (fulfillment.hasSubscription) {
+      return "Gói hội viên đã được kích hoạt trong tài khoản của bạn.";
+    }
     return "Nhân vật kỹ thuật số đã được mở khóa trong Thư viện của bạn.";
   }
   switch (order.status) {
@@ -246,6 +261,8 @@ function getProductTypeLabel(productType: string): string {
   switch (productType) {
     case "CHARACTER":
       return "Nhân vật kỹ thuật số";
+    case "SUBSCRIPTION":
+      return "Gói hội viên";
     case "BUNDLE":
       return "Bộ sản phẩm (Bundle)";
     case "LED_MODEL":
@@ -264,6 +281,8 @@ function canCancelOrder(order: MockOrder): boolean {
     order.status === "Confirmed";
   return cancellableStatus && !(isCharacterOnlyOrder(order) && order.paymentStatus === "Paid");
 }
+
+const ORDERS_PAGE_SIZE = 10;
 
 export default function OrderHistoryPage() {
   const { orders, isLoading, confirmOrderDelivery, cancelCustomerOrder } = useOrders();
@@ -311,6 +330,27 @@ export default function OrderHistoryPage() {
       return true;
     });
   }, [orders, activeTab, searchQuery]);
+
+  const [page, setPage] = usePageParam();
+  const listTopRef = useRef<HTMLDivElement>(null);
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedOrders = useMemo(
+    () => filteredOrders.slice((currentPage - 1) * ORDERS_PAGE_SIZE, currentPage * ORDERS_PAGE_SIZE),
+    [filteredOrders, currentPage],
+  );
+  // Đổi tab hoặc từ khoá thì quay về trang 1 (bỏ qua lần render đầu để giữ ?page= trên URL).
+  const filterKey = `${activeTab}|${searchQuery}`;
+  const previousFilterKey = useRef(filterKey);
+  useEffect(() => {
+    if (previousFilterKey.current === filterKey) return;
+    previousFilterKey.current = filterKey;
+    setPage(1);
+  }, [filterKey, setPage]);
+  const changePage = (next: number) => {
+    setPage(next);
+    scrollToTop(listTopRef.current);
+  };
 
   const handleConfirmOrder = async (orderId: string) => {
     setConfirmingId(orderId);
@@ -429,8 +469,8 @@ export default function OrderHistoryPage() {
                 </Link>
               </div>
             ) : (
-              <div className="space-y-3.5">
-                {filteredOrders.map((order) => {
+              <div ref={listTopRef} className="space-y-3.5">
+                {pagedOrders.map((order) => {
                   const statusInfo = getHeaderStatusInfo(order);
                   const footerHint = getFooterHint(order);
                   const isPendingPayment =
@@ -597,6 +637,16 @@ export default function OrderHistoryPage() {
                     </article>
                   );
                 })}
+                <Pagination
+                  variant="soft"
+                  page={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={changePage}
+                  totalItems={filteredOrders.length}
+                  pageSize={ORDERS_PAGE_SIZE}
+                  itemLabel="đơn"
+                  ariaLabel="Phân trang đơn hàng"
+                />
               </div>
             )}
           </section>
@@ -628,7 +678,6 @@ export default function OrderHistoryPage() {
           onConfirm={() => void handleConfirmOrder(confirmTargetId)}
         />
       )}
-      <Footer />
     </>
   );
 }

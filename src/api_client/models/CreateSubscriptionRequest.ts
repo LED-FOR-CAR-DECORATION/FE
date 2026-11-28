@@ -11,6 +11,7 @@ export type CreateSubscriptionRequest = {
     isLifetime: boolean;
     durationDays?: number;
     allAccessCharacters: boolean;
+    maxCommissionRevisions?: number;
     tagIds?: Array<number>;
 };
 

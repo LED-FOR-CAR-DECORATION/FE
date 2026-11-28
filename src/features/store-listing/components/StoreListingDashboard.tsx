@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CheckCircle2, Lock, Plus, Store, X } from "lucide-react";
+import { CheckCircle2, ChevronRight, Lock, Plus, Store, X } from "lucide-react";
 import {
   apiUpdateProductStatus,
-  apiUpdateStoreProduct,
   fetchManagedStoreProducts,
 } from "@/lib/api/products";
+import { formatVnd } from "../format";
 import { useStoreCharacters } from "../hooks/useStoreCharacters";
 import type { PublishMode, StoreCharacterRow } from "../types";
 import CatalogListingTable, { type StoreCatalogItem } from "./CatalogListingTable";
@@ -39,7 +39,8 @@ type TabId = "characters" | "led-models" | "bundles" | "subscriptions";
 
 type ModalState =
   | { kind: "select-product-type" }
-  | { kind: "edit"; product: EditableProductData }
+  | { kind: "edit"; product: EditableProductData; previewFallbackUrl?: string }
+  | { kind: "approve-character"; product: EditableProductData; creatorName?: string; previewFallbackUrl?: string }
   | { kind: "publish"; character: StoreCharacterRow; mode: PublishMode }
   | { kind: "unlist"; character: StoreCharacterRow }
   | { kind: "archive"; productId: string | number; productName: string }
@@ -188,40 +189,61 @@ export default function StoreListingDashboard() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-black">
-            <span className="grid h-9 w-9 place-items-center rounded-lg border border-[#55a96f] bg-gradient-to-br from-[#bceac8] to-[#8bd49f] shadow-[2px_2px_0_#c6e8cd]">
-              <Store size={18} />
-            </span>
-            Quản lý cửa hàng sản phẩm
-          </h1>
-          <p className="mt-1 text-sm font-medium text-text-muted">
-            Quản lý danh mục sản phẩm, duyệt nhân vật, chỉnh sửa và điều chỉnh trạng thái hiển thị trên cửa hàng.
-          </p>
-        </div>
+    <div className="manager-neo-dashboard mx-auto flex min-h-[calc(100dvh-114px)] w-full max-w-[1440px] flex-col gap-3 font-sans text-text-main xl:h-[calc(100dvh-114px)]">
+      <header className="shrink-0 border-2 border-black border-l-8 border-l-primary bg-white px-4 py-2.5 shadow-[4px_4px_0_0_#000] sm:px-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
+                CỬA HÀNG SẢN PHẨM
+              </span>
+              <nav
+                aria-label="Đường dẫn"
+                className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-text-muted"
+              >
+                <span>Quản lý</span>
+                <ChevronRight className="h-3.5 w-3.5 text-black" aria-hidden="true" />
+                <span className="text-black">Quản lý cửa hàng sản phẩm</span>
+              </nav>
+            </div>
 
-        {canManage && (
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setModal({ kind: "select-product-type" })}
-              className="inline-flex items-center gap-2 rounded-lg border border-[#3f9660] bg-gradient-to-br from-[#8bd49f] to-[#5fb97d] px-4 py-2.5 text-sm font-black text-[#10351f] shadow-[2px_2px_0_#c6e8cd] transition hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#c6e8cd]"
-            >
-              <Plus size={16} />
-              Tạo sản phẩm
-            </button>
+            <div className="mt-1 flex items-center gap-2">
+              <Store
+                size={20}
+                className="shrink-0 text-primary-ink"
+                aria-hidden="true"
+              />
+              <h1 className="text-lg font-black uppercase tracking-tight text-black sm:text-xl">
+                QUẢN LÝ CỬA HÀNG SẢN PHẨM
+              </h1>
+            </div>
+
+            <p className="mt-0.5 text-xs font-medium text-text-muted">
+              Quản lý danh mục sản phẩm, duyệt nhân vật, chỉnh sửa và điều chỉnh trạng thái hiển thị trên cửa hàng.
+            </p>
           </div>
-        )}
+
+          {canManage && (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setModal({ kind: "select-product-type" })}
+                className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+              >
+                <Plus size={14} strokeWidth={2.75} aria-hidden="true" />
+                Tạo sản phẩm
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {!canManage && (
         <p
           role="status"
-          className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800"
+          className="flex shrink-0 items-center gap-2.5 border-2 border-black bg-[#fef08a] px-4 py-2.5 text-xs font-bold text-black shadow-[4px_4px_0_0_#000] sm:text-sm"
         >
-          <Lock size={15} className="shrink-0" />
+          <Lock size={15} className="shrink-0 text-black" aria-hidden="true" />
           Chế độ chỉ xem: Chỉ tài khoản Quản lý hoặc Quản trị viên mới có quyền tạo mới, duyệt mở bán, chỉnh sửa, ngừng bán hoặc xóa mềm các sản phẩm.
         </p>
       )}
@@ -229,26 +251,29 @@ export default function StoreListingDashboard() {
       {notice && (
         <div
           role="status"
-          className="flex items-center gap-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800"
+          aria-live="polite"
+          className="flex shrink-0 items-center gap-3 border-2 border-black bg-white px-4 py-2.5 text-xs font-bold text-black shadow-[4px_4px_0_0_#000] sm:text-sm"
         >
-          <CheckCircle2 size={16} className="shrink-0" />
+          <span className="grid h-6 w-6 shrink-0 place-items-center border border-black bg-primary">
+            <CheckCircle2 size={14} className="text-black" aria-hidden="true" />
+          </span>
           <span className="flex-1">{notice}</span>
           <button
             type="button"
             onClick={() => setNotice(null)}
             aria-label="Đóng thông báo"
-            className="rounded p-1 hover:bg-green-100"
+            className="btn-secondary p-1! shadow-[2px_2px_0_0_#000]"
           >
-            <X size={14} />
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       )}
 
-      <section className="neo-box-no-hover overflow-hidden bg-white">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
         <div
           role="tablist"
           aria-label="Các danh mục sản phẩm trên Store"
-          className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b border-[#e3efe6] px-4 pt-3"
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b-2 border-black bg-white px-4 py-2.5"
         >
           {tabs.map((tab, index) => {
             const selected = tab.id === activeTab;
@@ -265,22 +290,24 @@ export default function StoreListingDashboard() {
                 tabIndex={selected ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
                 onKeyDown={(event) => onTabKeyDown(event, index)}
-                className={`-mb-px flex shrink-0 whitespace-nowrap items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${selected
-                    ? "border-primary-dark text-primary-dark"
-                    : "border-transparent text-text-muted hover:text-[#173b28]"
-                  }`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border-2 border-black px-3 py-1.5 text-xs font-black uppercase tracking-wider transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                  selected
+                    ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
+                    : "bg-white text-black hover:bg-primary/20"
+                }`}
               >
                 {tab.label}
                 {tab.count !== null && (
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-black ${selected ? "bg-primary/30 text-[#165d3a]" : "bg-gray-100 text-gray-600"
-                      }`}
+                    className={`border border-black px-1.5 py-0.2 text-[10px] font-black tabular-nums ${
+                      selected ? "bg-white text-black" : "bg-gray-100 text-black"
+                    }`}
                   >
                     {tab.count}
                   </span>
                 )}
                 {tab.pendingCount !== undefined && tab.pendingCount > 0 && (
-                  <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800">
+                  <span className="border border-black bg-[#fef08a] px-1.5 py-0.2 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
                     {tab.pendingCount} chờ duyệt
                   </span>
                 )}
@@ -289,9 +316,14 @@ export default function StoreListingDashboard() {
           })}
         </div>
 
-        <div role="tabpanel" id={`panel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
+        <div
+          role="tabpanel"
+          id={`panel-${activeTab}`}
+          aria-labelledby={`tab-${activeTab}`}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           {activeTab === "characters" && (
-            <div>
+            <div className="flex min-h-0 flex-1 flex-col">
               <StoreListingToolbar
                 statusFilter={characterStatusFilter}
                 onStatusFilterChange={setCharacterStatusFilter}
@@ -318,40 +350,36 @@ export default function StoreListingDashboard() {
                   onEdit={(character) =>
                     setModal({
                       kind: "edit",
+                      previewFallbackUrl: character.thumbnailUrl,
                       product: {
                         id: character.characterId,
                         productType: "CHARACTER",
                         productName: character.name,
                         basePrice: character.draft?.basePrice ?? character.basePrice ?? 0,
                         description: character.description,
-                        thumbnailUrl: character.draft?.thumbnailUrl ?? character.thumbnailUrl,
+                        thumbnailUrl: character.draft?.thumbnailUrl ?? undefined,
                         galleryUrls: character.draft?.galleryUrls ?? character.galleryUrls ?? [],
                         tags: character.tags ?? [],
                       },
                     })
                   }
-                  onApprove={async (character, price) => {
-                    const numericId = Number(character.characterId);
-                    if (Number.isSafeInteger(numericId) && numericId > 0) {
-                      if (character.draft && price !== undefined) {
-                        const safeThumb =
-                          character.draft.thumbnailUrl && /^https?:\/\//i.test(character.draft.thumbnailUrl)
-                            ? character.draft.thumbnailUrl
-                            : undefined;
-                        const safeGallery = (character.draft.galleryUrls || []).filter((u) => /^https?:\/\//i.test(u));
-                        await apiUpdateStoreProduct(numericId, {
-                          productName: character.name,
-                          basePrice: price,
-                          description: character.description || undefined,
-                          thumbnailUrl: safeThumb,
-                          galleryUrls: safeGallery,
-                        });
-                      }
-                      await apiUpdateProductStatus(numericId, "PUBLISHED");
-                    }
-                    setNotice(`Đã duyệt nhân vật "${character.name}" sang trạng thái Đang bán!`);
-                    refreshCatalog();
-                  }}
+                  onOpenApprove={(character) =>
+                    setModal({
+                      kind: "approve-character",
+                      creatorName: character.creatorName,
+                      previewFallbackUrl: character.thumbnailUrl,
+                      product: {
+                        id: character.characterId,
+                        productType: "CHARACTER",
+                        productName: character.name,
+                        basePrice: character.draft?.basePrice ?? character.basePrice ?? 0,
+                        description: character.description,
+                        thumbnailUrl: character.draft?.thumbnailUrl ?? undefined,
+                        galleryUrls: character.draft?.galleryUrls ?? character.galleryUrls ?? [],
+                        tags: character.tags ?? [],
+                      },
+                    })
+                  }
                   onRefresh={refreshCatalog}
                 />
               ) : (
@@ -555,9 +583,25 @@ export default function StoreListingDashboard() {
       {modal?.kind === "edit" && (
         <EditStoreProductModal
           product={modal.product}
+          previewFallbackUrl={modal.previewFallbackUrl}
           onClose={() => setModal(null)}
           onSuccess={(productName) => {
             setNotice(`Cập nhật thông tin sản phẩm "${productName}" thành công.`);
+            refreshCatalog();
+          }}
+        />
+      )}
+
+      {modal?.kind === "approve-character" && (
+        <EditStoreProductModal
+          mode="approve"
+          product={modal.product}
+          creatorName={modal.creatorName}
+          previewFallbackUrl={modal.previewFallbackUrl}
+          onClose={() => setModal(null)}
+          onSuccess={(productName, savedPrice) => {
+            const priceLabel = savedPrice !== undefined ? ` với giá ${formatVnd(savedPrice)}` : "";
+            setNotice(`Đã xét duyệt nhân vật "${productName}"${priceLabel} sang trạng thái Đang bán!`);
             refreshCatalog();
           }}
         />

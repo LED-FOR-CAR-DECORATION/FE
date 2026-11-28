@@ -24,6 +24,11 @@ export default function DesignerCharacterStudioPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const characterId = Number(params?.characterId);
+  const requestedVersionIdParam = Number(searchParams?.get("versionId"));
+  const requestedVersionId =
+    Number.isFinite(requestedVersionIdParam) && requestedVersionIdParam > 0
+      ? requestedVersionIdParam
+      : null;
   const requestedNewVersion = searchParams?.get("newVersion") === "1";
 
   const [character, setCharacter] = useState<DesignerCharacterItem | null>(null);
@@ -32,6 +37,7 @@ export default function DesignerCharacterStudioPage() {
   const [currentVersionId, setCurrentVersionId] = useState<number | null>(null);
   const [currentVersionNumber, setCurrentVersionNumber] = useState<number | null>(null);
   const [currentVersionListedOnStore, setCurrentVersionListedOnStore] = useState<boolean>(false);
+  const [isSelectedLatestVersion, setIsSelectedLatestVersion] = useState<boolean>(true);
   const [nextVersionNumber, setNextVersionNumber] = useState<number>(1);
   const [lockedMatrixSize, setLockedMatrixSize] = useState<MatrixSize>("32x32");
   const [loading, setLoading] = useState(true);
@@ -68,21 +74,28 @@ export default function DesignerCharacterStudioPage() {
         const sorted = sortVersionsNewestFirst(rawVersions);
         if (sorted.length > 0) {
           const newest = sorted[0];
+          const target =
+            (requestedVersionId
+              ? sorted.find((v) => v.versionId === requestedVersionId)
+              : undefined) ?? newest;
+          const isLatest = target.versionId === newest.versionId;
+
           const versionCached =
             typeof window !== "undefined"
-              ? window.localStorage.getItem(`character_version_artwork_${newest.versionId}`)
+              ? window.localStorage.getItem(`character_version_artwork_${target.versionId}`)
               : null;
           const charCached =
-            typeof window !== "undefined"
+            isLatest && typeof window !== "undefined"
               ? window.localStorage.getItem(`character_artwork_${characterId}`)
               : null;
           const localFallback = versionCached || charCached || null;
 
-          setLatestArtworkUrl(newest.previewGifUrl || localFallback);
+          setLatestArtworkUrl(target.previewGifUrl || localFallback);
           setFallbackArtworkUrl(localFallback);
-          setCurrentVersionId(newest.versionId);
-          setCurrentVersionNumber(newest.versionNumber);
-          setCurrentVersionListedOnStore(Boolean(newest.isListedOnStore || newest.productId));
+          setCurrentVersionId(target.versionId);
+          setCurrentVersionNumber(target.versionNumber);
+          setCurrentVersionListedOnStore(Boolean(target.isListedOnStore || target.productId));
+          setIsSelectedLatestVersion(isLatest);
           setNextVersionNumber(newest.versionNumber + 1);
         } else {
           // Empty Character (0 versions) -> blank canvas
@@ -91,6 +104,7 @@ export default function DesignerCharacterStudioPage() {
           setCurrentVersionId(null);
           setCurrentVersionNumber(null);
           setCurrentVersionListedOnStore(false);
+          setIsSelectedLatestVersion(true);
           setNextVersionNumber(1);
         }
       })
@@ -106,7 +120,7 @@ export default function DesignerCharacterStudioPage() {
     return () => {
       cancelled = true;
     };
-  }, [characterId]);
+  }, [characterId, requestedVersionId]);
 
   if (loading) {
     return (
@@ -131,9 +145,12 @@ export default function DesignerCharacterStudioPage() {
     );
   }
 
-  const commissionId = linkedCommissionId(character.description);
+  const commissionId = character.commissionId ?? linkedCommissionId(character.description) ?? undefined;
+  const isCommissionCharacter = (character.characterType ?? "STORE") === "COMMISSION" || Boolean(commissionId);
   const backHref = commissionId ? `/designer/commissions/${commissionId}` : "/designer/characters";
-  const isCreateNewVersionMode = Boolean(requestedNewVersion && currentVersionId);
+  const isCreateNewVersionMode = Boolean(
+    currentVersionId && (requestedNewVersion || !isSelectedLatestVersion),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -153,6 +170,19 @@ export default function DesignerCharacterStudioPage() {
               </h1>
               <span className="inline-flex items-center gap-1 rounded-[2px] border border-[#163d2c] bg-[#2d6a4f] px-2 py-0.5 font-mono text-[11px] font-bold text-white">
                 <Grid size={11} /> {lockedMatrixSize}
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-[2px] border px-2 py-0.5 text-[11px] font-bold ${
+                  isCommissionCharacter
+                    ? "border-amber-400 bg-amber-100 text-amber-900"
+                    : "border-sky-400 bg-sky-100 text-sky-900"
+                }`}
+              >
+                {isCommissionCharacter
+                  ? commissionId
+                    ? `Commission #${commissionId}`
+                    : "Loại: Commission"
+                  : "Loại: Bán Store"}
               </span>
               <span className="inline-flex items-center gap-1 rounded-[2px] border border-[#2d6a4f] bg-[#dcebe2] px-2 py-0.5 text-[11px] font-bold text-[#163d2c]">
                 <Sparkles size={11} />
@@ -199,7 +229,9 @@ export default function DesignerCharacterStudioPage() {
         createNewVersionMode={isCreateNewVersionMode}
         targetVersionNumber={nextVersionNumber}
         lockedMatrixSize={lockedMatrixSize}
-        hideStoreActions={Boolean(commissionId)}
+        characterType={character.characterType ?? (commissionId ? "COMMISSION" : "STORE")}
+        commissionId={commissionId}
+        hideStoreActions={isCommissionCharacter}
         onSaveVersion={() => {
           router.push(
             `/designer/characters?saved=1&name=${encodeURIComponent(character.characterName)}`,

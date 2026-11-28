@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -18,14 +19,15 @@ import {
   Palette,
   RefreshCw,
   Search,
-  ShieldCheck,
   Store,
   Tag,
+  X,
 } from "lucide-react";
 import {
   DesignerCharactersProvider,
   useDesignerCharacters,
 } from "@/features/designer/context/DesignerCharactersContext";
+import { useAdaptiveListRows } from "@/features/designer/hooks/useResponsiveGrid";
 import { getCharacterArtwork } from "@/features/designer/character-artwork";
 import { linkedCommissionId, stripCommissionMarker } from "@/features/designer/commission-link";
 import { fetchStoreTags } from "@/lib/api/products";
@@ -33,6 +35,7 @@ import { fetchAllPages } from "@/lib/api/paging";
 import {
   fetchMyCharacters,
   formatDesignerApiError,
+  isStoreCharacterType,
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
@@ -75,12 +78,30 @@ function DesignerPublishWorkspace() {
     publishVersionToStore,
   } = useDesignerCharacters();
 
+  const { rows: charPageSize, ready: charLayoutReady } = useAdaptiveListRows({
+    estimatedRowHeight: 64,
+    rowGap: 6,
+    chromeHeight: 300,
+    minRows: 3,
+    maxRows: 8,
+    defaultRows: 4,
+  });
+  const { rows: versionPageSize } = useAdaptiveListRows({
+    estimatedRowHeight: 58,
+    rowGap: 6,
+    chromeHeight: 325,
+    minRows: 3,
+    maxRows: 8,
+    defaultRows: 5,
+  });
+
   const [ownCharacters, setOwnCharacters] = useState<DesignerCharacterItem[]>([]);
   const [loadingCharacters, setLoadingCharacters] = useState(true);
   const [charactersError, setCharactersError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [page, setPage] = useState(0);
+  const [versionPage, setVersionPage] = useState(0);
   const [selectedCharacter, setSelectedCharacter] = useState<DesignerCharacterItem | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [productName, setProductName] = useState("");
@@ -88,6 +109,26 @@ function DesignerPublishWorkspace() {
   const [availableTags, setAvailableTags] = useState<TagItem[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(true);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const tagsDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tagsOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      if (tagsDropdownRef.current && !tagsDropdownRef.current.contains(event.target as Node)) {
+        setTagsOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTagsOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [tagsOpen]);
 
   const [versionError, setVersionError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -103,9 +144,12 @@ function DesignerPublishWorkspace() {
         const res = await fetchMyCharacters({ page: p, size: 100 });
         return { items: res.items, totalPages: res.meta.totalPages };
       });
-      // Exclude commission characters — only Designer-created personal characters can be listed on Store
+      // Exclude commission characters (both characterType === COMMISSION, commissionId, and legacy [COMMISSION #id] marker)
       const personalOnly = all.filter(
-        (char) => linkedCommissionId(char.description) === undefined,
+        (char) =>
+          isStoreCharacterType(char.characterType) &&
+          char.commissionId == null &&
+          linkedCommissionId(char.description) === undefined,
       );
       setOwnCharacters(personalOnly);
     } catch (err) {
@@ -132,13 +176,29 @@ function DesignerPublishWorkspace() {
     );
   }, [ownCharacters, appliedQuery]);
 
-  const pageSize = 12;
-  const totalPages = Math.max(1, Math.ceil(filteredCharacters.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredCharacters.length / charPageSize));
   const safePage = Math.min(page, totalPages - 1);
   const pagedCharacters = useMemo(
-    () => filteredCharacters.slice(safePage * pageSize, (safePage + 1) * pageSize),
-    [filteredCharacters, safePage],
+    () =>
+      filteredCharacters.slice(
+        safePage * charPageSize,
+        (safePage + 1) * charPageSize,
+      ),
+    [filteredCharacters, safePage, charPageSize],
   );
+  const charRangeStart =
+    filteredCharacters.length === 0 ? 0 : safePage * charPageSize + 1;
+  const charRangeEnd = Math.min(
+    filteredCharacters.length,
+    (safePage + 1) * charPageSize,
+  );
+
+  // Clamp current page when adaptive pageSize grows on viewport resize
+  useEffect(() => {
+    if (page > 0 && page >= totalPages) {
+      setPage(Math.max(0, totalPages - 1));
+    }
+  }, [page, totalPages]);
 
   // Load Store tags once
   useEffect(() => {
@@ -161,10 +221,13 @@ function DesignerPublishWorkspace() {
 
   // Resolve initial selection from ?characterId (non-commission only) or first eligible character
   useEffect(() => {
-    if (requestedCharacterId) {
-      const requested = ownCharacters.find((c) => c.characterId === requestedCharacterId);
-      if (requested) {
-        setSelectedCharacter(requested);
+    if (requestedCharacterId && charLayoutReady) {
+      const requestedIndex = ownCharacters.findIndex(
+        (c) => c.characterId === requestedCharacterId,
+      );
+      if (requestedIndex >= 0) {
+        setSelectedCharacter(ownCharacters[requestedIndex]);
+        setPage(Math.floor(requestedIndex / charPageSize));
         return;
       }
     }
@@ -178,7 +241,7 @@ function DesignerPublishWorkspace() {
     } else if (ownCharacters.length === 0) {
       setSelectedCharacter(null);
     }
-  }, [requestedCharacterId, ownCharacters, selectedCharacter]);
+  }, [requestedCharacterId, charLayoutReady, charPageSize, ownCharacters, selectedCharacter]);
 
   // Load versions whenever selected character changes
   useEffect(() => {
@@ -188,6 +251,7 @@ function DesignerPublishWorkspace() {
     setSubmitError(null);
     setPublishSuccess(null);
     setSelectedVersionId(null);
+    setVersionPage(0);
     setProductName(selectedCharacter.characterName);
     setDescription(stripCommissionMarker(selectedCharacter.description) ?? "");
     setSelectedTagIds([]);
@@ -207,6 +271,22 @@ function DesignerPublishWorkspace() {
     () => (selectedCharacter ? versionsByCharacter[selectedCharacter.characterId] ?? [] : []),
     [selectedCharacter, versionsByCharacter],
   );
+  const versionTotalPages = Math.max(1, Math.ceil(versions.length / versionPageSize));
+  const safeVersionPage = Math.min(versionPage, versionTotalPages - 1);
+  const pagedVersions = useMemo(
+    () =>
+      versions.slice(
+        safeVersionPage * versionPageSize,
+        (safeVersionPage + 1) * versionPageSize,
+      ),
+    [versions, safeVersionPage, versionPageSize],
+  );
+
+  useEffect(() => {
+    if (versionPage > 0 && versionPage >= versionTotalPages) {
+      setVersionPage(Math.max(0, versionTotalPages - 1));
+    }
+  }, [versionPage, versionTotalPages]);
   const isVersionsLoading = Boolean(
     selectedCharacter &&
       (loadingVersions[selectedCharacter.characterId] ||
@@ -319,20 +399,27 @@ function DesignerPublishWorkspace() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-studio-line bg-white p-6 shadow-xs">
-        <div>
-          <h1 className="text-2xl font-semibold text-studio-ink">Đăng bán lên Store</h1>
-          <p className="mt-1 text-xs text-slate-500">
-            Chỉ hiển thị nhân vật do bạn tự sáng tạo (nhân vật thuộc đơn Commission không được đăng bán tại đây). Chọn phiên bản đã chốt và gửi Manager duyệt.
-          </p>
+    <div className="flex min-h-[calc(100dvh-112px)] flex-col gap-3">
+      {/* Slim Neo-Brutalist Top Bar */}
+      <header className="neo-box-no-hover flex shrink-0 flex-wrap items-center justify-between gap-2.5 bg-white px-4 py-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center border-2 border-black bg-primary text-black shadow-[2px_2px_0_0_#000]">
+            <Store size={16} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-sm font-black uppercase tracking-tight text-black sm:text-base">
+              Đăng bán lên Store
+            </h1>
+            <p className="text-[11px] font-medium text-text-muted">
+              Chọn nhân vật Store và phiên bản đã chốt để gửi Manager duyệt giá.
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/designer/characters"
-            className="inline-flex items-center gap-1.5 rounded border border-studio-line bg-white px-3.5 py-2 text-xs font-semibold text-studio-ink transition hover:bg-studio-wash"
+            className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase"
           >
             <Layers size={14} /> Danh sách nhân vật
           </Link>
@@ -343,7 +430,7 @@ function DesignerPublishWorkspace() {
               void refreshCharacters();
             }}
             disabled={loadingCharacters}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-studio-line bg-white px-3.5 py-2 text-xs font-semibold text-studio-ink transition hover:bg-studio-wash disabled:opacity-50"
+            className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase"
           >
             <RefreshCw size={14} className={loadingCharacters ? "animate-spin" : ""} /> Làm mới
           </button>
@@ -353,21 +440,21 @@ function DesignerPublishWorkspace() {
       {charactersError && (
         <div
           role="alert"
-          className="flex items-center gap-2 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          className="neo-box-no-hover flex items-center gap-2 border-l-8 border-l-red-600 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700"
         >
           <AlertCircle size={16} />
           <span>{charactersError}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* LEFT COLUMN: Character Selector */}
-        <section className="flex flex-col rounded-md border border-studio-line bg-white p-4 shadow-xs lg:col-span-4">
-          <form onSubmit={handleSearchSubmit} className="mb-3 flex items-center gap-2">
-            <div className="relative flex-1">
+      <div className="grid flex-1 grid-cols-1 gap-3.5 lg:grid-cols-12">
+        {/* LEFT COLUMN: Adaptive-height Character Selector with bottom-pinned pagination */}
+        <section className="neo-box-no-hover flex min-w-0 flex-col bg-white p-3.5 lg:col-span-4">
+          <form onSubmit={handleSearchSubmit} className="mb-2.5 flex shrink-0 items-center gap-2">
+            <div className="relative min-w-0 flex-1">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black"
               />
               <input
                 type="text"
@@ -375,35 +462,35 @@ function DesignerPublishWorkspace() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Tìm nhân vật..."
                 aria-label="Tìm nhân vật để đăng bán"
-                className="w-full rounded border border-studio-line bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-studio-focus"
+                className="w-full min-w-0 border-2 border-black bg-white py-1.5 pl-8 pr-3 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none"
               />
             </div>
             <button
               type="submit"
-              className="cursor-pointer rounded border border-studio-line bg-studio-wash px-3 py-2 text-xs font-bold text-studio-ink transition hover:bg-studio-soft"
+              className="btn-primary shrink-0 px-3 py-1.5 text-xs font-black uppercase"
             >
               Tìm
             </button>
           </form>
 
           {loadingCharacters ? (
-            <div className="flex min-h-[280px] items-center justify-center gap-2 text-xs text-slate-500">
-              <Loader2 size={16} className="animate-spin text-studio-link" />
+            <div className="flex flex-1 items-center justify-center gap-2 text-xs font-bold text-text-muted">
+              <Loader2 size={16} className="animate-spin" />
               <span>Đang tải danh sách nhân vật...</span>
             </div>
           ) : pagedCharacters.length === 0 ? (
-            <div className="flex min-h-[260px] flex-col items-center justify-center rounded border border-dashed border-studio-line bg-studio-wash p-6 text-center text-xs text-slate-500">
-              <Layers size={28} className="mb-2 opacity-50" />
-              <p className="font-semibold text-studio-ink">Không có nhân vật cá nhân nào phù hợp.</p>
+            <div className="flex flex-1 flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-5 text-center text-xs text-text-muted">
+              <Layers size={26} className="mb-2 opacity-50" />
+              <p className="font-black uppercase text-black">Không có nhân vật cá nhân nào phù hợp.</p>
               <Link
                 href="/designer/characters"
-                className="mt-3 font-bold text-studio-link underline"
+                className="mt-2.5 font-black text-primary-ink underline"
               >
                 Về Danh sách nhân vật
               </Link>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="flex-1 space-y-1.5">
               {pagedCharacters.map((char) => {
                 const isActive = selectedCharacter?.characterId === char.characterId;
                 const thumb = getCharacterArtwork(char);
@@ -414,18 +501,19 @@ function DesignerPublishWorkspace() {
                     key={char.characterId}
                     type="button"
                     onClick={() => handleSelectCharacter(char)}
-                    className={`flex w-full cursor-pointer items-center gap-3 rounded border p-2.5 text-left transition ${
+                    className={`flex w-full cursor-pointer items-center gap-2.5 border-2 p-2 text-left transition ${
                       isActive
-                        ? "border-studio-accent bg-studio-soft ring-1 ring-studio-accent"
-                        : "border-studio-line bg-white hover:bg-studio-wash"
+                        ? "border-black bg-[#eef8f0] shadow-[3px_3px_0_0_#000]"
+                        : "border-black/25 bg-white hover:border-black"
                     }`}
                   >
-                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded border border-slate-200 bg-[#0f172a]">
+                    <div className="h-11 w-11 shrink-0 overflow-hidden border-2 border-black bg-[#090d14]">
                       {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={thumb}
                           alt={char.characterName}
-                          className="h-full w-full object-contain p-1"
+                          className="h-full w-full object-contain"
                           style={{ imageRendering: "pixelated" }}
                         />
                       ) : (
@@ -436,22 +524,22 @@ function DesignerPublishWorkspace() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-xs font-bold text-studio-ink">
+                        <span className="truncate text-xs font-black text-black">
                           {char.characterName}
                         </span>
-                        <span className="shrink-0 font-mono text-[10px] text-slate-400">
+                        <span className="shrink-0 font-mono text-[10px] font-bold text-text-muted">
                           #{char.characterId}
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono font-semibold text-slate-700">
+                        <span className="border border-black bg-gray-100 px-1.5 py-0.5 font-mono font-bold text-black">
                           {matrix}
                         </span>
                         <span
-                          className={`rounded px-1.5 py-0.5 font-semibold ${
+                          className={`border border-black px-1.5 py-0.5 font-black ${
                             char.totalVersions > 0
-                              ? "bg-emerald-50 text-emerald-800"
-                              : "bg-amber-50 text-amber-800"
+                              ? "bg-primary text-black"
+                              : "bg-amber-100 text-black"
                           }`}
                         >
                           {char.totalVersions} phiên bản
@@ -464,55 +552,63 @@ function DesignerPublishWorkspace() {
             </div>
           )}
 
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between border-t border-studio-line pt-3 text-xs">
-              <span className="text-slate-500">
-                Trang <strong>{safePage + 1}</strong> / {totalPages}
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={safePage <= 0}
-                  onClick={() => setPage(Math.max(0, safePage - 1))}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded border border-slate-200 px-2.5 py-1 font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronLeft size={13} /> Trước
-                </button>
-                <button
-                  type="button"
-                  disabled={safePage >= totalPages - 1}
-                  onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded border border-slate-200 px-2.5 py-1 font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Sau <ChevronRight size={13} />
-                </button>
+          {filteredCharacters.length > 0 && (
+            <div className="mt-auto shrink-0 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-black pt-2.5 text-xs">
+                <span className="font-semibold text-black/80">
+                  <strong className="font-mono text-black">
+                    {charRangeStart}–{charRangeEnd}
+                  </strong>{" "}
+                  / {filteredCharacters.length} · Trang{" "}
+                  <strong className="font-mono text-black">{safePage + 1}</strong>/{totalPages}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={safePage <= 0}
+                    onClick={() => setPage(Math.max(0, safePage - 1))}
+                    className="btn-secondary inline-flex items-center gap-1 px-2 py-1 text-[11px] font-black uppercase disabled:opacity-40"
+                  >
+                    <ChevronLeft size={12} /> Trước
+                  </button>
+                  <button
+                    type="button"
+                    disabled={safePage >= totalPages - 1}
+                    onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
+                    className="btn-secondary inline-flex items-center gap-1 px-2 py-1 text-[11px] font-black uppercase disabled:opacity-40"
+                  >
+                    Sau <ChevronRight size={12} />
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </section>
 
         {/* RIGHT COLUMN: Version Selector & Editable Publish Form */}
-        <section className="rounded-md border border-studio-line bg-white p-6 shadow-xs lg:col-span-8">
+        <section className="neo-box-no-hover flex min-w-0 flex-col bg-white p-4 lg:col-span-8">
           {!selectedCharacter ? (
-            <div className="flex min-h-[360px] flex-col items-center justify-center text-center text-sm text-slate-500">
+            <div className="flex flex-1 flex-col items-center justify-center text-center text-sm text-text-muted">
               <Store size={32} className="mb-2 opacity-40" />
-              <p className="font-semibold text-studio-ink">Chọn một nhân vật ở cột bên trái để chỉnh sửa thông tin đăng bán.</p>
+              <p className="font-black uppercase text-black">
+                Chọn một nhân vật ở cột bên trái để chỉnh sửa thông tin đăng bán.
+              </p>
             </div>
           ) : (
-            <form onSubmit={handlePublish} className="space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-studio-line pb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-studio-ink">
+            <form onSubmit={handlePublish} className="flex flex-1 flex-col gap-3">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2.5">
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-black uppercase tracking-tight text-black">
                     {selectedCharacter.characterName}
                   </h2>
-                  <p className="text-xs text-slate-500">
-                    Mã #{selectedCharacter.characterId} • Ma trận {selectedMatrixSize}
+                  <p className="font-mono text-[11px] font-bold text-text-muted">
+                    Mã #{selectedCharacter.characterId} · Ma trận {selectedMatrixSize}
                   </p>
                 </div>
 
                 <Link
                   href={`/designer/studio/${selectedCharacter.characterId}`}
-                  className="inline-flex items-center gap-1.5 rounded border border-studio-line bg-studio-wash px-3 py-1.5 text-xs font-bold text-studio-ink transition hover:bg-studio-soft"
+                  className="btn-secondary inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase"
                 >
                   <Palette size={14} /> Chỉnh sửa trên Studio
                 </Link>
@@ -521,9 +617,9 @@ function DesignerPublishWorkspace() {
               {publishSuccess && (
                 <div
                   role="status"
-                  className="flex items-start gap-2.5 rounded border border-emerald-300 bg-emerald-50 p-3.5 text-xs font-semibold text-emerald-800 sm:text-sm"
+                  className="flex shrink-0 items-start gap-2 border-2 border-black bg-[#eef8f0] p-2.5 text-xs font-bold text-black shadow-[2px_2px_0_0_#000]"
                 >
-                  <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-600" />
+                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-primary-ink" />
                   <span>{publishSuccess}</span>
                 </div>
               )}
@@ -531,7 +627,7 @@ function DesignerPublishWorkspace() {
               {(submitError || versionError) && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700"
+                  className="flex shrink-0 items-start gap-2 border-2 border-black bg-red-50 p-2.5 text-xs font-bold text-red-700 shadow-[2px_2px_0_0_#000]"
                 >
                   <AlertCircle size={15} className="mt-0.5 shrink-0" />
                   <span>{submitError || versionError}</span>
@@ -539,65 +635,68 @@ function DesignerPublishWorkspace() {
               )}
 
               {isVersionsLoading ? (
-                <div className="flex min-h-[260px] items-center justify-center gap-2 rounded border border-studio-line bg-studio-wash text-xs font-medium text-slate-500">
-                  <Loader2 size={18} className="animate-spin text-studio-link" />
+                <div className="flex flex-1 items-center justify-center gap-2 border-2 border-black bg-[#f7fbf8] text-xs font-bold text-text-muted">
+                  <Loader2 size={18} className="animate-spin" />
                   <span>Đang tải các phiên bản của nhân vật...</span>
                 </div>
               ) : versions.length === 0 ? (
-                <div className="flex min-h-[280px] flex-col items-center justify-center rounded border border-dashed border-studio-line bg-studio-wash p-8 text-center">
-                  <Layers size={34} className="mb-2 text-slate-400" />
-                  <p className="text-sm font-bold text-studio-ink">
+                <div className="flex flex-1 flex-col items-center justify-center border-2 border-dashed border-black bg-[#f7fbf8] p-6 text-center">
+                  <Layers size={30} className="mb-2 text-black/40" />
+                  <p className="text-sm font-black uppercase text-black">
                     Nhân vật này chưa có phiên bản hoàn thiện nào
                   </p>
-                  <p className="mt-1 max-w-md text-xs text-slate-500">
+                  <p className="mt-1 max-w-md text-xs font-medium text-text-muted">
                     Hãy vào Pixel Art Studio để hoàn thành bản vẽ và bấm <strong>Chốt v1</strong> trước khi đăng bán lên Store.
                   </p>
                   <Link
                     href={`/designer/studio/${selectedCharacter.characterId}`}
-                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-studio-accent px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-studio-accent-hover"
+                    className="btn-primary mt-3 inline-flex items-center gap-2 text-xs font-black uppercase"
                   >
                     <Palette size={14} /> Mở Studio để vẽ v1
                   </Link>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
+                <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-12">
                   {/* Preview + Form */}
-                  <div className="space-y-4 md:col-span-7">
-                    <div className="relative flex min-h-[240px] flex-col items-center justify-center rounded-md border border-studio-line bg-[#0f172a] p-5 text-center">
-                      <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-black/75 px-2.5 py-0.5 font-mono text-[11px] font-bold text-white">
-                          <Grid size={11} /> {selectedMatrixSize}
-                        </span>
-                        {selectedVersion && (
-                          <span className="rounded-full bg-emerald-500/90 px-2.5 py-0.5 font-mono text-[11px] font-bold text-white">
-                            v{selectedVersion.versionNumber}
-                            {isSelectedVersionLatest ? " • Mới nhất" : ""}
+                  <div className="flex min-w-0 flex-col gap-2.5 md:col-span-7">
+                    <div className="relative flex min-h-[140px] flex-1 flex-col items-center justify-center border-2 border-black bg-[#090d14] px-3 py-2.5 text-center shadow-[4px_4px_0_0_#000]">
+                      <div className="mb-1.5 flex w-full shrink-0 flex-wrap items-center justify-between gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 border border-black bg-white px-2 py-0.5 font-mono text-[10px] font-black text-black">
+                            <Grid size={10} /> {selectedMatrixSize}
+                          </span>
+                          {selectedVersion && (
+                            <span className="border border-black bg-primary px-2 py-0.5 font-mono text-[10px] font-black text-black">
+                              v{selectedVersion.versionNumber}
+                              {isSelectedVersionLatest ? " · Mới nhất" : ""}
+                            </span>
+                          )}
+                        </div>
+
+                        {isSelectedVersionListed && (
+                          <span className="inline-flex items-center gap-1 border border-black bg-amber-300 px-2 py-0.5 text-[10px] font-black uppercase text-black">
+                            <Lock size={10} /> Đã đăng Store
                           </span>
                         )}
                       </div>
 
-                      {isSelectedVersionListed && (
-                        <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-amber-400/95 px-2.5 py-0.5 text-[11px] font-bold text-amber-950">
-                          <Lock size={11} /> Đã đăng Store
-                        </span>
-                      )}
-
                       {selectedArtwork ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={selectedArtwork}
                           alt={`${selectedCharacter.characterName} v${selectedVersion?.versionNumber}`}
-                          className="h-44 w-44 object-contain sm:h-52 sm:w-52"
+                          className="min-h-0 w-full max-w-[200px] flex-1 object-contain"
                           style={{ imageRendering: "pixelated" }}
                         />
                       ) : (
-                        <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
-                          <Layers size={32} className="opacity-60" />
-                          <span className="text-xs">Chưa có ảnh xem trước</span>
+                        <div className="flex flex-col items-center gap-1.5 py-4 text-slate-400">
+                          <Layers size={26} className="opacity-60" />
+                          <span className="text-xs font-bold">Chưa có ảnh xem trước</span>
                         </div>
                       )}
 
                       {selectedVersion && (
-                        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
+                        <div className="mt-1.5 flex shrink-0 flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
                           <span>{selectedVersion.frameCount ?? 1} frames</span>
                           <span>•</span>
                           <span>
@@ -614,23 +713,13 @@ function DesignerPublishWorkspace() {
                       )}
                     </div>
 
-                    <div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
-                      <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-700" />
-                      <div>
-                        <p className="font-bold">Chờ manager duyệt &amp; định giá</p>
-                        <p className="mt-0.5 text-sky-800">
-                          Yêu cầu được tạo ở trạng thái chưa công khai với giá tạm 0 VNĐ để Manager định giá trước khi mở bán.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 rounded border border-studio-line bg-studio-wash p-4">
+                    <div className="shrink-0 space-y-2.5 border-2 border-black bg-[#f7fbf8] p-3">
                       <div>
                         <label
                           htmlFor="publish-product-name"
-                          className="mb-1 block text-xs font-bold text-studio-ink"
+                          className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
                         >
-                          Tên sản phẩm trên Store <span className="text-red-500">*</span>
+                          Tên sản phẩm trên Store <span className="text-red-600">*</span>
                         </label>
                         <input
                           id="publish-product-name"
@@ -640,63 +729,118 @@ function DesignerPublishWorkspace() {
                           disabled={isSelectedVersionListed || isSubmitting}
                           value={productName}
                           onChange={(e) => setProductName(e.target.value)}
-                          className="w-full rounded-lg border border-studio-line bg-white px-3 py-2 text-xs outline-none focus:border-studio-focus disabled:bg-slate-100"
+                          className="w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-semibold text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none disabled:bg-gray-100"
                         />
                       </div>
 
                       <div>
                         <label
                           htmlFor="publish-product-desc"
-                          className="mb-1 block text-xs font-bold text-studio-ink"
+                          className="mb-1 block text-[11px] font-black uppercase tracking-wider text-black"
                         >
                           Mô tả sản phẩm
                         </label>
                         <textarea
                           id="publish-product-desc"
-                          rows={3}
+                          rows={2}
                           disabled={isSelectedVersionListed || isSubmitting}
                           value={description}
                           onChange={(e) => setDescription(e.target.value)}
                           placeholder="Mô tả phong cách, hiệu ứng, điểm nổi bật của nhân vật..."
-                          className="w-full rounded-lg border border-studio-line bg-white px-3 py-2 text-xs outline-none focus:border-studio-focus disabled:bg-slate-100"
+                          className="w-full border-2 border-black bg-white px-2.5 py-1.5 text-xs font-medium text-black focus:shadow-[2px_2px_0_0_#000] focus:outline-none disabled:bg-gray-100"
                         />
                       </div>
 
                       {!isLoadingTags && availableTags.length > 0 && (
-                        <div>
-                          <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-studio-ink">
-                            <Tag size={12} /> Thẻ phân loại (Tags)
+                        <div ref={tagsDropdownRef} className="relative">
+                          <label className="mb-1 flex items-center gap-1 text-[11px] font-black uppercase tracking-wider text-black">
+                            <Tag size={11} /> Thẻ phân loại (Tags)
                           </label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {availableTags.map((tag) => {
-                              const id = tag.tagId;
-                              const active = id != null && selectedTagIds.includes(id);
-                              return (
-                                <button
-                                  key={id ?? tag.name}
-                                  type="button"
-                                  disabled={isSelectedVersionListed || isSubmitting}
-                                  onClick={() => toggleTag(id)}
-                                  className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition ${
-                                    active
-                                      ? "border-studio-accent bg-studio-accent text-white"
-                                      : "border-studio-line bg-white text-studio-ink hover:bg-studio-soft"
-                                  } disabled:cursor-not-allowed disabled:opacity-50`}
-                                >
-                                  {active && <Check size={10} />}
-                                  {tag.name}
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <button
+                            type="button"
+                            disabled={isSelectedVersionListed || isSubmitting}
+                            aria-expanded={tagsOpen}
+                            onClick={() => setTagsOpen((prev) => !prev)}
+                            className="flex w-full items-center justify-between gap-2 border-2 border-black bg-white px-2.5 py-1.5 text-left text-xs font-bold text-black hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
+                          >
+                            <span className="truncate">
+                              {selectedTagIds.length === 0
+                                ? "Chọn thẻ phân loại (tùy chọn)..."
+                                : availableTags
+                                    .filter((t) => t.tagId != null && selectedTagIds.includes(t.tagId))
+                                    .map((t) => t.name)
+                                    .join(", ")}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-1.5">
+                              {selectedTagIds.length > 0 && (
+                                <span className="border border-black bg-primary px-1.5 py-0.5 font-mono text-[10px] font-black text-black">
+                                  {selectedTagIds.length}
+                                </span>
+                              )}
+                              <ChevronDown
+                                size={14}
+                                className={`transition-transform ${tagsOpen ? "rotate-180" : ""}`}
+                              />
+                            </span>
+                          </button>
+
+                          {tagsOpen && (
+                            <div className="absolute bottom-full left-0 right-0 z-30 mb-1 border-2 border-black bg-white p-2.5 shadow-[4px_4px_0_0_#000]">
+                              <div className="mb-2 flex items-center justify-between border-b border-black/15 pb-1.5 text-[11px]">
+                                <span className="font-black uppercase text-black">
+                                  Chọn thẻ ({selectedTagIds.length}/{availableTags.length})
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  {selectedTagIds.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedTagIds([])}
+                                      className="inline-flex items-center gap-0.5 font-bold text-red-700 hover:underline"
+                                    >
+                                      <X size={11} /> Xóa hết
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setTagsOpen(false)}
+                                    className="border border-black bg-primary px-2 py-0.5 font-black text-black"
+                                  >
+                                    Xong
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+                                {availableTags.map((tag) => {
+                                  const id = tag.tagId;
+                                  const active = id != null && selectedTagIds.includes(id);
+                                  return (
+                                    <button
+                                      key={id ?? tag.name}
+                                      type="button"
+                                      disabled={isSelectedVersionListed || isSubmitting}
+                                      onClick={() => toggleTag(id)}
+                                      className={`inline-flex cursor-pointer items-center gap-1 border-2 border-black px-2 py-0.5 text-[11px] font-bold transition ${
+                                        active
+                                          ? "bg-primary font-black text-black shadow-[2px_2px_0_0_#000]"
+                                          : "bg-white text-black hover:bg-gray-50"
+                                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                                    >
+                                      {active && <Check size={10} />}
+                                      {tag.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
-                      <div className="pt-2">
+                      <div className="pt-1">
                         <button
                           type="submit"
                           disabled={isSubmitting || !selectedVersion || isSelectedVersionListed}
-                          className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-studio-accent px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-studio-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                          className="btn-primary inline-flex w-full items-center justify-center gap-2 py-2 text-xs font-black uppercase sm:text-sm"
                         >
                           {isSubmitting ? (
                             <>
@@ -716,19 +860,19 @@ function DesignerPublishWorkspace() {
                     </div>
                   </div>
 
-                  {/* Version List Column */}
-                  <div className="flex flex-col rounded-md border border-studio-line bg-studio-wash/50 p-4 md:col-span-5">
-                    <div className="mb-3 flex items-center justify-between border-b border-studio-line pb-2.5">
-                      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-studio-ink">
-                        <History size={14} /> Chọn phiên bản ({versions.length})
+                  {/* Version List Column (adaptive paging, bottom-pinned pager, no inner scrollbar) */}
+                  <div className="flex min-w-0 flex-col border-2 border-black bg-[#f7fbf8] p-3 md:col-span-5">
+                    <div className="mb-2.5 flex shrink-0 flex-wrap items-center justify-between gap-1 border-b-2 border-black pb-2">
+                      <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+                        <History size={13} /> Chọn phiên bản ({versions.length})
                       </h3>
-                      <span className="text-[10px] font-medium text-slate-400">Mới nhất trước</span>
+                      <span className="text-[10px] font-bold uppercase text-text-muted">Mới nhất trước</span>
                     </div>
 
-                    <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
-                      {versions.map((ver, idx) => {
+                    <div className="flex-1 space-y-1.5">
+                      {pagedVersions.map((ver) => {
                         const isSelected = ver.versionId === selectedVersion?.versionId;
-                        const isLatest = idx === 0;
+                        const isLatest = versions[0]?.versionId === ver.versionId;
                         const locked = Boolean(
                           ver.isListedOnStore || locallyPublishedIds.has(ver.versionId),
                         );
@@ -739,16 +883,17 @@ function DesignerPublishWorkspace() {
                             key={ver.versionId}
                             type="button"
                             onClick={() => handleSelectVersion(ver)}
-                            className={`flex w-full cursor-pointer items-center gap-2.5 rounded border p-2.5 text-left transition ${
+                            className={`flex w-full cursor-pointer items-center gap-2.5 border-2 p-2 text-left transition ${
                               isSelected
-                                ? "border-studio-accent bg-studio-soft ring-1 ring-studio-accent"
+                                ? "border-black bg-[#eef8f0] shadow-[3px_3px_0_0_#000]"
                                 : locked
-                                  ? "border-amber-200 bg-amber-50/50 hover:bg-amber-50"
-                                  : "border-studio-line bg-white hover:bg-studio-wash"
+                                  ? "border-black bg-amber-50 hover:bg-amber-100/70"
+                                  : "border-black/25 bg-white hover:border-black"
                             }`}
                           >
-                            <div className="h-12 w-12 shrink-0 overflow-hidden rounded border border-slate-200 bg-[#0f172a]">
+                            <div className="h-10 w-10 shrink-0 overflow-hidden border-2 border-black bg-[#090d14]">
                               {thumb ? (
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={thumb}
                                   alt={`v${ver.versionNumber}`}
@@ -764,28 +909,57 @@ function DesignerPublishWorkspace() {
 
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-1">
-                                <span className="font-mono text-xs font-semibold text-studio-ink">
+                                <span className="font-mono text-xs font-black text-black">
                                   v{ver.versionNumber}
                                 </span>
                                 {isLatest && (
-                                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                                  <span className="border border-black bg-primary px-1.5 py-0.5 text-[10px] font-black uppercase text-black">
                                     Mới nhất
                                   </span>
                                 )}
                                 {locked && (
-                                  <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                                  <span className="inline-flex items-center gap-0.5 border border-black bg-amber-200 px-1.5 py-0.5 text-[10px] font-black uppercase text-black">
                                     <Lock size={9} /> Đã đăng
                                   </span>
                                 )}
                               </div>
-                              <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                                {new Date(ver.createdAt).toLocaleDateString("vi-VN")} •{" "}
+                              <p className="mt-0.5 truncate text-[11px] font-medium text-text-muted">
+                                {new Date(ver.createdAt).toLocaleDateString("vi-VN")} ·{" "}
                                 {ver.frameCount ?? 1} frames
                               </p>
                             </div>
                           </button>
                         );
                       })}
+                    </div>
+
+                    <div className="mt-auto shrink-0 pt-3">
+                      <div className="flex items-center justify-between gap-2 border-t-2 border-black pt-2 text-[11px]">
+                        <span className="font-bold text-black">
+                          Trang <strong className="font-mono">{safeVersionPage + 1}</strong>/
+                          {versionTotalPages}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={safeVersionPage <= 0}
+                            onClick={() => setVersionPage(Math.max(0, safeVersionPage - 1))}
+                            className="btn-secondary inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-black uppercase disabled:opacity-40"
+                          >
+                            <ChevronLeft size={11} /> Trước
+                          </button>
+                          <button
+                            type="button"
+                            disabled={safeVersionPage >= versionTotalPages - 1}
+                            onClick={() =>
+                              setVersionPage(Math.min(versionTotalPages - 1, safeVersionPage + 1))
+                            }
+                            className="btn-secondary inline-flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-black uppercase disabled:opacity-40"
+                          >
+                            Sau <ChevronRight size={11} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -800,7 +974,7 @@ function DesignerPublishWorkspace() {
 
 export default function DesignerPublishPage() {
   return (
-    <DesignerCharactersProvider>
+    <DesignerCharactersProvider autoLoadCharacters={false}>
       <Suspense
         fallback={
           <div className="flex min-h-[320px] items-center justify-center gap-2 text-sm text-slate-500">

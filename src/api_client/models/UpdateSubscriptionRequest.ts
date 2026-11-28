@@ -9,5 +9,6 @@ export type UpdateSubscriptionRequest = {
     thumbnailUrl?: string;
     durationDays?: number;
     allAccessCharacters: boolean;
+    maxCommissionRevisions?: number;
 };
 

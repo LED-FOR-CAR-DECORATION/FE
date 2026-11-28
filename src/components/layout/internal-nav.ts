@@ -1,9 +1,8 @@
 /** Menu entries and role helpers for the internal (back-office) shell. */
 import {
   Boxes,
-  ChartNoAxesCombined,
   ClipboardList,
-  Image,
+  Cpu,
   LayoutDashboard,
   MessageCircle,
   Settings2,
@@ -12,9 +11,7 @@ import {
   Sparkles,
   Store,
   Tag,
-  Truck,
   Users,
-  UserCog,
   type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/features/auth/types";
@@ -68,7 +65,7 @@ export const menuItems: MenuItem[] = [
     description: "Duyệt yêu cầu, báo giá và phân công nhà thiết kế",
     href: "/staff/commission",
     icon: ClipboardList,
-    roles: ["STAFF", "MANAGER", "ADMIN"],
+    roles: ["STAFF", "ADMIN"],
   },
   {
     label: "Tin nhắn khách hàng",
@@ -80,7 +77,7 @@ export const menuItems: MenuItem[] = [
   {
     label: "Quản lý kho LED",
     description: "Theo dõi mẫu thiết bị và số lượng tồn kho",
-    href: "/staff/inventory",
+    href: "/manager/inventory",
     icon: Boxes,
     roles: ["MANAGER"],
   },
@@ -95,16 +92,23 @@ export const menuItems: MenuItem[] = [
   {
     label: "Quản lý thẻ sản phẩm",
     description: "Tạo, sửa và xóa thẻ danh mục phân loại",
-    href: "/staff/tags",
+    href: "/manager/tags",
     icon: Tag,
     roles: ["MANAGER", "ADMIN"],
   },
   {
     label: "Quản lý bảo hành",
-    description: "Tra cứu và cập nhật thông tin bảo hành",
+    description: "Thẩm định, duyệt và theo dõi phiếu bảo hành",
+    href: "/manager/warranty",
+    icon: ShieldCheck,
+    roles: ["MANAGER", "ADMIN"],
+  },
+  {
+    label: "Quản lý bảo hành",
+    description: "Tiếp nhận tại quầy, hoàn thành và từ chối bảo hành",
     href: "/staff/warranty",
     icon: ShieldCheck,
-    roles: ["MANAGER", "STAFF", "ADMIN"],
+    roles: ["STAFF"],
   },
   {
     label: "Cấu hình giá Yêu cầu thiết kế",
@@ -118,34 +122,13 @@ export const menuItems: MenuItem[] = [
     description: "Xem danh sách tài khoản nội bộ",
     href: "/admin/users",
     icon: Users,
-    roles: ["ADMIN", "MANAGER"],
-  },
-  {
-    label: "Quản lý vai trò",
-    description: "Quản lý khách hàng, nhân viên, quản lý và nhà thiết kế",
-    href: "/admin/roles",
-    icon: UserCog,
     roles: ["ADMIN"],
   },
   {
-    label: "Quản lý quyền hạn",
-    description: "Thiết lập quyền truy cập chức năng",
-    href: "/admin/permissions",
-    icon: ShieldCheck,
-    roles: ["ADMIN"],
-  },
-  {
-    label: "Gán vai trò và quyền",
-    description: "Gán role và cấu hình quyền cho role",
-    href: "/admin/assignments",
-    icon: Settings2,
-    roles: ["ADMIN"],
-  },
-  {
-    label: "Báo cáo và thống kê",
-    description: "Số liệu đơn hàng, doanh thu và Commission",
-    href: "/admin/reports",
-    icon: ChartNoAxesCombined,
+    label: "Quản lý firmware",
+    description: "Phát hành, theo dõi và thu hồi firmware OTA cho mẫu LED",
+    href: "/admin/firmware",
+    icon: Cpu,
     roles: ["ADMIN"],
   },
 ];

@@ -107,6 +107,13 @@ function mapBackendOrderType(orderType?: string): OrderType | undefined {
   }
 }
 
+function resolveFallbackProductType(orderType?: string): CartItem["productType"] {
+  if (orderType === "SUBSCRIPTION") return "SUBSCRIPTION";
+  if (orderType === "DIGITAL") return "CHARACTER";
+  if (orderType === "BUNDLE" || orderType === "MIXED") return "BUNDLE";
+  return "LED_MODEL";
+}
+
 function resolveEffectiveOrderStatus(
   rawStatus: OrderStatus,
   paymentStatus: PaymentStatus,
@@ -120,7 +127,7 @@ function resolveEffectiveOrderStatus(
     ) {
       if (orderKind === "PHYSICAL") return "PROCESSING";
       if (orderKind === "MIXED") return "PARTIALLY_FULFILLED";
-      if (rawStatus === "PENDING_PAYMENT") return "COMPLETED";
+      if (orderKind === "DIGITAL") return "COMPLETED";
     }
   }
   return rawStatus;
@@ -168,7 +175,7 @@ export function mapOrderSummaryAndDetailToOrder(
     : [
         {
           id: String(summary.orderId),
-          productType: summary.orderType === "DIGITAL" ? "CHARACTER" : "LED_MODEL",
+          productType: resolveFallbackProductType(summary.orderType),
           name: summary.primaryProductName,
           price: Number(summary.totalAmount ?? 0),
           quantity: summary.totalItems || 1,
@@ -249,7 +256,7 @@ export function mapStaffOrderSummaryAndDetailToOrder(
     : [
         {
           id: String(summary.orderId),
-          productType: summary.orderType === "DIGITAL" ? "CHARACTER" : "LED_MODEL",
+          productType: resolveFallbackProductType(summary.orderType),
           name: summary.primaryProductName,
           price: Number(summary.totalAmount ?? 0),
           quantity: summary.totalItems || 1,

@@ -5,10 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
-  Check,
-  ChevronRight,
-  Download,
-  Heart,
   Minus,
   Monitor,
   Plus,
@@ -16,11 +12,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import { useCart } from "@/features/cart/context/CartContext";
 import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { CatalogProduct } from "@/features/cart/catalog";
+import { BundleContentsSection } from "@/features/storefront/components/BundleContentsSection";
+import { ProductCompatibilityCard } from "@/features/storefront/components/ProductCompatibilityCard";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { fetchStoreProductDetail, fetchStoreProducts } from "@/lib/api/products";
 import { formatPrice } from "@/lib/currency";
@@ -29,7 +26,12 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const params = useParams<{ productId: string }>();
   const { items: cartItems, addItem } = useCart();
-  const { ownedCharacters, activeSubscription } = useGallery();
+  const {
+    ownedCharacters,
+    activeSubscriptions,
+    hasAllAccessCharacters,
+    ownedAllAccessOnlyPrice,
+  } = useGallery();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const canBuy = isAuthenticated && !authLoading;
 
@@ -77,7 +79,6 @@ export default function ProductDetailPage() {
             Đang tải chi tiết sản phẩm...
           </p>
         </main>
-        <Footer />
       </>
     );
   }
@@ -97,7 +98,6 @@ export default function ProductDetailPage() {
             </Link>
           </div>
         </main>
-        <Footer />
       </>
     );
   }
@@ -106,8 +106,12 @@ export default function ProductDetailPage() {
   const isSubscription = item.productType === "SUBSCRIPTION";
   const isBundle = item.productType === "BUNDLE";
   const isDigital = isCharacter || isSubscription;
-  const hasAllAccess = Boolean(activeSubscription?.allAccessCharacters);
-  const ownedCharIdSet = new Set(ownedCharacters.map((o) => o.characterId));
+  const hasAllAccess = hasAllAccessCharacters;
+  const ownedCharIdSet = new Set(
+    ownedCharacters
+      .map((o) => o.characterId)
+      .filter((id): id is number => id != null),
+  );
   const isOwnedCharacter =
     isCharacter &&
     (hasAllAccess ||
@@ -125,10 +129,34 @@ export default function ProductDetailPage() {
         (hasAllAccess || (bi.characterId != null && ownedCharIdSet.has(bi.characterId)))
     ) ??
       false);
+  const subDetail = item.subscriptionDetails;
+  const subAllAccess = Boolean(subDetail?.allAccessCharacters);
+  const subMobileProfiles = Number(subDetail?.maxMobileProfiles ?? 3);
+  const subCommissionRevisions = Number(subDetail?.maxCommissionRevisions ?? 0);
+  const isAllAccessOnlyPlan =
+    isSubscription && subAllAccess && subMobileProfiles <= 3 && subCommissionRevisions <= 0;
+  const isAllAccessUpgradePlan =
+    isSubscription && subAllAccess && (subMobileProfiles > 3 || subCommissionRevisions > 0);
+  const isCurrentActiveSubscription =
+    isSubscription &&
+    activeSubscriptions.some(
+      (active) =>
+        active.productId === Number(item.id) ||
+        (subDetail?.planCode != null && active.planCode === subDetail.planCode),
+    );
   const isOwned =
     isOwnedCharacter ||
     isOwnedBundle ||
-    (isSubscription && activeSubscription != null);
+    isCurrentActiveSubscription ||
+    (isAllAccessOnlyPlan && hasAllAccess);
+  const upgradeDeduction =
+    !isOwned &&
+    isAllAccessUpgradePlan &&
+    ownedAllAccessOnlyPrice != null &&
+    ownedAllAccessOnlyPrice > 0
+      ? ownedAllAccessOnlyPrice
+      : 0;
+  const effectiveItemPrice = Math.max(0, item.price - upgradeDeduction);
   const isAlreadyInCart = cartItems.some((i) => i.id === String(item.id));
 
   const productTypeLabel = isSubscription
@@ -174,10 +202,14 @@ export default function ProductDetailPage() {
         ? "Trọn đời (Lifetime)"
         : `${item.subscriptionDetails.durationDays ?? 30} ngày`,
     ]);
-    specifications.push([
-      "Mở khóa toàn bộ Character",
-      item.subscriptionDetails.allAccessCharacters ? "Có" : "Không",
-    ]);
+    const perks: string[] = [];
+    if (subAllAccess) perks.push("Mở khóa toàn bộ thư viện nhân vật");
+    if (subMobileProfiles > 3) perks.push(`Tối đa ${subMobileProfiles} profile chữ trên Mobile`);
+    if (subCommissionRevisions > 0)
+      perks.push(`${subCommissionRevisions} lượt chỉnh sửa miễn phí / mỗi đơn thiết kế`);
+    if (perks.length > 0) {
+      specifications.push(["Quyền lợi", perks.join(" · ")]);
+    }
   }
 
   const add = async (): Promise<boolean> => {
@@ -189,7 +221,7 @@ export default function ProductDetailPage() {
     setActionError("");
     setIsSubmitting(true);
     try {
-      await addItem(item, isDigital ? 1 : quantity);
+      await addItem({ ...item, price: effectiveItemPrice }, isDigital ? 1 : quantity);
       setAdded(true);
       return true;
     } catch (err) {
@@ -300,14 +332,57 @@ export default function ProductDetailPage() {
                 </p>
 
                 <div className="mt-4 border-b-2 border-dashed border-gray-300 pb-4">
-                  <span className="block text-xs font-bold uppercase text-text-muted">Giá niêm yết</span>
+                  <span className="block text-xs font-bold uppercase text-text-muted">
+                    {upgradeDeduction > 0
+                      ? "Giá nâng cấp dành riêng cho bạn"
+                      : isBundle && Number(item.bundleDetails?.originalPrice ?? 0) > effectiveItemPrice
+                        ? "Giá ưu đãi gói Combo"
+                        : "Giá niêm yết"}
+                  </span>
+                  {upgradeDeduction > 0 && (
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-text-muted line-through">
+                        {formatPrice(item.price)}
+                      </span>
+                      <span className="border border-black bg-primary/20 px-2 py-0.5 text-[11px] font-black text-black">
+                        Đã trừ {formatPrice(upgradeDeduction)} gói Mở khóa toàn bộ nhân vật
+                      </span>
+                    </div>
+                  )}
+                  {isBundle &&
+                    upgradeDeduction === 0 &&
+                    Number(item.bundleDetails?.originalPrice ?? 0) > effectiveItemPrice && (
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-text-muted line-through">
+                          {formatPrice(Number(item.bundleDetails?.originalPrice ?? 0))}
+                        </span>
+                        <span className="border border-black bg-[#fef08a] px-2 py-0.5 text-[11px] font-black text-black">
+                          Tiết kiệm{" "}
+                          {formatPrice(
+                            Number(item.bundleDetails?.originalPrice ?? 0) - effectiveItemPrice,
+                          )}
+                        </span>
+                      </div>
+                    )}
                   <strong className="text-3xl font-black text-primary-ink">
-                    {formatPrice(item.price)}
+                    {formatPrice(effectiveItemPrice)}
                   </strong>
                 </div>
 
                 <p className="mt-4 text-sm font-medium leading-relaxed text-text-muted">
-                  {item.description || "Chưa có mô tả chi tiết cho sản phẩm này."}
+                  {isSubscription
+                    ? [
+                        subAllAccess ? "Mở khóa toàn bộ thư viện nhân vật" : null,
+                        subMobileProfiles > 3
+                          ? `Tối đa ${subMobileProfiles} profile chữ trên ứng dụng Mobile`
+                          : null,
+                        subCommissionRevisions > 0
+                          ? `${subCommissionRevisions} lượt chỉnh sửa miễn phí cho mỗi đơn thiết kế`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || item.description || "Chưa có mô tả chi tiết cho sản phẩm này."
+                    : item.description || "Chưa có mô tả chi tiết cho sản phẩm này."}
                 </p>
 
                 {/* Quantity selector (physical products only) */}
@@ -395,47 +470,19 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* ── Right Column: Guarantees & Compatibility ── */}
-            <aside className="neo-box-no-hover h-fit bg-white p-5">
-              <h2 className="mb-4 flex items-center gap-2 border-b-2 border-black pb-3 text-xs font-black uppercase tracking-wider text-black">
-                <Monitor size={16} className="text-primary-ink" /> Tương thích thiết bị
-              </h2>
-              <p className="text-xs font-medium leading-relaxed text-text-muted">
-                Hoạt động đồng bộ 100% trên hệ sinh thái bảng LED và ứng dụng điều khiển Lumintra.
-              </p>
-              <ul className="mt-4 space-y-2.5 text-xs font-bold text-text-main">
-                {[
-                  "Bảng LED Lumintra Matrix 32×32",
-                  "Bảng LED Lumintra Panorama 64×32",
-                  "Điều khiển đồng bộ qua App Lumintra Mobile",
-                ].map((device) => (
-                  <li key={device} className="flex items-center gap-2">
-                    <Check size={14} className="text-primary-ink shrink-0" />
-                    <span>{device}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <hr className="my-5 border-t-2 border-black" />
-
-              <div className="space-y-3 text-xs">
-                <div className="flex items-start gap-2.5">
-                  <Download size={16} className="mt-0.5 text-primary-ink shrink-0" />
-                  <div>
-                    <strong className="block font-black uppercase">Đồng bộ OTA tức thì</strong>
-                    <span className="text-text-muted">Tải ảnh động về thiết bị trong tích tắc.</span>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <Sparkles size={16} className="mt-0.5 text-primary-ink shrink-0" />
-                  <div>
-                    <strong className="block font-black uppercase">Bản quyền trọn đời</strong>
-                    <span className="text-text-muted">Sử dụng vĩnh viễn trên tài khoản Lumintra.</span>
-                  </div>
-                </div>
-              </div>
-            </aside>
+            {/* ── Right Column: Context-Aware Compatibility & Highlights ── */}
+            <ProductCompatibilityCard item={item} />
           </div>
+
+          {/* ── Bundle Contents Showcase (for BUNDLE products) ── */}
+          {isBundle && item.bundleDetails && item.bundleDetails.items.length > 0 && (
+            <BundleContentsSection
+              bundleDetails={item.bundleDetails}
+              sellingPrice={effectiveItemPrice}
+              hasAllAccess={hasAllAccess}
+              ownedCharacterIds={ownedCharIdSet}
+            />
+          )}
 
           {/* ── Specifications Section ── */}
           <section className="neo-box-no-hover mt-8 bg-white p-6">
@@ -446,7 +493,7 @@ export default function ProductDetailPage() {
               <div>
                 <p className="text-xs font-black uppercase text-black mb-2">Giới thiệu sản phẩm</p>
                 <p className="text-xs font-medium leading-relaxed text-text-muted">
-                  {item.description || "Sản phẩm được tối ưu cho hệ thống LED ma trận gắn kính xe hoặc trang trí bàn làm việc."}
+                  {item.description || "Sản phẩm được tối ưu cho hệ thống tấm LED gắn kính xe hoặc trang trí bàn làm việc."}
                 </p>
               </div>
               <div>
@@ -510,7 +557,6 @@ export default function ProductDetailPage() {
 
         </div>
       </main>
-      <Footer />
     </>
   );
 }

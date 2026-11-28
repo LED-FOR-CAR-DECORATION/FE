@@ -1,7 +1,13 @@
 import { ApiError } from "@/api_client";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "./client";
-import { buildSignedPutHeaders } from "./media";
+import { buildSignedPutHeaders, resolveImageMimeAndExtension } from "./media";
+
+export type CharacterType = "STORE" | "COMMISSION";
+
+export function isStoreCharacterType(characterType?: CharacterType | null): boolean {
+  return (characterType ?? "STORE") === "STORE";
+}
 
 export interface CurrentVersionSummary {
   versionId: number;
@@ -13,6 +19,8 @@ export interface DesignerCharacterItem {
   characterId: number;
   characterName: string;
   description: string | null;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   totalVersions: number;
   currentVersion: CurrentVersionSummary | null;
   createdAt: string;
@@ -21,6 +29,8 @@ export interface DesignerCharacterItem {
 export interface CreateCharacterRequest {
   characterName: string;
   description?: string;
+  characterType?: CharacterType;
+  commissionId?: number;
 }
 
 export interface UpdateCharacterRequest {
@@ -33,6 +43,8 @@ export interface CreateCharacterResponse {
   characterName: string;
   description: string | null;
   creatorEmployeeId: number;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   createdAt: string;
 }
 
@@ -40,6 +52,8 @@ export interface UpdateCharacterResponse {
   characterId: number;
   characterName: string;
   description: string | null;
+  characterType?: CharacterType;
+  commissionId?: number | null;
   updatedAt: string;
 }
 
@@ -185,6 +199,12 @@ export function formatDesignerApiError(
       return serverMessage || "Dữ liệu đang được sử dụng trên cửa hàng, không thể thực hiện.";
     }
     if (error.status === 400) {
+      if (code === "CHARACTER_TYPE_NOT_ALLOWED_FOR_STORE") {
+        return "Nhân vật thuộc loại Commission không được phép đăng bán lên cửa hàng.";
+      }
+      if (code === "CHARACTER_TYPE_NOT_ALLOWED_FOR_COMMISSION") {
+        return "Nhân vật này không hợp lệ để nộp vào Commission.";
+      }
       return firstDetail || serverMessage || "Dữ liệu gửi lên không hợp lệ.";
     }
     if (serverMessage) return serverMessage;
@@ -198,6 +218,8 @@ export function formatDesignerApiError(
 
 export async function fetchMyCharacters(params: {
   query?: string;
+  characterType?: CharacterType;
+  commissionId?: number;
   page?: number;
   size?: number;
 } = {}): Promise<{ items: DesignerCharacterItem[]; meta: PaginationMeta }> {
@@ -210,11 +232,17 @@ export async function fetchMyCharacters(params: {
     url: "/api/management/designer/characters/my",
     query: {
       query: trimmedQuery ? trimmedQuery : undefined,
+      characterType: params.characterType,
+      commissionId: params.commissionId,
       page,
       size,
     },
   });
-  const items = res.data ?? [];
+  const items = (res.data ?? []).map((item) => ({
+    ...item,
+    characterType: item.characterType ?? "STORE",
+    commissionId: item.commissionId ?? null,
+  }));
   return {
     items,
     meta: normalizePaginationMeta(res.meta, page, size, items.length),
@@ -224,9 +252,15 @@ export async function fetchMyCharacters(params: {
 export async function createDesignerCharacter(
   payload: CreateCharacterRequest,
 ): Promise<CreateCharacterResponse> {
+  const characterType = payload.characterType ?? "STORE";
   const cleanPayload: CreateCharacterRequest = {
     characterName: payload.characterName.trim(),
     description: payload.description?.trim() || undefined,
+    characterType,
+    commissionId:
+      characterType === "COMMISSION" && payload.commissionId != null
+        ? payload.commissionId
+        : undefined,
   };
 
   const res = await request<ApiEnvelope<CreateCharacterResponse>>(OpenAPI, {
@@ -325,10 +359,11 @@ export async function uploadDesignerAssetFile(
   purpose: "CHARACTER_ASSET",
   targetId?: number,
 ): Promise<UploadedDesignerAsset> {
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-  if (!allowedTypes.includes(file.type)) {
+  const resolved = resolveImageMimeAndExtension(file.type, file.name);
+  if (!resolved) {
     throw new Error("Chỉ hỗ trợ file ảnh định dạng GIF, PNG, JPG hoặc WEBP.");
   }
+  const contentType = resolved.mimeType;
   if (file.size <= 0 || file.size > 10 * 1024 * 1024) {
     throw new Error("Kích thước file phải từ 1 byte đến tối đa 10MB.");
   }
@@ -340,7 +375,7 @@ export async function uploadDesignerAssetFile(
     url: "/api/media/upload-url",
     body: {
       fileName: file.name.slice(0, 255),
-      contentType: file.type,
+      contentType,
       fileSize: file.size,
       purpose,
       targetId,
@@ -354,16 +389,27 @@ export async function uploadDesignerAssetFile(
   }
 
   // BE trả uploadHeaders (nằm trong chữ ký) → phải gửi nguyên văn khi PUT
-  const putHeaders =
-    signedData.uploadHeaders ?? buildSignedPutHeaders(signedData.signedUploadUrl, file.type);
+  const putHeaders: Record<string, string> = signedData.uploadHeaders
+    ? { ...signedData.uploadHeaders }
+    : buildSignedPutHeaders(signedData.signedUploadUrl, contentType);
+  if (!putHeaders["Content-Type"]) {
+    putHeaders["Content-Type"] = contentType;
+  }
 
   const putResponse = await fetch(signedData.signedUploadUrl, {
     method: "PUT",
     headers: putHeaders,
-    body: file,
+    body: file.slice(0, file.size, putHeaders["Content-Type"]),
   });
 
   if (!putResponse.ok) {
+    console.error("[designerCharacters.uploadDesignerAssetFile] PUT failed", {
+      purpose,
+      targetId,
+      objectKey: signedData.objectKey,
+      status: putResponse.status,
+      contentType: putHeaders["Content-Type"],
+    });
     throw new Error(`Tải tệp lên kho lưu trữ thất bại (HTTP ${putResponse.status}).`);
   }
 

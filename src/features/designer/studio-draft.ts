@@ -1,5 +1,9 @@
 import { encodeFramesToGifDataUrl } from "./domain/gifCodec";
-import { renderDocumentToDataUrl, type PixelDocumentState } from "./domain/pixelDocument";
+import {
+  renderDocumentToDataUrl,
+  type PixelDocumentState,
+  type PixelLayer,
+} from "./domain/pixelDocument";
 
 export interface StudioDraftPayload {
   characterName: string;
@@ -8,6 +12,8 @@ export interface StudioDraftPayload {
   frames?: PixelDocumentState[];
   activeFrameIndex?: number;
   frameDelayMs?: number;
+  layers?: PixelLayer[];
+  activeLayerId?: string;
   previewDataUrl: string;
   baseVersionId?: number | null;
   baseVersionNumber?: number | null;
@@ -17,6 +23,20 @@ export interface StudioDraftPayload {
 export interface VersionFramesCachePayload {
   frames: PixelDocumentState[];
   frameDelayMs: number;
+  layers?: PixelLayer[];
+}
+
+function isValidPixelLayer(candidate: unknown): candidate is PixelLayer {
+  if (!candidate || typeof candidate !== "object") return false;
+  const l = candidate as Partial<PixelLayer>;
+  return (
+    typeof l.id === "string" &&
+    l.id.length > 0 &&
+    typeof l.name === "string" &&
+    typeof l.visible === "boolean" &&
+    typeof l.locked === "boolean" &&
+    typeof l.opacity === "number"
+  );
 }
 
 function getDraftStorageKey(characterId?: number | null): string {
@@ -70,6 +90,10 @@ export function loadStudioDraft(
         ? parsed.frameDelayMs
         : 100;
 
+    const validLayers = Array.isArray(parsed.layers)
+      ? parsed.layers.filter(isValidPixelLayer)
+      : [];
+
     return {
       characterName: typeof parsed.characterName === "string" ? parsed.characterName : "",
       description: typeof parsed.description === "string" ? parsed.description : "",
@@ -77,6 +101,9 @@ export function loadStudioDraft(
       frames: normalizedFrames,
       activeFrameIndex: safeIdx,
       frameDelayMs: safeDelay,
+      layers: validLayers.length > 0 ? validLayers : undefined,
+      activeLayerId:
+        typeof parsed.activeLayerId === "string" ? parsed.activeLayerId : undefined,
       previewDataUrl: typeof parsed.previewDataUrl === "string" ? parsed.previewDataUrl : "",
       baseVersionId: typeof parsed.baseVersionId === "number" ? parsed.baseVersionId : null,
       baseVersionNumber:
@@ -92,7 +119,41 @@ export function hasStudioDraft(characterId?: number | null): boolean {
   const draft = loadStudioDraft(characterId);
   if (!draft) return false;
   const allFrames = draft.frames && draft.frames.length > 0 ? draft.frames : [draft.doc];
-  return allFrames.some((f) => f.pixels.some(Boolean) || f.texts.length > 0);
+  return allFrames.some(
+    (f) =>
+      f.pixels.some(Boolean) ||
+      f.texts.length > 0 ||
+      Boolean(
+        f.layerContents &&
+          Object.values(f.layerContents).some(
+            (cel) => cel.pixels.some(Boolean) || cel.texts.length > 0,
+          ),
+      ),
+  );
+}
+
+export function getStudioDraftMeta(characterId?: number | null): {
+  hasDraft: boolean;
+  updatedAt: string | null;
+} {
+  const draft = loadStudioDraft(characterId);
+  if (!draft) return { hasDraft: false, updatedAt: null };
+  const allFrames = draft.frames && draft.frames.length > 0 ? draft.frames : [draft.doc];
+  const hasDraft = allFrames.some(
+    (f) =>
+      f.pixels.some(Boolean) ||
+      f.texts.length > 0 ||
+      Boolean(
+        f.layerContents &&
+          Object.values(f.layerContents).some(
+            (cel) => cel.pixels.some(Boolean) || cel.texts.length > 0,
+          ),
+      ),
+  );
+  return {
+    hasDraft,
+    updatedAt: hasDraft && draft.updatedAt ? draft.updatedAt : null,
+  };
 }
 
 export function saveStudioDraft(
@@ -105,11 +166,12 @@ export function saveStudioDraft(
   try {
     const frames = payload.frames && payload.frames.length > 0 ? payload.frames : [payload.doc];
     const frameDelayMs = payload.frameDelayMs ?? 100;
+    const activeCompositeDoc = frames[payload.activeFrameIndex ?? 0] ?? payload.doc;
     const previewDataUrl =
       payload.previewDataUrl ||
       (frames.length > 1
         ? encodeFramesToGifDataUrl(frames, frameDelayMs, 1)
-        : renderDocumentToDataUrl(payload.doc, "PNG", 1));
+        : renderDocumentToDataUrl(activeCompositeDoc, "PNG", 1));
 
     const fullPayload: StudioDraftPayload = {
       characterName: payload.characterName,
@@ -118,6 +180,8 @@ export function saveStudioDraft(
       frames,
       activeFrameIndex: payload.activeFrameIndex ?? 0,
       frameDelayMs,
+      layers: payload.layers,
+      activeLayerId: payload.activeLayerId,
       previewDataUrl,
       baseVersionId: payload.baseVersionId ?? null,
       baseVersionNumber: payload.baseVersionNumber ?? null,
@@ -146,10 +210,11 @@ export function saveVersionFramesCache(
   versionId: number,
   frames: PixelDocumentState[],
   frameDelayMs: number,
+  layers?: PixelLayer[],
 ): void {
   if (typeof window === "undefined" || !versionId) return;
   try {
-    const payload: VersionFramesCachePayload = { frames, frameDelayMs };
+    const payload: VersionFramesCachePayload = { frames, frameDelayMs, layers };
     window.localStorage.setItem(
       getVersionFramesStorageKey(versionId),
       JSON.stringify(payload),
@@ -170,12 +235,16 @@ export function loadVersionFramesCache(
     if (!parsed || !Array.isArray(parsed.frames)) return null;
     const validFrames = parsed.frames.filter(isValidPixelDocument);
     if (validFrames.length === 0) return null;
+    const validLayers = Array.isArray(parsed.layers)
+      ? parsed.layers.filter(isValidPixelLayer)
+      : [];
     return {
       frames: validFrames,
       frameDelayMs:
         typeof parsed.frameDelayMs === "number" && parsed.frameDelayMs >= 30
           ? parsed.frameDelayMs
           : 100,
+      layers: validLayers.length > 0 ? validLayers : undefined,
     };
   } catch {
     return null;

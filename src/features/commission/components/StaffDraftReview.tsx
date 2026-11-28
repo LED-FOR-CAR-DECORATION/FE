@@ -85,58 +85,129 @@ export default function StaffDraftReview({ commissionId, status, drafts, onChang
   const safeImage = /^https?:\/\//i.test(draft.imageUrl) ? draft.imageUrl : undefined;
 
   return (
-    <section aria-labelledby={`draft-review-${commissionId}`} className="space-y-3 rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
-      <h3 id={`draft-review-${commissionId}`} className="font-bold text-amber-900">
+    <section
+      aria-labelledby={`draft-review-${commissionId}`}
+      className="space-y-3 border-2 border-black bg-amber-50 p-4 shadow-[3px_3px_0_0_#000]"
+    >
+      <h3 id={`draft-review-${commissionId}`} className="text-sm font-black uppercase text-black">
         Duyệt bản nháp v{draft.versionNumber}{draft.designerName ? ` · ${draft.designerName}` : ""}
       </h3>
       {safeImage && (
-        <a href={safeImage} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-amber-300">
+        <a
+          href={safeImage}
+          target="_blank"
+          rel="noreferrer"
+          className="block overflow-hidden border-2 border-black bg-[#0d1117]"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={safeImage} alt={`Bản nháp v${draft.versionNumber}`} loading="lazy" decoding="async"
-            className="h-56 w-full bg-black object-contain [image-rendering:pixelated]" />
+          <img
+            src={safeImage}
+            alt={`Bản nháp v${draft.versionNumber}`}
+            loading="lazy"
+            decoding="async"
+            className="h-56 w-full bg-[#0d1117] object-contain [image-rendering:pixelated]"
+          />
         </a>
       )}
-      {draft.designerNote && <p className="whitespace-pre-wrap break-words text-sm"><strong>Ghi chú designer:</strong> {draft.designerNote}</p>}
+      {draft.designerNote && (
+        <p className="whitespace-pre-wrap break-words border-2 border-black bg-white p-2.5 text-xs text-black">
+          <strong>Ghi chú designer:</strong> {draft.designerNote}
+        </p>
+      )}
 
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      {notice && <p role="status" className="text-sm font-semibold text-[#155e59]">{notice}</p>}
+      {error && (
+        <p role="alert" className="border-2 border-red-600 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="border-2 border-black bg-primary/20 px-3 py-2 text-xs font-bold text-primary-ink">
+          {notice}
+        </p>
+      )}
 
       {mode === "reject" ? (
-        <form onSubmit={reject} className="space-y-2">
-          <label className="block text-sm font-semibold" htmlFor={`review-note-${commissionId}`}>Cần designer sửa gì?</label>
-          <textarea id={`review-note-${commissionId}`} rows={3} value={note} maxLength={MAX_NOTE} disabled={busy}
+        <form onSubmit={reject} className="space-y-2.5 border-t-2 border-dashed border-black/30 pt-3">
+          <label className="block text-xs font-black uppercase text-black" htmlFor={`review-note-${commissionId}`}>
+            Cần designer sửa gì?
+          </label>
+          <textarea
+            id={`review-note-${commissionId}`}
+            rows={3}
+            value={note}
+            maxLength={MAX_NOTE}
+            disabled={busy}
             onChange={(event) => setNote(event.target.value)}
-            className="w-full rounded-lg border border-[#819e8c] bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#155e59]"
-            placeholder="Ví dụ: viền neon hơi tối ở vùng nền đen, tăng tương phản và làm mượt vòng lặp." />
+            className="w-full border-2 border-black bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="Ví dụ: viền neon hơi tối ở vùng nền đen, tăng tương phản và làm mượt vòng lặp."
+          />
           <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={busy || !note.trim()}
-              className="min-h-11 rounded-lg bg-amber-600 px-4 font-semibold text-white hover:bg-amber-700 disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={busy || !note.trim()}
+              className="border-2 border-black bg-amber-400 px-4 py-2 text-xs font-black text-black hover:bg-amber-300 disabled:opacity-50"
+            >
               {busy ? "Đang gửi…" : "Trả về designer"}
             </button>
-            <button type="button" disabled={busy} onClick={() => { setMode("idle"); setError(""); }}
-              className="min-h-11 rounded-lg px-4 font-semibold text-[#155e59] underline">Hủy</button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setMode("idle");
+                setError("");
+              }}
+              className="btn-secondary px-4 py-2 text-xs font-bold"
+            >
+              Hủy
+            </button>
           </div>
         </form>
       ) : mode === "confirm" ? (
-        <div className="space-y-2">
-          <p className="text-sm">Khách sẽ nhận thẻ bản xem trước trong phòng chat và có 7 ngày để phản hồi trước khi commission tự hoàn thành.</p>
+        <div className="space-y-2.5 border-t-2 border-dashed border-black/30 pt-3">
+          <p className="text-xs font-semibold text-black">
+            Khách sẽ nhận thẻ bản xem trước trong phòng chat và có 7 ngày để phản hồi trước khi commission tự hoàn thành.
+          </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={busy} onClick={approve}
-              className="min-h-11 rounded-lg bg-[#155e59] px-4 font-semibold text-white hover:bg-[#0e4b47] disabled:opacity-50">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={approve}
+              className="btn-primary px-4 py-2 text-xs font-black disabled:opacity-50"
+            >
               {busy ? "Đang gửi…" : "Xác nhận gửi cho khách"}
             </button>
-            <button type="button" disabled={busy} onClick={() => setMode("idle")}
-              className="min-h-11 rounded-lg px-4 font-semibold text-[#155e59] underline">Hủy</button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setMode("idle")}
+              className="btn-secondary px-4 py-2 text-xs font-bold"
+            >
+              Hủy
+            </button>
           </div>
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => { setMode("confirm"); setError(""); setNotice(""); }}
-            className="min-h-11 rounded-lg bg-[#155e59] px-4 font-semibold text-white hover:bg-[#0e4b47]">
+          <button
+            type="button"
+            onClick={() => {
+              setMode("confirm");
+              setError("");
+              setNotice("");
+            }}
+            className="btn-primary px-4 py-2 text-xs font-black"
+          >
             Duyệt & gửi cho khách
           </button>
-          <button type="button" onClick={() => { setMode("reject"); setError(""); setNotice(""); }}
-            className="min-h-11 rounded-lg border border-amber-600 px-4 font-semibold text-amber-800 hover:bg-amber-100">
+          <button
+            type="button"
+            onClick={() => {
+              setMode("reject");
+              setError("");
+              setNotice("");
+            }}
+            className="border-2 border-black bg-white px-4 py-2 text-xs font-bold text-black hover:bg-amber-100"
+          >
             Yêu cầu designer sửa
           </button>
         </div>

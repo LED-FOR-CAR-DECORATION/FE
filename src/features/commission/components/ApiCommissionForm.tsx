@@ -19,6 +19,7 @@ import type { PricingRuleResponse } from "@/api_client/models/PricingRuleRespons
 import type { PricingOptionResponse } from "@/api_client/models/PricingOptionResponse";
 import { loadSession } from "@/lib/auth/session";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useGallery } from "@/features/character/context/GalleryContext";
 import { getCommissionPricing, submitCommission, uploadCommissionReference } from "../services/customer-commission.api";
 import { CommissionBrief } from "./FixedCommissionSteps";
 
@@ -61,6 +62,7 @@ export default function ApiCommissionForm() {
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const { user } = useAuth();
+  const { extraCommissionRevisions } = useGallery();
   const router = useRouter();
 
   useEffect(() => {
@@ -602,8 +604,13 @@ export default function ApiCommissionForm() {
               <div>
                 <p className="font-black uppercase text-black">{tier?.tierName}</p>
                 <p className="font-semibold text-primary-ink">
-                  {tier?.maxRevisions ?? 0} lượt chỉnh sửa miễn phí
+                  {Math.max(tier?.maxRevisions ?? 1, extraCommissionRevisions)} lượt chỉnh sửa miễn phí cho đơn này
                 </p>
+                {extraCommissionRevisions > (tier?.maxRevisions ?? 1) && (
+                  <p className="mt-0.5 text-[11px] font-bold text-[#2d6a4f]">
+                    Đã nâng từ mặc định {tier?.maxRevisions ?? 1} lượt nhờ gói hội viên của bạn
+                  </p>
+                )}
               </div>
               <CheckCircle2 size={18} className="shrink-0 text-primary-ink" />
             </div>

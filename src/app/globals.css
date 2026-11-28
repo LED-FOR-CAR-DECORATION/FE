@@ -216,7 +216,9 @@ select,
     #f5faf6;
 }
 .manager-main > * {
-  animation: manager-content-enter .45s cubic-bezier(.2,.8,.2,1) both;
+  /* `backwards`, not `both`: a retained transform would turn every page root into the
+     containing block of its `position: fixed` modals and trap them inside the page. */
+  animation: manager-content-enter .45s cubic-bezier(.2,.8,.2,1) backwards;
 }
 .manager-main .neo-box-no-hover {
   border: 1px solid var(--manager-border);
@@ -244,6 +246,38 @@ select,
 .manager-main input:focus, .manager-main select:focus {
   border-color: #48a56a;
   box-shadow: 0 0 0 3px rgba(72,165,106,.15);
+}
+/* Storefront Neo-Brutalist sync scoped to Manager Dashboard */
+.manager-main:has(.manager-neo-dashboard) {
+  background: var(--color-background);
+}
+.manager-main .manager-neo-dashboard h1 {
+  color: #000000;
+  letter-spacing: -0.02em;
+}
+.manager-main .manager-neo-dashboard .neo-box-no-hover {
+  border: 2px solid #000000;
+  border-radius: 0;
+  box-shadow: 4px 4px 0 0 #000000;
+  transition: none;
+}
+.manager-main .manager-neo-dashboard .neo-box-no-hover:hover {
+  border-color: #000000;
+  box-shadow: 4px 4px 0 0 #000000;
+}
+.manager-main .manager-neo-dashboard table thead {
+  background: #e9f5ed;
+}
+.manager-main .manager-neo-dashboard table tbody tr:hover {
+  background: #f3faf5;
+}
+.manager-main .manager-neo-dashboard input:focus,
+.manager-main .manager-neo-dashboard select:focus,
+.manager-main .manager-neo-dashboard textarea:focus {
+  border-color: #000000;
+  box-shadow: 2px 2px 0 0 #000000;
+  outline: 2px solid #000000;
+  outline-offset: 2px;
 }
 @keyframes manager-content-enter {
   from { opacity: 0; transform: translateY(8px); }
@@ -298,6 +332,36 @@ select,
   .profile-enter, .profile-avatar, .profile-pixels { animation: none; }
   .profile-tab, .address-card { transition: none; }
   .animate-marquee { animation: none; }
+  .hero-slide-enter, .hero-dot-progress { animation: none; }
+}
+
+@keyframes hero-slide-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-slide-enter {
+  animation: hero-slide-enter 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hero-dot-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.hero-dot-progress {
+  transform-origin: left center;
+  animation: hero-dot-progress 3000ms linear forwards;
 }
 
 @keyframes marquee-scroll {
@@ -320,29 +384,40 @@ select,
 }
 
 /* Neo-brutalism/retro utilities for the requested UI style */
-.btn-primary {
-  @apply bg-primary text-black font-semibold border-2 border-black px-4 py-2 transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none;
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-black font-semibold border-2 border-black px-4 py-2 transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-black font-semibold border-2 border-black px-4 py-2 transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 text-white font-semibold border-2 border-black px-4 py-2 transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none;
+  }
+
+  /* Shared states for neo buttons (UI standard §3.3) */
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    @apply cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none;
+  }
+
+  .neo-box {
+    @apply bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-shadow hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)];
+  }
+
+  .neo-box-no-hover {
+    @apply bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)];
+  }
 }
 
-.btn-secondary {
-  @apply bg-white text-black font-semibold border-2 border-black px-4 py-2 transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none;
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-.btn-danger {
-  @apply bg-red-600 text-white font-semibold border-2 border-black px-4 py-2 transition-transform hover:-translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none;
-}
-
-/* Shared states for neo buttons (UI standard §3.3) */
-.btn-primary,
-.btn-secondary,
-.btn-danger {
-  @apply cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none;
-}
-
-.neo-box {
-  @apply bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-shadow hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)];
-}
-
-.neo-box-no-hover {
-  @apply bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)];
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

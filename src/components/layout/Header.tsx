@@ -9,6 +9,7 @@ import {
   User,
   LogOut,
   ChevronDown,
+  Crown,
   Sparkles,
   LayoutDashboard,
   MessageCircle,
@@ -45,6 +46,12 @@ function UserDropdown() {
       label: "Lịch sử đơn mua",
       icon: ClipboardList,
       active: pathname.startsWith("/profile/orders"),
+    },
+    {
+      href: "/profile/subscription",
+      label: "Gói hội viên",
+      icon: Crown,
+      active: pathname.startsWith("/profile/subscription"),
     },
     {
       href: "/profile/gallery",

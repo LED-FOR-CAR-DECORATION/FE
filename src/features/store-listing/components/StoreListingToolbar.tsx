@@ -39,39 +39,12 @@ export function computeStatusCounts<T>(
 const STATUS_TABS: {
   id: StoreStatusFilter;
   label: string;
-  activeClass: string;
-  badgeActiveClass: string;
 }[] = [
-  {
-    id: "ALL",
-    label: "Tất cả",
-    activeClass: "border-[#3f9660] bg-white text-[#165d3a] shadow-sm",
-    badgeActiveClass: "bg-[#dff5e5] text-[#165d3a]",
-  },
-  {
-    id: "PUBLISHED",
-    label: STATUS_LABEL.PUBLISHED,
-    activeClass: "border-emerald-400 bg-white text-emerald-900 shadow-sm",
-    badgeActiveClass: "bg-emerald-100 text-emerald-800",
-  },
-  {
-    id: "UNPUBLISHED",
-    label: STATUS_LABEL.UNPUBLISHED,
-    activeClass: "border-amber-400 bg-white text-amber-900 shadow-sm",
-    badgeActiveClass: "bg-amber-100 text-amber-800",
-  },
-  {
-    id: "ARCHIVED",
-    label: STATUS_LABEL.ARCHIVED,
-    activeClass: "border-blue-400 bg-white text-blue-900 shadow-sm",
-    badgeActiveClass: "bg-blue-100 text-blue-800",
-  },
-  {
-    id: "DELETED",
-    label: STATUS_LABEL.DELETED,
-    activeClass: "border-neutral-400 bg-white text-neutral-800 shadow-sm",
-    badgeActiveClass: "bg-neutral-200 text-neutral-700",
-  },
+  { id: "ALL", label: "Tất cả" },
+  { id: "PUBLISHED", label: STATUS_LABEL.PUBLISHED },
+  { id: "UNPUBLISHED", label: STATUS_LABEL.UNPUBLISHED },
+  { id: "ARCHIVED", label: STATUS_LABEL.ARCHIVED },
+  { id: "DELETED", label: STATUS_LABEL.DELETED },
 ];
 
 interface StoreListingToolbarProps {
@@ -90,8 +63,8 @@ interface StoreListingToolbarProps {
 
 /**
  * Thanh điều khiển 2 hàng thống nhất cho cả 4 tab quản lý (Nhân vật, Mẫu LED, Gói sản phẩm, Gói hội viên):
- * - Hàng 1: Bộ lọc theo 4 ProductStatus (+ Tất cả) kèm số lượng
- * - Hàng 2: Thanh tìm kiếm + nút làm mới / đặt lại / tạo mới
+ * - Hàng 1: Thanh tìm kiếm + nút làm mới / đặt lại / thao tác mở rộng
+ * - Hàng 2: Bộ lọc theo 4 ProductStatus (+ Tất cả) kèm số lượng
  */
 export default function StoreListingToolbar({
   statusFilter,
@@ -107,28 +80,33 @@ export default function StoreListingToolbar({
   rightAction,
 }: StoreListingToolbarProps) {
   return (
-    <div>
+    <div className="shrink-0">
       {/* Hàng 1: Thanh tìm kiếm & thao tác nhanh */}
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-[#e3efe6] p-4">
-        <label className="flex min-w-[240px] flex-1 items-center gap-2 rounded-lg border border-[#d8e6dc] bg-white px-3 py-2 text-sm transition-shadow focus-within:border-[#48a56a] focus-within:shadow-[0_0_0_3px_rgba(72,165,106,.15)]">
-          <Search size={15} className="shrink-0 text-text-muted" />
+      <div className="flex flex-wrap items-center gap-2.5 border-b-2 border-dashed border-gray-200 bg-white px-4 py-2.5">
+        <div className="relative min-w-[240px] flex-1">
+          <Search
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black"
+            aria-hidden="true"
+          />
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full bg-transparent outline-none"
+            aria-label={searchPlaceholder}
+            className="w-full border-2 border-black bg-gray-50 py-1.5 pl-9 pr-3 text-xs font-bold text-black placeholder:font-medium placeholder:text-text-muted focus:bg-white"
           />
-        </label>
+        </div>
 
         {onReset && (
           <button
             type="button"
             onClick={onReset}
             disabled={!canReset}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#cfe0d4] bg-white px-3 py-2 text-xs font-bold transition-colors hover:bg-[#eef8f0] disabled:cursor-not-allowed disabled:opacity-40"
+            className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3! py-1.5! text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
           >
-            <RotateCcw size={14} /> Đặt lại
+            <RotateCcw size={14} aria-hidden="true" /> Đặt lại
           </button>
         )}
 
@@ -138,9 +116,9 @@ export default function StoreListingToolbar({
             onClick={onRefresh}
             disabled={isLoading}
             title="Làm mới danh sách"
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#cfe0d4] bg-white px-3 py-2 text-xs font-bold text-[#173b28] transition-colors hover:bg-[#eef8f0] disabled:opacity-50"
+            className="btn-secondary inline-flex items-center justify-center gap-1.5 px-3! py-1.5! text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
           >
-            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} aria-hidden="true" />
             Làm mới
           </button>
         )}
@@ -152,7 +130,7 @@ export default function StoreListingToolbar({
       <div
         role="tablist"
         aria-label="Lọc theo trạng thái sản phẩm"
-        className="flex flex-wrap items-center gap-2 border-b border-[#e3efe6] bg-[#f8fcf9] px-4 py-2.5"
+        className="flex flex-wrap items-center gap-2 border-b-2 border-black bg-[#f3faf5] px-4 py-2"
       >
         {STATUS_TABS.map((tab) => {
           const selected = statusFilter === tab.id;
@@ -164,20 +142,20 @@ export default function StoreListingToolbar({
               role="tab"
               aria-selected={selected}
               onClick={() => onStatusFilterChange(tab.id)}
-              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+              className={`inline-flex cursor-pointer items-center gap-2 border-2 border-black px-3 py-1.5 text-xs font-black uppercase tracking-wide transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                 selected
-                  ? tab.activeClass
-                  : "border-transparent text-text-muted hover:bg-white/70 hover:text-[#173b28]"
+                  ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
+                  : "bg-white text-black hover:bg-primary/20"
               }`}
             >
               {tab.label}
               <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
+                className={`border border-black px-1.5 py-0.2 text-[10px] font-black tabular-nums ${
                   selected
-                    ? tab.badgeActiveClass
+                    ? "bg-white text-black"
                     : tab.id === "UNPUBLISHED" && count > 0
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-gray-200/70 text-gray-600"
+                      ? "bg-[#fef08a] text-black"
+                      : "bg-gray-100 text-black"
                 }`}
               >
                 {isLoading ? "…" : count}

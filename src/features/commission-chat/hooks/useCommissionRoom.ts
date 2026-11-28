@@ -4,9 +4,7 @@ import "@/lib/api/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/api_client/core/ApiError";
 import { getCustomerCommission } from "@/features/commission/services/customer-commission.api";
-import { getApiBaseUrl, refreshAccessToken } from "@/lib/api/client";
 import { getApiErrorMessage } from "@/lib/api/auth";
-import { getSessionToken } from "@/lib/auth/session";
 import { getManagementCommission } from "@/features/commission/services/management-commission.api";
 import {
   CHAT_ACTIVE_STATUSES,
@@ -17,7 +15,7 @@ import {
   uploadCommissionChatImage,
   type CommissionMessage,
 } from "../services/commission-messages.api";
-import { buildStompUrl, subscribeStomp, type StompStatus } from "../services/stomp-client";
+import { subscribeHubStatus, subscribeTopic, type StompStatus } from "../services/stomp-hub";
 import { isPageVisible, scheduleVisiblePoll } from "@/lib/polling";
 
 export type ChatViewer = "CUSTOMER" | "STAFF";
@@ -57,7 +55,6 @@ export interface PendingMessage {
 
 const STATUS_POLL_MS = 4000;
 const FALLBACK_POLL_MS = 15000;
-const MAX_STOMP_ERRORS = 3;
 
 async function fetchInfo(commissionId: number, viewer: ChatViewer): Promise<CommissionRoomInfo> {
   if (viewer === "CUSTOMER") {
@@ -123,7 +120,10 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [pending, setPending] = useState<PendingMessage[]>([]);
-  const [realtime, setRealtime] = useState<StompStatus>("disconnected");
+  const [hubStatus, setHubStatus] = useState<StompStatus>("disconnected");
+  /** Server từ chối quyền vào phòng này → không có realtime, dùng poll dự phòng. */
+  const [denied, setDenied] = useState(false);
+  const realtime: StompStatus = denied ? "disconnected" : hubStatus;
   const [reloadKey, setReloadKey] = useState(0);
   /** messageId của tin đến realtime qua STOMP (để FE chạy hiệu ứng xuất hiện). Lịch sử tải từ REST không nằm trong set này. */
   const [liveIds, setLiveIds] = useState<ReadonlySet<number>>(() => new Set());
@@ -170,7 +170,8 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
     try {
       const { data } = await listCommissionMessages(commissionId);
       const list = data ?? [];
-      const hasNewStateCard = list.some(
+      // Lần tải đầu (chưa biết tin nào) thì effect thông tin đã tải rồi, không coi mọi thẻ là "mới".
+      const hasNewStateCard = knownIds.current.size > 0 && list.some(
         (m) =>
           !knownIds.current.has(m.messageId) &&
           m.messageType !== "TEXT" &&
@@ -204,36 +205,20 @@ export function useCommissionRoom(commissionId: number, viewer: ChatViewer) {
   }, [loadInfo]);
   useEffect(() => () => clearTimeout(infoRefreshTimer.current), []);
 
-  // ---- Realtime STOMP /topic/commissions/{id}
+  // ---- Realtime STOMP /topic/commissions/{id} qua kết nối dùng chung của cả tab (stomp-hub).
+  useEffect(() => subscribeHubStatus(setHubStatus), []);
+
   useEffect(() => {
     if (!readable) return;
-    let url: string;
-    try {
-      url = buildStompUrl(getApiBaseUrl());
-    } catch {
-      return;
-    }
-    let errors = 0;
-    const unsubscribe = subscribeStomp({
-      url,
-      destination: `/topic/commissions/${commissionId}`,
-      getToken: getSessionToken,
-      onStatusChange: setRealtime,
-      onConnected: () => {
-        errors = 0;
+    setDenied(false);
+    const unsubscribe = subscribeTopic(`/topic/commissions/${commissionId}`, {
+      onActive: (isReconnect) => {
+        // Lần đầu: lịch sử & thông tin vừa được tải bằng REST ở các effect trên → không tải lại.
+        if (!isReconnect) return;
         void loadHistory(); // bù các tin bị lỡ trong lúc mất kết nối
         void loadInfo();
       },
-      onError: async () => {
-        errors += 1;
-        if (errors >= MAX_STOMP_ERRORS) return false;
-        try {
-          return Boolean(await refreshAccessToken());
-        } catch {
-          // Keep the existing bounded reconnect policy for temporary refresh outages.
-          return true;
-        }
-      },
+      onDenied: () => setDenied(true),
       onMessage: (body) => {
         try {
           const message = JSON.parse(body) as CommissionMessage; // STOMP gửi raw CommissionMessageResponse, không có ApiResponse envelope

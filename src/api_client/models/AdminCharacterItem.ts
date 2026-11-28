@@ -20,6 +20,14 @@ export type AdminCharacterItem = {
      */
     description?: string;
     /**
+     * Character usage type (STORE or COMMISSION)
+     */
+    characterType?: 'STORE' | 'COMMISSION';
+    /**
+     * Bound commission request ID if applicable
+     */
+    commissionId?: number | null;
+    /**
      * Creator author employee summary
      */
     author?: AuthorSummary;

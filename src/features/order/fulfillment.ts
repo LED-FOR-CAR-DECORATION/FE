@@ -4,8 +4,10 @@ import type { MockOrder, OrderKind } from "./types";
 export interface OrderFulfillment {
   hasLED: boolean;
   hasCharacter: boolean;
+  hasSubscription: boolean;
   requiresDelivery: boolean;
   requiresCharacterEntitlement: boolean;
+  requiresSubscriptionActivation: boolean;
   characterIds: string[];
 }
 
@@ -19,6 +21,11 @@ function classifyItem(item: ProductDefinition, result: OrderFulfillment): void {
     result.hasCharacter = true;
     result.requiresCharacterEntitlement = true;
     if (!result.characterIds.includes(item.id)) result.characterIds.push(item.id);
+    return;
+  }
+  if (item.productType === "SUBSCRIPTION") {
+    result.hasSubscription = true;
+    result.requiresSubscriptionActivation = true;
     return;
   }
   if (item.productType === "BUNDLE") {
@@ -39,8 +46,10 @@ export function getOrderFulfillment(order: { items: ProductDefinition[] }): Orde
   const result: OrderFulfillment = {
     hasLED: false,
     hasCharacter: false,
+    hasSubscription: false,
     requiresDelivery: false,
     requiresCharacterEntitlement: false,
+    requiresSubscriptionActivation: false,
     characterIds: [],
   };
   order.items.forEach((item) => classifyItem(item, result));
@@ -49,16 +58,20 @@ export function getOrderFulfillment(order: { items: ProductDefinition[] }): Orde
 
 export function getOrderKind(order: { orderType?: string; items: ProductDefinition[] }): OrderKind {
   const fulfillment = getOrderFulfillment(order);
-  if (fulfillment.hasLED && fulfillment.hasCharacter) {
+  const hasDigital = fulfillment.hasCharacter || fulfillment.hasSubscription;
+  if (fulfillment.hasLED && hasDigital) {
     return "MIXED";
   }
   if (order.orderType === "MIXED" || order.orderType === "BUNDLE") {
+    if (order.items.length > 0 && !fulfillment.hasLED && hasDigital) {
+      return "DIGITAL";
+    }
     return "MIXED";
   }
   if (fulfillment.hasLED || order.orderType === "PHYSICAL") {
     return "PHYSICAL";
   }
-  if (fulfillment.hasCharacter || order.orderType === "DIGITAL" || order.orderType === "SUBSCRIPTION") {
+  if (hasDigital || order.orderType === "DIGITAL" || order.orderType === "SUBSCRIPTION") {
     return "DIGITAL";
   }
   return "PHYSICAL";

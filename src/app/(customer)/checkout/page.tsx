@@ -15,7 +15,6 @@ import {
   Trash2,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
 import AddAddressModal from "@/components/ui/AddAddressModal";
 import ConsentCheckbox, { PolicyLink } from "@/components/ui/ConsentCheckbox";
 import UndoToast from "@/components/ui/UndoToast";
@@ -425,7 +424,6 @@ export default function CheckoutPage() {
           )}
         </div>
       </main>
-      <Footer />
     </>
   );
 }

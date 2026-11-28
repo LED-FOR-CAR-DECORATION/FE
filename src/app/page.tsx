@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ChevronLeft,
@@ -28,6 +28,8 @@ import {
   StoreCartToast,
   isProductOwned,
 } from "@/features/storefront/components/ProductCard";
+
+const HERO_SLIDE_DURATION_MS = 3000;
 
 const HERO_SLIDES = [
   {
@@ -116,19 +118,85 @@ function HeroShowcase({
   loading: boolean;
 }) {
   const [current, setCurrent] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
+  const [cycleKey, setCycleKey] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [isTabHidden, setIsTabHidden] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [failedUrls, setFailedUrls] = useState<Record<string, boolean>>({});
 
+  const remainingMsRef = useRef(HERO_SLIDE_DURATION_MS);
+  const startedAtRef = useRef<number | null>(null);
+  const lastCycleKeyRef = useRef(0);
+
   useEffect(() => {
-    if (isPaused || loading) return;
-    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (typeof document !== "undefined") {
+      setIsTabHidden(document.hidden);
+      const handleVisibilityChange = () => setIsTabHidden(document.hidden);
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      if (typeof window !== "undefined") {
+        const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+        setPrefersReducedMotion(mediaQuery.matches);
+        const handleMotionChange = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+        mediaQuery.addEventListener("change", handleMotionChange);
+        return () => {
+          document.removeEventListener("visibilitychange", handleVisibilityChange);
+          mediaQuery.removeEventListener("change", handleMotionChange);
+        };
+      }
+
+      return () => {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
+    }
+  }, []);
+
+  const isPaused = loading || isHovered || isFocused || isTabHidden || prefersReducedMotion;
+
+  useEffect(() => {
+    if (lastCycleKeyRef.current !== cycleKey) {
+      lastCycleKeyRef.current = cycleKey;
+      remainingMsRef.current = HERO_SLIDE_DURATION_MS;
+    }
+
+    if (isPaused) {
+      startedAtRef.current = null;
       return;
     }
-    const timer = setInterval(() => {
+
+    const delay = Math.max(remainingMsRef.current, 0);
+    startedAtRef.current = Date.now();
+    const timer = window.setTimeout(() => {
+      remainingMsRef.current = HERO_SLIDE_DURATION_MS;
       setCurrent((prev) => (prev + 1) % HERO_SLIDES.length);
-    }, 5500);
-    return () => clearInterval(timer);
-  }, [isPaused, loading]);
+      setCycleKey((prev) => prev + 1);
+    }, delay);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (startedAtRef.current !== null) {
+        const elapsed = Date.now() - startedAtRef.current;
+        remainingMsRef.current = Math.max(0, remainingMsRef.current - elapsed);
+        startedAtRef.current = null;
+      }
+    };
+  }, [isPaused, cycleKey]);
+
+  const goToSlide = useCallback((index: number) => {
+    setCurrent(index);
+    setCycleKey((prev) => prev + 1);
+  }, []);
+
+  const prevSlide = useCallback(() => {
+    setCurrent((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length);
+    setCycleKey((prev) => prev + 1);
+  }, []);
+
+  const nextSlide = useCallback(() => {
+    setCurrent((prev) => (prev + 1) % HERO_SLIDES.length);
+    setCycleKey((prev) => prev + 1);
+  }, []);
 
   const firstLed = products.find((p) => p.productType === "LED_MODEL" && p.previewUrl);
   const firstCharacter = products.find((p) => p.productType === "CHARACTER" && p.previewUrl);
@@ -163,8 +231,19 @@ function HeroShowcase({
 
   return (
     <section
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocusCapture={(e) => {
+        if (e.target instanceof HTMLElement && e.target.matches(":focus-visible")) {
+          setIsFocused(true);
+        }
+      }}
+      onBlurCapture={(e) => {
+        const nextFocused = e.relatedTarget;
+        if (!(nextFocused instanceof Node) || !e.currentTarget.contains(nextFocused)) {
+          setIsFocused(false);
+        }
+      }}
       className="relative overflow-hidden border-b-2 border-black bg-background text-text-main"
       style={{
         backgroundImage:
@@ -178,17 +257,19 @@ function HeroShowcase({
         <div className="grid flex-1 items-center gap-10 lg:grid-cols-12 lg:gap-14">
           {/* Left: Clear Hero Value Prop + 2 Primary Paths */}
           <div className="cursor-default space-y-6 lg:col-span-7">
-            <span className="inline-block border-2 border-black bg-primary px-3 py-1 text-xs font-black uppercase tracking-wider text-black shadow-[2px_2px_0_0_#000]">
-              {slide.tag}
-            </span>
+            <div key={`${slide.id}-${cycleKey}`} className="hero-slide-enter space-y-6">
+              <span className="inline-block border-2 border-black bg-primary px-3 py-1 text-xs font-black uppercase tracking-wider text-black shadow-[2px_2px_0_0_#000]">
+                {slide.tag}
+              </span>
 
-            <h1 className="select-none text-4xl font-black uppercase leading-[1.06] tracking-tight text-black sm:text-5xl lg:text-6xl">
-              {slide.title}
-            </h1>
+              <h1 className="select-none text-4xl font-black uppercase leading-[1.06] tracking-tight text-black sm:text-5xl lg:text-6xl">
+                {slide.title}
+              </h1>
 
-            <p className="max-w-lg text-base font-medium leading-relaxed text-text-muted">
-              {slide.desc}
-            </p>
+              <p className="max-w-lg text-base font-medium leading-relaxed text-text-muted">
+                {slide.desc}
+              </p>
+            </div>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <Link
@@ -211,43 +292,45 @@ function HeroShowcase({
           {/* Right: Clean Flagship Product Visual */}
           <div className="flex justify-center lg:col-span-5 lg:justify-end">
             <div className="w-full max-w-[360px] border-2 border-black bg-white p-4 shadow-[8px_8px_0_0_#000]">
-              <div className="relative aspect-square w-full overflow-hidden border-2 border-black bg-gray-50">
-                {loading || !activeImageSrc ? (
-                  <div
-                    className="h-full w-full animate-pulse bg-gray-100"
-                    aria-label="Đang tải hình ảnh sản phẩm"
-                  />
-                ) : showIconFallback ? (
-                  <div className="grid h-full w-full place-items-center bg-gray-50">
-                    <Monitor size={64} strokeWidth={1.5} className="text-primary-ink" aria-hidden="true" />
-                  </div>
-                ) : (
-                  <Image
-                    src={activeImageSrc}
-                    alt={visual.alt}
-                    fill
-                    sizes="(max-width: 1024px) 320px, 360px"
-                    className="object-contain p-4 [image-rendering:pixelated]"
-                    onError={() => setFailedUrls((prev) => ({ ...prev, [activeImageSrc]: true }))}
-                  />
-                )}
-              </div>
-
-              <div className="mt-3 flex items-center justify-between gap-3 pt-1">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-black uppercase text-black">
-                    {visual.product?.name ?? slide.tag}
-                  </p>
-                  <p className="text-xs font-black tabular-nums text-primary-ink">
-                    {visual.product ? formatPrice(visual.product.price) : "Hàng có sẵn"}
-                  </p>
+              <div key={`${slide.id}-${cycleKey}`} className="hero-slide-enter">
+                <div className="relative aspect-square w-full overflow-hidden border-2 border-black bg-gray-50">
+                  {loading || !activeImageSrc ? (
+                    <div
+                      className="h-full w-full animate-pulse bg-gray-100"
+                      aria-label="Đang tải hình ảnh sản phẩm"
+                    />
+                  ) : showIconFallback ? (
+                    <div className="grid h-full w-full place-items-center bg-gray-50">
+                      <Monitor size={64} strokeWidth={1.5} className="text-primary-ink" aria-hidden="true" />
+                    </div>
+                  ) : (
+                    <Image
+                      src={activeImageSrc}
+                      alt={visual.alt}
+                      fill
+                      sizes="(max-width: 1024px) 320px, 360px"
+                      className="object-contain p-4 [image-rendering:pixelated]"
+                      onError={() => setFailedUrls((prev) => ({ ...prev, [activeImageSrc]: true }))}
+                    />
+                  )}
                 </div>
-                <Link
-                  href={visual.product ? `/products/${visual.product.id}` : slide.href}
-                  className="btn-primary shrink-0 px-3 py-1.5 text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
-                >
-                  Xem ngay
-                </Link>
+
+                <div className="mt-3 flex items-center justify-between gap-3 pt-1">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-black uppercase text-black">
+                      {visual.product?.name ?? slide.tag}
+                    </p>
+                    <p className="text-xs font-black tabular-nums text-primary-ink">
+                      {visual.product ? formatPrice(visual.product.price) : "Hàng có sẵn"}
+                    </p>
+                  </div>
+                  <Link
+                    href={visual.product ? `/products/${visual.product.id}` : slide.href}
+                    className="btn-primary shrink-0 px-3 py-1.5 text-[11px] font-black uppercase shadow-[2px_2px_0_0_#000]"
+                  >
+                    Xem ngay
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -256,25 +339,43 @@ function HeroShowcase({
         {/* Minimal Slide Switcher */}
         <div className="mt-10 flex items-center justify-between gap-4 border-t-2 border-black pt-5">
           <div className="flex items-center gap-2">
-            {HERO_SLIDES.map((s, index) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setCurrent(index)}
-                aria-label={`Chuyển tới ${s.tag}`}
-                className={`h-3 cursor-pointer border-2 border-black transition-all ${
-                  index === current
-                    ? "w-10 bg-primary shadow-[2px_2px_0_0_#000]"
-                    : "w-3 bg-white hover:bg-gray-100"
-                }`}
-              />
-            ))}
+            {HERO_SLIDES.map((s, index) => {
+              const isActive = index === current;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => goToSlide(index)}
+                  aria-label={`Chuyển tới ${s.tag}`}
+                  aria-pressed={isActive}
+                  className={`relative h-3 cursor-pointer overflow-hidden border-2 border-black transition-all ${
+                    isActive
+                      ? "w-12 bg-white shadow-[2px_2px_0_0_#000]"
+                      : "w-3 bg-white hover:bg-gray-100"
+                  }`}
+                >
+                  {isActive &&
+                    (prefersReducedMotion ? (
+                      <span className="absolute inset-0 block bg-primary" />
+                    ) : (
+                      <span
+                        key={cycleKey}
+                        className="hero-dot-progress absolute inset-0 block bg-primary"
+                        style={{
+                          animationDuration: `${HERO_SLIDE_DURATION_MS}ms`,
+                          animationPlayState: isPaused ? "paused" : "running",
+                        }}
+                      />
+                    ))}
+                </button>
+              );
+            })}
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setCurrent((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length)}
+              onClick={prevSlide}
               aria-label="Slide trước"
               className="grid h-10 w-10 cursor-pointer place-items-center border-2 border-black bg-white text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0"
             >
@@ -282,7 +383,7 @@ function HeroShowcase({
             </button>
             <button
               type="button"
-              onClick={() => setCurrent((prev) => (prev + 1) % HERO_SLIDES.length)}
+              onClick={nextSlide}
               aria-label="Slide tiếp theo"
               className="grid h-10 w-10 cursor-pointer place-items-center border-2 border-black bg-white text-black shadow-[2px_2px_0_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0"
             >

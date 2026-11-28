@@ -20,6 +20,8 @@ export interface ManagedSubscriptionPlan {
   isLifetime: boolean;
   durationDays: number | null;
   allAccessCharacters: boolean;
+  maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
   status: SubscriptionPlanStatus;
   createdAt: string;
 }
@@ -40,6 +42,8 @@ export interface CreateSubscriptionPayload {
   isLifetime: boolean;
   durationDays?: number | null;
   allAccessCharacters: boolean;
+  maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
   tagIds?: number[];
 }
 
@@ -50,6 +54,8 @@ export interface UpdateSubscriptionPayload {
   thumbnailUrl?: string;
   durationDays?: number | null;
   allAccessCharacters: boolean;
+  maxCommissionRevisions?: number;
+  maxMobileProfiles?: number;
 }
 
 interface ApiEnvelope<T> {

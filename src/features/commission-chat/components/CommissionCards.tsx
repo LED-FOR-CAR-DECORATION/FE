@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { formatPrice } from "@/lib/currency";
+import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
 import { commissionErrorMessage } from "@/features/commission/errors";
 import {
   approveDeliverableCard,
   cancelRevisionCheckout,
   confirmRevisionCard,
+  rejectRevisionCard,
 } from "@/features/commission/services/customer-commission.api";
 import type { ChatViewer, CommissionRoomInfo } from "../hooks/useCommissionRoom";
 import { parseMetadata, type CommissionMessage } from "../services/commission-messages.api";
@@ -151,10 +153,12 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
   const { viewer, info, latestDeliverableId, latestRevisionId, onChanged } = ctx;
   const router = useRouter();
   const action = useCardAction(onChanged);
+  const [rejectReason, setRejectReason] = useState("");
   const meta = parseMetadata(message.metadataJson);
 
   const brief = typeof meta?.brief === "string" && meta.brief ? meta.brief : message.content;
   const usesFreeQuota = meta?.usesFreeQuota === true;
+  const usesSubscriptionCredit = meta?.usesSubscriptionCredit === true;
   const fee = asNumber(meta?.revisionFee) ?? 0;
   const maxRevisions = asNumber(meta?.maxRevisions) ?? info.maxRevisions;
   const metaRevisionsUsed = asNumber(meta?.revisionsUsed);
@@ -165,8 +169,12 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
       : (metaRevisionsUsed ?? info.revisionsUsed ?? 0);
   const cardStatus = typeof meta?.status === "string" ? meta.status : "PENDING";
   const wasCancelled = typeof meta?.cancelledPaymentCode === "string";
+  const rejectedReason =
+    typeof meta?.rejectedReason === "string" && meta.rejectedReason.trim()
+      ? meta.rejectedReason.trim()
+      : null;
 
-  // Chỉ thẻ mới nhất, đăng sau bản xem trước mới nhất, mới còn xác nhận/hủy được (giống kiểm tra ở backend).
+  // Chỉ thẻ mới nhất, đăng sau bản xem trước mới nhất, mới còn xác nhận/từ chối được (giống kiểm tra ở backend).
   const isCurrent = message.messageId === latestRevisionId && (latestDeliverableId ?? 0) < message.messageId;
   const terminalCommission = info.status === "COMPLETED" || info.status === "CANCELLED" || info.status === "EXPIRED";
   const canConfirm = isCurrent && cardStatus === "PENDING" && info.status === "PREVIEW_DELIVERED";
@@ -176,9 +184,10 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
 
   const badge = cardStatus === "PAID" ? "Đã thanh toán"
     : cardStatus === "CONFIRMED" ? (usesFreeQuota ? "Đã xác nhận" : awaitingPayment ? "Chờ thanh toán" : "Đã xác nhận")
-      : canConfirm ? "Chờ khách xác nhận"
-        : syncingCardStatus ? "Đang đồng bộ"
-          : "Hết hiệu lực";
+      : cardStatus === "REJECTED" ? "Đã từ chối"
+        : canConfirm ? "Chờ khách xác nhận"
+          : syncingCardStatus ? "Đang đồng bộ"
+            : "Hết hiệu lực";
 
   const feeText = usesFreeQuota
     ? `Miễn phí · dùng 1 lượt${maxRevisions !== undefined ? ` (đã dùng ${revisionsUsed}/${maxRevisions})` : ""}`
@@ -188,13 +197,24 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
     <div className="w-72 max-w-full overflow-hidden border-2 border-black bg-amber-50 shadow-[4px_4px_0_0_#000]">
       <p className="flex items-center justify-between gap-2 border-b-2 border-black bg-amber-300 px-3 py-2 text-xs font-black uppercase text-black">
         <span>Yêu cầu chỉnh sửa</span>
-        <span className="border border-black bg-white px-2 py-0.5 text-[10px] font-black uppercase text-black">{badge}</span>
+        <span
+          className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase ${
+            cardStatus === "REJECTED" ? "bg-red-100 text-red-900" : "bg-white text-black"
+          }`}
+        >
+          {badge}
+        </span>
       </p>
       {brief && <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm text-text-main">{brief}</p>}
       <dl className="border-t-2 border-dashed border-black px-3 py-2 text-xs text-amber-950">
         <div className="flex justify-between gap-2"><dt>Chi phí</dt><dd className="text-right font-black tabular-nums">{feeText}</dd></div>
         {wasCancelled && cardStatus === "PENDING" && <p className="mt-1 font-semibold text-amber-900">Lần thanh toán trước đã bị hủy.</p>}
       </dl>
+      {cardStatus === "REJECTED" && rejectedReason && (
+        <p className="border-t-2 border-dashed border-black bg-red-50 px-3 py-2 text-xs text-red-900">
+          <strong>Lý do từ chối:</strong> {rejectedReason}
+        </p>
+      )}
 
       {viewer === "CUSTOMER" && (canConfirm || awaitingPayment) && (
         <div className="space-y-2.5 border-t-2 border-black bg-white px-3 py-3">
@@ -204,13 +224,16 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
             <>
               <p className="text-xs font-medium text-text-main">
                 {usesFreeQuota
-                  ? "Yêu cầu dùng 1 lượt miễn phí. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
+                  ? "Yêu cầu dùng 1 lượt chỉnh sửa miễn phí trong hạn mức của đơn. Họa sĩ sẽ xác nhận thời gian thực hiện sau khi bạn đồng ý."
                   : `Bạn sẽ được chuyển tới trang thanh toán ${formatPrice(fee)}. Sau thanh toán, họa sĩ sẽ xác nhận thời gian thực hiện.`}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={action.busy} className={primaryButton}
                   onClick={() => void action.run(() => confirmRevisionCard(info.commissionId, message.messageId), "Không xác nhận được yêu cầu chỉnh sửa.",
                     ({ data }) => {
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(new Event(ENTITLEMENTS_CHANGED_EVENT));
+                      }
                       onChanged();
                       if (data?.paymentSession) router.push(paymentHref);
                     })}>
@@ -219,10 +242,61 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
                 <button type="button" disabled={action.busy} className={secondaryButton} onClick={() => action.setConfirming(null)}>Hủy</button>
               </div>
             </>
+          ) : action.confirming === "reject" ? (
+            <>
+              <p className="text-xs font-medium text-text-main">
+                Từ chối thẻ nếu nội dung chỉnh sửa chưa đúng với yêu cầu của bạn. Nhân viên sẽ kiểm tra lại và gửi thẻ mới (không mất lượt hay chi phí).
+              </p>
+              <textarea
+                rows={2}
+                maxLength={500}
+                disabled={action.busy}
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                aria-label="Lý do từ chối thẻ yêu cầu chỉnh sửa"
+                placeholder="Lý do chưa đúng ý (tùy chọn)..."
+                className="w-full border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-black placeholder:text-black/45 focus:bg-white focus:outline-none"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={action.busy}
+                  className={dangerButton}
+                  onClick={() =>
+                    void action.run(
+                      () => rejectRevisionCard(info.commissionId, message.messageId, rejectReason),
+                      "Không từ chối được thẻ yêu cầu chỉnh sửa.",
+                      () => {
+                        setRejectReason("");
+                        onChanged();
+                      },
+                    )
+                  }
+                >
+                  {action.busy ? "Đang gửi…" : "Xác nhận từ chối"}
+                </button>
+                <button
+                  type="button"
+                  disabled={action.busy}
+                  className={secondaryButton}
+                  onClick={() => {
+                    setRejectReason("");
+                    action.setConfirming(null);
+                  }}
+                >
+                  Hủy
+                </button>
+              </div>
+            </>
           ) : (
-            <button type="button" className={`${primaryButton} w-full`} onClick={() => action.setConfirming("confirm")}>
-              {usesFreeQuota ? "Xác nhận chỉnh sửa (miễn phí)" : `Xác nhận & thanh toán ${formatPrice(fee)}`}
-            </button>
+            <div className="space-y-2">
+              <button type="button" className={`${primaryButton} w-full`} onClick={() => action.setConfirming("confirm")}>
+                {usesFreeQuota ? "Xác nhận chỉnh sửa (miễn phí)" : `Xác nhận & thanh toán ${formatPrice(fee)}`}
+              </button>
+              <button type="button" className={`${dangerButton} w-full`} onClick={() => action.setConfirming("reject")}>
+                Từ chối thẻ
+              </button>
+            </div>
           ))}
 
           {awaitingPayment && (action.confirming === "cancel" ? (
@@ -248,6 +322,11 @@ export function RevisionCard({ message, ctx }: { message: CommissionMessage; ctx
       )}
       {viewer === "STAFF" && canConfirm && (
         <p className="border-t-2 border-black bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-950">Đang chờ khách xác nhận.</p>
+      )}
+      {viewer === "STAFF" && isCurrent && cardStatus === "REJECTED" && (
+        <p className="border-t-2 border-black bg-red-50 px-3 py-2 text-xs font-semibold text-red-900">
+          Khách đã từ chối thẻ này. Hãy trao đổi lại và gửi thẻ chỉnh sửa mới.
+        </p>
       )}
     </div>
   );

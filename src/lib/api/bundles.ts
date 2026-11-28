@@ -56,7 +56,7 @@ export async function fetchBundleSelectableItems(): Promise<{
   const [productsRes, ledModels, characters] = await Promise.all([
     managedProductsPromise,
     fetchManagedLedModels().catch(() => []),
-    fetchAdminCharacters({ size: 100 }).catch(() => []),
+    fetchAdminCharacters({ characterType: "STORE", size: 100 }).catch(() => []),
   ]);
 
   const ledModelByProductId = new Map<number, (typeof ledModels)[number]>();
@@ -125,8 +125,19 @@ export async function fetchBundleSelectableItems(): Promise<{
 }
 
 export interface BundleConstituentItem {
+  itemType?: "LED" | "CHARACTER";
+  productId?: number | null;
   modelId?: number | null;
+  modelName?: string | null;
+  stockQuantity?: number | null;
+  specifications?: Record<string, unknown> | null;
   versionId?: number | null;
+  characterId?: number | null;
+  characterName?: string | null;
+  versionNumber?: number | null;
+  previewGifUrl?: string | null;
+  thumbnailUrl?: string | null;
+  unitPrice?: number | null;
   quantity: number;
 }
 

@@ -2,12 +2,23 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
   CheckCircle2,
   ChevronRight,
   GitCompareArrows,
   ImageIcon,
+  LayoutDashboard,
+  Package,
+  PieChart,
   RefreshCw,
+  ShieldAlert,
+  Sparkles,
+  TrendingUp,
+  Wallet,
   X,
 } from "lucide-react";
 import CharacterReviewModal from "./CharacterReviewModal";
@@ -22,6 +33,7 @@ import {
   type StoreDraftItem,
 } from "@/lib/api/dashboard";
 import { apiUpdateProductStatus, apiUpdateStoreProduct } from "@/lib/api/products";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { ManagerKpiSummary, RevenueCategoryItem, TopProductItem } from "../types";
 
 const EMPTY_KPI: ManagerKpiSummary = {
@@ -41,6 +53,9 @@ interface MetricCardProps {
   title: string;
   subtitle: string;
   value: string;
+  valueClassName?: string;
+  icon: LucideIcon;
+  iconBoxClass: string;
   badge: {
     label: string;
     className: string;
@@ -58,6 +73,9 @@ function MetricCard({
   title,
   subtitle,
   value,
+  valueClassName = "text-black",
+  icon: Icon,
+  iconBoxClass,
   badge,
   growth,
   footerText,
@@ -65,55 +83,71 @@ function MetricCard({
   onValueClick,
 }: MetricCardProps) {
   return (
-    <div className="flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+    <div className="flex h-full flex-col justify-between border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_#000]">
       <div>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold leading-snug text-slate-900">
-              {title}
-            </p>
-            <p className="mt-0.5 text-xs leading-snug text-slate-500">{subtitle}</p>
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <div
+              className={`grid h-9 w-9 shrink-0 place-items-center border-2 border-black shadow-[2px_2px_0_0_#000] ${iconBoxClass}`}
+            >
+              <Icon className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase leading-snug tracking-wider text-black">
+                {title}
+              </p>
+              <p className="mt-0.5 text-[11px] font-medium leading-snug text-text-muted">
+                {subtitle}
+              </p>
+            </div>
           </div>
 
           <span
-            className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${badge.className}`}
+            className={`inline-flex shrink-0 items-center border border-black px-2 py-0.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap shadow-[1px_1px_0_0_#000] ${badge.className}`}
           >
             {badge.label}
           </span>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-baseline gap-2">
+        <div className="mt-4 flex flex-wrap items-baseline gap-2.5">
           {onValueClick ? (
             <button
               type="button"
               onClick={onValueClick}
               title="Nhấn để truy xuất danh sách đơn hàng đóng góp"
-              className="cursor-pointer text-left text-xl font-bold tracking-tight text-slate-900 tabular-nums underline-offset-4 transition-colors hover:text-blue-600 hover:underline sm:text-2xl"
+              className={`cursor-pointer text-left text-xl font-black tracking-tight tabular-nums underline-offset-4 decoration-2 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:text-2xl ${valueClassName}`}
             >
               {value}
             </button>
           ) : (
-            <span className="text-xl font-bold tracking-tight text-slate-900 tabular-nums sm:text-2xl">
+            <span
+              className={`text-xl font-black tracking-tight tabular-nums sm:text-2xl ${valueClassName}`}
+            >
               {value}
             </span>
           )}
 
           {growth && (
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${
+              className={`inline-flex items-center gap-0.5 border border-black px-1.5 py-0.5 text-[11px] font-black tabular-nums shadow-[1px_1px_0_0_#000] ${
                 growth.isPositive
-                  ? "bg-green-50 text-green-700"
-                  : "bg-red-50 text-red-700"
+                  ? "bg-primary/70 text-black"
+                  : "bg-[#fecaca] text-black"
               }`}
             >
+              {growth.isPositive ? (
+                <ArrowUpRight className="h-3 w-3" strokeWidth={2.75} aria-hidden="true" />
+              ) : (
+                <ArrowDownRight className="h-3 w-3" strokeWidth={2.75} aria-hidden="true" />
+              )}
               {growth.value}
             </span>
           )}
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3.5">
-        <span className="min-w-0 flex-1 text-xs leading-relaxed text-slate-500">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed border-gray-200 pt-3.5">
+        <span className="min-w-0 flex-1 text-xs font-medium leading-relaxed text-text-muted">
           {footerText}
         </span>
         {footerAction}
@@ -133,6 +167,22 @@ const PRODUCT_CATEGORY_LABELS: Record<string, string> = {
   SUBSCRIPTION: "Gói hội viên",
 };
 
+/** Storefront-harmonized, soothing botanical pastel palette for Donut chart & legends. */
+const CATEGORY_STORE_COLORS: Record<string, string> = {
+  HARDWARE: "#74c69d",
+  LED: "#74c69d",
+  PHYSICAL: "#74c69d",
+  SUBSCRIPTION: "#8ecae6",
+  COMMISSION: "#f4a261",
+  CHARACTER: "#b8b8ff",
+  DIGITAL: "#b8b8ff",
+  BUNDLE: "#f9dc7a",
+};
+
+function resolveCategoryColor(category: string, fallbackColor: string): string {
+  return CATEGORY_STORE_COLORS[category] ?? fallbackColor;
+}
+
 function formatRevenuePeriodVi(period?: string): string {
   if (!period) return "So với tháng trước";
   return period
@@ -149,12 +199,12 @@ const STOCK_STATUS_MAP: Record<
   string,
   { label: string; className: string }
 > = {
-  "In stock": { label: "Còn hàng", className: "bg-green-50 text-green-700" },
-  "Low stock": { label: "Sắp hết", className: "bg-amber-50 text-amber-700" },
-  "Out of stock": { label: "Hết hàng", className: "bg-red-50 text-red-700" },
-  IN_STOCK: { label: "Còn hàng", className: "bg-green-50 text-green-700" },
-  LOW_STOCK: { label: "Sắp hết", className: "bg-amber-50 text-amber-700" },
-  OUT_OF_STOCK: { label: "Hết hàng", className: "bg-red-50 text-red-700" },
+  "In stock": { label: "Còn hàng", className: "bg-primary/60 text-black" },
+  "Low stock": { label: "Sắp hết", className: "bg-[#fef08a] text-black" },
+  "Out of stock": { label: "Hết hàng", className: "bg-[#fecaca] text-black" },
+  IN_STOCK: { label: "Còn hàng", className: "bg-primary/60 text-black" },
+  LOW_STOCK: { label: "Sắp hết", className: "bg-[#fef08a] text-black" },
+  OUT_OF_STOCK: { label: "Hết hàng", className: "bg-[#fecaca] text-black" },
 };
 
 function formatMillionVnd(value: number): string {
@@ -195,7 +245,12 @@ function RevenueDonutChart({
     const length = share * circumference;
     const offset = accumulatedOffset;
     accumulatedOffset += length;
-    return { item, length, offset };
+    return {
+      item,
+      color: resolveCategoryColor(item.category, item.color),
+      length,
+      offset,
+    };
   });
 
   const hoveredItem = items.find((item) => item.category === hoveredCategory) ?? null;
@@ -210,16 +265,17 @@ function RevenueDonutChart({
           role="img"
           aria-label="Biểu đồ tròn doanh thu theo danh mục"
         >
+          {/* Outer & inner crisp black outlines for Neo-Brutalist precision */}
           <circle
             cx="100"
             cy="100"
             r={radius}
             fill="none"
-            stroke="#f1f5f9"
+            stroke="#e5e7eb"
             strokeWidth={strokeWidth}
           />
           {sumRevenue > 0 &&
-            segments.map(({ item, length, offset }) => {
+            segments.map(({ item, color, length, offset }) => {
               if (length <= 0) return null;
               const isHovered = hoveredCategory === item.category;
               const isDimmed = hoveredCategory !== null && !isHovered;
@@ -230,65 +286,87 @@ function RevenueDonutChart({
                   cy="100"
                   r={radius}
                   fill="none"
-                  stroke={item.color}
+                  stroke={color}
                   strokeWidth={isHovered ? strokeWidth + 4 : strokeWidth}
                   strokeDasharray={`${length} ${circumference}`}
                   strokeDashoffset={-offset}
-                  className="cursor-pointer transition-all duration-200"
-                  style={{ opacity: isDimmed ? 0.35 : 1 }}
+                  className="cursor-pointer transition-all duration-150"
+                  style={{ opacity: isDimmed ? 0.3 : 1 }}
                   onMouseEnter={() => setHoveredCategory(item.category)}
                   onMouseLeave={() => setHoveredCategory(null)}
                   onClick={() => onSelectCategory(item.category)}
                 />
               );
             })}
+          <circle
+            cx="100"
+            cy="100"
+            r={radius + strokeWidth / 2}
+            fill="none"
+            stroke="#000000"
+            strokeWidth="2"
+            className="pointer-events-none"
+          />
+          <circle
+            cx="100"
+            cy="100"
+            r={radius - strokeWidth / 2}
+            fill="none"
+            stroke="#000000"
+            strokeWidth="2"
+            className="pointer-events-none"
+          />
         </svg>
 
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
-          <span className="max-w-[100px] truncate text-[11px] font-medium text-slate-500">
+          <span className="max-w-[104px] truncate text-[10px] font-black uppercase tracking-wider text-text-muted">
             {hoveredItem
               ? PRODUCT_CATEGORY_LABELS[hoveredItem.category] ?? hoveredItem.category
-              : "Tổng doanh thu"}
+              : "Tổng thu"}
           </span>
-          <span className="mt-0.5 text-sm font-bold text-slate-900 tabular-nums">
+          <span className="mt-0.5 text-sm font-black text-primary-ink tabular-nums">
             {formatRevenueCompact(hoveredItem ? hoveredItem.revenue : totalRevenue)}
           </span>
           {hoveredItem && (
-            <span className="text-[11px] font-semibold text-blue-600 tabular-nums">
+            <span className="mt-0.5 border border-black bg-primary px-1.5 py-0.2 text-[10px] font-black text-black tabular-nums">
               {hoveredItem.percentage}%
             </span>
           )}
         </div>
       </div>
 
-      {/* Category Breakdown Legend */}
+      {/* Category Breakdown Legend (mouse + keyboard synchronized) */}
       <div className="w-full flex-1 space-y-2">
         {items.map((item) => {
           const isHovered = hoveredCategory === item.category;
+          const swatchColor = resolveCategoryColor(item.category, item.color);
           return (
             <button
               key={item.category}
               type="button"
               onMouseEnter={() => setHoveredCategory(item.category)}
               onMouseLeave={() => setHoveredCategory(null)}
+              onFocus={() => setHoveredCategory(item.category)}
+              onBlur={() => setHoveredCategory(null)}
               onClick={() => onSelectCategory(item.category)}
               title={`Xem các đơn hàng đóng góp cho ${PRODUCT_CATEGORY_LABELS[item.category] ?? item.category}`}
-              className={`group flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+              className={`group flex w-full cursor-pointer items-center justify-between gap-2 border-2 px-3 py-2 text-left text-xs transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                 isHovered
-                  ? "border-blue-300 bg-blue-50/40"
-                  : "border-transparent bg-slate-50/50 hover:border-blue-200 hover:bg-blue-50/30"
+                  ? "border-black bg-primary/25 shadow-[2px_2px_0_0_#000]"
+                  : "border-black/15 bg-gray-50 hover:border-black hover:bg-primary/15 hover:shadow-[2px_2px_0_0_#000]"
               }`}
             >
               <div className="flex min-w-0 items-center gap-2.5">
                 <span
-                  className="h-3 w-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: item.color }}
+                  className="h-3.5 w-3.5 shrink-0 border border-black shadow-[1px_1px_0_0_#000]"
+                  style={{ backgroundColor: swatchColor }}
+                  aria-hidden="true"
                 />
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-800 group-hover:text-blue-700">
+                  <p className="truncate font-black uppercase tracking-wide text-black">
                     {PRODUCT_CATEGORY_LABELS[item.category] ?? item.category}
                   </p>
-                  <p className="text-[11px] text-slate-500 tabular-nums">
+                  <p className="text-[11px] font-medium text-text-muted tabular-nums">
                     {item.unitCount.toLocaleString("vi-VN")} đơn vị
                   </p>
                 </div>
@@ -296,14 +374,17 @@ function RevenueDonutChart({
 
               <div className="flex shrink-0 items-center gap-2">
                 <div className="text-right">
-                  <p className="font-semibold text-slate-900 tabular-nums">
+                  <p className="font-black text-primary-ink tabular-nums">
                     {formatRevenueCompact(item.revenue)}
                   </p>
-                  <p className="text-[11px] font-medium text-slate-500 tabular-nums">
+                  <p className="text-[11px] font-bold text-text-muted tabular-nums">
                     {item.percentage}%
                   </p>
                 </div>
-                <ChevronRight className="h-4 w-4 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600" />
+                <ChevronRight
+                  className="h-4 w-4 text-text-muted transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-black"
+                  aria-hidden="true"
+                />
               </div>
             </button>
           );
@@ -338,43 +419,51 @@ function CategoryRevenueCard({
   month,
   items,
   totalRevenue,
-  accent = "blue",
+  accent = "primary",
   onDrilldownAll,
   onSelectCategory,
 }: {
   month: string;
   items: RevenueCategoryItem[];
   totalRevenue: number;
-  accent?: "blue" | "emerald";
+  accent?: "primary" | "compare";
   onDrilldownAll: () => void;
   onSelectCategory: (category: string) => void;
 }) {
   const topCat = [...items].sort((a, b) => b.revenue - a.revenue)[0];
-  const badgeClass =
-    accent === "emerald"
-      ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-      : "bg-blue-50 text-blue-700 hover:bg-blue-100";
+  const isCompare = accent === "compare";
+  const badgeClass = isCompare
+    ? "bg-[#fef08a] text-black hover:bg-[#fde047]"
+    : "bg-primary text-black hover:bg-primary-dark";
+  const iconBoxClass = isCompare ? "bg-[#fef08a]" : "bg-primary";
 
   return (
     <section
       aria-label={`Doanh thu theo danh mục ${formatMonthTitle(month)}`}
-      className="flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+      className="flex h-full flex-col justify-between border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6"
     >
       <div>
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              Doanh thu theo danh mục · {formatMonthTitle(month)}
-            </h2>
-            <p className="text-xs text-slate-500">
-              Nhấn vào từng danh mục để truy xuất đơn hàng đóng góp
-            </p>
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black pb-4">
+          <div className="flex items-start gap-2.5">
+            <div
+              className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center border-2 border-black shadow-[2px_2px_0_0_#000] ${iconBoxClass}`}
+            >
+              <PieChart className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-wider text-black sm:text-base">
+                Doanh thu theo danh mục · {formatMonthTitle(month)}
+              </h2>
+              <p className="mt-0.5 text-xs font-medium text-text-muted">
+                Nhấn vào từng danh mục để truy xuất đơn hàng đóng góp
+              </p>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onDrilldownAll}
-            className={`inline-flex shrink-0 cursor-pointer items-center rounded-full px-2.5 py-1 text-xs font-medium tabular-nums transition-colors ${badgeClass}`}
+            className={`inline-flex shrink-0 cursor-pointer items-center border-2 border-black px-2.5 py-1 text-xs font-black uppercase tabular-nums shadow-[2px_2px_0_0_#000] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${badgeClass}`}
           >
             Tổng: {formatRevenueCompact(totalRevenue)}
           </button>
@@ -387,20 +476,20 @@ function CategoryRevenueCard({
             onSelectCategory={onSelectCategory}
           />
         ) : (
-          <div className="my-8 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center">
-            <p className="text-sm font-medium text-slate-600">
+          <div className="my-8 flex flex-col items-center justify-center border-2 border-dashed border-black/25 bg-gray-50 px-4 py-8 text-center">
+            <p className="text-xs font-black uppercase tracking-wide text-black">
               Chưa có dữ liệu doanh thu theo danh mục trong {formatMonthTitle(month)}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs font-medium text-text-muted">
               Dữ liệu sẽ tự động cập nhật khi có giao dịch mới.
             </p>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs">
-        <span className="font-medium text-slate-600">Điểm nổi bật</span>
-        <span className="font-semibold text-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-primary/15 px-3.5 py-2.5 text-xs">
+        <span className="font-black uppercase tracking-wider text-black">Điểm nổi bật</span>
+        <span className="font-bold text-primary-ink">
           {topCat && topCat.revenue > 0
             ? `${PRODUCT_CATEGORY_LABELS[topCat.category] ?? topCat.category} đóng góp ${topCat.percentage}% doanh thu`
             : "Chưa có dữ liệu"}
@@ -413,53 +502,63 @@ function CategoryRevenueCard({
 function TopProductsCard({
   month,
   products,
-  accent = "blue",
+  accent = "primary",
   onSelectProduct,
 }: {
   month: string;
   products: TopProductItem[];
-  accent?: "blue" | "emerald";
+  accent?: "primary" | "compare";
   onSelectProduct: (productId: number, name: string) => void;
 }) {
   const maxUnitsSold = Math.max(...products.map((item) => item.unitsSold), 1);
-  const rankColors =
-    accent === "emerald"
-      ? ["#059669", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0"]
-      : ["#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"];
-  const topBadgeBg = accent === "emerald" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white";
+  const isCompare = accent === "compare";
+  const rankColors = isCompare
+    ? ["#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fde68a"]
+    : ["#1f432b", "#2d6a4f", "#52986d", "#89c89b", "#bce2c6"];
+  const topBadgeBg = isCompare
+    ? "bg-[#fef08a] text-black"
+    : "bg-primary text-black";
+  const iconBoxClass = isCompare ? "bg-[#fef08a]" : "bg-primary";
 
   return (
     <section
       aria-label={`Top sản phẩm bán chạy ${formatMonthTitle(month)}`}
-      className="flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+      className="flex h-full flex-col justify-between border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6"
     >
       <div>
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              Top sản phẩm bán chạy · {formatMonthTitle(month)}
-            </h2>
-            <p className="text-xs text-slate-500">
-              Nhấn vào từng sản phẩm để xem danh sách đơn hàng cụ thể
-            </p>
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black pb-4">
+          <div className="flex items-start gap-2.5">
+            <div
+              className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center border-2 border-black shadow-[2px_2px_0_0_#000] ${iconBoxClass}`}
+            >
+              <TrendingUp className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-wider text-black sm:text-base">
+                Top sản phẩm bán chạy · {formatMonthTitle(month)}
+              </h2>
+              <p className="mt-0.5 text-xs font-medium text-text-muted">
+                Nhấn vào từng sản phẩm để xem danh sách đơn hàng cụ thể
+              </p>
+            </div>
           </div>
 
-          <span className="inline-flex shrink-0 items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+          <span className="inline-flex shrink-0 items-center border border-black bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
             Top {products.length > 0 ? products.length : 5} sản phẩm
           </span>
         </div>
 
         {products.length > 0 ? (
-          <div className="my-4 divide-y divide-slate-100">
+          <div className="my-4 divide-y-2 divide-dashed divide-gray-200">
             {products.map((prod, idx) => {
               const statusBadge =
                 (prod.stockStatus && STOCK_STATUS_MAP[prod.stockStatus]) || {
                   label: "Đang bán",
-                  className: "bg-blue-50 text-blue-700",
+                  className: "bg-primary/40 text-black",
                 };
               const barWidthPercent =
                 prod.unitsSold > 0
-                  ? Math.max((prod.unitsSold / maxUnitsSold) * 100, 5)
+                  ? Math.max((prod.unitsSold / maxUnitsSold) * 100, 6)
                   : 0;
               const barColor = rankColors[idx] ?? rankColors[rankColors.length - 1];
               const numericProductId = Number(prod.id);
@@ -472,38 +571,38 @@ function TopProductsCard({
                   disabled={!canDrilldownProduct}
                   onClick={() => canDrilldownProduct && onSelectProduct(numericProductId, prod.name)}
                   title={`Xem các đơn hàng đã mua ${prod.name} trong ${formatMonthTitle(month)}`}
-                  className="group -mx-2 grid w-[calc(100%+1rem)] cursor-pointer grid-cols-1 gap-2.5 rounded-xl px-2 py-3 text-left transition-colors hover:bg-blue-50/40 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] sm:items-center sm:gap-4"
+                  className="group -mx-2 grid w-[calc(100%+1rem)] cursor-pointer grid-cols-1 gap-2.5 px-2 py-3 text-left transition-colors duration-150 hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-default disabled:hover:bg-transparent sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] sm:items-center sm:gap-4"
                 >
                   <div className="flex min-w-0 items-start gap-2.5">
                     <span
-                      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold tabular-nums ${
-                        idx === 0 ? topBadgeBg : "bg-slate-100 text-slate-700"
+                      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center border border-black text-[11px] font-black tabular-nums shadow-[1px_1px_0_0_#000] ${
+                        idx === 0 ? topBadgeBg : "bg-white text-black"
                       }`}
                     >
                       #{prod.rank}
                     </span>
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden border-2 border-black bg-gray-50">
                       {prod.thumbnail ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={prod.thumbnail}
                           alt={prod.name}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain [image-rendering:pixelated]"
                         />
                       ) : (
-                        <ImageIcon className="h-4 w-4 text-slate-400" />
+                        <ImageIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium leading-snug text-slate-900 transition-colors group-hover:text-blue-700">
+                      <p className="text-xs font-black uppercase leading-snug text-black transition-colors group-hover:text-primary-ink sm:text-sm">
                         {prod.name}
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] font-bold uppercase text-text-muted">
                           {PRODUCT_CATEGORY_LABELS[prod.category] ?? prod.category}
                         </span>
                         <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadge.className}`}
+                          className={`inline-block border border-black px-1.5 py-0.2 text-[10px] font-black uppercase ${statusBadge.className}`}
                         >
                           {statusBadge.label}
                         </span>
@@ -513,17 +612,20 @@ function TopProductsCard({
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="font-bold text-slate-900 tabular-nums">
+                      <span className="font-black text-black tabular-nums">
                         {prod.unitsSold.toLocaleString("vi-VN")} đơn vị
                       </span>
-                      <span className="inline-flex items-center gap-1 font-medium text-slate-500 tabular-nums group-hover:text-blue-600">
+                      <span className="inline-flex items-center gap-1 font-black text-primary-ink tabular-nums">
                         {formatRevenueCompact(prod.revenue)}
-                        <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-600" />
+                        <ChevronRight
+                          className="h-3.5 w-3.5 text-text-muted transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-black"
+                          aria-hidden="true"
+                        />
                       </span>
                     </div>
-                    <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-3.5 w-full border-2 border-black bg-gray-100 p-0.5">
                       <div
-                        className="h-full rounded-full transition-all duration-300"
+                        className="h-full transition-all duration-200"
                         style={{
                           width: `${barWidthPercent}%`,
                           backgroundColor: barColor,
@@ -536,20 +638,22 @@ function TopProductsCard({
             })}
           </div>
         ) : (
-          <div className="my-8 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center">
-            <p className="text-sm font-medium text-slate-600">
+          <div className="my-8 flex flex-col items-center justify-center border-2 border-dashed border-black/25 bg-gray-50 px-4 py-8 text-center">
+            <p className="text-xs font-black uppercase tracking-wide text-black">
               Chưa có sản phẩm bán chạy trong {formatMonthTitle(month)}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs font-medium text-text-muted">
               Bảng xếp hạng sẽ hiển thị khi có đơn hàng phát sinh.
             </p>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs">
-        <span className="shrink-0 font-medium text-slate-600">Chủ lực doanh số</span>
-        <span className="truncate font-semibold text-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-primary/15 px-3.5 py-2.5 text-xs">
+        <span className="shrink-0 font-black uppercase tracking-wider text-black">
+          Chủ lực doanh số
+        </span>
+        <span className="truncate font-black uppercase text-primary-ink">
           {products[0]?.name ?? "—"}
         </span>
       </div>
@@ -558,6 +662,8 @@ function TopProductsCard({
 }
 
 export default function ManagerDashboard() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [drafts, setDrafts] = useState<StoreDraftItem[]>([]);
   const [selectedDraft, setSelectedDraft] = useState<StoreDraftItem | null>(null);
   const [drilldownQuery, setDrilldownQuery] = useState<RevenueDrilldownQuery | null>(null);
@@ -710,80 +816,99 @@ export default function ManagerDashboard() {
   const pendingCount = overview ? kpi.pendingCharactersCount : drafts.length;
   const lowStockCount = kpi.lowStockModelsCount;
   const growthPositive = kpi.revenueGrowthPercent >= 0;
-  const topCategory = [...revenueByCategory].sort((a, b) => b.revenue - a.revenue)[0];
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] font-sans text-slate-900">
-      {/* Toast Notification */}
+    <div className="manager-neo-dashboard mx-auto w-full max-w-[1440px] font-sans text-text-main">
+      {/* Storefront-matched Toast Notification */}
       {toastMessage && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-lg"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 border-2 border-black bg-white px-4 py-3 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
         >
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
+          <span className="grid h-6 w-6 shrink-0 place-items-center border border-black bg-primary">
+            <CheckCircle2 className="h-3.5 w-3.5 text-black" aria-hidden="true" />
+          </span>
           <span>{toastMessage}</span>
         </div>
       )}
 
-      <div className="flex flex-col gap-5">
-        {/* Top Row: Header */}
-        <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-6">
+        {/* Top Row: Storefront-aligned Header Banner & Period Toolbar */}
+        <header className="border-2 border-black border-l-8 border-l-primary bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="min-w-0">
-              <nav
-                aria-label="Đường dẫn"
-                className="flex items-center gap-1.5 text-xs font-medium text-slate-500"
-              >
-                <span>Quản lý</span>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                <span className="text-slate-900">Tổng quan</span>
-              </nav>
-              <h1 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                TỔNG QUAN QUẢN LÝ
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Điều hành kinh doanh, xét duyệt nhân vật Pixel Art và theo dõi
-                tồn kho thiết bị LED.
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="border border-black bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
+                  BẢNG ĐIỀU HÀNH
+                </span>
+                <nav
+                  aria-label="Đường dẫn"
+                  className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-text-muted"
+                >
+                  <span>Quản lý</span>
+                  <ChevronRight className="h-3.5 w-3.5 text-black" aria-hidden="true" />
+                  <span className="text-black">Tổng quan</span>
+                </nav>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <LayoutDashboard
+                  size={24}
+                  className="shrink-0 text-primary-ink"
+                  aria-hidden="true"
+                />
+                <h1 className="text-xl font-black uppercase tracking-tight text-black sm:text-2xl">
+                  TỔNG QUAN QUẢN LÝ
+                </h1>
+              </div>
+
+              <p className="text-xs font-medium text-text-muted sm:text-sm">
+                Điều hành kinh doanh, xét duyệt nhân vật Pixel Art và theo dõi tồn kho thiết bị LED.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
               <Link
                 href="/staff/pricing"
-                className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:text-slate-900"
+                className={`${isAdmin ? "btn-secondary" : "btn-primary"} inline-flex items-center px-3.5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]`}
               >
                 Danh sách sản phẩm
               </Link>
 
-              <Link
-                href="/admin"
-                className="inline-flex items-center rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-medium text-white shadow-xs transition-colors hover:bg-blue-700"
-              >
-                Trang quản trị
-              </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className="btn-primary inline-flex items-center px-3.5 py-2 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0_0_#000]"
+                >
+                  Trang quản trị
+                </Link>
+              )}
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t-2 border-dashed border-gray-200 pt-4">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-medium text-slate-500">Chọn nhanh:</span>
+              <span className="text-[11px] font-black uppercase tracking-wider text-text-muted">
+                Chọn nhanh:
+              </span>
               {recentMonths.map((ym) => {
                 const active = month === ym;
                 return (
                   <button
                     key={ym}
                     type="button"
+                    aria-pressed={active}
                     onClick={() => {
                       setMonth(ym);
                       if (compareWith === ym) {
                         setCompareWith("");
                       }
                     }}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    className={`cursor-pointer border-2 border-black px-2.5 py-1 text-xs font-black uppercase tracking-wide transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
                       active
-                        ? "bg-blue-600 text-white shadow-2xs"
-                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        ? "bg-primary text-black shadow-[2px_2px_0_0_#000]"
+                        : "bg-white text-black hover:bg-primary/20"
                     }`}
                   >
                     {formatMonthPillLabel(ym)}
@@ -792,9 +917,9 @@ export default function ManagerDashboard() {
               })}
             </div>
 
-            <div className="hidden h-5 w-px bg-slate-200 sm:block" />
+            <div className="hidden h-6 w-0.5 bg-black/15 sm:block" aria-hidden="true" />
 
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-text-muted">
               <span>Tháng</span>
               <input
                 type="month"
@@ -807,20 +932,18 @@ export default function ManagerDashboard() {
                     setCompareWith("");
                   }
                 }}
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800"
+                className="border-2 border-black bg-gray-50 px-2.5 py-1.5 text-xs font-bold text-black tabular-nums focus:bg-white"
               />
             </label>
 
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-text-muted">
               <span>So sánh với</span>
               <input
                 type="month"
                 value={compareWith}
                 onChange={(e) => setCompareWith(e.target.value)}
-                className={`rounded-lg border px-2.5 py-1.5 text-sm text-slate-800 ${
-                  isComparing
-                    ? "border-emerald-300 bg-emerald-50/40"
-                    : "border-slate-200 bg-white"
+                className={`border-2 border-black px-2.5 py-1.5 text-xs font-bold text-black tabular-nums ${
+                  isComparing ? "bg-[#fef9c3]" : "bg-gray-50 focus:bg-white"
                 }`}
               />
             </label>
@@ -829,18 +952,18 @@ export default function ManagerDashboard() {
               <button
                 type="button"
                 onClick={() => setCompareWith("")}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                className="inline-flex cursor-pointer items-center gap-1.5 border-2 border-black bg-black px-3 py-1.5 text-xs font-black uppercase tracking-wide text-white shadow-[2px_2px_0_0_#89c89b] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
                 Tắt so sánh
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setCompareWith(shiftYearMonth(month, -1))}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                className="inline-flex cursor-pointer items-center gap-1.5 border-2 border-black bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wide text-black shadow-[2px_2px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#fef08a] active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
-                <GitCompareArrows className="h-3.5 w-3.5" />
+                <GitCompareArrows className="h-3.5 w-3.5" aria-hidden="true" />
                 So sánh tháng trước
               </button>
             )}
@@ -849,9 +972,12 @@ export default function ManagerDashboard() {
               type="button"
               onClick={triggerFreshReload}
               disabled={kpiLoading}
-              className="ml-auto inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
+              className="btn-secondary ml-auto inline-flex items-center gap-2 px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
             >
-              <RefreshCw className={`h-4 w-4 ${kpiLoading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${kpiLoading ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
               Làm mới
             </button>
           </div>
@@ -860,13 +986,16 @@ export default function ManagerDashboard() {
         {kpiError && (
           <div
             role="alert"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+            className="flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-[#fee2e2] px-4 py-3 text-xs font-bold text-black shadow-[4px_4px_0_0_#000]"
           >
-            <span>{kpiError}</span>
+            <span className="inline-flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-700" aria-hidden="true" />
+              {kpiError}
+            </span>
             <button
               type="button"
               onClick={triggerFreshReload}
-              className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-bold"
+              className="btn-secondary px-3 py-1 text-xs font-black uppercase shadow-[2px_2px_0_0_#000]"
             >
               Thử lại
             </button>
@@ -874,14 +1003,17 @@ export default function ManagerDashboard() {
         )}
 
         {/* Second Row: 4 Equal-Width Key Metric Cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             title="Tổng doanh thu"
-            subtitle={`Tháng ${month} (VNĐ)`}
+            subtitle={`Tháng ${month || "—"} (VNĐ)`}
             value={kpiLoading && !overview ? "…" : `${kpi.totalRevenue.toLocaleString("vi-VN")} VNĐ`}
+            valueClassName="text-primary-ink"
+            icon={Wallet}
+            iconBoxClass="bg-primary"
             badge={{
               label: growthPositive ? "Tăng trưởng" : "Giảm",
-              className: growthPositive ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700",
+              className: growthPositive ? "bg-primary text-black" : "bg-[#fecaca] text-black",
             }}
             growth={{
               value: `${growthPositive ? "+" : ""}${kpi.revenueGrowthPercent}%`,
@@ -905,7 +1037,7 @@ export default function ManagerDashboard() {
                     titleHint: "Tổng doanh thu",
                   })
                 }
-                className="inline-flex shrink-0 cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+                className="inline-flex shrink-0 cursor-pointer items-center border-2 border-black bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-[2px_2px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:bg-primary active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
                 Truy xuất đơn
               </button>
@@ -916,22 +1048,24 @@ export default function ManagerDashboard() {
             title="Nhân vật chờ duyệt"
             subtitle="Chờ quản lý thẩm định"
             value={`${pendingCount} Sản phẩm`}
+            icon={Sparkles}
+            iconBoxClass={pendingCount > 0 ? "bg-[#fef08a]" : "bg-primary/50"}
             badge={
               pendingCount === 0
                 ? {
                     label: "Đã xử lý hết",
-                    className: "bg-green-50 text-green-700",
+                    className: "bg-primary text-black",
                   }
                 : {
                     label: "Cần duyệt",
-                    className: "bg-amber-50 text-amber-700",
+                    className: "bg-[#fef08a] text-black",
                   }
             }
             footerText={`${kpi.pendingCommissionsCount} yêu cầu thiết kế chờ duyệt`}
             footerAction={
               <Link
                 href="/staff/pricing"
-                className="inline-flex shrink-0 items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                className="inline-flex shrink-0 items-center border-2 border-black bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-[2px_2px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:bg-primary active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
                 Duyệt ngay
               </Link>
@@ -942,10 +1076,19 @@ export default function ManagerDashboard() {
             title="Mẫu LED sắp hết"
             subtitle="Cần nhập thêm vào kho"
             value={`${lowStockCount} Mẫu thiết bị`}
-            badge={{
-              label: "Cần nhập thêm",
-              className: "bg-red-50 text-red-700",
-            }}
+            icon={Package}
+            iconBoxClass={lowStockCount > 0 ? "bg-[#fecaca]" : "bg-primary/50"}
+            badge={
+              lowStockCount === 0
+                ? {
+                    label: "Ổn định",
+                    className: "bg-primary text-black",
+                  }
+                : {
+                    label: "Cần nhập thêm",
+                    className: "bg-[#fecaca] text-black",
+                  }
+            }
             footerText={
               lowStockLeds[0]
                 ? `${lowStockLeds[0].name} còn ${lowStockLeds[0].currentStock} chiếc`
@@ -953,8 +1096,8 @@ export default function ManagerDashboard() {
             }
             footerAction={
               <Link
-                href="/staff/inventory"
-                className="inline-flex shrink-0 items-center rounded-lg px-2.5 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+                href="/manager/inventory"
+                className="inline-flex shrink-0 items-center border-2 border-black bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-[2px_2px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:bg-primary active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
                 Xem chi tiết
               </Link>
@@ -965,15 +1108,17 @@ export default function ManagerDashboard() {
             title="Bảo hành cần xử lý"
             subtitle="Phiếu bảo hành đang chờ duyệt"
             value={`${kpi.pendingWarrantyClaimsCount} Phiếu`}
+            icon={ShieldAlert}
+            iconBoxClass={kpi.pendingWarrantyClaimsCount > 0 ? "bg-[#fed7aa]" : "bg-primary/50"}
             badge={
               kpi.pendingWarrantyClaimsCount === 0
                 ? {
                     label: "Đã xử lý hết",
-                    className: "bg-green-50 text-green-700",
+                    className: "bg-primary text-black",
                   }
                 : {
                     label: "Cần xử lý",
-                    className: "bg-rose-50 text-rose-700",
+                    className: "bg-[#fed7aa] text-black",
                   }
             }
             footerText={
@@ -983,8 +1128,8 @@ export default function ManagerDashboard() {
             }
             footerAction={
               <Link
-                href="/staff/warranty"
-                className="inline-flex shrink-0 items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                href="/manager/warranty"
+                className="inline-flex shrink-0 items-center border-2 border-black bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-[2px_2px_0_0_#000] transition-all duration-150 hover:-translate-y-0.5 hover:bg-primary active:translate-y-0 active:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
               >
                 Xử lý ngay
               </Link>
@@ -994,43 +1139,50 @@ export default function ManagerDashboard() {
 
         {/* Third Row: Monthly Daily Revenue Chart & Side-by-Side Comparison */}
         {isComparing ? (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-6">
             {/* Comparison Summary Strip */}
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-blue-50/70 via-white to-emerald-50/70 px-5 py-4 shadow-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
-                  <GitCompareArrows className="h-4 w-4" />
+            <div className="flex flex-wrap items-center justify-between gap-4 border-2 border-black border-l-8 border-l-primary bg-white px-5 py-4 shadow-[4px_4px_0_0_#000]">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center border-2 border-black bg-primary shadow-[2px_2px_0_0_#000]">
+                  <GitCompareArrows className="h-4 w-4 text-black" aria-hidden="true" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-slate-900">
+                  <p className="text-xs font-black uppercase tracking-wider text-black sm:text-sm">
                     Đang so sánh {formatMonthTitle(month)} và {formatMonthTitle(compareWith)}
                   </p>
-                  <p className="text-xs text-slate-500">
-                    Hai biểu đồ doanh thu đặt kế bên nhau và dùng chung trục giá trị để đối chiếu trực quan.
+                  <p className="text-xs font-medium text-text-muted">
+                    Hai biểu đồ đặt cạnh nhau và dùng chung trục giá trị để đối chiếu trực quan.
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-4 text-xs tabular-nums">
-                <div>
-                  <span className="text-slate-500">{formatMonthTitle(month)}: </span>
-                  <strong className="text-blue-700">
+              <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">
+                <div className="flex items-center gap-2 border-2 border-black bg-primary/20 px-2.5 py-1">
+                  <span className="h-2.5 w-2.5 border border-black bg-primary" aria-hidden="true" />
+                  <span className="font-bold text-text-muted">{formatMonthTitle(month)}:</span>
+                  <strong className="font-black text-primary-ink">
                     {kpi.totalRevenue.toLocaleString("vi-VN")} VNĐ
                   </strong>
                 </div>
-                <div>
-                  <span className="text-slate-500">{formatMonthTitle(compareWith)}: </span>
-                  <strong className="text-emerald-700">
+                <div className="flex items-center gap-2 border-2 border-black bg-[#fef9c3] px-2.5 py-1">
+                  <span className="h-2.5 w-2.5 border border-black bg-[#f59e0b]" aria-hidden="true" />
+                  <span className="font-bold text-text-muted">{formatMonthTitle(compareWith)}:</span>
+                  <strong className="font-black text-black">
                     {compareKpi.totalRevenue.toLocaleString("vi-VN")} VNĐ
                   </strong>
                 </div>
                 <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-1 font-bold ${
+                  className={`inline-flex items-center gap-1 border-2 border-black px-2.5 py-1 font-black shadow-[2px_2px_0_0_#000] ${
                     compareDeltaVnd >= 0
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-700"
+                      ? "bg-primary text-black"
+                      : "bg-[#fecaca] text-black"
                   }`}
                 >
+                  {compareDeltaVnd >= 0 ? (
+                    <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2.75} aria-hidden="true" />
+                  ) : (
+                    <ArrowDownRight className="h-3.5 w-3.5" strokeWidth={2.75} aria-hidden="true" />
+                  )}
                   {compareDeltaVnd >= 0 ? "+" : ""}
                   {compareDeltaVnd.toLocaleString("vi-VN")} VNĐ ({compareDeltaPct >= 0 ? "+" : ""}
                   {compareDeltaPct}%)
@@ -1039,13 +1191,13 @@ export default function ManagerDashboard() {
             </div>
 
             {/* 2 Daily Revenue Charts Side-by-Side */}
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <MonthlyRevenueChartCard
                 month={month}
                 points={dailyRevenue}
                 totalRevenue={kpi.totalRevenue}
                 loading={kpiLoading && !overview}
-                accent="blue"
+                accent="primary"
                 sharedMaxRevenue={sharedMaxDailyRevenue}
                 onDrilldown={() =>
                   setDrilldownQuery({
@@ -1060,7 +1212,7 @@ export default function ManagerDashboard() {
                 points={compareDailyRevenue}
                 totalRevenue={compareKpi.totalRevenue}
                 loading={kpiLoading && !compareOverview}
-                accent="emerald"
+                accent="compare"
                 sharedMaxRevenue={sharedMaxDailyRevenue}
                 onDrilldown={() =>
                   setDrilldownQuery({
@@ -1073,12 +1225,12 @@ export default function ManagerDashboard() {
             </div>
 
             {/* 2 Category Donut Charts Side-by-Side */}
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <CategoryRevenueCard
                 month={month}
                 items={revenueByCategory}
                 totalRevenue={kpi.totalRevenue}
-                accent="blue"
+                accent="primary"
                 onDrilldownAll={() =>
                   setDrilldownQuery({
                     month,
@@ -1098,7 +1250,7 @@ export default function ManagerDashboard() {
                 month={compareWith}
                 items={compareRevenueByCategory}
                 totalRevenue={compareKpi.totalRevenue}
-                accent="emerald"
+                accent="compare"
                 onDrilldownAll={() =>
                   setDrilldownQuery({
                     month: compareWith,
@@ -1117,11 +1269,11 @@ export default function ManagerDashboard() {
             </div>
 
             {/* 2 Top Selling Products Rankings Side-by-Side */}
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <TopProductsCard
                 month={month}
                 products={topProducts}
-                accent="blue"
+                accent="primary"
                 onSelectProduct={(productId, name) =>
                   setDrilldownQuery({
                     month,
@@ -1133,7 +1285,7 @@ export default function ManagerDashboard() {
               <TopProductsCard
                 month={compareWith}
                 products={compareTopProducts}
-                accent="emerald"
+                accent="compare"
                 onSelectProduct={(productId, name) =>
                   setDrilldownQuery({
                     month: compareWith,
@@ -1145,14 +1297,14 @@ export default function ManagerDashboard() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-6">
             {/* Single-Month Daily Revenue Bar Chart */}
             <MonthlyRevenueChartCard
               month={month}
               points={dailyRevenue}
               totalRevenue={kpi.totalRevenue}
               loading={kpiLoading && !overview}
-              accent="blue"
+              accent="primary"
               onDrilldown={() =>
                 setDrilldownQuery({
                   month,
@@ -1163,12 +1315,12 @@ export default function ManagerDashboard() {
             />
 
             {/* Single-Month Category Donut + Top 5 Best-Selling Products */}
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <CategoryRevenueCard
                 month={month}
                 items={revenueByCategory}
                 totalRevenue={kpi.totalRevenue}
-                accent="blue"
+                accent="primary"
                 onDrilldownAll={() =>
                   setDrilldownQuery({
                     month,
@@ -1188,7 +1340,7 @@ export default function ManagerDashboard() {
               <TopProductsCard
                 month={month}
                 products={topProducts}
-                accent="blue"
+                accent="primary"
                 onSelectProduct={(productId, name) =>
                   setDrilldownQuery({
                     month,
@@ -1204,90 +1356,97 @@ export default function ManagerDashboard() {
         {/* Bottom Row: Full-Width Actionable Review Queue Table */}
         <section
           aria-label="Danh sách nhân vật chờ duyệt"
-          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+          className="border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6"
         >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h2 className="text-base font-semibold text-slate-900">
-                  DANH SÁCH NHÂN VẬT CHỜ DUYỆT
-                </h2>
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums ${
-                    pendingCount > 0
-                      ? "bg-amber-50 text-amber-700"
-                      : "bg-green-50 text-green-700"
-                  }`}
-                >
-                  {pendingCount} chờ duyệt
-                </span>
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black pb-4">
+            <div className="flex items-start gap-2.5">
+              <div
+                className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center border-2 border-black shadow-[2px_2px_0_0_#000] ${
+                  pendingCount > 0 ? "bg-[#fef08a]" : "bg-primary"
+                }`}
+              >
+                <Sparkles className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
               </div>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Kiểm tra hiển thị Pixel Art trực tiếp trên thiết bị LED mô
-                phỏng trước khi mở bán.
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2 className="text-sm font-black uppercase tracking-wider text-black sm:text-base">
+                    DANH SÁCH NHÂN VẬT CHỜ DUYỆT
+                  </h2>
+                  <span
+                    className={`inline-flex items-center border border-black px-2 py-0.5 text-[10px] font-black uppercase tracking-wider tabular-nums shadow-[1px_1px_0_0_#000] ${
+                      pendingCount > 0
+                        ? "bg-[#fef08a] text-black"
+                        : "bg-primary text-black"
+                    }`}
+                  >
+                    {pendingCount} chờ duyệt
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs font-medium text-text-muted">
+                  Kiểm tra hiển thị Pixel Art trực tiếp trước khi định giá và mở bán trên cửa hàng.
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
+          <div className="mt-5 overflow-x-auto border-2 border-black">
             <table className="w-full min-w-[760px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3.5 text-left">Sản phẩm nhân vật</th>
-                  <th className="px-4 py-3.5 text-left">Mô tả</th>
-                  <th className="px-4 py-3.5 text-left">Ngày gửi</th>
-                  <th className="px-4 py-3.5 text-right">Giá bán</th>
-                  <th className="px-4 py-3.5 text-left">Trạng thái</th>
-                  <th className="px-4 py-3.5 text-right">Thao tác</th>
+                <tr className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
+                  <th className="px-4 py-3 text-left">Sản phẩm nhân vật</th>
+                  <th className="px-4 py-3 text-left">Mô tả</th>
+                  <th className="px-4 py-3 text-left">Ngày gửi</th>
+                  <th className="px-4 py-3 text-right">Giá bán</th>
+                  <th className="px-4 py-3 text-left">Trạng thái</th>
+                  <th className="px-4 py-3 text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
+              <tbody className="divide-y-2 divide-black/10 bg-white">
                 {drafts.length > 0 ? (
                   drafts.map((row) => (
                     <tr
                       key={row.productId}
-                      className="transition-colors hover:!bg-slate-50/80"
+                      className="transition-colors duration-150 hover:bg-[#f3faf5]"
                     >
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden border-2 border-black bg-gray-50">
                             {row.thumbnailUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={row.thumbnailUrl}
                                 alt={row.productName}
-                                className="h-full w-full object-contain"
-                                style={{ imageRendering: "pixelated" }}
+                                className="h-full w-full object-contain [image-rendering:pixelated]"
                               />
                             ) : (
-                              <ImageIcon className="h-4 w-4 text-slate-400" />
+                              <ImageIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
                             )}
                           </div>
                           <div>
-                            <p className="font-medium text-slate-900">
+                            <p className="text-xs font-black uppercase text-black sm:text-sm">
                               {row.productName}
                             </p>
-                            <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
+                            <span className="mt-0.5 inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.2 font-mono text-[10px] font-bold text-black">
                               #{row.productId}
                             </span>
                           </div>
                         </div>
                       </td>
                       <td className="max-w-xs px-4 py-3.5">
-                        <p className="line-clamp-2 text-xs text-slate-600">
+                        <p className="line-clamp-2 text-xs font-medium text-text-muted">
                           {row.description || "Chưa có mô tả chi tiết."}
                         </p>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3.5 text-xs text-slate-600">
+                      <td className="whitespace-nowrap px-4 py-3.5 text-xs font-medium text-text-muted tabular-nums">
                         {new Date(row.createdAt).toLocaleString("vi-VN")}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold text-slate-900 tabular-nums">
+                      <td className="whitespace-nowrap px-4 py-3.5 text-right text-sm font-black text-primary-ink tabular-nums">
                         {Number(row.basePrice ?? 0) === 0
                           ? "Chưa định giá (0 VNĐ)"
                           : `${Number(row.basePrice).toLocaleString("vi-VN")} VNĐ`}
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                        <span className="inline-flex items-center border border-black bg-[#fef08a] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000]">
                           Chờ duyệt
                         </span>
                       </td>
@@ -1295,7 +1454,7 @@ export default function ManagerDashboard() {
                         <button
                           type="button"
                           onClick={() => setSelectedDraft(row)}
-                          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                          className="btn-primary inline-flex items-center px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
                         >
                           Xét duyệt
                         </button>
@@ -1306,12 +1465,11 @@ export default function ManagerDashboard() {
                   <tr>
                     <td colSpan={6} className="px-6 py-12 text-center">
                       <div className="mx-auto flex max-w-sm flex-col items-center">
-                        <p className="text-sm font-medium text-slate-900">
+                        <p className="text-xs font-black uppercase tracking-wide text-black sm:text-sm">
                           Tuyệt vời! Hiện không còn nhân vật nào đang chờ duyệt.
                         </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Các mẫu thiết kế Pixel Art mới gửi từ nhà thiết kế sẽ hiển
-                          thị tại đây.
+                        <p className="mt-1 text-xs font-medium text-text-muted">
+                          Các mẫu thiết kế Pixel Art mới gửi từ nhà thiết kế sẽ hiển thị tại đây.
                         </p>
                       </div>
                     </td>
@@ -1321,11 +1479,14 @@ export default function ManagerDashboard() {
             </table>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed border-gray-200 pt-3 text-xs font-medium text-text-muted">
             <span>
-              Hiển thị {drafts.length} bản thiết kế nhân vật đang chờ duyệt trên hệ thống.
+              Hiển thị <strong className="font-black text-black">{drafts.length}</strong> bản thiết kế nhân vật đang chờ duyệt trên hệ thống.
             </span>
-            <Link href="/staff/pricing" className="font-medium text-blue-600 hover:underline">
+            <Link
+              href="/staff/pricing"
+              className="font-black uppercase tracking-wide text-primary-ink hover:underline"
+            >
               Mở trang Quản lý cửa hàng sản phẩm →
             </Link>
           </div>
@@ -1334,111 +1495,116 @@ export default function ManagerDashboard() {
         {/* Warranty Alerts Queue */}
         <section
           aria-label="Danh sách phiếu bảo hành cần xử lý"
-          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+          className="border-2 border-black bg-white p-5 shadow-[4px_4px_0_0_#000] sm:p-6"
         >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h2 className="text-base font-semibold text-slate-900">
-                  PHIẾU BẢO HÀNH CẦN XỬ LÝ
-                </h2>
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums ${
-                    kpi.pendingWarrantyClaimsCount > 0
-                      ? "bg-rose-50 text-rose-700"
-                      : "bg-green-50 text-green-700"
-                  }`}
-                >
-                  {kpi.pendingWarrantyClaimsCount} chờ tiếp nhận
-                </span>
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b-2 border-black pb-4">
+            <div className="flex items-start gap-2.5">
+              <div
+                className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center border-2 border-black shadow-[2px_2px_0_0_#000] ${
+                  kpi.pendingWarrantyClaimsCount > 0 ? "bg-[#fed7aa]" : "bg-primary"
+                }`}
+              >
+                <ShieldAlert className="h-4 w-4 text-black" strokeWidth={2.25} aria-hidden="true" />
               </div>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Tối đa 5 yêu cầu bảo hành đang mở gần nhất (ưu tiên phiếu chờ duyệt trước).
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2 className="text-sm font-black uppercase tracking-wider text-black sm:text-base">
+                    PHIẾU BẢO HÀNH CẦN XỬ LÝ
+                  </h2>
+                  <span
+                    className={`inline-flex items-center border border-black px-2 py-0.5 text-[10px] font-black uppercase tracking-wider tabular-nums shadow-[1px_1px_0_0_#000] ${
+                      kpi.pendingWarrantyClaimsCount > 0
+                        ? "bg-[#fecaca] text-black"
+                        : "bg-primary text-black"
+                    }`}
+                  >
+                    {kpi.pendingWarrantyClaimsCount} chờ tiếp nhận
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs font-medium text-text-muted">
+                  Tối đa 5 yêu cầu bảo hành đang mở gần nhất (ưu tiên phiếu chờ duyệt trước).
+                </p>
+              </div>
             </div>
 
             <Link
-              href="/staff/warranty"
-              className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+              href="/manager/warranty"
+              className="btn-secondary inline-flex items-center px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
             >
               Xử lý bảo hành
             </Link>
           </div>
 
-          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
+          <div className="mt-5 overflow-x-auto border-2 border-black">
             <table className="w-full min-w-[760px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3.5 text-left">Mã phiếu</th>
-                  <th className="px-4 py-3.5 text-left">Khách hàng</th>
-                  <th className="px-4 py-3.5 text-left">Thiết bị</th>
-                  <th className="px-4 py-3.5 text-left">Mô tả sự cố</th>
-                  <th className="px-4 py-3.5 text-left">Ngày gửi</th>
-                  <th className="px-4 py-3.5 text-left">Trạng thái</th>
-                  <th className="px-4 py-3.5 text-right">Thao tác</th>
+                <tr className="border-b-2 border-black bg-[#e9f5ed] text-[11px] font-black uppercase tracking-wider text-black">
+                  <th className="px-4 py-3 text-left">Mã phiếu</th>
+                  <th className="px-4 py-3 text-left">Khách hàng</th>
+                  <th className="px-4 py-3 text-left">Thiết bị</th>
+                  <th className="px-4 py-3 text-left">Mô tả sự cố</th>
+                  <th className="px-4 py-3 text-left">Ngày gửi</th>
+                  <th className="px-4 py-3 text-left">Trạng thái</th>
+                  <th className="px-4 py-3 text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
+              <tbody className="divide-y-2 divide-black/10 bg-white">
                 {warrantyAlerts.length > 0 ? (
                   warrantyAlerts.map((ticket) => (
                     <tr
                       key={ticket.ticketId}
-                      className="transition-colors hover:!bg-slate-50/80"
+                      className="transition-colors duration-150 hover:bg-[#f3faf5]"
                     >
-                      <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-slate-900 tabular-nums">
+                      <td className="whitespace-nowrap px-4 py-3.5 font-mono text-xs font-black text-black tabular-nums">
                         #{ticket.ticketId}
                       </td>
                       <td className="px-4 py-3.5">
-                        <p className="font-medium text-slate-900">
+                        <p className="text-xs font-black text-black sm:text-sm">
                           {ticket.customerName || "Khách hàng"}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs font-medium text-text-muted">
                           {ticket.customerEmail || "—"}
                         </p>
                       </td>
                       <td className="px-4 py-3.5">
-                        <p className="font-medium text-slate-900">
+                        <p className="text-xs font-black uppercase text-black">
                           {ticket.deviceModel || "Thiết bị LED"}
                         </p>
-                        <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600">
+                        <span className="mt-0.5 inline-flex items-center border border-black bg-gray-100 px-1.5 py-0.2 font-mono text-[11px] font-bold text-black">
                           {ticket.deviceSerial}
                         </span>
                       </td>
                       <td className="max-w-xs px-4 py-3.5">
-                        <p className="line-clamp-2 text-xs text-slate-600">
+                        <p className="line-clamp-2 text-xs font-medium text-text-muted">
                           {ticket.issueDescription}
                         </p>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3.5 text-xs text-slate-600">
+                      <td className="whitespace-nowrap px-4 py-3.5 text-xs font-medium text-text-muted tabular-nums">
                         {ticket.reportedDate
                           ? new Date(ticket.reportedDate).toLocaleString("vi-VN")
                           : "—"}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3.5">
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          className={`inline-flex items-center border border-black px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[1px_1px_0_0_#000] ${
                             ticket.status === "PENDING"
-                              ? "bg-amber-50 text-amber-700"
+                              ? "bg-[#fef08a]"
                               : ticket.status === "APPROVED"
-                                ? "bg-blue-50 text-blue-700"
-                                : ticket.status === "COMPLETED"
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-slate-100 text-slate-700"
+                                ? "bg-primary/60"
+                                : "bg-gray-100"
                           }`}
                         >
                           {ticket.status === "PENDING"
                             ? "Chờ tiếp nhận"
                             : ticket.status === "APPROVED"
                               ? "Đã tiếp nhận"
-                              : ticket.status === "COMPLETED"
-                                ? "Đã hoàn tất"
-                                : "Đang xử lý"}
+                              : "Đang xử lý"}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3.5 text-right">
                         <Link
-                          href={`/staff/warranty?ticketId=${encodeURIComponent(ticket.ticketId)}`}
-                          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                          href={`/manager/warranty?ticketId=${encodeURIComponent(ticket.ticketId)}`}
+                          className="btn-secondary inline-flex items-center px-3 py-1.5 text-xs font-black uppercase tracking-wide shadow-[2px_2px_0_0_#000]"
                         >
                           Xử lý
                         </Link>
@@ -1449,10 +1615,10 @@ export default function ManagerDashboard() {
                   <tr>
                     <td colSpan={7} className="px-6 py-10 text-center">
                       <div className="mx-auto flex max-w-sm flex-col items-center">
-                        <p className="text-sm font-medium text-slate-900">
+                        <p className="text-xs font-black uppercase tracking-wide text-black sm:text-sm">
                           Hiện không có phiếu bảo hành nào đang mở.
                         </p>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs font-medium text-text-muted">
                           Các yêu cầu bảo hành phần cứng LED mới từ khách hàng sẽ hiển thị tại đây.
                         </p>
                       </div>
@@ -1463,11 +1629,14 @@ export default function ManagerDashboard() {
             </table>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed border-gray-200 pt-3 text-xs font-medium text-text-muted">
             <span>
-              Hiển thị {warrantyAlerts.length} phiếu bảo hành đang mở ({kpi.pendingWarrantyClaimsCount} phiếu chờ tiếp nhận).
+              Hiển thị <strong className="font-black text-black">{warrantyAlerts.length}</strong> phiếu bảo hành đang mở ({kpi.pendingWarrantyClaimsCount} phiếu chờ tiếp nhận).
             </span>
-            <Link href="/staff/warranty" className="font-medium text-blue-600 hover:underline">
+            <Link
+              href="/manager/warranty"
+              className="font-black uppercase tracking-wide text-primary-ink hover:underline"
+            >
               Mở trang quản lý Bảo hành →
             </Link>
           </div>

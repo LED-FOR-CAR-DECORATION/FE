@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchAllMyCharactersCached } from "@/features/designer/designer-characters-cache";
+import { fetchAllMyCharactersCached, fetchCharacterVersionsCached } from "@/features/designer/designer-characters-cache";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -20,7 +20,6 @@ import {
 import {
   createCharacterVersion,
   deleteCharacterVersion,
-  fetchCharacterVersions,
   formatDesignerApiError,
   isStoreCharacterType,
   uploadDesignerAssetFile,
@@ -110,7 +109,7 @@ function StoreUploadsWorkspace() {
     setLoadingVersions(true);
     setListError("");
     try {
-      const data = await fetchCharacterVersions(charId);
+      const data = await fetchCharacterVersionsCached(charId);
       setVersions([...data].sort((a, b) => b.versionNumber - a.versionNumber));
     } catch (err) {
       setListError(

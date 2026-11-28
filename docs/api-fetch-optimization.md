@@ -9,7 +9,7 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 - [x] B. Đơn hàng (OrderContext → query, chi tiết theo id, fulfillment)
 - [x] C. Websocket hub + chat/inbox
 - [x] D. Khách: gallery / store / subscription
-- [x] E. Designer (chưa đo bằng tài khoản DESIGNER — BE trả 403 cho admin)
+- [x] E. Designer
 - [ ] F. Manager / Admin / Staff khác + monitoring double fetch
 - [ ] G. Đo lại toàn bộ, build/lint, mở PR
 
@@ -108,6 +108,16 @@ Nguyên nhân chính: `OrderProvider` trong layout staff/manager tải mọi đ�
 | Workspace commission: ảnh nhân vật cho mỗi thẻ | 1 request / thẻ | 1 request cho cả trang (lọc từ danh sách COMMISSION) |
 | Workspace commission: poll chi tiết | 10s, không bao giờ dừng | 30s, dừng khi COMPLETED/CANCELLED/EXPIRED/REJECTED |
 | `store/tags` ở trang đăng bán + modal | gọi trực tiếp (×2 khi mount) | cache chung 5 phút (×1) |
+| Phiên bản nhân vật (`characters/{id}/versions`) | mỗi lần mở studio/đăng bán (×2 khi mount) | cache 30s, tạo/xoá phiên bản tự invalidate |
+
+Đo bằng tài khoản designer:
+
+| Tình huống | Request |
+|---|---|
+| `/designer/publish` lần đầu | `characters/my` ×1, `tags` ×1, `versions` ×1 |
+| → studio → store-uploads → quay lại publish | **0 / 0 / 0** |
+| `/designer/commissions` (danh sách, ≥3 thẻ) | `commissions/assigned` ×3 (3 status) + `characters/my?type=COMMISSION` ×1 (trước: 1/thẻ) |
+| Mở workspace commission | **2** (chi tiết + versions); trước: chi tiết + COMMISSION ×2 + versions; không poll trong 25s (trước 10s/lần) |
 
 ## Bảng API BE còn thiếu (đề xuất, chờ duyệt)
 

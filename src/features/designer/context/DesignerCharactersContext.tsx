@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchCharacterVersionsCached } from "../designer-characters-cache";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { getApiBaseUrl, OpenAPI } from "@/lib/api/client";
@@ -7,7 +8,6 @@ import { getSessionToken } from "@/lib/auth/session";
 import {
   createDesignerCharacter,
   deleteCharacterVersion,
-  fetchCharacterVersions,
   fetchMyCharacters,
   formatDesignerApiError,
   isStoreCharacterType,
@@ -288,7 +288,7 @@ export function DesignerCharactersProvider({
       latestVersionRequests.current.set(characterId, requestId);
       setLoadingVersions((prev) => ({ ...prev, [characterId]: true }));
       try {
-        const list = await fetchCharacterVersions(characterId);
+        const list = await fetchCharacterVersionsCached(characterId);
         if (latestVersionRequests.current.get(characterId) === requestId) {
           setVersionsByCharacter((prev) => ({ ...prev, [characterId]: sortVersionsNewestFirst(list) }));
         }

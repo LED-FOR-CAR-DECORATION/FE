@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchAllMyCharactersCached } from "@/features/designer/designer-characters-cache";
+import { fetchAllMyCharactersCached, fetchCharacterVersionsCached } from "@/features/designer/designer-characters-cache";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -13,7 +13,6 @@ import {
   type MatrixSize,
 } from "@/features/designer/context/DesignerCharactersContext";
 import {
-  fetchCharacterVersions,
   formatDesignerApiError,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
@@ -57,7 +56,7 @@ export default function DesignerCharacterStudioPage() {
     Promise.all([
       // Danh sách dùng chung cache với các trang designer khác (BE chưa có GET nhân vật theo id).
       fetchAllMyCharactersCached(),
-      fetchCharacterVersions(characterId),
+      fetchCharacterVersionsCached(characterId),
     ])
       .then(([characters, rawVersions]) => {
         if (cancelled) return;

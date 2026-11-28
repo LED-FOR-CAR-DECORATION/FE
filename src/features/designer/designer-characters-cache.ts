@@ -5,7 +5,7 @@
  * BE chưa có GET nhân vật theo id (docs/api-fetch-optimization.md, API #12) nên studio vẫn tìm trong danh sách —
  * nhưng danh sách chỉ tải một lần cho mọi trang designer.
  */
-import { fetchMyCharacters, type DesignerCharacterItem } from "@/lib/api/designerCharacters";
+import { fetchCharacterVersions, fetchMyCharacters, type DesignerCharacterItem } from "@/lib/api/designerCharacters";
 import { fetchAllPages } from "@/lib/api/paging";
 import { getQueryClient } from "@/lib/query/client";
 
@@ -35,5 +35,17 @@ export function fetchCommissionCharactersCached({ force = false }: ForceOption =
     queryKey: COMMISSION_KEY,
     queryFn: async () => (await fetchMyCharacters({ page: 0, size: 100, characterType: "COMMISSION" })).items,
     staleTime: force ? 0 : STALE_MS,
+  });
+}
+
+/**
+ * Phiên bản của một nhân vật (cache 30s). Tạo/xoá phiên bản đã invalidate cả nhóm ["designer","characters"],
+ * nên sau khi đăng tải/xoá, lần gọi kế tiếp luôn lấy dữ liệu mới.
+ */
+export function fetchCharacterVersionsCached(characterId: number, { force = false }: ForceOption = {}) {
+  return getQueryClient().fetchQuery({
+    queryKey: [...DESIGNER_CHARACTERS_KEY, characterId, "versions"],
+    queryFn: () => fetchCharacterVersions(characterId),
+    staleTime: force ? 0 : 30_000,
   });
 }

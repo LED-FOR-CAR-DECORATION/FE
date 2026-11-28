@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchCommissionCharactersCached } from "@/features/designer/designer-characters-cache";
+import { fetchCommissionCharactersCached, fetchCharacterVersionsCached } from "@/features/designer/designer-characters-cache";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -11,7 +11,6 @@ import {
 import "@/styles/transitions.css";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import {
-  fetchCharacterVersions,
   formatDesignerApiError,
   type CharacterVersionItem,
   type DesignerCharacterItem,
@@ -491,7 +490,7 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
         setCommissionCharacters(selectable);
         const found = linked ?? selectable.find((item) => item.commissionId === commissionId) ?? null;
         setCharacter(found);
-        const list = found ? sortVersionsNewestFirst(await fetchCharacterVersions(found.characterId)) : [];
+        const list = found ? sortVersionsNewestFirst(await fetchCharacterVersionsCached(found.characterId)) : [];
         if (!active) return;
         setVersions(list);
         setCharacterError("");
@@ -508,7 +507,7 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
     setCharacter(picked);
     setSelectedId(undefined);
     try {
-      const list = sortVersionsNewestFirst(await fetchCharacterVersions(picked.characterId));
+      const list = sortVersionsNewestFirst(await fetchCharacterVersionsCached(picked.characterId));
       setVersions(list);
       setCharacterError("");
     } catch (failure) {

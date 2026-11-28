@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchCharacterVersionsCached } from "@/features/designer/designer-characters-cache";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -33,7 +34,6 @@ import {
   createCharacterVersion,
   deleteCharacterVersion,
   deleteDesignerCharacter,
-  fetchCharacterVersions,
   fetchMyCharacters,
   formatDesignerApiError,
   isStoreCharacterType,
@@ -188,7 +188,7 @@ export default function MyCharactersPage() {
     setUploadNotice(null);
     setLoadingVersions(true);
     try {
-      const vList = await fetchCharacterVersions(item.characterId);
+      const vList = await fetchCharacterVersionsCached(item.characterId);
       const sorted = [...vList].sort((a, b) => {
         if (b.versionNumber !== a.versionNumber) return b.versionNumber - a.versionNumber;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -236,7 +236,7 @@ export default function MyCharactersPage() {
 
       setUploadNotice("Tải ảnh và tạo phiên bản mới thành công!");
       // Reload versions and catalog
-      const updatedVersions = await fetchCharacterVersions(viewingItem.characterId);
+      const updatedVersions = await fetchCharacterVersionsCached(viewingItem.characterId);
       setItemVersions(updatedVersions);
       await loadCharacters(page, activeQuery);
     } catch (err) {

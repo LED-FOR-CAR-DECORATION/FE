@@ -7,7 +7,7 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 - [x] 0. Đo baseline (Redis BE tắt có chủ đích)
 - [x] A. Nền tảng TanStack Query + refresh token đa tab (`/users/me` đã chỉ 1 lượt/lần tải, không cần sửa)
 - [x] B. Đơn hàng (OrderContext → query, chi tiết theo id, fulfillment)
-- [ ] C. Websocket hub + chat/inbox
+- [x] C. Websocket hub + chat/inbox
 - [ ] D. Khách: gallery / store / subscription
 - [ ] E. Designer
 - [ ] F. Manager / Admin / Staff khác + monitoring double fetch
@@ -60,6 +60,19 @@ Nguyên nhân chính: `OrderProvider` trong layout staff/manager tải mọi đ�
 | `/staff/deliveries` | ~46 | 45 lần đầu, **15** khi quay lại | Cần địa chỉ/vận đơn → chi tiết từng đơn; đơn đã kết thúc cache suốt phiên. Muốn giảm hẳn cần API BE #8 |
 | `/manager/character-orders` (sau khi đã vào deliveries) | ~46 | **0** | Dùng lại cache |
 | Quay lại trang đã xem trong 30s | tải lại toàn bộ | **0** | Cache TanStack |
+
+## Sau mục C (chat / websocket)
+
+| Tình huống | Trước | Sau |
+|---|---|---|
+| `/staff/chat` lần đầu | 13 (commissions ×2, messages ×10) | 13 → commissions ×1, messages ×10 (N+1 còn lại chờ API BE #3) |
+| Mở một hội thoại từ hộp thư | +1 lịch sử + thông tin | **0 lịch sử** (dùng cache của hộp thư), chỉ thông tin commission |
+| Rời hộp thư rồi quay lại trong 60s | tải lại danh sách + N lịch sử | **0** |
+| Mất mạng → có mạng lại | chờ backoff tới 30s, vẫn hiện "Trực tuyến" khi socket chết | báo "Mất kết nối" ngay; kết nối lại ~15ms sau sự kiện `online` |
+| Socket chết lặng (BE chưa có heart-beat) | không phát hiện, poll dự phòng bị tắt → mất tin | phòng đang mở đối chiếu REST mỗi 60s, thiếu tin thì kết nối lại |
+| 3 lỗi STOMP liên tiếp | dừng realtime tới khi rời trang | tự thử lại sau 60s, khi quay lại tab, khi có mạng hoặc khi mở phòng khác |
+| Đăng xuất / đổi tài khoản | socket giữ token cũ | đóng socket, xoá trạng thái từ chối; đăng nhập lại thì kết nối với token mới |
+| Topic realtime của hộp thư | 50 | 20 (giảm kiểm quyền ở BE và phạm vi ảnh hưởng khi một topic bị từ chối) |
 
 ## Bảng API BE còn thiếu (đề xuất, chờ duyệt)
 

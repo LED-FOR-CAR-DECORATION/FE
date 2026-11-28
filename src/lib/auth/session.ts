@@ -37,6 +37,13 @@ export function clearSession(): void {
 const ACCESS_TOKEN_COOKIE = "access_token";
 const REFRESH_TOKEN_KEY = "led_controller_refresh_token";
 export const SESSION_EXPIRED_EVENT = "led-controller-session-expired";
+/** Đăng nhập/đăng xuất chủ động (detail: { loggedIn }). Các kết nối giữ token (vd. STOMP) nghe để reset. */
+export const AUTH_CHANGED_EVENT = "led-controller-auth-changed";
+
+export function emitAuthChanged(loggedIn: boolean): void {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT, { detail: { loggedIn } }));
+}
 
 /** Lưu cặp token trả về từ login / refresh / google login. */
 export function saveTokens(accessToken: string, refreshToken?: string, expiresInSeconds?: number): void {

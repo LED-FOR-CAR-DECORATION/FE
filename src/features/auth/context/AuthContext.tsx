@@ -5,7 +5,7 @@ import { authService, normalizeUserRole } from "@/features/auth/services/auth.se
 import type { AuthUser } from "@/features/auth/types";
 import { apiGetMyProfile, apiUpdateMyProfile } from "@/lib/api/addresses";
 import { clearQueryCache } from "@/lib/query/client";
-import { clearSession, clearTokens, getSessionToken, loadSession, saveSession, SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
+import { clearSession, clearTokens, emitAuthChanged, getSessionToken, loadSession, saveSession, SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -89,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveSession(nextUser);
     setUser(nextUser);
     setIsLoading(false);
+    emitAuthChanged(true);
     void apiGetMyProfile()
       .then((remoteProfile) => {
         if (!remoteProfile || sessionVersion.current !== version) return;
@@ -139,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearQueryCache();
     setUser(null);
     setIsLoading(false);
+    emitAuthChanged(false);
     await pending;
   }, []);
 

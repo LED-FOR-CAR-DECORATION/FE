@@ -12,7 +12,7 @@
  *   kết nối lại và gọi `onActive(true)` để các nơi đăng ký tự tải bù tin bị lỡ.
  */
 import { getApiBaseUrl, refreshAccessToken } from "@/lib/api/client";
-import { getSessionToken } from "@/lib/auth/session";
+import { AUTH_CHANGED_EVENT, getSessionToken, SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
 import { buildStompUrl, parseFrame, serializeFrame, type StompFrame, type StompStatus } from "./stomp-client";
 
 export type { StompStatus } from "./stomp-client";
@@ -38,6 +38,8 @@ const MAX_BACKOFF_MS = 30_000;
 const MAX_ERRORS = 3;
 const DENY_WINDOW_MS = 2_000;
 const DENIED_CACHE_MS = 60_000;
+/** Sau khi dừng vì lỗi liên tiếp, tự thử lại sau khoảng này (thay vì mất realtime tới khi rời trang). */
+const RECOVER_AFTER_STOP_MS = 60_000;
 const ACCESS_DENIED = /AccessDenied|not authorized|do not own|Unsupported subscription|chat room not found/i;
 
 interface Entry {
@@ -55,7 +57,7 @@ const entries = new Map<string, Entry>();
 const deniedCache = new Map<string, { message: string; at: number }>();
 const statusListeners = new Set<(status: StompStatus) => void>();
 /** Handler đã từng được kích hoạt (để phân biệt lần đầu và kết nối lại). */
-const activatedHandlers = new WeakSet<TopicHandlers>();
+let activatedHandlers = new WeakSet<TopicHandlers>();
 
 let nextSubId = 1;
 let status: StompStatus = "disconnected";
@@ -63,6 +65,11 @@ let socket: WebSocket | null = null;
 let connecting = false;
 let connected = false;
 let stopped = false;
+/** Trình duyệt báo mất mạng: không thử kết nối cho tới khi có sự kiện `online`. */
+let offline = false;
+/** Đã đăng xuất: không kết nối cho tới khi đăng nhập lại. */
+let loggedOut = false;
+let recoverTimer: ReturnType<typeof setTimeout> | undefined;
 let attempt = 0;
 let errors = 0;
 let sequential = false;
@@ -233,7 +240,12 @@ function handleVisibilityChange() {
     if (!stopped && activeEntries().length > 0) void connect();
     return;
   }
-  if (activeEntries().length === 0 || stopped) return;
+  if (activeEntries().length === 0) return;
+  if (stopped) {
+    // Đã dừng vì lỗi: người dùng quay lại tab là lúc hợp lý để thử lại.
+    resume();
+    return;
+  }
   // Nếu máy ngủ làm timer bị trễ và tab đã ẩn >= HIDDEN_CLOSE_MS, đóng socket cũ để kết nối lại và tải bù.
   if (hiddenDuration >= HIDDEN_CLOSE_MS && (socket || connecting || retryTimer)) {
     disconnectSocket();
@@ -269,11 +281,18 @@ function ensureLifecycleListeners() {
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("pagehide", handlePageHide);
   window.addEventListener("pageshow", handlePageShow);
+  window.addEventListener("offline", handleOffline);
+  window.addEventListener("online", handleOnline);
+  window.addEventListener(SESSION_EXPIRED_EVENT, () => resetForAuthChange(false));
+  window.addEventListener(AUTH_CHANGED_EVENT, (event) => {
+    resetForAuthChange(Boolean((event as CustomEvent<{ loggedIn?: boolean }>).detail?.loggedIn));
+  });
+  offline = typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
 function scheduleReconnect() {
   cleanupSocket();
-  if (stopped || hiddenPaused || activeEntries().length === 0) {
+  if (stopped || offline || loggedOut || hiddenPaused || activeEntries().length === 0) {
     setStatus("disconnected");
     return;
   }
@@ -309,6 +328,48 @@ function stop() {
   hiddenPaused = false;
   cleanupSocket();
   setStatus("disconnected");
+  clearTimeout(recoverTimer);
+  if (!loggedOut) recoverTimer = setTimeout(() => resume(), RECOVER_AFTER_STOP_MS);
+}
+
+/** Bỏ trạng thái dừng/backoff và kết nối lại ngay nếu còn topic cần giữ. */
+function resume() {
+  clearTimeout(recoverTimer);
+  recoverTimer = undefined;
+  if (loggedOut || offline) return;
+  stopped = false;
+  attempt = 0;
+  errors = 0;
+  sequential = false;
+  clearTimeout(retryTimer);
+  retryTimer = undefined;
+  if (activeEntries().length > 0) void connect();
+}
+
+function handleOffline() {
+  offline = true;
+  clearTimeout(retryTimer);
+  retryTimer = undefined;
+  cleanupSocket();
+  setStatus("disconnected");
+}
+
+function handleOnline() {
+  offline = false;
+  // Mạng vừa có lại: kết nối ngay, không chờ hết backoff (tối đa 30s).
+  if (!socket && !connecting) resume();
+}
+
+/** Đăng xuất/đổi tài khoản/hết phiên: đóng socket mang token cũ và quên mọi trạng thái của người dùng trước. */
+function resetForAuthChange(loggedIn: boolean) {
+  clearTimeout(recoverTimer);
+  recoverTimer = undefined;
+  disconnectSocket(true);
+  deniedCache.clear();
+  activatedHandlers = new WeakSet();
+  for (const entry of entries.values()) entry.confirmed = false;
+  loggedOut = !loggedIn;
+  if (loggedIn && activeEntries().length > 0) void connect();
 }
 
 function deny(entry: Entry, message: string) {
@@ -395,7 +456,7 @@ function handleMessage(frame: StompFrame) {
 }
 
 async function connect() {
-  if (socket || connecting || stopped || hiddenPaused || activeEntries().length === 0) return;
+  if (socket || connecting || stopped || offline || loggedOut || hiddenPaused || activeEntries().length === 0) return;
   connecting = true;
   clearTimeout(retryTimer);
   retryTimer = undefined;
@@ -416,7 +477,7 @@ async function connect() {
     // vẫn thử kết nối; server sẽ trả ERROR nếu thiếu token
   }
   connecting = false;
-  if (socket || stopped || hiddenPaused || activeEntries().length === 0) {
+  if (socket || stopped || offline || loggedOut || hiddenPaused || activeEntries().length === 0) {
     if (!socket) setStatus("disconnected");
     return;
   }
@@ -507,7 +568,8 @@ export function subscribeTopic(destination: string, handler: TopicHandlers): () 
     if (entry.subscribed) activateHandler(handler);
     else sendSubscribe(entry);
   } else if (!hiddenPaused) {
-    void connect();
+    if (stopped && !loggedOut) resume();
+    else void connect();
   }
   syncHiddenTimer();
 
@@ -529,4 +591,14 @@ export function subscribeHubStatus(listener: (status: StompStatus) => void): () 
   return () => {
     statusListeners.delete(listener);
   };
+}
+
+/**
+ * Đóng socket hiện tại và kết nối lại ngay (các nơi đăng ký nhận `onActive(true)` để tải bù).
+ * Dùng khi phát hiện kết nối "chết lặng": REST có tin mới mà socket không nhận được.
+ */
+export function reconnectNow(): void {
+  if (typeof window === "undefined" || loggedOut) return;
+  disconnectSocket(true);
+  resume();
 }

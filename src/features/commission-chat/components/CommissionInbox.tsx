@@ -6,7 +6,9 @@ import { Loader2, MessageCircle, RefreshCw, Search } from "lucide-react";
 import "@/styles/transitions.css";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import { commissionStatusLabel, formatCommissionSystemMessage } from "../commission-status";
-import { canReadHistory, listCommissionMessages, type CommissionMessage } from "../services/commission-messages.api";
+import { canReadHistory, type CommissionMessage } from "../services/commission-messages.api";
+import { appendMessagesToCache, fetchLastMessageCached, MESSAGES_STALE_MS } from "../services/messages-cache";
+import { useQueryClient } from "@tanstack/react-query";
 import CommissionAvatar from "./CommissionAvatar";
 import CommissionChatRoom from "./CommissionChatRoom";
 import { subscribeHubStatus, subscribeTopic, type StompStatus } from "../services/stomp-hub";
@@ -35,8 +37,11 @@ export interface InboxFilter { key: string; label: string; statuses?: string[] }
 
 const PREVIEW_CONCURRENCY = 6;
 const PREVIEW_REFRESH_MS = 60_000;
-/** Số hội thoại (mới nhất) nhận tin realtime qua kết nối dùng chung; phần còn lại vẫn làm mới định kỳ. */
-const MAX_LIVE_CONVERSATIONS = 50;
+/**
+ * Số hội thoại (mới nhất) nhận tin realtime qua kết nối dùng chung; phần còn lại vẫn làm mới định kỳ.
+ * Giữ nhỏ: mỗi SUBSCRIBE là một lần BE kiểm quyền bằng DB, và một topic bị từ chối làm BE đóng CẢ kết nối.
+ */
+const MAX_LIVE_CONVERSATIONS = 20;
 /** Sau khi kết nối lại, gộp nhiều topic cùng kích hoạt lại thành một lần tải bù tin cuối. */
 const CATCH_UP_DELAY_MS = 500;
 
@@ -95,14 +100,6 @@ async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) => Prom
   return results;
 }
 
-async function loadLastMessage(commissionId: number) {
-  try {
-    const { data } = await listCommissionMessages(commissionId);
-    return data?.length ? data[data.length - 1] : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 export default function CommissionInbox({ viewer, loadItems, filters, className = "", emptyText }: {
   viewer: ChatViewer;
@@ -114,6 +111,7 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
 }) {
   const seenPrefix = viewer === "CUSTOMER" ? "customer_chat_seen_" : "staff_chat_seen_";
   const router = useRouter();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedId = Number(searchParams.get("commissionId")) || undefined;
@@ -150,9 +148,17 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
     let active = true;
     (async () => {
       try {
-        const chatItems = (await loadItems()).filter((item) => canReadHistory(item.status));
+        // Bấm "Làm mới" (revision > 0) thì bỏ qua cache; mở lại hộp thư trong MESSAGES_STALE_MS dùng cache.
+        const force = revision > 0;
+        const allItems = await queryClient.fetchQuery({
+          queryKey: ["commissions", "inbox", viewer],
+          queryFn: loadItems,
+          staleTime: force ? 0 : MESSAGES_STALE_MS,
+        });
+        const chatItems = allItems.filter((item) => canReadHistory(item.status));
         itemsRef.current = chatItems;
-        const lasts = await mapLimited(chatItems, PREVIEW_CONCURRENCY, (item) => loadLastMessage(item.commissionId));
+        const lasts = await mapLimited(chatItems, PREVIEW_CONCURRENCY, (item) =>
+          fetchLastMessageCached(queryClient, item.commissionId, { force }));
         if (!active) return;
         const loaded = chatItems.map((item, index) => ({ item, last: lasts[index] }));
         setConversations(loaded);
@@ -172,19 +178,20 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
       }
     })();
     return () => { active = false; };
-  }, [loadItems, revision, seenPrefix]);
+  }, [loadItems, revision, seenPrefix, queryClient, viewer]);
 
   /** Tải lại tin cuối cho các hội thoại chỉ định (bỏ qua hội thoại đang mở — phòng chat đã báo qua onLastMessage). */
   const refreshPreviews = useCallback(async (ids: ReadonlySet<number> | "all") => {
     const items = itemsRef.current.filter((item) =>
       item.commissionId !== selectedIdRef.current && (ids === "all" || ids.has(item.commissionId)));
     if (items.length === 0) return;
-    const lasts = await mapLimited(items, PREVIEW_CONCURRENCY, (item) => loadLastMessage(item.commissionId));
+    const lasts = await mapLimited(items, PREVIEW_CONCURRENCY, (item) =>
+      fetchLastMessageCached(queryClient, item.commissionId, { force: true }));
     setConversations((current) => current?.map((conversation) => {
       const index = items.findIndex((item) => item.commissionId === conversation.item.commissionId);
       return index >= 0 && lasts[index] ? { ...conversation, last: lasts[index] } : conversation;
     }));
-  }, []);
+  }, [queryClient]);
 
   // Làm mới định kỳ CHỈ cho hội thoại không có realtime: ngoài MAX_LIVE_CONVERSATIONS, bị từ chối quyền,
   // hoặc tất cả khi kết nối chung đang mất.
@@ -226,7 +233,10 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
       onMessage: (body) => {
         try {
           const message = JSON.parse(body) as CommissionMessage;
-          if (typeof message?.messageId === "number") updateLastMessage(message);
+          if (typeof message?.messageId === "number") {
+            updateLastMessage(message);
+            appendMessagesToCache(queryClient, commissionId, [message]);
+          }
         } catch {
           // bỏ qua frame không hợp lệ
         }
@@ -238,7 +248,7 @@ export default function CommissionInbox({ viewer, loadItems, filters, className 
       onDenied: () => setDeniedIds((current) => (current.has(commissionId) ? current : new Set(current).add(commissionId))),
     }));
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }, [liveIds, refreshPreviews, updateLastMessage]);
+  }, [liveIds, refreshPreviews, updateLastMessage, queryClient]);
 
   // Hội thoại đang mở coi như đã đọc tới tin cuối.
   const selectedLastId = conversations?.find((entry) => entry.item.commissionId === selectedId)?.last?.messageId;

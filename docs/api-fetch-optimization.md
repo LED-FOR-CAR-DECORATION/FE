@@ -10,7 +10,7 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 - [x] C. Websocket hub + chat/inbox
 - [x] D. Khách: gallery / store / subscription
 - [x] E. Designer
-- [x] F. Manager / Admin / Staff khác + monitoring double fetch + địa chỉ chỉ tải khi cần
+- [x] F. Manager / Admin / Staff khác + địa chỉ chỉ tải khi cần (monitoring giữ nguyên: poll 15s là đúng)
 - [ ] G. Đo lại toàn bộ, build/lint, mở PR
 
 ## Baseline
@@ -127,7 +127,6 @@ Nguyên nhân chính: `OrderProvider` trong layout staff/manager tải mọi đ�
 | `/staff/pricing` (Niêm yết & giá) | 9: `admin/store/products` ×5, `bundles` ×2, `subscriptions` ×2 | **4**; quay lại **0** |
 | `/staff/commission/pricing` | 16: `pricing` ×2, `pricing/rules/{id}` ×14 | **8** (1 + 7 rule, chờ API BE #22); quay lại **0** |
 | `/manager/inventory` sau trang giá | `admin/store/products` + `led-models` | chỉ `led-models` (sản phẩm LED dùng lại cache) |
-| `/admin/monitoring` | `system/metrics` ×2 khi mở | ×1; poll 15s chỉ khi tab hiện |
 | `/users/me/addresses` | **mọi trang** (provider ở root layout) | chỉ trang dùng địa chỉ (hồ sơ, checkout), cache 5 phút |
 
 Mọi thao tác ghi sản phẩm/bundle/gói/tag/LED model gọi `markStoreChanged()` → bỏ cache quản lý và cache cửa hàng công khai.

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Activity, AlertOctagon, Cpu, Database, Gauge, ListOrdered, Server, Timer, Zap } from "lucide-react";
 import {
   describeMonitoringError,
@@ -55,27 +54,38 @@ export default function LiveMetricsSection({ refreshSignal }: { refreshSignal: n
   const [liveWindow, setLiveWindow] = useState<LiveWindow>("15m");
   const [sort, setSort] = useState<LiveSort>("p95Ms");
   const [autoRefresh, setAutoRefresh] = useState(true);
-  // useQuery: gộp request trùng, giữ số liệu khi chuyển tab Trực tiếp ↔ Lịch sử, chỉ poll khi tab đang hiện.
-  const query = useQuery({
-    queryKey: ["monitoring", "live", liveWindow, sort],
-    queryFn: () => fetchLiveSystemMetrics({ window: liveWindow, sort, limit: 10 }),
-    refetchInterval: autoRefresh ? POLL_INTERVAL_MS : false,
-    staleTime: POLL_INTERVAL_MS,
-    placeholderData: keepPreviousData,
-  });
-  const data: LiveSystemMetrics | null = query.data ?? null;
-  const loading = query.isFetching;
-  const error = query.error ? describeMonitoringError(query.error, "Không thể tải số liệu trực tiếp.") : "";
-  const { refetch } = query;
-  const load = useCallback(() => refetch(), [refetch]);
+  const [data, setData] = useState<LiveSystemMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const requestId = useRef(0);
 
-  // Nút "Làm mới" của trang (refreshSignal tăng) → tải lại ngay.
-  const firstSignal = useRef(refreshSignal);
+  const load = useCallback(async () => {
+    const id = ++requestId.current;
+    setLoading(true);
+    try {
+      const result = await fetchLiveSystemMetrics({ window: liveWindow, sort, limit: 10 });
+      if (id !== requestId.current) return;
+      setData(result);
+      setError("");
+    } catch (err) {
+      if (id !== requestId.current) return;
+      setError(describeMonitoringError(err, "Không thể tải số liệu trực tiếp."));
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }, [liveWindow, sort]);
+
   useEffect(() => {
-    if (refreshSignal === firstSignal.current) return;
-    firstSignal.current = refreshSignal;
-    void refetch();
-  }, [refreshSignal, refetch]);
+    void load();
+  }, [load, refreshSignal]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = globalThis.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, POLL_INTERVAL_MS);
+    return () => globalThis.clearInterval(timer);
+  }, [autoRefresh, load]);
 
   const overview = data?.overview;
   const initialLoading = loading && !data;

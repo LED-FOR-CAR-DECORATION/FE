@@ -1061,7 +1061,11 @@ export default function ManagerDashboard() {
                     className: "bg-[#fef08a] text-black",
                   }
             }
-            footerText={`${kpi.pendingCommissionsCount} yêu cầu thiết kế chờ duyệt`}
+            footerText={
+              pendingCount > 0
+                ? "Đang chờ duyệt mở bán trên Store"
+                : "Không có nhân vật chờ duyệt trên Store"
+            }
             footerAction={
               <Link
                 href="/staff/pricing"
@@ -1107,7 +1111,7 @@ export default function ManagerDashboard() {
           <MetricCard
             title="Bảo hành cần xử lý"
             subtitle="Phiếu bảo hành đang chờ duyệt"
-            value={`${kpi.pendingWarrantyClaimsCount} Phiếu`}
+            value={`Còn ${kpi.pendingWarrantyClaimsCount} phiếu cần duyệt`}
             icon={ShieldAlert}
             iconBoxClass={kpi.pendingWarrantyClaimsCount > 0 ? "bg-[#fed7aa]" : "bg-primary/50"}
             badge={
@@ -1123,7 +1127,7 @@ export default function ManagerDashboard() {
             }
             footerText={
               warrantyAlerts.length > 0
-                ? `${warrantyAlerts.length} phiếu đang mở theo dõi`
+                ? `Trên tổng số ${warrantyAlerts.length} phiếu chưa hoàn thành`
                 : "Không có phiếu bảo hành tồn đọng"
             }
             footerAction={

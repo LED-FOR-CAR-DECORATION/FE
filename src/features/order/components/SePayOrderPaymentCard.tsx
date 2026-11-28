@@ -355,11 +355,10 @@ export default function SePayOrderPaymentCard({
 
             {countdown && session.status === "PENDING" && (
               <div
-                className={`mt-3 inline-flex items-center gap-1.5 border-2 border-black px-2.5 py-1 text-xs font-black tabular-nums ${
-                  isExpired
+                className={`mt-3 inline-flex items-center gap-1.5 border-2 border-black px-2.5 py-1 text-xs font-black tabular-nums ${isExpired
                     ? "bg-red-100 text-red-800"
                     : "bg-amber-300 text-black"
-                }`}
+                  }`}
               >
                 <Clock size={13} />
                 {isExpired ? "Đã hết hạn thanh toán" : `Hết hạn sau: ${countdown}`}
@@ -452,7 +451,7 @@ export default function SePayOrderPaymentCard({
                     ) : (
                       <Zap size={12} className="text-black" />
                     )}
-                    Giả lập thanh toán
+
                   </button>
                 )}
                 <button

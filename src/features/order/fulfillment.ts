@@ -31,6 +31,21 @@ function classifyItem(item: ProductDefinition, result: OrderFulfillment): void {
   if (item.productType === "BUNDLE") {
     if (item.components?.length) {
       item.components.forEach((component) => classifyItem(component, result));
+    } else if (item.bundleDetails?.items?.length) {
+      item.bundleDetails.items.forEach((bItem) => {
+        const itemType = String(bItem.itemType ?? "").toUpperCase();
+        if (itemType === "LED" || itemType === "LED_MODEL") {
+          result.hasLED = true;
+          result.requiresDelivery = true;
+        } else if (itemType === "CHARACTER") {
+          result.hasCharacter = true;
+          result.requiresCharacterEntitlement = true;
+          const charId = String(bItem.productId ?? bItem.versionId ?? "");
+          if (charId && !result.characterIds.includes(charId)) {
+            result.characterIds.push(charId);
+          }
+        }
+      });
     } else {
       result.hasLED = true;
       result.requiresDelivery = true;
@@ -56,9 +71,16 @@ export function getOrderFulfillment(order: { items: ProductDefinition[] }): Orde
   return result;
 }
 
-export function getOrderKind(order: { orderType?: string; items: ProductDefinition[] }): OrderKind {
+export function getOrderKind(order: {
+  orderType?: string;
+  items: ProductDefinition[];
+  hasDelivery?: boolean;
+}): OrderKind {
   const fulfillment = getOrderFulfillment(order);
   const hasDigital = fulfillment.hasCharacter || fulfillment.hasSubscription;
+  if (order.hasDelivery === false && !order.items.some((item) => item.productType === "LED_MODEL")) {
+    return "DIGITAL";
+  }
   if (fulfillment.hasLED && hasDigital) {
     return "MIXED";
   }

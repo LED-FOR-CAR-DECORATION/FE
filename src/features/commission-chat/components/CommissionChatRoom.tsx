@@ -9,7 +9,7 @@ import StaffDraftReview from "@/features/commission/components/StaffDraftReview"
 import StaffRevisionCard from "@/features/commission/components/StaffRevisionCard";
 import { DeliverableCard, RevisionCard, type CardContext } from "./CommissionCards";
 import CommissionAvatar from "./CommissionAvatar";
-import { commissionStatusLabel } from "../commission-status";
+import { commissionStatusLabel, formatCommissionSystemMessage } from "../commission-status";
 import { useCommissionRoom, type ChatViewer, type CommissionRoomInfo, type PendingMessage } from "../hooks/useCommissionRoom";
 import { MAX_MESSAGE_LENGTH, parseMetadata, type CommissionMessage } from "../services/commission-messages.api";
 
@@ -364,7 +364,7 @@ function MessageItem({ message, viewer, info, animate, cardCtx }: {
     return (
       <Reveal animate={animate} className="flex justify-center">
         <p className="t-stagger-line t-stagger-line--1 max-w-[85%] border-2 border-black bg-primary/10 px-3 py-1.5 text-center text-xs font-bold text-black">
-          {message.content} <span className="font-semibold text-text-muted">· {formatTime(message.createdAt)}</span>
+          {formatCommissionSystemMessage(message.content)} <span className="font-semibold text-text-muted">· {formatTime(message.createdAt)}</span>
         </p>
       </Reveal>
     );

@@ -184,7 +184,11 @@ export function mapOrderSummaryAndDetailToOrder(
       ];
 
   const orderType = mapBackendOrderType(detail?.orderType ?? summary.orderType);
-  const orderKind = getOrderKind({ orderType, items });
+  const orderKind = getOrderKind({
+    orderType,
+    items,
+    hasDelivery: detail ? Boolean(detail.delivery) : undefined,
+  });
   const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
   const paymentStatus = mapBackendPaymentStatus(detail?.status ?? summary.status, detail?.payment?.status);
   const status = resolveEffectiveOrderStatus(rawStatus, paymentStatus, orderKind);
@@ -265,7 +269,11 @@ export function mapStaffOrderSummaryAndDetailToOrder(
       ];
 
   const orderType = mapBackendOrderType(detail?.orderType ?? summary.orderType);
-  const orderKind = getOrderKind({ orderType, items });
+  const orderKind = getOrderKind({
+    orderType,
+    items,
+    hasDelivery: detail ? Boolean(detail.delivery) : summary.deliveryStatus ? true : undefined,
+  });
   const rawStatus = mapBackendOrderStatus(detail?.status ?? summary.status);
   const paymentStatus = mapBackendPaymentStatus(
     detail?.status ?? summary.status,

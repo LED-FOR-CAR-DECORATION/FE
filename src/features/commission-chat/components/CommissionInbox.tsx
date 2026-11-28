@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Loader2, MessageCircle, RefreshCw, Search } from "lucide-react";
 import "@/styles/transitions.css";
 import { getApiErrorMessage } from "@/lib/api/auth";
-import { commissionStatusLabel } from "../commission-status";
+import { commissionStatusLabel, formatCommissionSystemMessage } from "../commission-status";
 import { canReadHistory, listCommissionMessages, type CommissionMessage } from "../services/commission-messages.api";
 import CommissionAvatar from "./CommissionAvatar";
 import CommissionChatRoom from "./CommissionChatRoom";
@@ -60,8 +60,11 @@ function isOwn(message: CommissionMessage, viewer: ChatViewer) {
 
 function previewText(viewer: ChatViewer, message?: CommissionMessage) {
   if (!message) return "Chưa có tin nhắn";
+  if (message.messageType === "SYSTEM" || message.senderRole === "SYSTEM") {
+    return formatCommissionSystemMessage(message.content);
+  }
   const own = isOwn(message, viewer);
-  const other = message.senderRole === "SYSTEM" ? "" : viewer === "CUSTOMER" ? "LUMINTRA: " : "Khách: ";
+  const other = viewer === "CUSTOMER" ? "LUMINTRA: " : "Khách: ";
   const prefix = own ? "Bạn: " : other;
   switch (message.messageType) {
     case "IMAGE": return `${prefix}Đã gửi một ảnh${message.content ? ` · ${message.content}` : ""}`;

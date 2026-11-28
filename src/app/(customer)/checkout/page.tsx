@@ -24,8 +24,8 @@ import { useCart } from "@/features/cart/context/CartContext";
 import { useAddresses } from "@/features/address/context/AddressContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useOrders } from "@/features/order/context/OrderContext";
-import { getOrderFulfillment } from "@/features/order/fulfillment";
 import { getApiErrorMessage } from "@/lib/api/auth";
+import { fetchStoreProductDetail } from "@/lib/api/products";
 import { formatPrice } from "@/lib/currency";
 
 export default function CheckoutPage() {
@@ -54,11 +54,84 @@ export default function CheckoutPage() {
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [bundleHasLedById, setBundleHasLedById] = useState<Record<string, boolean>>({});
+  const [checkingBundles, setCheckingBundles] = useState(false);
+
+  const unresolvedBundlesKey = items
+    .filter(
+      (i) =>
+        i.productType === "BUNDLE" &&
+        !i.components?.length &&
+        !i.bundleDetails?.items?.length &&
+        bundleHasLedById[i.id] === undefined,
+    )
+    .map((i) => `${i.id}:${i.productId ?? ""}`)
+    .join(",");
+
+  useEffect(() => {
+    if (!unresolvedBundlesKey) return;
+    const targets = items.filter(
+      (i) =>
+        i.productType === "BUNDLE" &&
+        !i.components?.length &&
+        !i.bundleDetails?.items?.length &&
+        bundleHasLedById[i.id] === undefined,
+    );
+    if (!targets.length) return;
+
+    let cancelled = false;
+    setCheckingBundles(true);
+    Promise.all(
+      targets.map(async (bundle) => {
+        const detail = await fetchStoreProductDetail(bundle.productId ?? bundle.id).catch(() => null);
+        const hasLed = detail
+          ? Boolean(
+              detail.components?.some((c) => c.productType === "LED_MODEL") ||
+                detail.bundleDetails?.items?.some((b) => {
+                  const t = String(b.itemType ?? "").toUpperCase();
+                  return t === "LED" || t === "LED_MODEL";
+                }),
+            )
+          : false;
+        return [bundle.id, hasLed] as const;
+      }),
+    )
+      .then((entries) => {
+        if (cancelled) return;
+        setBundleHasLedById((prev) => {
+          const next = { ...prev };
+          for (const [id, hasLed] of entries) {
+            next[id] = hasLed;
+          }
+          return next;
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingBundles(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [unresolvedBundlesKey, items, bundleHasLedById]);
 
   const address = addresses.find((entry) => entry.id === selectedAddressId);
-  const hasLedItems =
-    getOrderFulfillment({ items }).requiresDelivery ||
-    items.some((i) => i.productType === "BUNDLE" || i.productType === "LED_MODEL");
+  const hasLedItems = items.some((i) => {
+    if (i.productType === "LED_MODEL") return true;
+    if (i.productType === "BUNDLE") {
+      if (i.components?.length) {
+        return i.components.some((c) => c.productType === "LED_MODEL");
+      }
+      if (i.bundleDetails?.items?.length) {
+        return i.bundleDetails.items.some((b) => {
+          const t = String(b.itemType ?? "").toUpperCase();
+          return t === "LED" || t === "LED_MODEL";
+        });
+      }
+      return bundleHasLedById[i.id] ?? false;
+    }
+    return false;
+  });
 
   // Shipping fee is decided by the backend (currently 0); shown as "Miễn phí" in both cart and checkout.
   const shipping = 0;
@@ -75,26 +148,26 @@ export default function CheckoutPage() {
   }, [addresses, selectedAddressId]);
 
   const placeOrder = async () => {
-    if (!items.length || (hasLedItems && !address) || !user || !agreedToTerms) return;
+    if (!items.length || checkingBundles || (hasLedItems && !address) || !user || !agreedToTerms) return;
     setProcessing(true);
     setCheckoutError("");
     try {
+      const digitalFallbackAddress = {
+        id: "0",
+        fullName: user.fullName,
+        phoneNumber: user.phoneNumber ?? "",
+        streetNumber: "",
+        streetName: "",
+        ward: "",
+        district: "",
+        province: "",
+        fullAddress: "Digital delivery",
+        isDefault: false,
+      };
       const order = await createOrder({
         customer: user,
         items,
-        address:
-          address ?? {
-            id: "0",
-            fullName: user.fullName,
-            phoneNumber: user.phoneNumber ?? "",
-            streetNumber: "",
-            streetName: "",
-            ward: "",
-            district: "",
-            province: "",
-            fullAddress: "Digital delivery",
-            isDefault: false,
-          },
+        address: hasLedItems && address ? address : digitalFallbackAddress,
         shipping,
         paymentMethod: "SEPAY",
       });
@@ -111,13 +184,15 @@ export default function CheckoutPage() {
 
   const blockReason = processing
     ? "Đang xử lý đơn hàng..."
-    : hasLedItems && addressesLoading
-      ? "Đang tải địa chỉ giao hàng..."
-      : hasLedItems && !address
-        ? "Thêm hoặc chọn địa chỉ giao hàng để tiếp tục."
-        : !agreedToTerms
-          ? "Tick đồng ý điều khoản để đặt hàng."
-          : "";
+    : checkingBundles
+      ? "Đang kiểm tra thành phần sản phẩm..."
+      : hasLedItems && addressesLoading
+        ? "Đang tải địa chỉ giao hàng..."
+        : hasLedItems && !address
+          ? "Thêm hoặc chọn địa chỉ giao hàng để tiếp tục."
+          : !agreedToTerms
+            ? "Tick đồng ý điều khoản để đặt hàng."
+            : "";
 
   return (
     <>

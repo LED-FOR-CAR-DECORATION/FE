@@ -5,7 +5,7 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 ## Tiến độ
 
 - [x] 0. Đo baseline (Redis BE tắt có chủ đích)
-- [ ] A. Nền tảng TanStack Query + dedupe `/users/me` + refresh token đa tab
+- [x] A. Nền tảng TanStack Query + refresh token đa tab (`/users/me` đã chỉ 1 lượt/lần tải, không cần sửa)
 - [ ] B. Đơn hàng (OrderContext → query, chi tiết theo id, fulfillment)
 - [ ] C. Websocket hub + chat/inbox
 - [ ] D. Khách: gallery / store / subscription

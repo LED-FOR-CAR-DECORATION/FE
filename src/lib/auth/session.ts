@@ -91,7 +91,13 @@ export const getSessionToken = async (): Promise<string> => {
     if (getRefreshToken()) {
         // The refresh transport bypasses OpenAPI.TOKEN to avoid recursive refresh.
         const { refreshAccessToken } = await import("../api/client");
-        return (await refreshAccessToken()) ?? "";
+        try {
+            return (await refreshAccessToken()) ?? "";
+        } catch (error) {
+            // Refresh chủ động lỗi mạng/5xx nhưng token cũ vẫn còn hạn: cứ dùng, đừng làm hỏng request.
+            if (token && !accessTokenNeedsRefresh(token, 0)) return token;
+            throw error;
+        }
     }
     if (token && !accessTokenNeedsRefresh(token, 0)) return token;
     if (token || loadSession()) expireSession();

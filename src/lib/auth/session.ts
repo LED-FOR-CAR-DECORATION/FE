@@ -37,6 +37,13 @@ export function clearSession(): void {
 const ACCESS_TOKEN_COOKIE = "access_token";
 const REFRESH_TOKEN_KEY = "led_controller_refresh_token";
 export const SESSION_EXPIRED_EVENT = "led-controller-session-expired";
+/** Đăng nhập/đăng xuất chủ động (detail: { loggedIn }). Các kết nối giữ token (vd. STOMP) nghe để reset. */
+export const AUTH_CHANGED_EVENT = "led-controller-auth-changed";
+
+export function emitAuthChanged(loggedIn: boolean): void {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT, { detail: { loggedIn } }));
+}
 
 /** Lưu cặp token trả về từ login / refresh / google login. */
 export function saveTokens(accessToken: string, refreshToken?: string, expiresInSeconds?: number): void {
@@ -91,7 +98,13 @@ export const getSessionToken = async (): Promise<string> => {
     if (getRefreshToken()) {
         // The refresh transport bypasses OpenAPI.TOKEN to avoid recursive refresh.
         const { refreshAccessToken } = await import("../api/client");
-        return (await refreshAccessToken()) ?? "";
+        try {
+            return (await refreshAccessToken()) ?? "";
+        } catch (error) {
+            // Refresh chủ động lỗi mạng/5xx nhưng token cũ vẫn còn hạn: cứ dùng, đừng làm hỏng request.
+            if (token && !accessTokenNeedsRefresh(token, 0)) return token;
+            throw error;
+        }
     }
     if (token && !accessTokenNeedsRefresh(token, 0)) return token;
     if (token || loadSession()) expireSession();

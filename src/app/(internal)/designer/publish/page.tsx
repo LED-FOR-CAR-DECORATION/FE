@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchAllMyCharactersCached } from "@/features/designer/designer-characters-cache";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -30,10 +31,9 @@ import {
 import { useAdaptiveListRows } from "@/features/designer/hooks/useResponsiveGrid";
 import { getCharacterArtwork } from "@/features/designer/character-artwork";
 import { linkedCommissionId, stripCommissionMarker } from "@/features/designer/commission-link";
-import { fetchStoreTags } from "@/lib/api/products";
-import { fetchAllPages } from "@/lib/api/paging";
+import { getQueryClient } from "@/lib/query/client";
+import { fetchStoreTagsCached } from "@/lib/query/store";
 import {
-  fetchMyCharacters,
   formatDesignerApiError,
   isStoreCharacterType,
   type CharacterVersionItem,
@@ -140,10 +140,7 @@ function DesignerPublishWorkspace() {
     setLoadingCharacters(true);
     setCharactersError(null);
     try {
-      const all = await fetchAllPages(async (p) => {
-        const res = await fetchMyCharacters({ page: p, size: 100 });
-        return { items: res.items, totalPages: res.meta.totalPages };
-      });
+      const all = await fetchAllMyCharactersCached();
       // Exclude commission characters (both characterType === COMMISSION, commissionId, and legacy [COMMISSION #id] marker)
       const personalOnly = all.filter(
         (char) =>
@@ -204,7 +201,7 @@ function DesignerPublishWorkspace() {
   useEffect(() => {
     let cancelled = false;
     setIsLoadingTags(true);
-    fetchStoreTags()
+    fetchStoreTagsCached(getQueryClient())
       .then((tags) => {
         if (!cancelled) setAvailableTags(tags);
       })

@@ -1,5 +1,7 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { fetchStoreCatalogCached, fetchStoreProductDetailCached } from "@/lib/query/store";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -19,7 +21,6 @@ import type { CatalogProduct } from "@/features/cart/catalog";
 import { BundleContentsSection } from "@/features/storefront/components/BundleContentsSection";
 import { ProductCompatibilityCard } from "@/features/storefront/components/ProductCompatibilityCard";
 import { getApiErrorMessage } from "@/lib/api/auth";
-import { fetchStoreProductDetail, fetchStoreProducts } from "@/lib/api/products";
 import { formatPrice } from "@/lib/currency";
 
 export default function ProductDetailPage() {
@@ -35,6 +36,7 @@ export default function ProductDetailPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const canBuy = isAuthenticated && !authLoading;
 
+  const queryClient = useQueryClient();
   const [item, setItem] = useState<CatalogProduct | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<CatalogProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,16 +49,17 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    // "Sản phẩm liên quan" lọc từ catalogue đã cache thay vì tải thêm 50 sản phẩm mỗi lần mở chi tiết.
     Promise.all([
-      fetchStoreProductDetail(params.productId),
-      fetchStoreProducts({ page: 0, size: 50 }),
+      fetchStoreProductDetailCached(queryClient, params.productId),
+      fetchStoreCatalogCached(queryClient).catch(() => []),
     ])
-      .then(([detail, listRes]) => {
+      .then(([detail, catalog]) => {
         if (cancelled) return;
         setItem(detail);
         if (detail) {
           setRelatedProducts(
-            listRes.items
+            catalog
               .filter((p) => p.id !== detail.id && p.productType === detail.productType)
               .slice(0, 4),
           );
@@ -68,7 +71,7 @@ export default function ProductDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.productId]);
+  }, [params.productId, queryClient]);
 
   if (loading) {
     return (

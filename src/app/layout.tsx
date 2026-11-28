@@ -3,8 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/features/auth/context/AuthContext";
 import { CartProvider } from "@/features/cart/context/CartContext";
-import { AddressProvider } from "@/features/address/context/AddressContext";
 import { GalleryProvider } from "@/features/character/context/GalleryContext";
+import QueryProvider from "@/lib/query/QueryProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -25,9 +25,11 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning className={`${inter.variable} font-sans antialiased`}>
       <body suppressHydrationWarning className="min-h-screen bg-gray-50 flex flex-col text-gray-900">
-        <AuthProvider>
-          <CartProvider><AddressProvider><GalleryProvider>{children}</GalleryProvider></AddressProvider></CartProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <CartProvider><GalleryProvider>{children}</GalleryProvider></CartProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

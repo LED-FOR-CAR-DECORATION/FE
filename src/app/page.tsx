@@ -1,5 +1,7 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { fetchStoreCatalogCached } from "@/lib/query/store";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,7 +23,6 @@ import { useGallery } from "@/features/character/context/GalleryContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getRoleHomePath } from "@/features/auth/services/auth.service";
 import { getApiErrorMessage } from "@/lib/api/auth";
-import { fetchStoreProducts } from "@/lib/api/products";
 import { formatPrice } from "@/lib/currency";
 import {
   ProductCard,
@@ -398,6 +399,7 @@ function HeroShowcase({
 
 export default function LandingPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { items: cartItems, addItem } = useCart();
   const { ownedCharacters, activeSubscription } = useGallery();
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -417,9 +419,10 @@ export default function LandingPage() {
     if (isLoading || isInternalUser) return;
     let cancelled = false;
     setLoadingProducts(true);
-    fetchStoreProducts({ page: 0, size: 40 })
-      .then((res) => {
-        if (!cancelled) setProducts(res.items);
+    // Dùng chung catalogue đã cache với /products (thứ tự mặc định như nhau) thay vì một request riêng.
+    fetchStoreCatalogCached(queryClient)
+      .then((items) => {
+        if (!cancelled) setProducts(items.slice(0, 40));
       })
       .catch(() => {
         if (!cancelled) setProducts([]);

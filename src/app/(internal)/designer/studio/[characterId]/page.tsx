@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchAllMyCharactersCached, fetchCharacterVersionsCached } from "@/features/designer/designer-characters-cache";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -12,12 +13,9 @@ import {
   type MatrixSize,
 } from "@/features/designer/context/DesignerCharactersContext";
 import {
-  fetchCharacterVersions,
-  fetchMyCharacters,
   formatDesignerApiError,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
-import { fetchAllPages } from "@/lib/api/paging";
 
 export default function DesignerCharacterStudioPage() {
   const params = useParams<{ characterId: string }>();
@@ -56,11 +54,9 @@ export default function DesignerCharacterStudioPage() {
     setLockedMatrixSize(getStoredMatrixSize(characterId));
 
     Promise.all([
-      fetchAllPages(async (page) => {
-        const res = await fetchMyCharacters({ page, size: 100 });
-        return { items: res.items, totalPages: res.meta.totalPages };
-      }),
-      fetchCharacterVersions(characterId),
+      // Danh sách dùng chung cache với các trang designer khác (BE chưa có GET nhân vật theo id).
+      fetchAllMyCharactersCached(),
+      fetchCharacterVersionsCached(characterId),
     ])
       .then(([characters, rawVersions]) => {
         if (cancelled) return;

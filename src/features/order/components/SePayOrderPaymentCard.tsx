@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { PaymentSessionResponse } from "@/api_client";
 import { ENTITLEMENTS_CHANGED_EVENT } from "@/features/character/services/entitlement.service";
-import { ORDERS_CHANGED_EVENT } from "@/features/order/services/order.service";
+import { emitOrdersChanged } from "@/features/order/services/order.service";
 import { fetchOrderDetail } from "@/lib/api/orders";
 import { fetchPaymentSession, mockPaymentSuccess } from "@/lib/api/payments";
 import { formatPrice } from "@/lib/currency";
@@ -95,7 +95,7 @@ export default function SePayOrderPaymentCard({
       setError("");
 
       if (orderId !== undefined && typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent(ORDERS_CHANGED_EVENT));
+        emitOrdersChanged(orderId);
         window.dispatchEvent(new CustomEvent(ENTITLEMENTS_CHANGED_EVENT));
       }
       onPaymentSuccessRef.current?.(latestSession);

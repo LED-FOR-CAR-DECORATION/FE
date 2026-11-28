@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { authService, normalizeUserRole } from "@/features/auth/services/auth.service";
 import type { AuthUser } from "@/features/auth/types";
 import { apiGetMyProfile, apiUpdateMyProfile } from "@/lib/api/addresses";
-import { clearSession, clearTokens, getSessionToken, loadSession, saveSession, SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
+import { clearQueryCache } from "@/lib/query/client";
+import { clearSession, clearTokens, emitAuthChanged, getSessionToken, loadSession, saveSession, SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -84,9 +85,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback((nextUser: AuthUser) => {
     const version = ++sessionVersion.current;
+    clearQueryCache();
     saveSession(nextUser);
     setUser(nextUser);
     setIsLoading(false);
+    emitAuthChanged(true);
     void apiGetMyProfile()
       .then((remoteProfile) => {
         if (!remoteProfile || sessionVersion.current !== version) return;
@@ -134,8 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const pending = authService.logout();
     clearTokens();
     clearSession();
+    clearQueryCache();
     setUser(null);
     setIsLoading(false);
+    emitAuthChanged(false);
     await pending;
   }, []);
 

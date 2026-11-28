@@ -9,7 +9,7 @@ Nhánh: `perf/api-fetch-optimization` → PR vào `dev`. Mỗi mục là một c
 - [x] B. Đơn hàng (OrderContext → query, chi tiết theo id, fulfillment)
 - [x] C. Websocket hub + chat/inbox
 - [x] D. Khách: gallery / store / subscription
-- [ ] E. Designer
+- [x] E. Designer (chưa đo bằng tài khoản DESIGNER — BE trả 403 cho admin)
 - [ ] F. Manager / Admin / Staff khác + monitoring double fetch
 - [ ] G. Đo lại toàn bộ, build/lint, mở PR
 
@@ -88,6 +88,26 @@ Nguyên nhân chính: `OrderProvider` trong layout staff/manager tải mọi đ�
 | Checkout: kiểm tra bundle có LED | chi tiết từng bundle mỗi lần | dùng cache chi tiết sản phẩm |
 | Gallery: quay lại cửa sổ/tab | **2 lần** tải gallery (focus + visibilitychange), mỗi lần gọi chi tiết từng commission đã hoàn thành | chỉ khi dữ liệu cũ hơn 60s, 1 lần; chi tiết commission COMPLETED cache cả phiên |
 | Gallery: vào `/profile/gallery` | gọi `refresh()` mỗi lần mount | dùng cache nếu còn mới |
+
+## Kiểm tra lại mục B/D bằng tài khoản khách
+
+| Tình huống | Kết quả |
+|---|---|
+| `/profile/orders` lần đầu | 1 danh sách + 22 chi tiết (khách cần item của từng đơn → API BE #6) |
+| Mở chi tiết đơn từ danh sách, quay lại danh sách | **0** |
+| Vào `/profile/gallery`, giả lập focus + visibilitychange | **0** (trước: 2 lượt gallery đầy đủ mỗi lần quay lại cửa sổ) |
+| `/messages` lần đầu | `commissions/my` ×1 + lịch sử ×8 (chờ API BE #3); quay lại **0** |
+
+## Sau mục E (designer)
+
+| Chỗ | Trước | Sau |
+|---|---|---|
+| Studio `/designer/studio/{id}` | tải mọi trang nhân vật để tìm 1 | dùng chung cache danh sách (0 nếu vừa ở trang designer khác) |
+| `/designer/publish`, `/designer/store-uploads` | mỗi trang tự tải toàn bộ | một cache chung, mọi thao tác ghi tự invalidate |
+| Workspace commission: danh sách nhân vật COMMISSION | gọi **2 lần giống hệt** (trực tiếp + `findCommissionCharacter`) | 1 (cache) |
+| Workspace commission: ảnh nhân vật cho mỗi thẻ | 1 request / thẻ | 1 request cho cả trang (lọc từ danh sách COMMISSION) |
+| Workspace commission: poll chi tiết | 10s, không bao giờ dừng | 30s, dừng khi COMPLETED/CANCELLED/EXPIRED/REJECTED |
+| `store/tags` ở trang đăng bán + modal | gọi trực tiếp (×2 khi mount) | cache chung 5 phút (×1) |
 
 ## Bảng API BE còn thiếu (đề xuất, chờ duyệt)
 

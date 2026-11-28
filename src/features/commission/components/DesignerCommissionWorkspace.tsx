@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchCommissionCharactersCached } from "@/features/designer/designer-characters-cache";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -11,7 +12,6 @@ import "@/styles/transitions.css";
 import { getApiErrorMessage } from "@/lib/api/auth";
 import {
   fetchCharacterVersions,
-  fetchMyCharacters,
   formatDesignerApiError,
   type CharacterVersionItem,
   type DesignerCharacterItem,
@@ -33,6 +33,9 @@ import { scheduleVisiblePoll } from "@/lib/polling";
 // ---------------------------------------------------------------------------
 // Trạng thái
 // ---------------------------------------------------------------------------
+
+const DETAIL_POLL_MS = 30_000;
+const TERMINAL_STATUSES = new Set(["COMPLETED", "CANCELLED", "EXPIRED", "REJECTED"]);
 
 /** Trạng thái designer được nộp bản nháp (UploadCommissionDraftUseCase, CMS-15). */
 export const DESIGNER_DRAFTABLE = new Set(["IN_PROGRESS", "INTERNAL_REVISION_REQUIRED"]);
@@ -238,20 +241,19 @@ export function DesignerCommissionBoard() {
       return;
     }
     let active = true;
-    Promise.all(
-      items.map((entry) =>
-        fetchMyCharacters({ page: 0, size: 1, commissionId: entry.commissionId })
-          .then(({ items: list }) => [entry.commissionId, list[0]] as const)
-          .catch(() => [entry.commissionId, undefined] as const),
-      ),
-    ).then((pairs) => {
-      if (!active) return;
-      const map = new Map<number, DesignerCharacterItem>();
-      for (const [id, char] of pairs) {
-        if (char) map.set(id, char);
-      }
-      setCharacters(map);
-    });
+    // Một request (danh sách COMMISSION đã cache) thay vì một request cho mỗi thẻ commission đang hiển thị.
+    fetchCommissionCharactersCached()
+      .catch(() => [] as DesignerCharacterItem[])
+      .then((list) => {
+        if (!active) return;
+        const map = new Map<number, DesignerCharacterItem>();
+        for (const entry of items) {
+          const char = list.find((item) =>
+            (item.commissionId ?? linkedCommissionId(item.description)) === entry.commissionId);
+          if (char) map.set(entry.commissionId, char);
+        }
+        setCharacters(map);
+      });
     return () => {
       active = false;
     };
@@ -458,11 +460,15 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
     let active = true;
     let cancelPoll: (() => void) | undefined;
     let query: ReturnType<typeof getManagementCommission>;
+    let latestStatus: string | undefined;
     function refresh() {
       query = getManagementCommission(commissionId);
-      query.then(({ data }) => { if (active) { setDetail(data); setDetailError(""); } })
+      query.then(({ data }) => { latestStatus = data.status; if (active) { setDetail(data); setDetailError(""); } })
         .catch((failure) => { if (active) setDetailError(getApiErrorMessage(failure, "Không tải được commission.")); })
-        .finally(() => { if (active) cancelPoll = scheduleVisiblePoll(refresh, 10000); });
+        .finally(() => {
+          // Theo dõi duyệt/chỉnh sửa từ staff khi commission còn đang chạy; đã kết thúc thì không poll nữa.
+          if (active && !TERMINAL_STATUSES.has(latestStatus ?? "")) cancelPoll = scheduleVisiblePoll(refresh, DETAIL_POLL_MS);
+        });
     }
     refresh();
     return () => { active = false; cancelPoll?.(); query?.cancel(); };
@@ -473,7 +479,8 @@ export function DesignerCommissionOverview({ commissionId }: { commissionId: num
     (async () => {
       try {
         const [{ items: commissionList }, linked] = await Promise.all([
-          fetchMyCharacters({ page: 0, size: 100, characterType: "COMMISSION" }).catch(() => ({ items: [] as DesignerCharacterItem[] })),
+          // Cùng một request (cache) với findCommissionCharacter — trước đây gọi 2 lần giống hệt nhau.
+          fetchCommissionCharactersCached({ force: revision > 0 }).then((items) => ({ items })).catch(() => ({ items: [] as DesignerCharacterItem[] })),
           findCommissionCharacter(commissionId),
         ]);
         if (!active) return;

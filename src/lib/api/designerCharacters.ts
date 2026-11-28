@@ -2,6 +2,13 @@ import { ApiError } from "@/api_client";
 import { request } from "@/api_client/core/request";
 import { OpenAPI } from "./client";
 import { buildSignedPutHeaders, resolveImageMimeAndExtension } from "./media";
+import { getQueryClient } from "@/lib/query/client";
+
+/** Báo cache danh sách nhân vật designer (features/designer/designer-characters-cache.ts) là đã cũ. */
+function markDesignerCharactersChanged(): void {
+  if (typeof window === "undefined") return;
+  void getQueryClient().invalidateQueries({ queryKey: ["designer", "characters"] });
+}
 
 export type CharacterType = "STORE" | "COMMISSION";
 
@@ -272,6 +279,7 @@ export async function createDesignerCharacter(
   if (!res.data) {
     throw new Error("Không nhận được dữ liệu nhân vật sau khi tạo.");
   }
+  markDesignerCharactersChanged();
   return res.data;
 }
 
@@ -294,6 +302,7 @@ export async function updateDesignerCharacter(
   if (!res.data) {
     throw new Error("Không nhận được dữ liệu sau khi cập nhật nhân vật.");
   }
+  markDesignerCharactersChanged();
   return res.data;
 }
 
@@ -303,6 +312,7 @@ export async function deleteDesignerCharacter(characterId: number): Promise<void
     url: "/api/management/characters/{id}",
     path: { id: characterId },
   });
+  markDesignerCharactersChanged();
 }
 
 export async function fetchCharacterVersions(
@@ -339,6 +349,7 @@ export async function createCharacterVersion(
   if (!res.data) {
     throw new Error("Không nhận được dữ liệu phiên bản sau khi đăng tải.");
   }
+  markDesignerCharactersChanged();
   return res.data;
 }
 
@@ -351,6 +362,7 @@ export async function deleteCharacterVersion(
     url: "/api/management/characters/{characterId}/versions/{versionId}",
     path: { characterId, versionId },
   });
+  markDesignerCharactersChanged();
 }
 
 export async function uploadDesignerAssetFile(

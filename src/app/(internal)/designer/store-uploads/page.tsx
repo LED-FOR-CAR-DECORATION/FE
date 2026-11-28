@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchAllMyCharactersCached } from "@/features/designer/designer-characters-cache";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -20,14 +21,12 @@ import {
   createCharacterVersion,
   deleteCharacterVersion,
   fetchCharacterVersions,
-  fetchMyCharacters,
   formatDesignerApiError,
   isStoreCharacterType,
   uploadDesignerAssetFile,
   type CharacterVersionItem,
   type DesignerCharacterItem,
 } from "@/lib/api/designerCharacters";
-import { fetchAllPages } from "@/lib/api/paging";
 
 function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -76,10 +75,8 @@ function StoreUploadsWorkspace() {
     async (preferCharacterId?: number | null) => {
       setLoadingCharacters(true);
       try {
-        const rawItems = await fetchAllPages(async (page) => {
-          const res = await fetchMyCharacters({ page, size: 50, characterType: "STORE" });
-          return { items: res.items, totalPages: res.meta.totalPages };
-        });
+        // Cache dùng chung; sau khi đăng tải/xoá phiên bản cache đã bị invalidate nên lần này tải mới.
+        const rawItems = await fetchAllMyCharactersCached();
         const items = rawItems.filter((item) => isStoreCharacterType(item.characterType));
         setCharacters(items);
 

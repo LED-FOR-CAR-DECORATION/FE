@@ -20,7 +20,8 @@ import {
   Trash2,
 } from "lucide-react";
 import StoreModal from "@/features/store-listing/components/StoreModal";
-import { fetchStoreTags } from "@/lib/api/products";
+import { getQueryClient } from "@/lib/query/client";
+import { fetchStoreTagsCached } from "@/lib/query/store";
 import {
   formatDesignerApiError,
   isStoreCharacterType,
@@ -111,7 +112,7 @@ export default function PublishToStoreModal({
   useEffect(() => {
     let cancelled = false;
     setIsLoadingTags(true);
-    fetchStoreTags()
+    fetchStoreTagsCached(getQueryClient())
       .then((tags) => {
         if (!cancelled) setAvailableTags(tags);
       })
